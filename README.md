@@ -1,4 +1,4 @@
-# sqlc-engine-ydb
+# sqlc-ydb
 sqlc-engine-ydb is an external engine of SQLC with support YDB.
 
 ## Generating Go code (examples/authors)
