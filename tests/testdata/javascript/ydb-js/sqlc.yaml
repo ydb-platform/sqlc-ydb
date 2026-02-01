@@ -1,0 +1,21 @@
+version: "2"
+
+engines:
+  - name: ydb
+    process:
+      cmd: sqlc-engine-ydb
+
+plugins:
+  - name: ydb-js
+    process:
+      cmd: sqlc-gen-ydb-js
+
+sql:
+  - engine: ydb
+    schema: "../../schema.sql"
+    queries: "../../queries.sql"
+    codegen:
+      - plugin: ydb-js
+        out: typescript
+        options:
+          package: db

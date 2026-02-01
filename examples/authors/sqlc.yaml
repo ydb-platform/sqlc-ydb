@@ -1,0 +1,22 @@
+version: "2"
+
+engines:
+  - name: ydb
+    process:
+      cmd: sqlc-engine-ydb
+
+plugins:
+  - name: ydb-go-sdk
+    process:
+      cmd: sqlc-gen-ydb-go-sdk
+
+sql:
+  - engine: ydb
+    schema: "schema.sql"
+    queries: "queries.sql"
+    codegen:
+      - out: db
+        plugin: ydb-go-sdk
+        options:
+          package: db
+          sql_package: "github.com/ydb-platform/ydb-go-sdk/v3"

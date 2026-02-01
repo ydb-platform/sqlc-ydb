@@ -1,0 +1,21 @@
+version: "2"
+
+engines:
+  - name: ydb
+    process:
+      cmd: sqlc-engine-ydb
+
+plugins:
+  - name: ydb-php
+    process:
+      cmd: sqlc-gen-ydb-php
+
+sql:
+  - engine: ydb
+    schema: "../../schema.sql"
+    queries: "../../queries.sql"
+    codegen:
+      - plugin: ydb-php
+        out: php
+        options:
+          package: Db

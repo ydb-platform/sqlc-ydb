@@ -1,0 +1,22 @@
+version: "2"
+
+engines:
+  - name: ydb
+    process:
+      cmd: sqlc-engine-ydb
+
+plugins:
+  - name: ydb-dotnet
+    process:
+      cmd: sqlc-gen-ydb-dotnet
+
+sql:
+  - engine: ydb
+    schema: "../../schema.sql"
+    queries: "../../queries.sql"
+    codegen:
+      - plugin: ydb-dotnet
+        out: dotnet
+        options:
+          package: Db
+          sql_package: "linq2db"
