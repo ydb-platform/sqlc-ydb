@@ -1,5 +1,7 @@
 # sqlc-ydb
-sqlc-engine-ydb is an external engine of SQLC with support YDB.
+
+`cmd/sqlc-engine-ydb` is an external engine of SQLC with support YDB.
+`cmd/sqlc-get-ydb-go-sdk` is an go codegen plugin for generate helpers over YDB Query service API in ydb-go-sdk
 
 ## Generating Go code (examples/authors)
 
