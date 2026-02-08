@@ -27,8 +27,15 @@ PROTO_OUT    = $(REPO_ROOT)internal/codegen/pb
 PBOUT        = $(PROTO_OUT)/codegen.pb.go
 ENGINE_BIN   = $(BINDIR)/sqlc-engine-ydb
 CODEGEN_BIN  = $(BINDIR)/sqlc-gen-ydb-go-sdk
+CODEGEN_DBSQL_BIN = $(BINDIR)/sqlc-gen-ydb-database-sql
 
-.PHONY: all proto build build-engine build-codegen build-sqlc examples clean help
+# Example dirs under examples/ (each has schema.sql, queries.sql, sqlc.yaml with all plugins).
+# Codegen output: examples/<name>/<plugin>/ (e.g. authors/ydb-go-sdk, authors/ydb-database-sql).
+# To add an example: create examples/<name>/{schema.sql,queries.sql,sqlc.yaml} and add <name> to EXAMPLES.
+EXAMPLES        ?= authors album kv batch booktest jets ondeck
+PLUGIN_OUTPUTS  := ydb-go-sdk ydb-database-sql
+
+.PHONY: all proto build build-engine build-codegen build-codegen-dbsql build-sqlc examples clean help
 
 all: help
 
@@ -37,10 +44,11 @@ help:
 	@echo "  proto         - generate codegen.pb.go from sqlc module's protos/plugin/codegen.proto (needs protoc, protoc-gen-go, go mod download)"
 	@echo "  build-engine  - build sqlc-engine-ydb into $(BINDIR)/"
 	@echo "  build-codegen - build sqlc-gen-ydb-go-sdk into $(BINDIR)/ (depends on proto)"
-	@echo "  build         - proto + build both plugins"
+	@echo "  build-codegen-dbsql - build sqlc-gen-ydb-database-sql into $(BINDIR)/ (depends on proto)"
+	@echo "  build         - proto + build both plugins (ydb-go-sdk + ydb-database-sql)"
 	@echo "  build-sqlc    - build sqlc from ../engine-plugin into $(BINDIR)/sqlc (needed for examples)"
-	@echo "  examples      - run 'sqlc generate' in examples/authors (requires build + build-sqlc or sqlc on PATH)"
-	@echo "  clean         - remove $(BINDIR)/ and generated example output"
+	@echo "  examples      - run 'sqlc generate' in each example (EXAMPLES=$(EXAMPLES)); outputs: $(PLUGIN_OUTPUTS)"
+	@echo "  clean         - remove $(BINDIR)/ and generated plugin dirs under examples/"
 	@echo ""
 	@echo "Overrides: BINDIR=$(BINDIR)  SQLC=$(SQLC)"
 
@@ -73,8 +81,13 @@ build-codegen: proto $(BINDIR)
 	go build -o $(CODEGEN_BIN) ./cmd/sqlc-gen-ydb-go-sdk/
 	@echo "ok: $(CODEGEN_BIN)"
 
-# Build both plugins.
-build: build-engine build-codegen
+# Build the ydb-database-sql codegen plugin. Requires proto.
+build-codegen-dbsql: proto $(BINDIR)
+	go build -o $(CODEGEN_DBSQL_BIN) ./cmd/sqlc-gen-ydb-database-sql/
+	@echo "ok: $(CODEGEN_DBSQL_BIN)"
+
+# Build both plugins (ydb-go-sdk + ydb-database-sql).
+build: build-engine build-codegen build-codegen-dbsql
 	@echo "Plugins ready in $(BINDIR)/"
 
 # Build sqlc from engine-plugin into BINDIR (so examples use plugin-aware sqlc).
@@ -86,13 +99,20 @@ build-sqlc: $(BINDIR)
 $(BINDIR):
 	mkdir -p $(BINDIR)
 
-# Run sqlc generate in examples/authors. Uses BINDIR/sqlc if build-sqlc was run, else SQLC from PATH.
+# Run sqlc generate in each example dir. One run per example generates all plugin outputs (ydb-go-sdk, ydb-database-sql).
 examples: build
 	@which $(SQLC) >/dev/null 2>/dev/null || (echo "error: sqlc not found. Run 'make build-sqlc' or set SQLC to a plugin-aware sqlc binary" >&2; exit 1)
-	cd $(REPO_ROOT)examples/authors && PATH="$(REPO_ROOT)$(BINDIR):$$PATH" $(SQLC) generate
-	@echo "ok: examples/authors/db/ generated"
+	@for ex in $(EXAMPLES); do \
+	  echo "sqlc generate in examples/$$ex ..."; \
+	  (cd $(REPO_ROOT)examples/$$ex && PATH="$(REPO_ROOT)$(BINDIR):$$PATH" $(SQLC) generate) || exit 1; \
+	done
+	@echo "ok: examples generated ($(EXAMPLES) -> $(PLUGIN_OUTPUTS))"
 
 clean:
 	rm -rf $(REPO_ROOT)$(BINDIR)
-	rm -rf $(REPO_ROOT)examples/authors/db
+	@for ex in $(EXAMPLES); do \
+	  for out in $(PLUGIN_OUTPUTS); do \
+	    rm -rf "$(REPO_ROOT)examples/$$ex/$$out"; \
+	  done; \
+	done
 	@echo "ok: cleaned"
