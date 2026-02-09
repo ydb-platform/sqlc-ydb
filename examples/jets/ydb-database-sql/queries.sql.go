@@ -6,97 +6,144 @@ package db
 import (
 	"context"
 	"database/sql"
+
+	_ "github.com/ydb-platform/ydb-go-sdk/v3"
+	"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xerrors"
+	"github.com/ydb-platform/ydb-go-sdk/v3/retry"
 )
 
 const countPilots = `-- name: CountPilots :one
 SELECT COUNT(*) FROM pilots;`
 
-func (q *Queries) CountPilots(ctx context.Context, id int64) (interface{}, error) {
-	row := q.db.QueryRowContext(ctx, countPilots, id)
-	var i interface{}
-	err := row.Scan()
+func (q *Queries) CountPilots(ctx context.Context, id int64) (*interface{}, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*interface{}, error) {
+		row := q.db.QueryRowContext(ctx, countPilots)
+		var i interface{}
+		err := row.Scan()
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return &i, nil
+	}, retry.WithLabel("CountPilots"))
 	if err != nil {
-		return i, err
+		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return i, nil
 }
-
 
 const listPilots = `-- name: ListPilots :many
 SELECT * FROM pilots
 LIMIT 5;`
 
 func (q *Queries) ListPilots(ctx context.Context) ([]ListPilotsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listPilots)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListPilotsRow
-	for rows.Next() {
-		var i ListPilotsRow
-		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]ListPilotsRow, error) {
+		rows, err := q.db.QueryContext(ctx, listPilots)
+		if err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		defer rows.Close()
+		var items []ListPilotsRow
+		for rows.Next() {
+			var i ListPilotsRow
+			if err := rows.Scan(&i.ID, &i.Name); err != nil {
+				return nil, xerrors.WithStackTrace(err)
+			}
+			items = append(items, i)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return items, nil
+	}, retry.WithLabel("ListPilots"))
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
+
 	return items, nil
 }
 
-
 const deletePilot = `-- name: DeletePilot :exec
 DELETE FROM pilots
-WHERE id = ;`
+WHERE id = $id;`
 
 type DeletePilotParams struct {
 	ID uint64 `json:"id"`
 }
 
 func (q *Queries) DeletePilot(ctx context.Context, arg DeletePilotParams) error {
-	_, err := q.db.ExecContext(ctx, deletePilot, arg.ID)
-	return err
-}
+	err := retry.Retry(ctx, func(ctx context.Context) error {
+		_, err := q.db.ExecContext(ctx, deletePilot,
+			sql.Named("id", arg.ID),
+		)
+		if err != nil {
+			return xerrors.WithStackTrace(err)
+		}
 
+		return nil
+	}, retry.WithLabel("DeletePilot"))
+	if err != nil {
+		return xerrors.WithStackTrace(err)
+	}
+
+	return nil
+}
 
 const getPilot = `-- name: GetPilot :one
 SELECT * FROM pilots
-WHERE id =  LIMIT 1;`
+WHERE id = $id LIMIT 1;`
 
 type GetPilotParams struct {
 	ID uint64 `json:"id"`
 }
 
-func (q *Queries) GetPilot(ctx context.Context, arg GetPilotParams) (GetPilotRow, error) {
-	row := q.db.QueryRowContext(ctx, getPilot, arg.ID)
-	var i GetPilotRow
-	err := row.Scan(&i.ID, &i.Name)
+func (q *Queries) GetPilot(ctx context.Context, arg GetPilotParams) (*GetPilotRow, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*GetPilotRow, error) {
+		row := q.db.QueryRowContext(ctx, getPilot,
+			sql.Named("id", arg.ID),
+		)
+		var i GetPilotRow
+		err := row.Scan(&i.ID, &i.Name)
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return &i, nil
+	}, retry.WithLabel("GetPilot"))
 	if err != nil {
-		return i, err
+		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return i, nil
 }
 
-
 const createPilot = `-- name: CreatePilot :one
 INSERT INTO pilots (name)
-VALUES ()
+VALUES ($name)
 RETURNING *;`
 
 type CreatePilotParams struct {
 	Name string `json:"name"`
 }
 
-func (q *Queries) CreatePilot(ctx context.Context, arg CreatePilotParams) (CreatePilotRow, error) {
-	row := q.db.QueryRowContext(ctx, createPilot, arg.Name)
-	var i CreatePilotRow
-	err := row.Scan(&i.ID, &i.Name)
+func (q *Queries) CreatePilot(ctx context.Context, arg CreatePilotParams) (*CreatePilotRow, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*CreatePilotRow, error) {
+		row := q.db.QueryRowContext(ctx, createPilot,
+			sql.Named("name", arg.Name),
+		)
+		var i CreatePilotRow
+		err := row.Scan(&i.ID, &i.Name)
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return &i, nil
+	}, retry.WithLabel("CreatePilot"))
 	if err != nil {
-		return i, err
+		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return i, nil
 }
-
-

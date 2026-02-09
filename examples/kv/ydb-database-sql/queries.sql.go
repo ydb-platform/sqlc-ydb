@@ -6,55 +6,75 @@ package db
 import (
 	"context"
 	"database/sql"
+
+	_ "github.com/ydb-platform/ydb-go-sdk/v3"
+	"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xerrors"
+	"github.com/ydb-platform/ydb-go-sdk/v3/retry"
 )
 
 const get = `-- name: Get :one
 SELECT key, value FROM kv
-WHERE key =  LIMIT 1;`
+WHERE key = $key LIMIT 1;`
 
 type GetParams struct {
 	Key string `json:"key"`
 }
 
-func (q *Queries) Get(ctx context.Context, arg GetParams) (interface{}, error) {
-	row := q.db.QueryRowContext(ctx, get, arg.Key)
-	var i interface{}
-	err := row.Scan()
+func (q *Queries) Get(ctx context.Context, arg GetParams) (*interface{}, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*interface{}, error) {
+		row := q.db.QueryRowContext(ctx, get,
+			sql.Named("key", arg.Key),
+		)
+		var i interface{}
+		err := row.Scan()
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return &i, nil
+	}, retry.WithLabel("Get"))
 	if err != nil {
-		return i, err
+		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return i, nil
 }
-
 
 const list = `-- name: List :many
 SELECT key, value FROM kv
 ORDER BY key;`
 
 func (q *Queries) List(ctx context.Context) ([]interface{}, error) {
-	rows, err := q.db.QueryContext(ctx, list)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []interface{}
-	for rows.Next() {
-		var i interface{}
-		if err := rows.Scan(); err != nil {
+	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]interface{}, error) {
+		rows, err := q.db.QueryContext(ctx, list)
+		if err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		defer rows.Close()
+		var items []interface{}
+		for rows.Next() {
+			var i interface{}
+			if err := rows.Scan(); err != nil {
+				return nil, xerrors.WithStackTrace(err)
+			}
+			items = append(items, i)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return items, nil
+	}, retry.WithLabel("List"))
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
+
 	return items, nil
 }
 
-
 const set = `-- name: Set :exec
 INSERT INTO kv (key, value)
-VALUES (, );`
+VALUES ($key, $value);`
 
 type SetParams struct {
 	Key string `json:"key"`
@@ -62,22 +82,46 @@ type SetParams struct {
 }
 
 func (q *Queries) Set(ctx context.Context, arg SetParams) error {
-	_, err := q.db.ExecContext(ctx, set, arg.Key, arg.Value)
-	return err
-}
+	err := retry.Retry(ctx, func(ctx context.Context) error {
+		_, err := q.db.ExecContext(ctx, set,
+			sql.Named("key", arg.Key),
+			sql.Named("value", arg.Value),
+		)
+		if err != nil {
+			return xerrors.WithStackTrace(err)
+		}
 
+		return nil
+	}, retry.WithLabel("Set"))
+	if err != nil {
+		return xerrors.WithStackTrace(err)
+	}
+
+	return nil
+}
 
 const delete = `-- name: Delete :exec
 DELETE FROM kv
-WHERE key = ;`
+WHERE key = $key;`
 
 type DeleteParams struct {
 	Key string `json:"key"`
 }
 
 func (q *Queries) Delete(ctx context.Context, arg DeleteParams) error {
-	_, err := q.db.ExecContext(ctx, delete, arg.Key)
-	return err
+	err := retry.Retry(ctx, func(ctx context.Context) error {
+		_, err := q.db.ExecContext(ctx, delete,
+			sql.Named("key", arg.Key),
+		)
+		if err != nil {
+			return xerrors.WithStackTrace(err)
+		}
+
+		return nil
+	}, retry.WithLabel("Delete"))
+	if err != nil {
+		return xerrors.WithStackTrace(err)
+	}
+
+	return nil
 }
-
-

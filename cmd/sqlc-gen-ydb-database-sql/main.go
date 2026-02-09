@@ -10,7 +10,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/sqlc-dev/sqlc-engine-ydb/internal/codegen/dbsql"
+	"github.com/sqlc-dev/sqlc-engine-ydb/internal/codegen"
 	"github.com/sqlc-dev/sqlc-engine-ydb/internal/codegen/pb"
 	"google.golang.org/protobuf/proto"
 )
@@ -31,7 +31,7 @@ func run(ctx context.Context) error {
 	if err := proto.Unmarshal(reqBlob, &req); err != nil {
 		return fmt.Errorf("unmarshal request: %w", err)
 	}
-	resp, err := dbsql.Generate(ctx, &req)
+	resp, err := codegen.Generate(ctx, &req, codegen.DatabaseSQL)
 	if err != nil {
 		return err
 	}

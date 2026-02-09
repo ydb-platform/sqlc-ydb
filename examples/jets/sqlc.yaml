@@ -12,6 +12,9 @@ plugins:
   - name: ydb-database-sql
     process:
       cmd: sqlc-gen-ydb-database-sql
+  - name: ydb-python-sdk
+    process:
+      cmd: sqlc-gen-ydb-python-sdk
 
 sql:
   - engine: ydb
@@ -24,5 +27,9 @@ sql:
           package: db
       - out: ydb-database-sql
         plugin: ydb-database-sql
+        options:
+          package: db
+      - out: ydb-python-sdk
+        plugin: ydb-python-sdk
         options:
           package: db

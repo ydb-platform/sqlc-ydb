@@ -1,6 +1,6 @@
-// sqlc-gen-ydb-go-sdk is a process-based codegen plugin for sqlc (v2 config).
-// It reads a binary GenerateRequest from stdin and writes a binary GenerateResponse to stdout.
-// See docs/guides/plugins.md (process plugins).
+// sqlc-gen-ydb-python-sdk is a process-based codegen plugin for sqlc (v2 config).
+// It generates Python code for ydb-python-sdk (QuerySessionPool, execute_with_retries, $name params).
+// Reads binary GenerateRequest from stdin, writes binary GenerateResponse to stdout.
 package main
 
 import (
@@ -17,7 +17,7 @@ import (
 
 func main() {
 	if err := run(context.Background()); err != nil {
-		fmt.Fprintf(os.Stderr, "sqlc-gen-ydb-go-sdk: %v\n", err)
+		fmt.Fprintf(os.Stderr, "sqlc-gen-ydb-python-sdk: %v\n", err)
 		os.Exit(2)
 	}
 }
@@ -31,7 +31,7 @@ func run(ctx context.Context) error {
 	if err := proto.Unmarshal(reqBlob, &req); err != nil {
 		return fmt.Errorf("unmarshal request: %w", err)
 	}
-	resp, err := codegen.Generate(ctx, &req, codegen.YdbGoSDK)
+	resp, err := codegen.Generate(ctx, &req, codegen.YdbPythonSDK)
 	if err != nil {
 		return err
 	}

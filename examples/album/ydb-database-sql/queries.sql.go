@@ -6,124 +6,171 @@ package db
 import (
 	"context"
 	"database/sql"
+
+	_ "github.com/ydb-platform/ydb-go-sdk/v3"
+	"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xerrors"
+	"github.com/ydb-platform/ydb-go-sdk/v3/retry"
 )
 
 const getAuthor = `-- name: GetAuthor :one
 SELECT * FROM authors
-WHERE id =  LIMIT 1;`
+WHERE id = $id LIMIT 1;`
 
 type GetAuthorParams struct {
 	ID uint64 `json:"id"`
 }
 
-func (q *Queries) GetAuthor(ctx context.Context, arg GetAuthorParams) (GetAuthorRow, error) {
-	row := q.db.QueryRowContext(ctx, getAuthor, arg.ID)
-	var i GetAuthorRow
-	err := row.Scan(&i.ID, &i.Name)
+func (q *Queries) GetAuthor(ctx context.Context, arg GetAuthorParams) (*GetAuthorRow, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*GetAuthorRow, error) {
+		row := q.db.QueryRowContext(ctx, getAuthor,
+			sql.Named("id", arg.ID),
+		)
+		var i GetAuthorRow
+		err := row.Scan(&i.ID, &i.Name)
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return &i, nil
+	}, retry.WithLabel("GetAuthor"))
 	if err != nil {
-		return i, err
+		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return i, nil
 }
-
 
 const listAuthors = `-- name: ListAuthors :many
 SELECT * FROM authors
 ORDER BY name;`
 
 func (q *Queries) ListAuthors(ctx context.Context) ([]ListAuthorsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAuthors)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListAuthorsRow
-	for rows.Next() {
-		var i ListAuthorsRow
-		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]ListAuthorsRow, error) {
+		rows, err := q.db.QueryContext(ctx, listAuthors)
+		if err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		defer rows.Close()
+		var items []ListAuthorsRow
+		for rows.Next() {
+			var i ListAuthorsRow
+			if err := rows.Scan(&i.ID, &i.Name); err != nil {
+				return nil, xerrors.WithStackTrace(err)
+			}
+			items = append(items, i)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return items, nil
+	}, retry.WithLabel("ListAuthors"))
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
+
 	return items, nil
 }
 
-
 const createAuthor = `-- name: CreateAuthor :one
 INSERT INTO authors (name)
-VALUES ()
+VALUES ($name)
 RETURNING *;`
 
 type CreateAuthorParams struct {
 	Name string `json:"name"`
 }
 
-func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (CreateAuthorRow, error) {
-	row := q.db.QueryRowContext(ctx, createAuthor, arg.Name)
-	var i CreateAuthorRow
-	err := row.Scan(&i.ID, &i.Name)
+func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (*CreateAuthorRow, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*CreateAuthorRow, error) {
+		row := q.db.QueryRowContext(ctx, createAuthor,
+			sql.Named("name", arg.Name),
+		)
+		var i CreateAuthorRow
+		err := row.Scan(&i.ID, &i.Name)
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return &i, nil
+	}, retry.WithLabel("CreateAuthor"))
 	if err != nil {
-		return i, err
+		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return i, nil
 }
 
-
 const getAlbum = `-- name: GetAlbum :one
 SELECT * FROM albums
-WHERE id =  LIMIT 1;`
+WHERE id = $id LIMIT 1;`
 
 type GetAlbumParams struct {
 	ID uint64 `json:"id"`
 }
 
-func (q *Queries) GetAlbum(ctx context.Context, arg GetAlbumParams) (GetAlbumRow, error) {
-	row := q.db.QueryRowContext(ctx, getAlbum, arg.ID)
-	var i GetAlbumRow
-	err := row.Scan(&i.ID, &i.Title, &i.Author_id)
+func (q *Queries) GetAlbum(ctx context.Context, arg GetAlbumParams) (*GetAlbumRow, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*GetAlbumRow, error) {
+		row := q.db.QueryRowContext(ctx, getAlbum,
+			sql.Named("id", arg.ID),
+		)
+		var i GetAlbumRow
+		err := row.Scan(&i.ID, &i.Title, &i.Author_id)
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return &i, nil
+	}, retry.WithLabel("GetAlbum"))
 	if err != nil {
-		return i, err
+		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return i, nil
 }
 
-
 const listAlbumsByAuthor = `-- name: ListAlbumsByAuthor :many
 SELECT * FROM albums
-WHERE author_id = 
+WHERE author_id = $author_id
 ORDER BY title;`
 
 type ListAlbumsByAuthorParams struct {
 	Author_id uint64 `json:"author_id"`
 }
 
-func (q *Queries) ListAlbumsByAuthor(ctx context.Context) ([]ListAlbumsByAuthorRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAlbumsByAuthor)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListAlbumsByAuthorRow
-	for rows.Next() {
-		var i ListAlbumsByAuthorRow
-		if err := rows.Scan(&i.ID, &i.Title, &i.Author_id); err != nil {
+func (q *Queries) ListAlbumsByAuthor(ctx context.Context, arg ListAlbumsByAuthorParams) ([]ListAlbumsByAuthorRow, error) {
+	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]ListAlbumsByAuthorRow, error) {
+		rows, err := q.db.QueryContext(ctx, listAlbumsByAuthor,
+			sql.Named("author_id", arg.Author_id),
+		)
+		if err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		defer rows.Close()
+		var items []ListAlbumsByAuthorRow
+		for rows.Next() {
+			var i ListAlbumsByAuthorRow
+			if err := rows.Scan(&i.ID, &i.Title, &i.Author_id); err != nil {
+				return nil, xerrors.WithStackTrace(err)
+			}
+			items = append(items, i)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return items, nil
+	}, retry.WithLabel("ListAlbumsByAuthor"))
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
+
 	return items, nil
 }
 
-
 const createAlbum = `-- name: CreateAlbum :one
 INSERT INTO albums (title, author_id)
-VALUES (, )
+VALUES ($title, $author_id)
 RETURNING *;`
 
 type CreateAlbumParams struct {
@@ -131,28 +178,49 @@ type CreateAlbumParams struct {
 	Author_id uint64 `json:"author_id"`
 }
 
-func (q *Queries) CreateAlbum(ctx context.Context, arg CreateAlbumParams) (CreateAlbumRow, error) {
-	row := q.db.QueryRowContext(ctx, createAlbum, arg.Title, arg.Author_id)
-	var i CreateAlbumRow
-	err := row.Scan(&i.ID, &i.Title, &i.Author_id)
+func (q *Queries) CreateAlbum(ctx context.Context, arg CreateAlbumParams) (*CreateAlbumRow, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*CreateAlbumRow, error) {
+		row := q.db.QueryRowContext(ctx, createAlbum,
+			sql.Named("title", arg.Title),
+			sql.Named("author_id", arg.Author_id),
+		)
+		var i CreateAlbumRow
+		err := row.Scan(&i.ID, &i.Title, &i.Author_id)
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return &i, nil
+	}, retry.WithLabel("CreateAlbum"))
 	if err != nil {
-		return i, err
+		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return i, nil
 }
 
-
 const deleteAlbum = `-- name: DeleteAlbum :exec
 DELETE FROM albums
-WHERE id = ;`
+WHERE id = $id;`
 
 type DeleteAlbumParams struct {
 	ID uint64 `json:"id"`
 }
 
 func (q *Queries) DeleteAlbum(ctx context.Context, arg DeleteAlbumParams) error {
-	_, err := q.db.ExecContext(ctx, deleteAlbum, arg.ID)
-	return err
+	err := retry.Retry(ctx, func(ctx context.Context) error {
+		_, err := q.db.ExecContext(ctx, deleteAlbum,
+			sql.Named("id", arg.ID),
+		)
+		if err != nil {
+			return xerrors.WithStackTrace(err)
+		}
+
+		return nil
+	}, retry.WithLabel("DeleteAlbum"))
+	if err != nil {
+		return xerrors.WithStackTrace(err)
+	}
+
+	return nil
 }
-
-

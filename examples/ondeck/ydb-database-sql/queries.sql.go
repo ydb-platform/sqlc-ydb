@@ -6,6 +6,10 @@ package db
 import (
 	"context"
 	"database/sql"
+
+	_ "github.com/ydb-platform/ydb-go-sdk/v3"
+	"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xerrors"
+	"github.com/ydb-platform/ydb-go-sdk/v3/retry"
 )
 
 const listCities = `-- name: ListCities :many
@@ -13,48 +17,64 @@ SELECT * FROM city
 ORDER BY name;`
 
 func (q *Queries) ListCities(ctx context.Context) ([]ListCitiesRow, error) {
-	rows, err := q.db.QueryContext(ctx, listCities)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListCitiesRow
-	for rows.Next() {
-		var i ListCitiesRow
-		if err := rows.Scan(&i.Slug, &i.Name); err != nil {
+	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]ListCitiesRow, error) {
+		rows, err := q.db.QueryContext(ctx, listCities)
+		if err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		defer rows.Close()
+		var items []ListCitiesRow
+		for rows.Next() {
+			var i ListCitiesRow
+			if err := rows.Scan(&i.Slug, &i.Name); err != nil {
+				return nil, xerrors.WithStackTrace(err)
+			}
+			items = append(items, i)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return items, nil
+	}, retry.WithLabel("ListCities"))
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
+
 	return items, nil
 }
 
-
 const getCity = `-- name: GetCity :one
 SELECT * FROM city
-WHERE slug =  LIMIT 1;`
+WHERE slug = $slug LIMIT 1;`
 
 type GetCityParams struct {
 	Slug string `json:"slug"`
 }
 
-func (q *Queries) GetCity(ctx context.Context, arg GetCityParams) (GetCityRow, error) {
-	row := q.db.QueryRowContext(ctx, getCity, arg.Slug)
-	var i GetCityRow
-	err := row.Scan(&i.Slug, &i.Name)
+func (q *Queries) GetCity(ctx context.Context, arg GetCityParams) (*GetCityRow, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*GetCityRow, error) {
+		row := q.db.QueryRowContext(ctx, getCity,
+			sql.Named("slug", arg.Slug),
+		)
+		var i GetCityRow
+		err := row.Scan(&i.Slug, &i.Name)
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return &i, nil
+	}, retry.WithLabel("GetCity"))
 	if err != nil {
-		return i, err
+		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return i, nil
 }
 
-
 const createCity = `-- name: CreateCity :one
 INSERT INTO city (name, slug)
-VALUES (, )
+VALUES ($name, $slug)
 RETURNING *;`
 
 type CreateCityParams struct {
@@ -62,21 +82,31 @@ type CreateCityParams struct {
 	Slug string `json:"slug"`
 }
 
-func (q *Queries) CreateCity(ctx context.Context, arg CreateCityParams) (CreateCityRow, error) {
-	row := q.db.QueryRowContext(ctx, createCity, arg.Name, arg.Slug)
-	var i CreateCityRow
-	err := row.Scan(&i.Slug, &i.Name)
+func (q *Queries) CreateCity(ctx context.Context, arg CreateCityParams) (*CreateCityRow, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*CreateCityRow, error) {
+		row := q.db.QueryRowContext(ctx, createCity,
+			sql.Named("name", arg.Name),
+			sql.Named("slug", arg.Slug),
+		)
+		var i CreateCityRow
+		err := row.Scan(&i.Slug, &i.Name)
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return &i, nil
+	}, retry.WithLabel("CreateCity"))
 	if err != nil {
-		return i, err
+		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return i, nil
 }
 
-
 const updateCityName = `-- name: UpdateCityName :exec
 UPDATE city
-SET name = 
-WHERE slug = ;`
+SET name = $name
+WHERE slug = $slug;`
 
 type UpdateCityNameParams struct {
 	Name string `json:"name"`
@@ -84,74 +114,118 @@ type UpdateCityNameParams struct {
 }
 
 func (q *Queries) UpdateCityName(ctx context.Context, arg UpdateCityNameParams) error {
-	_, err := q.db.ExecContext(ctx, updateCityName, arg.Name, arg.Slug)
-	return err
-}
+	err := retry.Retry(ctx, func(ctx context.Context) error {
+		_, err := q.db.ExecContext(ctx, updateCityName,
+			sql.Named("name", arg.Name),
+			sql.Named("slug", arg.Slug),
+		)
+		if err != nil {
+			return xerrors.WithStackTrace(err)
+		}
 
+		return nil
+	}, retry.WithLabel("UpdateCityName"))
+	if err != nil {
+		return xerrors.WithStackTrace(err)
+	}
+
+	return nil
+}
 
 const listVenues = `-- name: ListVenues :many
 SELECT * FROM venue
-WHERE city = 
+WHERE city = $city
 ORDER BY name;`
 
 type ListVenuesParams struct {
 	City string `json:"city"`
 }
 
-func (q *Queries) ListVenues(ctx context.Context) ([]ListVenuesRow, error) {
-	rows, err := q.db.QueryContext(ctx, listVenues)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListVenuesRow
-	for rows.Next() {
-		var i ListVenuesRow
-		if err := rows.Scan(&i.ID, &i.Status, &i.Slug, &i.Name, &i.City, &i.Spotify_playlist, &i.Songkick_id, &i.Tags, &i.Created_at); err != nil {
+func (q *Queries) ListVenues(ctx context.Context, arg ListVenuesParams) ([]ListVenuesRow, error) {
+	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]ListVenuesRow, error) {
+		rows, err := q.db.QueryContext(ctx, listVenues,
+			sql.Named("city", arg.City),
+		)
+		if err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		defer rows.Close()
+		var items []ListVenuesRow
+		for rows.Next() {
+			var i ListVenuesRow
+			if err := rows.Scan(&i.ID, &i.Status, &i.Slug, &i.Name, &i.City, &i.Spotify_playlist, &i.Songkick_id, &i.Tags, &i.Created_at); err != nil {
+				return nil, xerrors.WithStackTrace(err)
+			}
+			items = append(items, i)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return items, nil
+	}, retry.WithLabel("ListVenues"))
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
+
 	return items, nil
 }
 
-
 const deleteVenue = `-- name: DeleteVenue :exec
 DELETE FROM venue
-WHERE slug = ;`
+WHERE slug = $slug;`
 
 type DeleteVenueParams struct {
 	Slug string `json:"slug"`
 }
 
 func (q *Queries) DeleteVenue(ctx context.Context, arg DeleteVenueParams) error {
-	_, err := q.db.ExecContext(ctx, deleteVenue, arg.Slug)
-	return err
-}
+	err := retry.Retry(ctx, func(ctx context.Context) error {
+		_, err := q.db.ExecContext(ctx, deleteVenue,
+			sql.Named("slug", arg.Slug),
+		)
+		if err != nil {
+			return xerrors.WithStackTrace(err)
+		}
 
+		return nil
+	}, retry.WithLabel("DeleteVenue"))
+	if err != nil {
+		return xerrors.WithStackTrace(err)
+	}
+
+	return nil
+}
 
 const getVenue = `-- name: GetVenue :one
 SELECT * FROM venue
-WHERE slug =  AND city =  LIMIT 1;`
+WHERE slug = $slug AND city = $city LIMIT 1;`
 
 type GetVenueParams struct {
 	Slug string `json:"slug"`
 	City string `json:"city"`
 }
 
-func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams) (GetVenueRow, error) {
-	row := q.db.QueryRowContext(ctx, getVenue, arg.Slug, arg.City)
-	var i GetVenueRow
-	err := row.Scan(&i.ID, &i.Status, &i.Slug, &i.Name, &i.City, &i.Spotify_playlist, &i.Songkick_id, &i.Tags, &i.Created_at)
+func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams) (*GetVenueRow, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*GetVenueRow, error) {
+		row := q.db.QueryRowContext(ctx, getVenue,
+			sql.Named("slug", arg.Slug),
+			sql.Named("city", arg.City),
+		)
+		var i GetVenueRow
+		err := row.Scan(&i.ID, &i.Status, &i.Slug, &i.Name, &i.City, &i.Spotify_playlist, &i.Songkick_id, &i.Tags, &i.Created_at)
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return &i, nil
+	}, retry.WithLabel("GetVenue"))
 	if err != nil {
-		return i, err
+		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return i, nil
 }
-
 
 const createVenue = `-- name: CreateVenue :one
 INSERT INTO venue (
@@ -164,14 +238,14 @@ INSERT INTO venue (
     status,
     tags
 ) VALUES (
-    ,
-    ,
-    ,
-    ,
-    ,
-    ,
-    ,
-    
+    $id,
+    $slug,
+    $name,
+    $city,
+    $created_at,
+    $spotify_playlist,
+    $status,
+    $tags
 )
 RETURNING id;`
 
@@ -186,21 +260,37 @@ type CreateVenueParams struct {
 	Tags *string `json:"tags"`
 }
 
-func (q *Queries) CreateVenue(ctx context.Context, arg CreateVenueParams) (interface{}, error) {
-	row := q.db.QueryRowContext(ctx, createVenue, arg.ID, arg.Slug, arg.Name, arg.City, arg.Created_at, arg.Spotify_playlist, arg.Status, arg.Tags)
-	var i interface{}
-	err := row.Scan()
+func (q *Queries) CreateVenue(ctx context.Context, arg CreateVenueParams) (*interface{}, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*interface{}, error) {
+		row := q.db.QueryRowContext(ctx, createVenue,
+			sql.Named("id", arg.ID),
+			sql.Named("slug", arg.Slug),
+			sql.Named("name", arg.Name),
+			sql.Named("city", arg.City),
+			sql.Named("created_at", arg.Created_at),
+			sql.Named("spotify_playlist", arg.Spotify_playlist),
+			sql.Named("status", arg.Status),
+			sql.Named("tags", arg.Tags),
+		)
+		var i interface{}
+		err := row.Scan()
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return &i, nil
+	}, retry.WithLabel("CreateVenue"))
 	if err != nil {
-		return i, err
+		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return i, nil
 }
 
-
 const updateVenueName = `-- name: UpdateVenueName :one
 UPDATE venue
-SET name = 
-WHERE slug = 
+SET name = $name
+WHERE slug = $slug
 RETURNING id;`
 
 type UpdateVenueNameParams struct {
@@ -208,16 +298,26 @@ type UpdateVenueNameParams struct {
 	Slug string `json:"slug"`
 }
 
-func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams) (interface{}, error) {
-	row := q.db.QueryRowContext(ctx, updateVenueName, arg.Name, arg.Slug)
-	var i interface{}
-	err := row.Scan()
+func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams) (*interface{}, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*interface{}, error) {
+		row := q.db.QueryRowContext(ctx, updateVenueName,
+			sql.Named("name", arg.Name),
+			sql.Named("slug", arg.Slug),
+		)
+		var i interface{}
+		err := row.Scan()
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return &i, nil
+	}, retry.WithLabel("UpdateVenueName"))
 	if err != nil {
-		return i, err
+		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return i, nil
 }
-
 
 const venueCountByCity = `-- name: VenueCountByCity :many
 SELECT city, COUNT(*) AS count
@@ -226,23 +326,29 @@ GROUP BY city
 ORDER BY city;`
 
 func (q *Queries) VenueCountByCity(ctx context.Context) ([]interface{}, error) {
-	rows, err := q.db.QueryContext(ctx, venueCountByCity)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []interface{}
-	for rows.Next() {
-		var i interface{}
-		if err := rows.Scan(); err != nil {
+	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]interface{}, error) {
+		rows, err := q.db.QueryContext(ctx, venueCountByCity)
+		if err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		defer rows.Close()
+		var items []interface{}
+		for rows.Next() {
+			var i interface{}
+			if err := rows.Scan(); err != nil {
+				return nil, xerrors.WithStackTrace(err)
+			}
+			items = append(items, i)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return items, nil
+	}, retry.WithLabel("VenueCountByCity"))
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
+
 	return items, nil
 }
-
-

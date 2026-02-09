@@ -6,109 +6,162 @@ package db
 import (
 	"context"
 	"database/sql"
+
+	_ "github.com/ydb-platform/ydb-go-sdk/v3"
+	"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xerrors"
+	"github.com/ydb-platform/ydb-go-sdk/v3/retry"
 )
 
 const getAuthor = `-- name: GetAuthor :one
 SELECT * FROM authors
-WHERE author_id =  LIMIT 1;`
+WHERE author_id = $author_id LIMIT 1;`
 
 type GetAuthorParams struct {
 	Author_id uint64 `json:"author_id"`
 }
 
-func (q *Queries) GetAuthor(ctx context.Context, arg GetAuthorParams) (GetAuthorRow, error) {
-	row := q.db.QueryRowContext(ctx, getAuthor, arg.Author_id)
-	var i GetAuthorRow
-	err := row.Scan(&i.Author_id, &i.Name)
+func (q *Queries) GetAuthor(ctx context.Context, arg GetAuthorParams) (*GetAuthorRow, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*GetAuthorRow, error) {
+		row := q.db.QueryRowContext(ctx, getAuthor,
+			sql.Named("author_id", arg.Author_id),
+		)
+		var i GetAuthorRow
+		err := row.Scan(&i.Author_id, &i.Name)
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return &i, nil
+	}, retry.WithLabel("GetAuthor"))
 	if err != nil {
-		return i, err
+		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return i, nil
 }
 
-
 const getBook = `-- name: GetBook :one
 SELECT * FROM books
-WHERE book_id =  LIMIT 1;`
+WHERE book_id = $book_id LIMIT 1;`
 
 type GetBookParams struct {
 	Book_id uint64 `json:"book_id"`
 }
 
-func (q *Queries) GetBook(ctx context.Context, arg GetBookParams) (GetBookRow, error) {
-	row := q.db.QueryRowContext(ctx, getBook, arg.Book_id)
-	var i GetBookRow
-	err := row.Scan(&i.Book_id, &i.Author_id, &i.Isbn, &i.Book_type, &i.Title, &i.Year, &i.Available, &i.Tags)
+func (q *Queries) GetBook(ctx context.Context, arg GetBookParams) (*GetBookRow, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*GetBookRow, error) {
+		row := q.db.QueryRowContext(ctx, getBook,
+			sql.Named("book_id", arg.Book_id),
+		)
+		var i GetBookRow
+		err := row.Scan(&i.Book_id, &i.Author_id, &i.Isbn, &i.Book_type, &i.Title, &i.Year, &i.Available, &i.Tags)
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return &i, nil
+	}, retry.WithLabel("GetBook"))
 	if err != nil {
-		return i, err
+		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return i, nil
 }
 
-
 const deleteBook = `-- name: DeleteBook :exec
 DELETE FROM books
-WHERE book_id = ;`
+WHERE book_id = $book_id;`
 
 type DeleteBookParams struct {
 	Book_id uint64 `json:"book_id"`
 }
 
 func (q *Queries) DeleteBook(ctx context.Context, arg DeleteBookParams) error {
-	_, err := q.db.ExecContext(ctx, deleteBook, arg.Book_id)
-	return err
-}
+	err := retry.Retry(ctx, func(ctx context.Context) error {
+		_, err := q.db.ExecContext(ctx, deleteBook,
+			sql.Named("book_id", arg.Book_id),
+		)
+		if err != nil {
+			return xerrors.WithStackTrace(err)
+		}
 
+		return nil
+	}, retry.WithLabel("DeleteBook"))
+	if err != nil {
+		return xerrors.WithStackTrace(err)
+	}
+
+	return nil
+}
 
 const booksByTitleYear = `-- name: BooksByTitleYear :many
 SELECT * FROM books
-WHERE title =  AND year = ;`
+WHERE title = $title AND year = $year;`
 
 type BooksByTitleYearParams struct {
 	Title string `json:"title"`
 	Year uint64 `json:"year"`
 }
 
-func (q *Queries) BooksByTitleYear(ctx context.Context) ([]BooksByTitleYearRow, error) {
-	rows, err := q.db.QueryContext(ctx, booksByTitleYear)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []BooksByTitleYearRow
-	for rows.Next() {
-		var i BooksByTitleYearRow
-		if err := rows.Scan(&i.Book_id, &i.Author_id, &i.Isbn, &i.Book_type, &i.Title, &i.Year, &i.Available, &i.Tags); err != nil {
+func (q *Queries) BooksByTitleYear(ctx context.Context, arg BooksByTitleYearParams) ([]BooksByTitleYearRow, error) {
+	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]BooksByTitleYearRow, error) {
+		rows, err := q.db.QueryContext(ctx, booksByTitleYear,
+			sql.Named("title", arg.Title),
+			sql.Named("year", arg.Year),
+		)
+		if err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		defer rows.Close()
+		var items []BooksByTitleYearRow
+		for rows.Next() {
+			var i BooksByTitleYearRow
+			if err := rows.Scan(&i.Book_id, &i.Author_id, &i.Isbn, &i.Book_type, &i.Title, &i.Year, &i.Available, &i.Tags); err != nil {
+				return nil, xerrors.WithStackTrace(err)
+			}
+			items = append(items, i)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return items, nil
+	}, retry.WithLabel("BooksByTitleYear"))
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
+
 	return items, nil
 }
 
-
 const createAuthor = `-- name: CreateAuthor :one
 INSERT INTO authors (name)
-VALUES ()
+VALUES ($name)
 RETURNING *;`
 
 type CreateAuthorParams struct {
 	Name string `json:"name"`
 }
 
-func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (CreateAuthorRow, error) {
-	row := q.db.QueryRowContext(ctx, createAuthor, arg.Name)
-	var i CreateAuthorRow
-	err := row.Scan(&i.Author_id, &i.Name)
+func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (*CreateAuthorRow, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*CreateAuthorRow, error) {
+		row := q.db.QueryRowContext(ctx, createAuthor,
+			sql.Named("name", arg.Name),
+		)
+		var i CreateAuthorRow
+		err := row.Scan(&i.Author_id, &i.Name)
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return &i, nil
+	}, retry.WithLabel("CreateAuthor"))
 	if err != nil {
-		return i, err
+		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return i, nil
 }
-
 
 const createBook = `-- name: CreateBook :one
 INSERT INTO books (
@@ -120,13 +173,13 @@ INSERT INTO books (
     available,
     tags
 ) VALUES (
-    ,
-    ,
-    ,
-    ,
-    ,
-    ,
-    
+    $author_id,
+    $isbn,
+    $book_type,
+    $title,
+    $year,
+    $available,
+    $tags
 )
 RETURNING *;`
 
@@ -140,21 +193,36 @@ type CreateBookParams struct {
 	Tags *string `json:"tags"`
 }
 
-func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams) (CreateBookRow, error) {
-	row := q.db.QueryRowContext(ctx, createBook, arg.Author_id, arg.Isbn, arg.Book_type, arg.Title, arg.Year, arg.Available, arg.Tags)
-	var i CreateBookRow
-	err := row.Scan(&i.Book_id, &i.Author_id, &i.Isbn, &i.Book_type, &i.Title, &i.Year, &i.Available, &i.Tags)
+func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams) (*CreateBookRow, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*CreateBookRow, error) {
+		row := q.db.QueryRowContext(ctx, createBook,
+			sql.Named("author_id", arg.Author_id),
+			sql.Named("isbn", arg.Isbn),
+			sql.Named("book_type", arg.Book_type),
+			sql.Named("title", arg.Title),
+			sql.Named("year", arg.Year),
+			sql.Named("available", arg.Available),
+			sql.Named("tags", arg.Tags),
+		)
+		var i CreateBookRow
+		err := row.Scan(&i.Book_id, &i.Author_id, &i.Isbn, &i.Book_type, &i.Title, &i.Year, &i.Available, &i.Tags)
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return &i, nil
+	}, retry.WithLabel("CreateBook"))
 	if err != nil {
-		return i, err
+		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return i, nil
 }
 
-
 const updateBook = `-- name: UpdateBook :exec
 UPDATE books
-SET title = , tags = 
-WHERE book_id = ;`
+SET title = $title, tags = $tags
+WHERE book_id = $book_id;`
 
 type UpdateBookParams struct {
 	Title string `json:"title"`
@@ -163,15 +231,29 @@ type UpdateBookParams struct {
 }
 
 func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams) error {
-	_, err := q.db.ExecContext(ctx, updateBook, arg.Title, arg.Tags, arg.Book_id)
-	return err
-}
+	err := retry.Retry(ctx, func(ctx context.Context) error {
+		_, err := q.db.ExecContext(ctx, updateBook,
+			sql.Named("title", arg.Title),
+			sql.Named("tags", arg.Tags),
+			sql.Named("book_id", arg.Book_id),
+		)
+		if err != nil {
+			return xerrors.WithStackTrace(err)
+		}
 
+		return nil
+	}, retry.WithLabel("UpdateBook"))
+	if err != nil {
+		return xerrors.WithStackTrace(err)
+	}
+
+	return nil
+}
 
 const updateBookISBN = `-- name: UpdateBookISBN :exec
 UPDATE books
-SET title = , tags = , isbn = 
-WHERE book_id = ;`
+SET title = $title, tags = $tags, isbn = $isbn
+WHERE book_id = $book_id;`
 
 type UpdateBookISBNParams struct {
 	Title string `json:"title"`
@@ -181,8 +263,22 @@ type UpdateBookISBNParams struct {
 }
 
 func (q *Queries) UpdateBookISBN(ctx context.Context, arg UpdateBookISBNParams) error {
-	_, err := q.db.ExecContext(ctx, updateBookISBN, arg.Title, arg.Tags, arg.Isbn, arg.Book_id)
-	return err
+	err := retry.Retry(ctx, func(ctx context.Context) error {
+		_, err := q.db.ExecContext(ctx, updateBookISBN,
+			sql.Named("title", arg.Title),
+			sql.Named("tags", arg.Tags),
+			sql.Named("isbn", arg.Isbn),
+			sql.Named("book_id", arg.Book_id),
+		)
+		if err != nil {
+			return xerrors.WithStackTrace(err)
+		}
+
+		return nil
+	}, retry.WithLabel("UpdateBookISBN"))
+	if err != nil {
+		return xerrors.WithStackTrace(err)
+	}
+
+	return nil
 }
-
-

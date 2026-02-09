@@ -25,19 +25,22 @@ SQLC_PROTOS  := $(SQLC_MOD_DIR)/protos
 PROTO_IN     := $(SQLC_PROTOS)/plugin/codegen.proto
 PROTO_OUT    = $(REPO_ROOT)internal/codegen/pb
 PBOUT        = $(PROTO_OUT)/codegen.pb.go
-ENGINE_BIN   = $(BINDIR)/sqlc-engine-ydb
-CODEGEN_BIN  = $(BINDIR)/sqlc-gen-ydb-go-sdk
-CODEGEN_DBSQL_BIN = $(BINDIR)/sqlc-gen-ydb-database-sql
+
+# Binaries
+SQLC_ENGINE_YDB_BIN          = $(BINDIR)/sqlc-engine-ydb
+CODEGEN_YDB_GO_SDK_BIN       = $(BINDIR)/sqlc-gen-ydb-go-sdk
+CODEGEN_YDB_DATABASE_SQL_BIN = $(BINDIR)/sqlc-gen-ydb-database-sql
+CODEGEN_YDB_PYTHON_SDK_BIN   = $(BINDIR)/sqlc-gen-ydb-python-sdk
 
 # Example dirs under examples/ (each has schema.sql, queries.sql, sqlc.yaml with all plugins).
-# Codegen output: examples/<name>/<plugin>/ (e.g. authors/ydb-go-sdk, authors/ydb-database-sql).
+# Codegen output: examples/<name>/<plugin>/ (e.g. authors/ydb-go-sdk, authors/ydb-database-sql, authors/ydb-python-sdk).
 # To add an example: create examples/<name>/{schema.sql,queries.sql,sqlc.yaml} and add <name> to EXAMPLES.
 EXAMPLES        ?= authors album kv batch booktest jets ondeck
-PLUGIN_OUTPUTS  := ydb-go-sdk ydb-database-sql
+PLUGIN_OUTPUTS  := ydb-go-sdk ydb-database-sql ydb-python-sdk
 
 DOCKER_IMAGE ?= sqlc-ydb
 
-.PHONY: all proto build build-engine build-codegen build-codegen-dbsql build-sqlc examples docker-build clean help
+.PHONY: all proto build build-engine build-codegen build-codegen-dbsql build-codegen-pysdk build-sqlc examples docker-build clean help
 
 all: help
 
@@ -47,7 +50,8 @@ help:
 	@echo "  build-engine  - build sqlc-engine-ydb into $(BINDIR)/"
 	@echo "  build-codegen - build sqlc-gen-ydb-go-sdk into $(BINDIR)/ (depends on proto)"
 	@echo "  build-codegen-dbsql - build sqlc-gen-ydb-database-sql into $(BINDIR)/ (depends on proto)"
-	@echo "  build         - proto + build both plugins (ydb-go-sdk + ydb-database-sql)"
+	@echo "  build-codegen-pysdk - build sqlc-gen-ydb-python-sdk into $(BINDIR)/ (depends on proto)"
+	@echo "  build         - proto + build all plugins (ydb-go-sdk, ydb-database-sql, ydb-python-sdk)"
 	@echo "  build-sqlc    - build sqlc from ../engine-plugin into $(BINDIR)/sqlc (needed for examples)"
 	@echo "  examples      - run 'sqlc generate' in each example (EXAMPLES=$(EXAMPLES)); outputs: $(PLUGIN_OUTPUTS)"
 	@echo "  docker-build  - build Docker image with sqlc + plugins (DOCKER_IMAGE=$(DOCKER_IMAGE))"
@@ -76,21 +80,26 @@ $(PBOUT): $(PROTO_IN)
 
 # Build the YDB engine plugin (parses schema + queries).
 build-engine: $(BINDIR)
-	go build -o $(ENGINE_BIN) ./cmd/sqlc-engine-ydb/
-	@echo "ok: $(ENGINE_BIN)"
+	go build -o $(SQLC_ENGINE_YDB_BIN) ./cmd/sqlc-engine-ydb/
+	@echo "ok: $(SQLC_ENGINE_YDB_BIN)"
 
 # Build the ydb-go-sdk codegen plugin. Requires proto.
 build-codegen: proto $(BINDIR)
-	go build -o $(CODEGEN_BIN) ./cmd/sqlc-gen-ydb-go-sdk/
-	@echo "ok: $(CODEGEN_BIN)"
+	go build -o $(CODEGEN_YDB_GO_SDK_BIN) ./cmd/sqlc-gen-ydb-go-sdk/
+	@echo "ok: $(CODEGEN_YDB_GO_SDK_BIN)"
 
 # Build the ydb-database-sql codegen plugin. Requires proto.
 build-codegen-dbsql: proto $(BINDIR)
-	go build -o $(CODEGEN_DBSQL_BIN) ./cmd/sqlc-gen-ydb-database-sql/
-	@echo "ok: $(CODEGEN_DBSQL_BIN)"
+	go build -o $(CODEGEN_YDB_DATABASE_SQL_BIN) ./cmd/sqlc-gen-ydb-database-sql/
+	@echo "ok: $(CODEGEN_YDB_DATABASE_SQL_BIN)"
 
-# Build both plugins (ydb-go-sdk + ydb-database-sql).
-build: build-engine build-codegen build-codegen-dbsql
+# Build the ydb-python-sdk codegen plugin. Requires proto.
+build-codegen-pysdk: proto $(BINDIR)
+	go build -o $(CODEGEN_YDB_PYTHON_SDK_BIN) ./cmd/sqlc-gen-ydb-python-sdk/
+	@echo "ok: $(CODEGEN_YDB_PYTHON_SDK_BIN)"
+
+# Build all plugins (ydb-go-sdk, ydb-database-sql, ydb-python-sdk).
+build: build-engine build-codegen build-codegen-dbsql build-codegen-pysdk
 	@echo "Plugins ready in $(BINDIR)/"
 
 # Build sqlc from engine-plugin into BINDIR (so examples use plugin-aware sqlc).
