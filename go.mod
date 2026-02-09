@@ -3,6 +3,7 @@ module github.com/sqlc-dev/sqlc-engine-ydb
 go 1.24.7
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/antlr4-go/antlr/v4 v4.13.1
 	github.com/google/go-cmp v0.7.0
 	github.com/sqlc-dev/sqlc v0.0.0
