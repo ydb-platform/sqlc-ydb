@@ -9,7 +9,7 @@ import (
 	"github.com/sqlc-dev/sqlc-engine-ydb/internal/codegen/pb"
 )
 
-func generateYdbGoSdk(ctx context.Context, req *pb.GenerateRequest) (*pb.GenerateResponse, error) {
+func generateYdbGoSDK(ctx context.Context, req *pb.GenerateRequest) (*pb.GenerateResponse, error) {
 	opts, err := parseOptions(req.GetPluginOptions())
 	if err != nil {
 		return nil, err

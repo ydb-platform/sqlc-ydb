@@ -1,7 +1,119 @@
 # sqlc-ydb
 
-`cmd/sqlc-engine-ydb` is an external engine of SQLC with support YDB.
-`cmd/sqlc-gen-ydb-go-sdk` and `cmd/sqlc-gen-ydb-database-sql` are codegen plugins for YDB (ydb-go-sdk and database/sql APIs).
+[sqlc](https://sqlc.dev) engine and codegen plugins for [YDB](https://ydb.tech).
+
+- **sqlc-engine-ydb** — engine plugin: parses YDB schema and queries.
+- **sqlc-gen-ydb-go-sdk** — generates Go code for [ydb-go-sdk](https://github.com/ydb-platform/ydb-go-sdk) (query API, `ParamsBuilder`, `QueryRow`, `Exec`).
+- **sqlc-gen-ydb-database-sql** — generates Go code for `database/sql` with YDB driver (DBTX, `ExecContext`, `QueryContext`, `QueryRowContext`).
+- **sqlc-gen-ydb-python-sdk** — generates Python code for [ydb-python-sdk](https://github.com/ydb-platform/ydb-python-sdk) (`QuerySessionPool`, `execute_with_retries`, `$name` parameters).
+
+## Configuration (sqlc.yaml)
+
+Use **version 2** config. Register the engine and the codegen plugins you need; each `codegen` entry produces output in its `out` directory.
+
+### Minimal: one plugin (e.g. ydb-go-sdk)
+
+```yaml
+version: "2"
+
+engines:
+  - name: ydb
+    process:
+      cmd: sqlc-engine-ydb
+
+plugins:
+  - name: ydb-go-sdk
+    process:
+      cmd: sqlc-gen-ydb-go-sdk
+
+sql:
+  - engine: ydb
+    schema: "schema.sql"
+    queries: "queries.sql"
+    codegen:
+      - out: ydb-go-sdk
+        plugin: ydb-go-sdk
+        options:
+          package: db
+          # optional, default: github.com/ydb-platform/ydb-go-sdk/v3
+          sql_package: github.com/ydb-platform/ydb-go-sdk/v3
+```
+
+### database/sql (ydb-database-sql)
+
+```yaml
+plugins:
+  - name: ydb-database-sql
+    process:
+      cmd: sqlc-gen-ydb-database-sql
+
+# In sql.codegen add:
+      - out: ydb-database-sql
+        plugin: ydb-database-sql
+        options:
+          package: db
+```
+
+Output: `ydb-database-sql/models.go`, `db.go`, `queries.sql.go` (Go types, DBTX, retry-wrapped queries).
+
+### ydb-python-sdk
+
+```yaml
+plugins:
+  - name: ydb-python-sdk
+    process:
+      cmd: sqlc-gen-ydb-python-sdk
+
+# In sql.codegen add:
+      - out: ydb-python-sdk
+        plugin: ydb-python-sdk
+        options:
+          package: db
+```
+
+Output: `ydb-python-sdk/models.py`, `queries.py` (or one `.py` per query file), `__init__.py`. Use `Querier(pool)` and call methods like `get_author(id=...)`; add the output dir to `PYTHONPATH` or use as package `db`.
+
+### All plugins in one project
+
+```yaml
+version: "2"
+
+engines:
+  - name: ydb
+    process:
+      cmd: sqlc-engine-ydb
+
+plugins:
+  - name: ydb-go-sdk
+    process:
+      cmd: sqlc-gen-ydb-go-sdk
+  - name: ydb-database-sql
+    process:
+      cmd: sqlc-gen-ydb-database-sql
+  - name: ydb-python-sdk
+    process:
+      cmd: sqlc-gen-ydb-python-sdk
+
+sql:
+  - engine: ydb
+    schema: "schema.sql"
+    queries: "queries.sql"
+    codegen:
+      - out: ydb-go-sdk
+        plugin: ydb-go-sdk
+        options:
+          package: db
+      - out: ydb-database-sql
+        plugin: ydb-database-sql
+        options:
+          package: db
+      - out: ydb-python-sdk
+        plugin: ydb-python-sdk
+        options:
+          package: db
+```
+
+Ensure the plugin binaries (`sqlc-engine-ydb`, `sqlc-gen-ydb-go-sdk`, etc.) are on `PATH` when you run `sqlc generate`.
 
 ## Generating code with Docker (recommended)
 
@@ -12,7 +124,7 @@ You don't need to install sqlc or plugins locally. Use the pre-built image (or b
 docker run --rm -v "$(pwd):/src" -w /src ghcr.io/<owner>/sqlc-ydb:latest generate
 ```
 
-Replace `<owner>` with the GitHub org/user that publishes the image (e.g. `sqlc-dev`). The image includes sqlc (from engine-plugin), **sqlc-engine-ydb**, **sqlc-gen-ydb-go-sdk**, and **sqlc-gen-ydb-database-sql**.
+Replace `<owner>` with the GitHub org/user that publishes the image (e.g. `sqlc-dev`). The image includes sqlc (from engine-plugin), **sqlc-engine-ydb**, **sqlc-gen-ydb-go-sdk**, **sqlc-gen-ydb-database-sql**, and **sqlc-gen-ydb-python-sdk**.
 
 To build the image locally (from the sqlc-ydb repo root):
 
@@ -44,4 +156,4 @@ The `examples/authors` project uses the v2 config with the **sqlc-engine-ydb** e
    make examples
    ```
 
-Generated files appear under each example in `examples/<name>/ydb-go-sdk/` and `examples/<name>/ydb-database-sql/` (`models.go`, `db.go`, `queries.sql.go`). The Makefile uses `bin/sqlc` from `make build-sqlc` by default; override with `make examples SQLC=/path/to/sqlc`.
+Generated files appear under each example: `ydb-go-sdk/` and `ydb-database-sql/` (Go: `models.go`, `db.go`, `queries.sql.go`), `ydb-python-sdk/` (Python: `models.py`, `queries.py`, `__init__.py`). The Makefile uses `bin/sqlc` from `make build-sqlc` by default; override with `make examples SQLC=/path/to/sqlc`.

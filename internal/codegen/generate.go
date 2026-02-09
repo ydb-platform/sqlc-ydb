@@ -10,12 +10,12 @@ import (
 func Generate(ctx context.Context, req *pb.GenerateRequest, dest Destination) (*pb.GenerateResponse, error) {
 	switch dest {
 	case DatabaseSQL:
-		return generateDbsql(ctx, req)
+		return generateDatabaseSQL(ctx, req)
 	case YdbGoSDK:
-		return generateYdbGoSdk(ctx, req)
+		return generateYdbGoSDK(ctx, req)
 	case YdbPythonSDK:
-		return generatePysdk(ctx, req)
+		return generateYdbPythonSDK(ctx, req)
 	default:
-		return generateYdbGoSdk(ctx, req) // fallback
+		return generateYdbGoSDK(ctx, req) // fallback
 	}
 }

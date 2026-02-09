@@ -8,7 +8,7 @@ import (
 	"github.com/sqlc-dev/sqlc-engine-ydb/internal/codegen/pb"
 )
 
-func generatePysdk(ctx context.Context, req *pb.GenerateRequest) (*pb.GenerateResponse, error) {
+func generateYdbPythonSDK(ctx context.Context, req *pb.GenerateRequest) (*pb.GenerateResponse, error) {
 	opts, err := parseOptions(req.GetPluginOptions())
 	if err != nil {
 		return nil, err
@@ -166,20 +166,7 @@ func pysdkGenQuery(cat *pb.Catalog, pkg string, q *pb.Query) ([]byte, error) {
 	name := q.GetName()
 	text := q.GetText()
 	constName := pysdkToConstName(name)
-	buf.WriteString(constName + " = \"\"\"\n" + text + "\"\"\"\n\n")
-
-	if len(q.GetParams()) > 0 {
-		buf.WriteString("# params: ")
-		for i, p := range q.GetParams() {
-			if col := p.GetColumn(); col != nil {
-				if i > 0 {
-					buf.WriteString(", ")
-				}
-				buf.WriteString("$" + col.GetName())
-			}
-		}
-		buf.WriteString("\n\n")
-	}
+	buf.WriteString(constName + " = \"\"\"\n" + text + "\n\"\"\"\n\n")
 	return buf.Bytes(), nil
 }
 
