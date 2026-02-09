@@ -70,12 +70,14 @@ VALUES ($id, $name, $bio)
 RETURNING *;`
 
 type CreateAuthorParams struct {
+	ID uint64 `json:"id"`
 	Name string `json:"name"`
 	Bio *string `json:"bio"`
 }
 
 func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts ...query.ExecuteOption) (CreateAuthorRow, error) {
 	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$id").Uint64(arg.ID)
 	parameters = parameters.Param("$name").Text(arg.Name)
 	parameters = parameters.Param("$bio").BeginOptional().Text(arg.Bio).EndOptional()
 	row, err := q.db.QueryRow(ctx, createAuthor,
@@ -138,3 +140,5 @@ func (q *Queries) DeleteAuthor(ctx context.Context, arg DeleteAuthorParams, opts
 	}
 	return nil
 }
+
+

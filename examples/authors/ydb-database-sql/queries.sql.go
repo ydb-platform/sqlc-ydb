@@ -78,7 +78,7 @@ VALUES ($id, $name, $bio)
 RETURNING *;`
 
 type CreateAuthorParams struct {
-	ID uint64 `json:"name"`
+	ID uint64 `json:"id"`
 	Name string `json:"name"`
 	Bio *string `json:"bio"`
 }
