@@ -5,7 +5,10 @@ package db
 
 import (
 	"context"
-	"database/sql"
+
+	_ "github.com/ydb-platform/ydb-go-sdk/v3"
+	"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xerrors"
+	"github.com/ydb-platform/ydb-go-sdk/v3/retry"
 )
 
 const getAuthor = `-- name: GetAuthor :one
@@ -16,41 +19,55 @@ type GetAuthorParams struct {
 	ID uint64 `json:"id"`
 }
 
-func (q *Queries) GetAuthor(ctx context.Context, arg GetAuthorParams) (GetAuthorRow, error) {
-	row := q.db.QueryRowContext(ctx, getAuthor, arg.ID)
-	var i GetAuthorRow
-	err := row.Scan(&i.ID, &i.Name, &i.Bio)
+func (q *Queries) GetAuthor(ctx context.Context, arg GetAuthorParams) (*GetAuthorRow, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*GetAuthorRow, error) {
+		row := q.db.QueryRowContext(ctx, getAuthor, arg.ID)
+		var i GetAuthorRow
+		err := row.Scan(&i.ID, &i.Name, &i.Bio)
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return &i, nil
+	}, retry.WithLabel("GetAuthor"))
 	if err != nil {
-		return i, err
+		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return i, nil
 }
-
 
 const listAuthors = `-- name: ListAuthors :many
 SELECT * FROM authors
 ORDER BY name;`
 
 func (q *Queries) ListAuthors(ctx context.Context) ([]ListAuthorsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAuthors)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListAuthorsRow
-	for rows.Next() {
-		var i ListAuthorsRow
-		if err := rows.Scan(&i.ID, &i.Name, &i.Bio); err != nil {
+	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]ListAuthorsRow, error) {
+		rows, err := q.db.QueryContext(ctx, listAuthors)
+		if err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		defer rows.Close()
+		var items []ListAuthorsRow
+		for rows.Next() {
+			var i ListAuthorsRow
+			if err := rows.Scan(&i.ID, &i.Name, &i.Bio); err != nil {
+				return nil, xerrors.WithStackTrace(err)
+			}
+			items = append(items, i)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return items, nil
+	}, retry.WithLabel("ListAuthors"))
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
+
 	return items, nil
 }
-
 
 const createAuthor = `-- name: CreateAuthor :one
 INSERT INTO authors (name, bio)
@@ -62,16 +79,23 @@ type CreateAuthorParams struct {
 	Bio *string `json:"bio"`
 }
 
-func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (CreateAuthorRow, error) {
-	row := q.db.QueryRowContext(ctx, createAuthor, arg.Name, arg.Bio)
-	var i CreateAuthorRow
-	err := row.Scan(&i.ID, &i.Name, &i.Bio)
+func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (*CreateAuthorRow, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*CreateAuthorRow, error) {
+		row := q.db.QueryRowContext(ctx, createAuthor, arg.Name, arg.Bio)
+		var i CreateAuthorRow
+		err := row.Scan(&i.ID, &i.Name, &i.Bio)
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+
+		return &i, nil
+	}, retry.WithLabel("CreateAuthor"))
 	if err != nil {
-		return i, err
+		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return i, nil
 }
-
 
 const updateAuthor = `-- name: UpdateAuthor :exec
 UPDATE authors
@@ -85,10 +109,20 @@ type UpdateAuthorParams struct {
 }
 
 func (q *Queries) UpdateAuthor(ctx context.Context, arg UpdateAuthorParams) error {
-	_, err := q.db.ExecContext(ctx, updateAuthor, arg.Name, arg.Bio, arg.ID)
-	return err
-}
+	err := retry.Retry(ctx, func(ctx context.Context) error {
+		_, err := q.db.ExecContext(ctx, updateAuthor, arg.Name, arg.Bio, arg.ID)
+		if err != nil {
+			return xerrors.WithStackTrace(err)
+		}
 
+		return nil
+	}, retry.WithLabel("UpdateAuthor"))
+	if err != nil {
+		return xerrors.WithStackTrace(err)
+	}
+
+	return nil
+}
 
 const deleteAuthor = `-- name: DeleteAuthor :exec
 DELETE FROM authors
@@ -99,8 +133,17 @@ type DeleteAuthorParams struct {
 }
 
 func (q *Queries) DeleteAuthor(ctx context.Context, arg DeleteAuthorParams) error {
-	_, err := q.db.ExecContext(ctx, deleteAuthor, arg.ID)
-	return err
+	err := retry.Retry(ctx, func(ctx context.Context) error {
+		_, err := q.db.ExecContext(ctx, deleteAuthor, arg.ID)
+		if err != nil {
+			return xerrors.WithStackTrace(err)
+		}
+
+		return nil
+	}, retry.WithLabel("DeleteAuthor"))
+	if err != nil {
+		return xerrors.WithStackTrace(err)
+	}
+
+	return nil
 }
-
-
