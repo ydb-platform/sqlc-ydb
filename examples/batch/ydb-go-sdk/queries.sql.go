@@ -15,25 +15,31 @@ const getAuthor = `-- name: GetAuthor :one
 SELECT * FROM authors
 WHERE author_id = $author_id LIMIT 1;`
 
-type GetAuthorParams struct {
-	Author_id uint64 `json:"author_id"`
-}
-
-func (q *Queries) GetAuthor(ctx context.Context, arg GetAuthorParams, opts ...query.ExecuteOption) (GetAuthorRow, error) {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$author_id").Uint64(arg.Author_id)
+func (q *Queries) GetAuthor(ctx context.Context,
+	author_id uint64,
+	opts ...query.ExecuteOption,
+) (*Author, error) {
 	row, err := q.db.QueryRow(ctx, getAuthor,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$author_id").Uint64(author_id).
+				Build(),
+			),
+			query.WithLabel("GetAuthor"),
+		)...,
 	)
-	var i GetAuthorRow
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
+
+	var i Author
 	err = row.Scan(&i.Author_id, &i.Name, &i.Biography)
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
-	return i, nil
+
+	return &i, nil
 }
 
 
@@ -41,19 +47,24 @@ const deleteBook = `-- name: DeleteBook :exec
 DELETE FROM books
 WHERE book_id = $book_id;`
 
-type DeleteBookParams struct {
-	Book_id uint64 `json:"book_id"`
-}
-
-func (q *Queries) DeleteBook(ctx context.Context, arg DeleteBookParams, opts ...query.ExecuteOption) error {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$book_id").Uint64(arg.Book_id)
+func (q *Queries) DeleteBook(ctx context.Context,
+	book_id uint64,
+	opts ...query.ExecuteOption,
+) error {
 	err := q.db.Exec(ctx, deleteBook,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$book_id").Uint64(book_id).
+				Build(),
+			),
+			query.WithLabel("DeleteBook"),
+		)...,
 	)
 	if err != nil {
 		return xerrors.WithStackTrace(err)
 	}
+
 	return nil
 }
 
@@ -62,21 +73,31 @@ const booksByYear = `-- name: BooksByYear :many
 SELECT * FROM books
 WHERE year = $year;`
 
-type BooksByYearParams struct {
-	Year uint64 `json:"year"`
-}
-
-func (q *Queries) BooksByYear(ctx context.Context, opts ...query.ExecuteOption) ([]BooksByYearRow, error) {
-	result, err := q.db.QueryResultSet(ctx, booksByYear, opts...)
+func (q *Queries) BooksByYear(ctx context.Context,
+	year uint64,
+	opts ...query.ExecuteOption,
+) ([]Book, error) {
+	result, err := q.db.QueryResultSet(ctx, booksByYear,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$year").Uint64(year).
+				Build(),
+			),
+			query.WithLabel("BooksByYear"),
+		)...,
+	)
 	if err != nil {
 		return nil, xerrors.WithStackTrace(err)
 	}
-	var items []BooksByYearRow
+
+	var items []Book
 	for row, err := range result.Rows(ctx) {
 		if err != nil {
 			return nil, xerrors.WithStackTrace(err)
 		}
-		var i BooksByYearRow
+
+		var i Book
 		if err := row.Scan(&i.Book_id, &i.Author_id, &i.Isbn, &i.Book_type, &i.Title, &i.Year, &i.Available, &i.Tags); err != nil {
 			return nil, xerrors.WithStackTrace(err)
 		}
@@ -85,6 +106,7 @@ func (q *Queries) BooksByYear(ctx context.Context, opts ...query.ExecuteOption) 
 	if err := result.Close(ctx); err != nil {
 		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return items, nil
 }
 
@@ -94,25 +116,31 @@ INSERT INTO authors (name)
 VALUES ($name)
 RETURNING *;`
 
-type CreateAuthorParams struct {
-	Name string `json:"name"`
-}
-
-func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts ...query.ExecuteOption) (CreateAuthorRow, error) {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$name").Text(arg.Name)
+func (q *Queries) CreateAuthor(ctx context.Context,
+	name string,
+	opts ...query.ExecuteOption,
+) (*Author, error) {
 	row, err := q.db.QueryRow(ctx, createAuthor,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$name").Text(name).
+				Build(),
+			),
+			query.WithLabel("CreateAuthor"),
+		)...,
 	)
-	var i CreateAuthorRow
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
+
+	var i Author
 	err = row.Scan(&i.Author_id, &i.Name, &i.Biography)
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
-	return i, nil
+
+	return &i, nil
 }
 
 
@@ -136,37 +164,43 @@ INSERT INTO books (
 )
 RETURNING *;`
 
-type CreateBookParams struct {
-	Author_id uint64 `json:"author_id"`
-	Isbn string `json:"isbn"`
-	Book_type string `json:"book_type"`
-	Title string `json:"title"`
-	Year uint64 `json:"year"`
-	Available *string `json:"available"`
-	Tags *string `json:"tags"`
-}
-
-func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams, opts ...query.ExecuteOption) (CreateBookRow, error) {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$author_id").Uint64(arg.Author_id)
-	parameters = parameters.Param("$isbn").Text(arg.Isbn)
-	parameters = parameters.Param("$book_type").Text(arg.Book_type)
-	parameters = parameters.Param("$title").Text(arg.Title)
-	parameters = parameters.Param("$year").Uint64(arg.Year)
-	parameters = parameters.Param("$available").BeginOptional().Text(arg.Available).EndOptional()
-	parameters = parameters.Param("$tags").BeginOptional().Text(arg.Tags).EndOptional()
+func (q *Queries) CreateBook(ctx context.Context,
+	author_id uint64,
+	isbn string,
+	book_type string,
+	title string,
+	year uint64,
+	available *string,
+	tags *string,
+	opts ...query.ExecuteOption,
+) (*Book, error) {
 	row, err := q.db.QueryRow(ctx, createBook,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$author_id").Uint64(author_id).
+				Param("$isbn").Text(isbn).
+				Param("$book_type").Text(book_type).
+				Param("$title").Text(title).
+				Param("$year").Uint64(year).
+				Param("$available").BeginOptional().Text(available).EndOptional().
+				Param("$tags").BeginOptional().Text(tags).EndOptional().
+				Build(),
+			),
+			query.WithLabel("CreateBook"),
+		)...,
 	)
-	var i CreateBookRow
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
+
+	var i Book
 	err = row.Scan(&i.Book_id, &i.Author_id, &i.Isbn, &i.Book_type, &i.Title, &i.Year, &i.Available, &i.Tags)
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
-	return i, nil
+
+	return &i, nil
 }
 
 
@@ -175,23 +209,28 @@ UPDATE books
 SET title = $title, tags = $tags
 WHERE book_id = $book_id;`
 
-type UpdateBookParams struct {
-	Title string `json:"title"`
-	Tags *string `json:"tags"`
-	Book_id uint64 `json:"book_id"`
-}
-
-func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams, opts ...query.ExecuteOption) error {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$title").Text(arg.Title)
-	parameters = parameters.Param("$tags").BeginOptional().Text(arg.Tags).EndOptional()
-	parameters = parameters.Param("$book_id").Uint64(arg.Book_id)
+func (q *Queries) UpdateBook(ctx context.Context,
+	title string,
+	tags *string,
+	book_id uint64,
+	opts ...query.ExecuteOption,
+) error {
 	err := q.db.Exec(ctx, updateBook,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$title").Text(title).
+				Param("$tags").BeginOptional().Text(tags).EndOptional().
+				Param("$book_id").Uint64(book_id).
+				Build(),
+			),
+			query.WithLabel("UpdateBook"),
+		)...,
 	)
 	if err != nil {
 		return xerrors.WithStackTrace(err)
 	}
+
 	return nil
 }
 
@@ -200,25 +239,31 @@ const getBiography = `-- name: GetBiography :one
 SELECT biography FROM authors
 WHERE author_id = $author_id LIMIT 1;`
 
-type GetBiographyParams struct {
-	Author_id uint64 `json:"author_id"`
-}
-
-func (q *Queries) GetBiography(ctx context.Context, arg GetBiographyParams, opts ...query.ExecuteOption) (interface{}, error) {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$author_id").Uint64(arg.Author_id)
+func (q *Queries) GetBiography(ctx context.Context,
+	author_id uint64,
+	opts ...query.ExecuteOption,
+) (*interface{}, error) {
 	row, err := q.db.QueryRow(ctx, getBiography,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$author_id").Uint64(author_id).
+				Build(),
+			),
+			query.WithLabel("GetBiography"),
+		)...,
 	)
-	var i interface{}
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
+
+	var i interface{}
 	err = row.Scan()
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
-	return i, nil
+
+	return &i, nil
 }
 
 

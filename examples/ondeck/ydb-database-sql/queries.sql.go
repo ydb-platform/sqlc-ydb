@@ -16,16 +16,16 @@ const listCities = `-- name: ListCities :many
 SELECT * FROM city
 ORDER BY name;`
 
-func (q *Queries) ListCities(ctx context.Context) ([]ListCitiesRow, error) {
-	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]ListCitiesRow, error) {
+func (q *Queries) ListCities(ctx context.Context) ([]City, error) {
+	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]City, error) {
 		rows, err := q.db.QueryContext(ctx, listCities)
 		if err != nil {
 			return nil, err
 		}
 		defer rows.Close()
-		var items []ListCitiesRow
+		var items []City
 		for rows.Next() {
-			var i ListCitiesRow
+			var i City
 			if err := rows.Scan(&i.Slug, &i.Name); err != nil {
 				return nil, xerrors.WithStackTrace(err)
 			}
@@ -48,16 +48,14 @@ const getCity = `-- name: GetCity :one
 SELECT * FROM city
 WHERE slug = $slug LIMIT 1;`
 
-type GetCityParams struct {
-	Slug string `json:"slug"`
-}
-
-func (q *Queries) GetCity(ctx context.Context, arg GetCityParams) (*GetCityRow, error) {
-	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*GetCityRow, error) {
+func (q *Queries) GetCity(ctx context.Context,
+	slug string,
+) (*City, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*City, error) {
 		row := q.db.QueryRowContext(ctx, getCity,
-			sql.Named("slug", arg.Slug),
+			sql.Named("slug", slug),
 		)
-		var i GetCityRow
+		var i City
 		err := row.Scan(&i.Slug, &i.Name)
 		if err != nil {
 			return nil, xerrors.WithStackTrace(err)
@@ -77,18 +75,16 @@ INSERT INTO city (name, slug)
 VALUES ($name, $slug)
 RETURNING *;`
 
-type CreateCityParams struct {
-	Name string `json:"name"`
-	Slug string `json:"slug"`
-}
-
-func (q *Queries) CreateCity(ctx context.Context, arg CreateCityParams) (*CreateCityRow, error) {
-	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*CreateCityRow, error) {
+func (q *Queries) CreateCity(ctx context.Context,
+	name string,
+	slug string,
+) (*City, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*City, error) {
 		row := q.db.QueryRowContext(ctx, createCity,
-			sql.Named("name", arg.Name),
-			sql.Named("slug", arg.Slug),
+			sql.Named("name", name),
+			sql.Named("slug", slug),
 		)
-		var i CreateCityRow
+		var i City
 		err := row.Scan(&i.Slug, &i.Name)
 		if err != nil {
 			return nil, xerrors.WithStackTrace(err)
@@ -108,16 +104,14 @@ UPDATE city
 SET name = $name
 WHERE slug = $slug;`
 
-type UpdateCityNameParams struct {
-	Name string `json:"name"`
-	Slug string `json:"slug"`
-}
-
-func (q *Queries) UpdateCityName(ctx context.Context, arg UpdateCityNameParams) error {
+func (q *Queries) UpdateCityName(ctx context.Context,
+	name string,
+	slug string,
+) error {
 	err := retry.Retry(ctx, func(ctx context.Context) error {
 		_, err := q.db.ExecContext(ctx, updateCityName,
-			sql.Named("name", arg.Name),
-			sql.Named("slug", arg.Slug),
+			sql.Named("name", name),
+			sql.Named("slug", slug),
 		)
 		if err != nil {
 			return xerrors.WithStackTrace(err)
@@ -137,22 +131,20 @@ SELECT * FROM venue
 WHERE city = $city
 ORDER BY name;`
 
-type ListVenuesParams struct {
-	City string `json:"city"`
-}
-
-func (q *Queries) ListVenues(ctx context.Context, arg ListVenuesParams) ([]ListVenuesRow, error) {
-	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]ListVenuesRow, error) {
+func (q *Queries) ListVenues(ctx context.Context,
+	city string,
+) ([]Venue, error) {
+	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]Venue, error) {
 		rows, err := q.db.QueryContext(ctx, listVenues,
-			sql.Named("city", arg.City),
+			sql.Named("city", city),
 		)
 		if err != nil {
 			return nil, err
 		}
 		defer rows.Close()
-		var items []ListVenuesRow
+		var items []Venue
 		for rows.Next() {
-			var i ListVenuesRow
+			var i Venue
 			if err := rows.Scan(&i.ID, &i.Status, &i.Slug, &i.Name, &i.City, &i.Spotify_playlist, &i.Songkick_id, &i.Tags, &i.Created_at); err != nil {
 				return nil, xerrors.WithStackTrace(err)
 			}
@@ -175,14 +167,12 @@ const deleteVenue = `-- name: DeleteVenue :exec
 DELETE FROM venue
 WHERE slug = $slug;`
 
-type DeleteVenueParams struct {
-	Slug string `json:"slug"`
-}
-
-func (q *Queries) DeleteVenue(ctx context.Context, arg DeleteVenueParams) error {
+func (q *Queries) DeleteVenue(ctx context.Context,
+	slug string,
+) error {
 	err := retry.Retry(ctx, func(ctx context.Context) error {
 		_, err := q.db.ExecContext(ctx, deleteVenue,
-			sql.Named("slug", arg.Slug),
+			sql.Named("slug", slug),
 		)
 		if err != nil {
 			return xerrors.WithStackTrace(err)
@@ -201,18 +191,16 @@ const getVenue = `-- name: GetVenue :one
 SELECT * FROM venue
 WHERE slug = $slug AND city = $city LIMIT 1;`
 
-type GetVenueParams struct {
-	Slug string `json:"slug"`
-	City string `json:"city"`
-}
-
-func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams) (*GetVenueRow, error) {
-	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*GetVenueRow, error) {
+func (q *Queries) GetVenue(ctx context.Context,
+	slug string,
+	city string,
+) (*Venue, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*Venue, error) {
 		row := q.db.QueryRowContext(ctx, getVenue,
-			sql.Named("slug", arg.Slug),
-			sql.Named("city", arg.City),
+			sql.Named("slug", slug),
+			sql.Named("city", city),
 		)
-		var i GetVenueRow
+		var i Venue
 		err := row.Scan(&i.ID, &i.Status, &i.Slug, &i.Name, &i.City, &i.Spotify_playlist, &i.Songkick_id, &i.Tags, &i.Created_at)
 		if err != nil {
 			return nil, xerrors.WithStackTrace(err)
@@ -249,28 +237,26 @@ INSERT INTO venue (
 )
 RETURNING id;`
 
-type CreateVenueParams struct {
-	ID uint64 `json:"id"`
-	Slug string `json:"slug"`
-	Name string `json:"name"`
-	City string `json:"city"`
-	Created_at *string `json:"created_at"`
-	Spotify_playlist string `json:"spotify_playlist"`
-	Status string `json:"status"`
-	Tags *string `json:"tags"`
-}
-
-func (q *Queries) CreateVenue(ctx context.Context, arg CreateVenueParams) (*interface{}, error) {
+func (q *Queries) CreateVenue(ctx context.Context,
+	id uint64,
+	slug string,
+	name string,
+	city string,
+	created_at *string,
+	spotify_playlist string,
+	status string,
+	tags *string,
+) (*interface{}, error) {
 	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*interface{}, error) {
 		row := q.db.QueryRowContext(ctx, createVenue,
-			sql.Named("id", arg.ID),
-			sql.Named("slug", arg.Slug),
-			sql.Named("name", arg.Name),
-			sql.Named("city", arg.City),
-			sql.Named("created_at", arg.Created_at),
-			sql.Named("spotify_playlist", arg.Spotify_playlist),
-			sql.Named("status", arg.Status),
-			sql.Named("tags", arg.Tags),
+			sql.Named("id", id),
+			sql.Named("slug", slug),
+			sql.Named("name", name),
+			sql.Named("city", city),
+			sql.Named("created_at", created_at),
+			sql.Named("spotify_playlist", spotify_playlist),
+			sql.Named("status", status),
+			sql.Named("tags", tags),
 		)
 		var i interface{}
 		err := row.Scan()
@@ -293,16 +279,14 @@ SET name = $name
 WHERE slug = $slug
 RETURNING id;`
 
-type UpdateVenueNameParams struct {
-	Name string `json:"name"`
-	Slug string `json:"slug"`
-}
-
-func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams) (*interface{}, error) {
+func (q *Queries) UpdateVenueName(ctx context.Context,
+	name string,
+	slug string,
+) (*interface{}, error) {
 	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*interface{}, error) {
 		row := q.db.QueryRowContext(ctx, updateVenueName,
-			sql.Named("name", arg.Name),
-			sql.Named("slug", arg.Slug),
+			sql.Named("name", name),
+			sql.Named("slug", slug),
 		)
 		var i interface{}
 		err := row.Scan()

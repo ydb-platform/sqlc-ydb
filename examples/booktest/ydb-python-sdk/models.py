@@ -3,39 +3,12 @@ import dataclasses
 from typing import Optional
 
 @dataclasses.dataclass
-class GetAuthorRow:
+class Author:
     author_id: int
     name: str
 
 @dataclasses.dataclass
-class GetBookRow:
-    book_id: int
-    author_id: int
-    isbn: str
-    book_type: str
-    title: str
-    year: int
-    available: Optional[str]
-    tags: Optional[str]
-
-@dataclasses.dataclass
-class BooksByTitleYearRow:
-    book_id: int
-    author_id: int
-    isbn: str
-    book_type: str
-    title: str
-    year: int
-    available: Optional[str]
-    tags: Optional[str]
-
-@dataclasses.dataclass
-class CreateAuthorRow:
-    author_id: int
-    name: str
-
-@dataclasses.dataclass
-class CreateBookRow:
+class Book:
     book_id: int
     author_id: int
     isbn: str

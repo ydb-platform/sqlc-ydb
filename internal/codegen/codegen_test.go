@@ -10,7 +10,7 @@ import (
 
 // TestGenerate_authors runs the generator with a request mimicking sqlc output
 // for examples/authors (empty catalog, one query file with GetAuthor/ListAuthors/etc).
-func TestGenerate_authors(t *testing.T) {
+func TestGenerateAuthorsGoSDK(t *testing.T) {
 	req := &pb.GenerateRequest{
 		Settings: &pb.Settings{
 			Codegen: &pb.Codegen{Out: "db"},
@@ -81,7 +81,7 @@ func TestGenerate_authors(t *testing.T) {
 		},
 	}
 
-	resp, err := Generate(context.Background(), req, YdbGoSDK)
+	resp, err := New(GoSDK).Generate(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
@@ -120,5 +120,65 @@ func TestGenerate_authors(t *testing.T) {
 		if !strings.Contains(qgo, want) {
 			t.Errorf("queries.sql.go: expected to contain %q", want)
 		}
+	}
+}
+
+// TestGenerate_UsesCatalogFromRequest verifies that when GenerateRequest contains a non-empty
+// Catalog (as returned by the engine plugin from schema.sql), the codegen uses it and emits
+// model structs from the catalog (e.g. Author) not only query-row types.
+func TestGenerate_UsesCatalogFromRequest(t *testing.T) {
+	req := &pb.GenerateRequest{
+		Settings:      &pb.Settings{Codegen: &pb.Codegen{Out: "db"}},
+		PluginOptions: []byte(`{"package":"db"}`),
+		Catalog: &pb.Catalog{
+			Schemas: []*pb.Schema{
+				{
+					Name: "",
+					Tables: []*pb.Table{
+						{
+							Rel: &pb.Identifier{Name: "authors"},
+							Columns: []*pb.Column{
+								{Name: "id", Type: &pb.Identifier{Name: "uint64"}, NotNull: true, Table: &pb.Identifier{Name: "authors"}},
+								{Name: "name", Type: &pb.Identifier{Name: "utf8"}, NotNull: true, Table: &pb.Identifier{Name: "authors"}},
+								{Name: "bio", Type: &pb.Identifier{Name: "utf8"}, NotNull: false, Table: &pb.Identifier{Name: "authors"}},
+							},
+						},
+					},
+				},
+			},
+		},
+		Queries: []*pb.Query{
+			{
+				Name:     "GetAuthor",
+				Cmd:      ":one",
+				Text:     "SELECT * FROM authors WHERE id = $id LIMIT 1",
+				Filename: "queries.sql",
+				Params:   []*pb.Parameter{{Number: 1, Column: &pb.Column{Name: "id", Type: &pb.Identifier{Name: "uint64"}, NotNull: true}}},
+				Columns: []*pb.Column{
+					{Name: "id", Type: &pb.Identifier{Name: "uint64"}, NotNull: true, Table: &pb.Identifier{Name: "authors"}},
+					{Name: "name", Type: &pb.Identifier{Name: "utf8"}, NotNull: true, Table: &pb.Identifier{Name: "authors"}},
+					{Name: "bio", Type: &pb.Identifier{Name: "utf8"}, NotNull: false, Table: &pb.Identifier{Name: "authors"}},
+				},
+			},
+		},
+	}
+	resp, err := New(GoSDK).Generate(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	byName := make(map[string][]byte)
+	for _, f := range resp.Files {
+		byName[f.Name] = f.Contents
+	}
+	models := string(byName["models.go"])
+	if models == "" {
+		t.Fatal("models.go missing")
+	}
+	// Catalog contained "authors" table → codegen should emit "type Author struct" (from catalog).
+	if !strings.Contains(models, "type Author struct") {
+		t.Errorf("models.go: expected type Author struct from catalog; got:\n%s", models)
+	}
+	if !strings.Contains(models, "ID") || !strings.Contains(models, "Name") || !strings.Contains(models, "Bio") {
+		t.Errorf("models.go: expected Author fields (ID, Name, Bio) from catalog")
 	}
 }

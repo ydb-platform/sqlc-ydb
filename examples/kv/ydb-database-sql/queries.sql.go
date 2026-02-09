@@ -16,14 +16,12 @@ const get = `-- name: Get :one
 SELECT key, value FROM kv
 WHERE key = $key LIMIT 1;`
 
-type GetParams struct {
-	Key string `json:"key"`
-}
-
-func (q *Queries) Get(ctx context.Context, arg GetParams) (*interface{}, error) {
+func (q *Queries) Get(ctx context.Context,
+	key string,
+) (*interface{}, error) {
 	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*interface{}, error) {
 		row := q.db.QueryRowContext(ctx, get,
-			sql.Named("key", arg.Key),
+			sql.Named("key", key),
 		)
 		var i interface{}
 		err := row.Scan()
@@ -76,16 +74,14 @@ const set = `-- name: Set :exec
 INSERT INTO kv (key, value)
 VALUES ($key, $value);`
 
-type SetParams struct {
-	Key string `json:"key"`
-	Value *string `json:"value"`
-}
-
-func (q *Queries) Set(ctx context.Context, arg SetParams) error {
+func (q *Queries) Set(ctx context.Context,
+	key string,
+	value *string,
+) error {
 	err := retry.Retry(ctx, func(ctx context.Context) error {
 		_, err := q.db.ExecContext(ctx, set,
-			sql.Named("key", arg.Key),
-			sql.Named("value", arg.Value),
+			sql.Named("key", key),
+			sql.Named("value", value),
 		)
 		if err != nil {
 			return xerrors.WithStackTrace(err)
@@ -104,14 +100,12 @@ const delete = `-- name: Delete :exec
 DELETE FROM kv
 WHERE key = $key;`
 
-type DeleteParams struct {
-	Key string `json:"key"`
-}
-
-func (q *Queries) Delete(ctx context.Context, arg DeleteParams) error {
+func (q *Queries) Delete(ctx context.Context,
+	key string,
+) error {
 	err := retry.Retry(ctx, func(ctx context.Context) error {
 		_, err := q.db.ExecContext(ctx, delete,
-			sql.Named("key", arg.Key),
+			sql.Named("key", key),
 		)
 		if err != nil {
 			return xerrors.WithStackTrace(err)

@@ -15,25 +15,31 @@ const getAuthor = `-- name: GetAuthor :one
 SELECT * FROM authors
 WHERE id = $id LIMIT 1;`
 
-type GetAuthorParams struct {
-	ID uint64 `json:"id"`
-}
-
-func (q *Queries) GetAuthor(ctx context.Context, arg GetAuthorParams, opts ...query.ExecuteOption) (GetAuthorRow, error) {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$id").Uint64(arg.ID)
+func (q *Queries) GetAuthor(ctx context.Context,
+	id uint64,
+	opts ...query.ExecuteOption,
+) (*Author, error) {
 	row, err := q.db.QueryRow(ctx, getAuthor,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$id").Uint64(id).
+				Build(),
+			),
+			query.WithLabel("GetAuthor"),
+		)...,
 	)
-	var i GetAuthorRow
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
+
+	var i Author
 	err = row.Scan(&i.ID, &i.Name)
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
-	return i, nil
+
+	return &i, nil
 }
 
 
@@ -41,17 +47,21 @@ const listAuthors = `-- name: ListAuthors :many
 SELECT * FROM authors
 ORDER BY name;`
 
-func (q *Queries) ListAuthors(ctx context.Context, opts ...query.ExecuteOption) ([]ListAuthorsRow, error) {
-	result, err := q.db.QueryResultSet(ctx, listAuthors, opts...)
+func (q *Queries) ListAuthors(ctx context.Context, opts ...query.ExecuteOption) ([]Author, error) {
+	result, err := q.db.QueryResultSet(ctx, listAuthors,
+		append(opts, query.WithLabel("ListAuthors"))...,
+	)
 	if err != nil {
 		return nil, xerrors.WithStackTrace(err)
 	}
-	var items []ListAuthorsRow
+
+	var items []Author
 	for row, err := range result.Rows(ctx) {
 		if err != nil {
 			return nil, xerrors.WithStackTrace(err)
 		}
-		var i ListAuthorsRow
+
+		var i Author
 		if err := row.Scan(&i.ID, &i.Name); err != nil {
 			return nil, xerrors.WithStackTrace(err)
 		}
@@ -60,6 +70,7 @@ func (q *Queries) ListAuthors(ctx context.Context, opts ...query.ExecuteOption) 
 	if err := result.Close(ctx); err != nil {
 		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return items, nil
 }
 
@@ -69,25 +80,31 @@ INSERT INTO authors (name)
 VALUES ($name)
 RETURNING *;`
 
-type CreateAuthorParams struct {
-	Name string `json:"name"`
-}
-
-func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts ...query.ExecuteOption) (CreateAuthorRow, error) {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$name").Text(arg.Name)
+func (q *Queries) CreateAuthor(ctx context.Context,
+	name string,
+	opts ...query.ExecuteOption,
+) (*Author, error) {
 	row, err := q.db.QueryRow(ctx, createAuthor,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$name").Text(name).
+				Build(),
+			),
+			query.WithLabel("CreateAuthor"),
+		)...,
 	)
-	var i CreateAuthorRow
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
+
+	var i Author
 	err = row.Scan(&i.ID, &i.Name)
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
-	return i, nil
+
+	return &i, nil
 }
 
 
@@ -95,25 +112,31 @@ const getAlbum = `-- name: GetAlbum :one
 SELECT * FROM albums
 WHERE id = $id LIMIT 1;`
 
-type GetAlbumParams struct {
-	ID uint64 `json:"id"`
-}
-
-func (q *Queries) GetAlbum(ctx context.Context, arg GetAlbumParams, opts ...query.ExecuteOption) (GetAlbumRow, error) {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$id").Uint64(arg.ID)
+func (q *Queries) GetAlbum(ctx context.Context,
+	id uint64,
+	opts ...query.ExecuteOption,
+) (*Album, error) {
 	row, err := q.db.QueryRow(ctx, getAlbum,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$id").Uint64(id).
+				Build(),
+			),
+			query.WithLabel("GetAlbum"),
+		)...,
 	)
-	var i GetAlbumRow
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
+
+	var i Album
 	err = row.Scan(&i.ID, &i.Title, &i.Author_id)
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
-	return i, nil
+
+	return &i, nil
 }
 
 
@@ -122,21 +145,31 @@ SELECT * FROM albums
 WHERE author_id = $author_id
 ORDER BY title;`
 
-type ListAlbumsByAuthorParams struct {
-	Author_id uint64 `json:"author_id"`
-}
-
-func (q *Queries) ListAlbumsByAuthor(ctx context.Context, opts ...query.ExecuteOption) ([]ListAlbumsByAuthorRow, error) {
-	result, err := q.db.QueryResultSet(ctx, listAlbumsByAuthor, opts...)
+func (q *Queries) ListAlbumsByAuthor(ctx context.Context,
+	author_id uint64,
+	opts ...query.ExecuteOption,
+) ([]Album, error) {
+	result, err := q.db.QueryResultSet(ctx, listAlbumsByAuthor,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$author_id").Uint64(author_id).
+				Build(),
+			),
+			query.WithLabel("ListAlbumsByAuthor"),
+		)...,
+	)
 	if err != nil {
 		return nil, xerrors.WithStackTrace(err)
 	}
-	var items []ListAlbumsByAuthorRow
+
+	var items []Album
 	for row, err := range result.Rows(ctx) {
 		if err != nil {
 			return nil, xerrors.WithStackTrace(err)
 		}
-		var i ListAlbumsByAuthorRow
+
+		var i Album
 		if err := row.Scan(&i.ID, &i.Title, &i.Author_id); err != nil {
 			return nil, xerrors.WithStackTrace(err)
 		}
@@ -145,6 +178,7 @@ func (q *Queries) ListAlbumsByAuthor(ctx context.Context, opts ...query.ExecuteO
 	if err := result.Close(ctx); err != nil {
 		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return items, nil
 }
 
@@ -154,27 +188,33 @@ INSERT INTO albums (title, author_id)
 VALUES ($title, $author_id)
 RETURNING *;`
 
-type CreateAlbumParams struct {
-	Title string `json:"title"`
-	Author_id uint64 `json:"author_id"`
-}
-
-func (q *Queries) CreateAlbum(ctx context.Context, arg CreateAlbumParams, opts ...query.ExecuteOption) (CreateAlbumRow, error) {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$title").Text(arg.Title)
-	parameters = parameters.Param("$author_id").Uint64(arg.Author_id)
+func (q *Queries) CreateAlbum(ctx context.Context,
+	title string,
+	author_id uint64,
+	opts ...query.ExecuteOption,
+) (*Album, error) {
 	row, err := q.db.QueryRow(ctx, createAlbum,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$title").Text(title).
+				Param("$author_id").Uint64(author_id).
+				Build(),
+			),
+			query.WithLabel("CreateAlbum"),
+		)...,
 	)
-	var i CreateAlbumRow
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
+
+	var i Album
 	err = row.Scan(&i.ID, &i.Title, &i.Author_id)
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
-	return i, nil
+
+	return &i, nil
 }
 
 
@@ -182,19 +222,24 @@ const deleteAlbum = `-- name: DeleteAlbum :exec
 DELETE FROM albums
 WHERE id = $id;`
 
-type DeleteAlbumParams struct {
-	ID uint64 `json:"id"`
-}
-
-func (q *Queries) DeleteAlbum(ctx context.Context, arg DeleteAlbumParams, opts ...query.ExecuteOption) error {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$id").Uint64(arg.ID)
+func (q *Queries) DeleteAlbum(ctx context.Context,
+	id uint64,
+	opts ...query.ExecuteOption,
+) error {
 	err := q.db.Exec(ctx, deleteAlbum,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$id").Uint64(id).
+				Build(),
+			),
+			query.WithLabel("DeleteAlbum"),
+		)...,
 	)
 	if err != nil {
 		return xerrors.WithStackTrace(err)
 	}
+
 	return nil
 }
 

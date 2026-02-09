@@ -37,6 +37,10 @@ func databaseFromDSN(dsn string) string {
 	return strings.Trim(p, "/")
 }
 
+func (r *ydbRegistry) TableNames() []string {
+	return nil
+}
+
 func (r *ydbRegistry) Columns(tableOrView string) ([]schema.ColumnInfo, bool) {
 	dsn := r.params.GetDsn()
 	if dsn == "" || tableOrView == "" {

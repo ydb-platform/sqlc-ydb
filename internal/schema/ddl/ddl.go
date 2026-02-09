@@ -41,6 +41,14 @@ func (r *registry) Columns(tableOrView string) ([]schema.ColumnInfo, bool) {
 	return cols, ok
 }
 
+func (r *registry) TableNames() []string {
+	names := make([]string, 0, len(r.tables))
+	for t := range r.tables {
+		names = append(names, t)
+	}
+	return names
+}
+
 type errListener struct {
 	*antlr.DefaultErrorListener
 	err string

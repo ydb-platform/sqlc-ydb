@@ -46,7 +46,49 @@ func ParseWithRegistry(req *engine.ParseRequest, reg schema.Registry) (*engine.P
 		}
 		statements = append(statements, st)
 	}
-	return &engine.ParseResponse{Statements: statements}, nil
+	resp := &engine.ParseResponse{Statements: statements}
+	if cat := registryToEngineCatalog(reg); cat != nil {
+		resp.Catalog = cat
+	}
+	return resp, nil
+}
+
+// registryToEngineCatalog builds engine.Catalog from schema.Registry (tables/columns from schema_sql).
+// The sqlc app converts it to plugin.Catalog when calling codegen.
+func registryToEngineCatalog(reg schema.Registry) *engine.Catalog {
+	if reg == nil {
+		return nil
+	}
+	tableNames := reg.TableNames()
+	if len(tableNames) == 0 {
+		return nil
+	}
+	var tables []*engine.CatalogTable
+	for _, tableName := range tableNames {
+		cols, ok := reg.Columns(tableName)
+		if !ok || len(cols) == 0 {
+			continue
+		}
+		rel := &engine.Identifier{Name: tableName}
+		var engineCols []*engine.CatalogColumn
+		for _, c := range cols {
+			engineCols = append(engineCols, &engine.CatalogColumn{
+				Name:    c.Name,
+				NotNull: !c.Nullable,
+				IsArray: c.IsArray,
+				ArrayDims: c.ArrayDims,
+				Type:   &engine.Identifier{Name: strings.ToLower(c.DataType)},
+				Table:  rel,
+			})
+		}
+		tables = append(tables, &engine.CatalogTable{Rel: rel, Columns: engineCols})
+	}
+	if len(tables) == 0 {
+		return nil
+	}
+	return &engine.Catalog{
+		Schemas: []*engine.CatalogSchema{{Name: "", Tables: tables}},
+	}
 }
 
 // parseOneBlock parses a single query block and returns a Statement with name, cmd, sql, parameters, columns.

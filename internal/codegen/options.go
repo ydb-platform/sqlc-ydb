@@ -9,7 +9,7 @@ import (
 const defaultSQLPackage = "github.com/ydb-platform/ydb-go-sdk/v3"
 
 // options holds plugin_options from the codegen request (JSON).
-// Used by all destinations; YdbGoSDK uses SQLPackage, others ignore it.
+// Used by all destinations; generatorGoSdk uses SQLPackage, others ignore it.
 type options struct {
 	Package    string `json:"package"`
 	SQLPackage string `json:"sql_package"`

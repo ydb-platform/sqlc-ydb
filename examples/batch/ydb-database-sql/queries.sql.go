@@ -16,16 +16,14 @@ const getAuthor = `-- name: GetAuthor :one
 SELECT * FROM authors
 WHERE author_id = $author_id LIMIT 1;`
 
-type GetAuthorParams struct {
-	Author_id uint64 `json:"author_id"`
-}
-
-func (q *Queries) GetAuthor(ctx context.Context, arg GetAuthorParams) (*GetAuthorRow, error) {
-	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*GetAuthorRow, error) {
+func (q *Queries) GetAuthor(ctx context.Context,
+	author_id uint64,
+) (*Author, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*Author, error) {
 		row := q.db.QueryRowContext(ctx, getAuthor,
-			sql.Named("author_id", arg.Author_id),
+			sql.Named("author_id", author_id),
 		)
-		var i GetAuthorRow
+		var i Author
 		err := row.Scan(&i.Author_id, &i.Name, &i.Biography)
 		if err != nil {
 			return nil, xerrors.WithStackTrace(err)
@@ -44,14 +42,12 @@ const deleteBook = `-- name: DeleteBook :exec
 DELETE FROM books
 WHERE book_id = $book_id;`
 
-type DeleteBookParams struct {
-	Book_id uint64 `json:"book_id"`
-}
-
-func (q *Queries) DeleteBook(ctx context.Context, arg DeleteBookParams) error {
+func (q *Queries) DeleteBook(ctx context.Context,
+	book_id uint64,
+) error {
 	err := retry.Retry(ctx, func(ctx context.Context) error {
 		_, err := q.db.ExecContext(ctx, deleteBook,
-			sql.Named("book_id", arg.Book_id),
+			sql.Named("book_id", book_id),
 		)
 		if err != nil {
 			return xerrors.WithStackTrace(err)
@@ -70,22 +66,20 @@ const booksByYear = `-- name: BooksByYear :many
 SELECT * FROM books
 WHERE year = $year;`
 
-type BooksByYearParams struct {
-	Year uint64 `json:"year"`
-}
-
-func (q *Queries) BooksByYear(ctx context.Context, arg BooksByYearParams) ([]BooksByYearRow, error) {
-	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]BooksByYearRow, error) {
+func (q *Queries) BooksByYear(ctx context.Context,
+	year uint64,
+) ([]Book, error) {
+	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]Book, error) {
 		rows, err := q.db.QueryContext(ctx, booksByYear,
-			sql.Named("year", arg.Year),
+			sql.Named("year", year),
 		)
 		if err != nil {
 			return nil, err
 		}
 		defer rows.Close()
-		var items []BooksByYearRow
+		var items []Book
 		for rows.Next() {
-			var i BooksByYearRow
+			var i Book
 			if err := rows.Scan(&i.Book_id, &i.Author_id, &i.Isbn, &i.Book_type, &i.Title, &i.Year, &i.Available, &i.Tags); err != nil {
 				return nil, xerrors.WithStackTrace(err)
 			}
@@ -109,16 +103,14 @@ INSERT INTO authors (name)
 VALUES ($name)
 RETURNING *;`
 
-type CreateAuthorParams struct {
-	Name string `json:"name"`
-}
-
-func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (*CreateAuthorRow, error) {
-	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*CreateAuthorRow, error) {
+func (q *Queries) CreateAuthor(ctx context.Context,
+	name string,
+) (*Author, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*Author, error) {
 		row := q.db.QueryRowContext(ctx, createAuthor,
-			sql.Named("name", arg.Name),
+			sql.Named("name", name),
 		)
-		var i CreateAuthorRow
+		var i Author
 		err := row.Scan(&i.Author_id, &i.Name, &i.Biography)
 		if err != nil {
 			return nil, xerrors.WithStackTrace(err)
@@ -153,28 +145,26 @@ INSERT INTO books (
 )
 RETURNING *;`
 
-type CreateBookParams struct {
-	Author_id uint64 `json:"author_id"`
-	Isbn string `json:"isbn"`
-	Book_type string `json:"book_type"`
-	Title string `json:"title"`
-	Year uint64 `json:"year"`
-	Available *string `json:"available"`
-	Tags *string `json:"tags"`
-}
-
-func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams) (*CreateBookRow, error) {
-	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*CreateBookRow, error) {
+func (q *Queries) CreateBook(ctx context.Context,
+	author_id uint64,
+	isbn string,
+	book_type string,
+	title string,
+	year uint64,
+	available *string,
+	tags *string,
+) (*Book, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*Book, error) {
 		row := q.db.QueryRowContext(ctx, createBook,
-			sql.Named("author_id", arg.Author_id),
-			sql.Named("isbn", arg.Isbn),
-			sql.Named("book_type", arg.Book_type),
-			sql.Named("title", arg.Title),
-			sql.Named("year", arg.Year),
-			sql.Named("available", arg.Available),
-			sql.Named("tags", arg.Tags),
+			sql.Named("author_id", author_id),
+			sql.Named("isbn", isbn),
+			sql.Named("book_type", book_type),
+			sql.Named("title", title),
+			sql.Named("year", year),
+			sql.Named("available", available),
+			sql.Named("tags", tags),
 		)
-		var i CreateBookRow
+		var i Book
 		err := row.Scan(&i.Book_id, &i.Author_id, &i.Isbn, &i.Book_type, &i.Title, &i.Year, &i.Available, &i.Tags)
 		if err != nil {
 			return nil, xerrors.WithStackTrace(err)
@@ -194,18 +184,16 @@ UPDATE books
 SET title = $title, tags = $tags
 WHERE book_id = $book_id;`
 
-type UpdateBookParams struct {
-	Title string `json:"title"`
-	Tags *string `json:"tags"`
-	Book_id uint64 `json:"book_id"`
-}
-
-func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams) error {
+func (q *Queries) UpdateBook(ctx context.Context,
+	title string,
+	tags *string,
+	book_id uint64,
+) error {
 	err := retry.Retry(ctx, func(ctx context.Context) error {
 		_, err := q.db.ExecContext(ctx, updateBook,
-			sql.Named("title", arg.Title),
-			sql.Named("tags", arg.Tags),
-			sql.Named("book_id", arg.Book_id),
+			sql.Named("title", title),
+			sql.Named("tags", tags),
+			sql.Named("book_id", book_id),
 		)
 		if err != nil {
 			return xerrors.WithStackTrace(err)
@@ -224,14 +212,12 @@ const getBiography = `-- name: GetBiography :one
 SELECT biography FROM authors
 WHERE author_id = $author_id LIMIT 1;`
 
-type GetBiographyParams struct {
-	Author_id uint64 `json:"author_id"`
-}
-
-func (q *Queries) GetBiography(ctx context.Context, arg GetBiographyParams) (*interface{}, error) {
+func (q *Queries) GetBiography(ctx context.Context,
+	author_id uint64,
+) (*interface{}, error) {
 	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*interface{}, error) {
 		row := q.db.QueryRowContext(ctx, getBiography,
-			sql.Named("author_id", arg.Author_id),
+			sql.Named("author_id", author_id),
 		)
 		var i interface{}
 		err := row.Scan()

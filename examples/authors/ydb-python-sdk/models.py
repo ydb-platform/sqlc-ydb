@@ -3,19 +3,7 @@ import dataclasses
 from typing import Optional
 
 @dataclasses.dataclass
-class GetAuthorRow:
-    id: int
-    name: str
-    bio: Optional[str]
-
-@dataclasses.dataclass
-class ListAuthorsRow:
-    id: int
-    name: str
-    bio: Optional[str]
-
-@dataclasses.dataclass
-class CreateAuthorRow:
+class Author:
     id: int
     name: str
     bio: Optional[str]

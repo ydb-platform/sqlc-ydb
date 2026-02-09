@@ -14,20 +14,21 @@ import (
 const countPilots = `-- name: CountPilots :one
 SELECT COUNT(*) FROM pilots;`
 
-func (q *Queries) CountPilots(ctx context.Context, id int32, opts ...query.ExecuteOption) (interface{}, error) {
-	parameters := ydb.ParamsBuilder()
+func (q *Queries) CountPilots(ctx context.Context, opts ...query.ExecuteOption) (*interface{}, error) {
 	row, err := q.db.QueryRow(ctx, countPilots,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts, query.WithLabel("CountPilots"))...,
 	)
-	var i interface{}
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
+
+	var i interface{}
 	err = row.Scan()
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
-	return i, nil
+
+	return &i, nil
 }
 
 
@@ -35,17 +36,21 @@ const listPilots = `-- name: ListPilots :many
 SELECT * FROM pilots
 LIMIT 5;`
 
-func (q *Queries) ListPilots(ctx context.Context, opts ...query.ExecuteOption) ([]ListPilotsRow, error) {
-	result, err := q.db.QueryResultSet(ctx, listPilots, opts...)
+func (q *Queries) ListPilots(ctx context.Context, opts ...query.ExecuteOption) ([]Pilot, error) {
+	result, err := q.db.QueryResultSet(ctx, listPilots,
+		append(opts, query.WithLabel("ListPilots"))...,
+	)
 	if err != nil {
 		return nil, xerrors.WithStackTrace(err)
 	}
-	var items []ListPilotsRow
+
+	var items []Pilot
 	for row, err := range result.Rows(ctx) {
 		if err != nil {
 			return nil, xerrors.WithStackTrace(err)
 		}
-		var i ListPilotsRow
+
+		var i Pilot
 		if err := row.Scan(&i.ID, &i.Name); err != nil {
 			return nil, xerrors.WithStackTrace(err)
 		}
@@ -54,6 +59,7 @@ func (q *Queries) ListPilots(ctx context.Context, opts ...query.ExecuteOption) (
 	if err := result.Close(ctx); err != nil {
 		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return items, nil
 }
 
@@ -62,19 +68,24 @@ const deletePilot = `-- name: DeletePilot :exec
 DELETE FROM pilots
 WHERE id = $id;`
 
-type DeletePilotParams struct {
-	ID uint64 `json:"id"`
-}
-
-func (q *Queries) DeletePilot(ctx context.Context, arg DeletePilotParams, opts ...query.ExecuteOption) error {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$id").Uint64(arg.ID)
+func (q *Queries) DeletePilot(ctx context.Context,
+	id uint64,
+	opts ...query.ExecuteOption,
+) error {
 	err := q.db.Exec(ctx, deletePilot,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$id").Uint64(id).
+				Build(),
+			),
+			query.WithLabel("DeletePilot"),
+		)...,
 	)
 	if err != nil {
 		return xerrors.WithStackTrace(err)
 	}
+
 	return nil
 }
 
@@ -83,25 +94,31 @@ const getPilot = `-- name: GetPilot :one
 SELECT * FROM pilots
 WHERE id = $id LIMIT 1;`
 
-type GetPilotParams struct {
-	ID uint64 `json:"id"`
-}
-
-func (q *Queries) GetPilot(ctx context.Context, arg GetPilotParams, opts ...query.ExecuteOption) (GetPilotRow, error) {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$id").Uint64(arg.ID)
+func (q *Queries) GetPilot(ctx context.Context,
+	id uint64,
+	opts ...query.ExecuteOption,
+) (*Pilot, error) {
 	row, err := q.db.QueryRow(ctx, getPilot,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$id").Uint64(id).
+				Build(),
+			),
+			query.WithLabel("GetPilot"),
+		)...,
 	)
-	var i GetPilotRow
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
+
+	var i Pilot
 	err = row.Scan(&i.ID, &i.Name)
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
-	return i, nil
+
+	return &i, nil
 }
 
 
@@ -110,25 +127,31 @@ INSERT INTO pilots (name)
 VALUES ($name)
 RETURNING *;`
 
-type CreatePilotParams struct {
-	Name string `json:"name"`
-}
-
-func (q *Queries) CreatePilot(ctx context.Context, arg CreatePilotParams, opts ...query.ExecuteOption) (CreatePilotRow, error) {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$name").Text(arg.Name)
+func (q *Queries) CreatePilot(ctx context.Context,
+	name string,
+	opts ...query.ExecuteOption,
+) (*Pilot, error) {
 	row, err := q.db.QueryRow(ctx, createPilot,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$name").Text(name).
+				Build(),
+			),
+			query.WithLabel("CreatePilot"),
+		)...,
 	)
-	var i CreatePilotRow
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
+
+	var i Pilot
 	err = row.Scan(&i.ID, &i.Name)
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
-	return i, nil
+
+	return &i, nil
 }
 
 

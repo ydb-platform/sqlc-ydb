@@ -9,41 +9,38 @@ from db import models
 GET_AUTHOR = """
 -- name: GetAuthor :one
 SELECT * FROM authors
-WHERE id = $id LIMIT 1;"""
-
-# params: $id
+WHERE id = $id LIMIT 1;
+"""
 
 
 LIST_AUTHORS = """
 -- name: ListAuthors :many
 SELECT * FROM authors
-ORDER BY name;"""
+ORDER BY name;
+"""
 
 
 CREATE_AUTHOR = """
 -- name: CreateAuthor :one
 INSERT INTO authors (id, name, bio)
 VALUES ($id, $name, $bio)
-RETURNING *;"""
-
-# params: $id, $name, $bio
+RETURNING *;
+"""
 
 
 UPDATE_AUTHOR = """
 -- name: UpdateAuthor :exec
 UPDATE authors
 SET name = $name, bio = $bio
-WHERE id = $id;"""
-
-# params: $name, $bio, $id
+WHERE id = $id;
+"""
 
 
 DELETE_AUTHOR = """
 -- name: DeleteAuthor :exec
 DELETE FROM authors
-WHERE id = $id;"""
-
-# params: $id
+WHERE id = $id;
+"""
 
 
 
@@ -51,38 +48,38 @@ class Querier:
     def __init__(self, pool: ydb.QuerySessionPool):
         self._pool = pool
 
-    def get_author(self, *, id: int) -> Optional[models.GetAuthorRow]:
+    def get_author(self, *, id: int) -> Optional[models.Author]:
         result_sets = self._pool.execute_with_retries(GET_AUTHOR, parameters={"$id": id})
         if not result_sets or not result_sets[0].rows:
             return None
         row = result_sets[0].rows[0]
-        return models.GetAuthorRow(
+        return models.Author(
             id=row.id,
             name=row.name,
             bio=row.bio
         )
 
-    def list_authors(self) -> Iterator[models.ListAuthorsRow]:
+    def list_authors(self) -> Iterator[models.Author]:
         result_sets = self._pool.execute_with_retries(LIST_AUTHORS, parameters={})
         for row in result_sets[0].rows:
-            yield models.ListAuthorsRow(
+            yield models.Author(
                 id=row.id,
                 name=row.name,
                 bio=row.bio
             )
 
-    def create_author(self, *, id: int, *, name: str, *, bio: Optional[str]) -> Optional[models.CreateAuthorRow]:
+    def create_author(self, *, id: int, name: str, bio: Optional[str]) -> Optional[models.Author]:
         result_sets = self._pool.execute_with_retries(CREATE_AUTHOR, parameters={"$id": id, "$name": name, "$bio": bio})
         if not result_sets or not result_sets[0].rows:
             return None
         row = result_sets[0].rows[0]
-        return models.CreateAuthorRow(
+        return models.Author(
             id=row.id,
             name=row.name,
             bio=row.bio
         )
 
-    def update_author(self, *, name: str, *, bio: Optional[str], *, id: int) -> None:
+    def update_author(self, *, name: str, bio: Optional[str], id: int) -> None:
         self._pool.execute_with_retries(UPDATE_AUTHOR, parameters={"$name": name, "$bio": bio, "$id": id})
 
     def delete_author(self, *, id: int) -> None:

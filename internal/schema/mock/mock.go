@@ -24,3 +24,11 @@ func (r *Registry) Columns(tableOrView string) ([]schema.ColumnInfo, bool) {
 	cols, ok := r.tables[strings.ToLower(tableOrView)]
 	return cols, ok
 }
+
+func (r *Registry) TableNames() []string {
+	names := make([]string, 0, len(r.tables))
+	for t := range r.tables {
+		names = append(names, t)
+	}
+	return names
+}

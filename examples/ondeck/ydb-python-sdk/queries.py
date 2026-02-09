@@ -9,58 +9,53 @@ from db import models
 LIST_CITIES = """
 -- name: ListCities :many
 SELECT * FROM city
-ORDER BY name;"""
+ORDER BY name;
+"""
 
 
 GET_CITY = """
 -- name: GetCity :one
 SELECT * FROM city
-WHERE slug = $slug LIMIT 1;"""
-
-# params: $slug
+WHERE slug = $slug LIMIT 1;
+"""
 
 
 CREATE_CITY = """
 -- name: CreateCity :one
 INSERT INTO city (name, slug)
 VALUES ($name, $slug)
-RETURNING *;"""
-
-# params: $name, $slug
+RETURNING *;
+"""
 
 
 UPDATE_CITY_NAME = """
 -- name: UpdateCityName :exec
 UPDATE city
 SET name = $name
-WHERE slug = $slug;"""
-
-# params: $name, $slug
+WHERE slug = $slug;
+"""
 
 
 LIST_VENUES = """
 -- name: ListVenues :many
 SELECT * FROM venue
 WHERE city = $city
-ORDER BY name;"""
-
-# params: $city
+ORDER BY name;
+"""
 
 
 DELETE_VENUE = """
 -- name: DeleteVenue :exec
 DELETE FROM venue
-WHERE slug = $slug;"""
-
-# params: $slug
+WHERE slug = $slug;
+"""
 
 
 GET_VENUE = """
 -- name: GetVenue :one
 SELECT * FROM venue
-WHERE slug = $slug AND city = $city LIMIT 1;"""
-
-# params: $slug, $city
+WHERE slug = $slug AND city = $city LIMIT 1;
+"""
 
 
 CREATE_VENUE = """
@@ -84,9 +79,8 @@ INSERT INTO venue (
     $status,
     $tags
 )
-RETURNING id;"""
-
-# params: $id, $slug, $name, $city, $created_at, $spotify_playlist, $status, $tags
+RETURNING id;
+"""
 
 
 UPDATE_VENUE_NAME = """
@@ -94,9 +88,8 @@ UPDATE_VENUE_NAME = """
 UPDATE venue
 SET name = $name
 WHERE slug = $slug
-RETURNING id;"""
-
-# params: $name, $slug
+RETURNING id;
+"""
 
 
 VENUE_COUNT_BY_CITY = """
@@ -104,7 +97,8 @@ VENUE_COUNT_BY_CITY = """
 SELECT city, COUNT(*) AS count
 FROM venue
 GROUP BY city
-ORDER BY city;"""
+ORDER BY city;
+"""
 
 
 
@@ -112,41 +106,41 @@ class Querier:
     def __init__(self, pool: ydb.QuerySessionPool):
         self._pool = pool
 
-    def list_cities(self) -> Iterator[models.ListCitiesRow]:
+    def list_cities(self) -> Iterator[models.City]:
         result_sets = self._pool.execute_with_retries(LIST_CITIES, parameters={})
         for row in result_sets[0].rows:
-            yield models.ListCitiesRow(
+            yield models.City(
                 slug=row.slug,
                 name=row.name
             )
 
-    def get_city(self, *, slug: str) -> Optional[models.GetCityRow]:
+    def get_city(self, *, slug: str) -> Optional[models.City]:
         result_sets = self._pool.execute_with_retries(GET_CITY, parameters={"$slug": slug})
         if not result_sets or not result_sets[0].rows:
             return None
         row = result_sets[0].rows[0]
-        return models.GetCityRow(
+        return models.City(
             slug=row.slug,
             name=row.name
         )
 
-    def create_city(self, *, name: str, *, slug: str) -> Optional[models.CreateCityRow]:
+    def create_city(self, *, name: str, slug: str) -> Optional[models.City]:
         result_sets = self._pool.execute_with_retries(CREATE_CITY, parameters={"$name": name, "$slug": slug})
         if not result_sets or not result_sets[0].rows:
             return None
         row = result_sets[0].rows[0]
-        return models.CreateCityRow(
+        return models.City(
             slug=row.slug,
             name=row.name
         )
 
-    def update_city_name(self, *, name: str, *, slug: str) -> None:
+    def update_city_name(self, *, name: str, slug: str) -> None:
         self._pool.execute_with_retries(UPDATE_CITY_NAME, parameters={"$name": name, "$slug": slug})
 
-    def list_venues(self, *, city: str) -> Iterator[models.ListVenuesRow]:
+    def list_venues(self, *, city: str) -> Iterator[models.Venue]:
         result_sets = self._pool.execute_with_retries(LIST_VENUES, parameters={"$city": city})
         for row in result_sets[0].rows:
-            yield models.ListVenuesRow(
+            yield models.Venue(
                 id=row.id,
                 status=row.status,
                 slug=row.slug,
@@ -161,12 +155,12 @@ class Querier:
     def delete_venue(self, *, slug: str) -> None:
         self._pool.execute_with_retries(DELETE_VENUE, parameters={"$slug": slug})
 
-    def get_venue(self, *, slug: str, *, city: str) -> Optional[models.GetVenueRow]:
+    def get_venue(self, *, slug: str, city: str) -> Optional[models.Venue]:
         result_sets = self._pool.execute_with_retries(GET_VENUE, parameters={"$slug": slug, "$city": city})
         if not result_sets or not result_sets[0].rows:
             return None
         row = result_sets[0].rows[0]
-        return models.GetVenueRow(
+        return models.Venue(
             id=row.id,
             status=row.status,
             slug=row.slug,
@@ -178,7 +172,7 @@ class Querier:
             created_at=row.created_at
         )
 
-    def create_venue(self, *, id: int, *, slug: str, *, name: str, *, city: str, *, created_at: Optional[str], *, spotify_playlist: str, *, status: str, *, tags: Optional[str]) -> Optional[models.CreateVenueRow]:
+    def create_venue(self, *, id: int, slug: str, name: str, city: str, created_at: Optional[str], spotify_playlist: str, status: str, tags: Optional[str]) -> Optional[models.CreateVenueRow]:
         result_sets = self._pool.execute_with_retries(CREATE_VENUE, parameters={"$id": id, "$slug": slug, "$name": name, "$city": city, "$created_at": created_at, "$spotify_playlist": spotify_playlist, "$status": status, "$tags": tags})
         if not result_sets or not result_sets[0].rows:
             return None
@@ -186,7 +180,7 @@ class Querier:
         return models.CreateVenueRow(
         )
 
-    def update_venue_name(self, *, name: str, *, slug: str) -> Optional[models.UpdateVenueNameRow]:
+    def update_venue_name(self, *, name: str, slug: str) -> Optional[models.UpdateVenueNameRow]:
         result_sets = self._pool.execute_with_retries(UPDATE_VENUE_NAME, parameters={"$name": name, "$slug": slug})
         if not result_sets or not result_sets[0].rows:
             return None

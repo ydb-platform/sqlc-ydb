@@ -16,16 +16,14 @@ const getAuthor = `-- name: GetAuthor :one
 SELECT * FROM authors
 WHERE id = $id LIMIT 1;`
 
-type GetAuthorParams struct {
-	ID uint64 `json:"id"`
-}
-
-func (q *Queries) GetAuthor(ctx context.Context, arg GetAuthorParams) (*GetAuthorRow, error) {
-	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*GetAuthorRow, error) {
+func (q *Queries) GetAuthor(ctx context.Context,
+	id uint64,
+) (*Author, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*Author, error) {
 		row := q.db.QueryRowContext(ctx, getAuthor,
-			sql.Named("id", arg.ID),
+			sql.Named("id", id),
 		)
-		var i GetAuthorRow
+		var i Author
 		err := row.Scan(&i.ID, &i.Name, &i.Bio)
 		if err != nil {
 			return nil, xerrors.WithStackTrace(err)
@@ -44,16 +42,16 @@ const listAuthors = `-- name: ListAuthors :many
 SELECT * FROM authors
 ORDER BY name;`
 
-func (q *Queries) ListAuthors(ctx context.Context) ([]ListAuthorsRow, error) {
-	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]ListAuthorsRow, error) {
+func (q *Queries) ListAuthors(ctx context.Context) ([]Author, error) {
+	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]Author, error) {
 		rows, err := q.db.QueryContext(ctx, listAuthors)
 		if err != nil {
 			return nil, err
 		}
 		defer rows.Close()
-		var items []ListAuthorsRow
+		var items []Author
 		for rows.Next() {
-			var i ListAuthorsRow
+			var i Author
 			if err := rows.Scan(&i.ID, &i.Name, &i.Bio); err != nil {
 				return nil, xerrors.WithStackTrace(err)
 			}
@@ -77,20 +75,18 @@ INSERT INTO authors (id, name, bio)
 VALUES ($id, $name, $bio)
 RETURNING *;`
 
-type CreateAuthorParams struct {
-	ID uint64 `json:"id"`
-	Name string `json:"name"`
-	Bio *string `json:"bio"`
-}
-
-func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (*CreateAuthorRow, error) {
-	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*CreateAuthorRow, error) {
+func (q *Queries) CreateAuthor(ctx context.Context,
+	id uint64,
+	name string,
+	bio *string,
+) (*Author, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*Author, error) {
 		row := q.db.QueryRowContext(ctx, createAuthor,
-			sql.Named("id", arg.ID),
-			sql.Named("name", arg.Name),
-			sql.Named("bio", arg.Bio),
+			sql.Named("id", id),
+			sql.Named("name", name),
+			sql.Named("bio", bio),
 		)
-		var i CreateAuthorRow
+		var i Author
 		err := row.Scan(&i.ID, &i.Name, &i.Bio)
 		if err != nil {
 			return nil, xerrors.WithStackTrace(err)
@@ -110,18 +106,16 @@ UPDATE authors
 SET name = $name, bio = $bio
 WHERE id = $id;`
 
-type UpdateAuthorParams struct {
-	Name string `json:"name"`
-	Bio *string `json:"bio"`
-	ID uint64 `json:"id"`
-}
-
-func (q *Queries) UpdateAuthor(ctx context.Context, arg UpdateAuthorParams) error {
+func (q *Queries) UpdateAuthor(ctx context.Context,
+	name string,
+	bio *string,
+	id uint64,
+) error {
 	err := retry.Retry(ctx, func(ctx context.Context) error {
 		_, err := q.db.ExecContext(ctx, updateAuthor,
-			sql.Named("name", arg.Name),
-			sql.Named("bio", arg.Bio),
-			sql.Named("id", arg.ID),
+			sql.Named("name", name),
+			sql.Named("bio", bio),
+			sql.Named("id", id),
 		)
 		if err != nil {
 			return xerrors.WithStackTrace(err)
@@ -140,14 +134,12 @@ const deleteAuthor = `-- name: DeleteAuthor :exec
 DELETE FROM authors
 WHERE id = $id;`
 
-type DeleteAuthorParams struct {
-	ID uint64 `json:"id"`
-}
-
-func (q *Queries) DeleteAuthor(ctx context.Context, arg DeleteAuthorParams) error {
+func (q *Queries) DeleteAuthor(ctx context.Context,
+	id uint64,
+) error {
 	err := retry.Retry(ctx, func(ctx context.Context) error {
 		_, err := q.db.ExecContext(ctx, deleteAuthor,
-			sql.Named("id", arg.ID),
+			sql.Named("id", id),
 		)
 		if err != nil {
 			return xerrors.WithStackTrace(err)

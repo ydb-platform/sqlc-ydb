@@ -2,3 +2,8 @@
 import dataclasses
 from typing import Optional
 
+@dataclasses.dataclass
+class Kv:
+    key: str
+    value: Optional[str]
+

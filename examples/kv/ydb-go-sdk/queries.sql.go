@@ -15,25 +15,31 @@ const get = `-- name: Get :one
 SELECT key, value FROM kv
 WHERE key = $key LIMIT 1;`
 
-type GetParams struct {
-	Key string `json:"key"`
-}
-
-func (q *Queries) Get(ctx context.Context, arg GetParams, opts ...query.ExecuteOption) (interface{}, error) {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$key").Text(arg.Key)
+func (q *Queries) Get(ctx context.Context,
+	key string,
+	opts ...query.ExecuteOption,
+) (*interface{}, error) {
 	row, err := q.db.QueryRow(ctx, get,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$key").Text(key).
+				Build(),
+			),
+			query.WithLabel("Get"),
+		)...,
 	)
-	var i interface{}
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
+
+	var i interface{}
 	err = row.Scan()
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
-	return i, nil
+
+	return &i, nil
 }
 
 
@@ -42,15 +48,19 @@ SELECT key, value FROM kv
 ORDER BY key;`
 
 func (q *Queries) List(ctx context.Context, opts ...query.ExecuteOption) ([]interface{}, error) {
-	result, err := q.db.QueryResultSet(ctx, list, opts...)
+	result, err := q.db.QueryResultSet(ctx, list,
+		append(opts, query.WithLabel("List"))...,
+	)
 	if err != nil {
 		return nil, xerrors.WithStackTrace(err)
 	}
+
 	var items []interface{}
 	for row, err := range result.Rows(ctx) {
 		if err != nil {
 			return nil, xerrors.WithStackTrace(err)
 		}
+
 		var i interface{}
 		if err := row.Scan(); err != nil {
 			return nil, xerrors.WithStackTrace(err)
@@ -60,6 +70,7 @@ func (q *Queries) List(ctx context.Context, opts ...query.ExecuteOption) ([]inte
 	if err := result.Close(ctx); err != nil {
 		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return items, nil
 }
 
@@ -68,21 +79,26 @@ const set = `-- name: Set :exec
 INSERT INTO kv (key, value)
 VALUES ($key, $value);`
 
-type SetParams struct {
-	Key string `json:"key"`
-	Value *string `json:"value"`
-}
-
-func (q *Queries) Set(ctx context.Context, arg SetParams, opts ...query.ExecuteOption) error {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$key").Text(arg.Key)
-	parameters = parameters.Param("$value").BeginOptional().Text(arg.Value).EndOptional()
+func (q *Queries) Set(ctx context.Context,
+	key string,
+	value *string,
+	opts ...query.ExecuteOption,
+) error {
 	err := q.db.Exec(ctx, set,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$key").Text(key).
+				Param("$value").BeginOptional().Text(value).EndOptional().
+				Build(),
+			),
+			query.WithLabel("Set"),
+		)...,
 	)
 	if err != nil {
 		return xerrors.WithStackTrace(err)
 	}
+
 	return nil
 }
 
@@ -91,19 +107,24 @@ const delete = `-- name: Delete :exec
 DELETE FROM kv
 WHERE key = $key;`
 
-type DeleteParams struct {
-	Key string `json:"key"`
-}
-
-func (q *Queries) Delete(ctx context.Context, arg DeleteParams, opts ...query.ExecuteOption) error {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$key").Text(arg.Key)
+func (q *Queries) Delete(ctx context.Context,
+	key string,
+	opts ...query.ExecuteOption,
+) error {
 	err := q.db.Exec(ctx, delete,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$key").Text(key).
+				Build(),
+			),
+			query.WithLabel("Delete"),
+		)...,
 	)
 	if err != nil {
 		return xerrors.WithStackTrace(err)
 	}
+
 	return nil
 }
 

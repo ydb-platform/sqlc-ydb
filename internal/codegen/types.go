@@ -93,6 +93,32 @@ func toGoStruct(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
+// singularize converts a plural table name to singular for use as row/struct type (e.g. authors → author).
+func singularize(tableName string) string {
+	if tableName == "" {
+		return ""
+	}
+	lower := strings.ToLower(tableName)
+	if len(lower) <= 1 {
+		return tableName
+	}
+	if strings.HasSuffix(lower, "ies") && len(lower) > 3 {
+		return lower[:len(lower)-3] + "y"
+	}
+	if strings.HasSuffix(lower, "es") && len(lower) > 2 {
+		return lower[:len(lower)-2]
+	}
+	if strings.HasSuffix(lower, "s") && !strings.HasSuffix(lower, "ss") {
+		return lower[:len(lower)-1]
+	}
+	return tableName
+}
+
+// tableNameToGoStruct returns the Go struct name for a table: singular, PascalCase (e.g. authors → Author).
+func tableNameToGoStruct(tableName string) string {
+	return toGoStruct(singularize(tableName))
+}
+
 func toGoField(s string) string {
 	if s == "" {
 		return "F"
@@ -103,6 +129,19 @@ func toGoField(s string) string {
 	default:
 		return strings.ToUpper(s[:1]) + s[1:]
 	}
+}
+
+// toGoParamName returns the variable name for a method parameter (e.g. id, name, bio).
+// All-caps field names like ID, UUID become lowercase id, uuid.
+func toGoParamName(s string) string {
+	f := toGoField(s)
+	if len(f) == 0 {
+		return "p"
+	}
+	if f == strings.ToUpper(f) && len(f) >= 2 {
+		return strings.ToLower(f)
+	}
+	return strings.ToLower(f[:1]) + f[1:]
 }
 
 func toGoConst(s string) string {

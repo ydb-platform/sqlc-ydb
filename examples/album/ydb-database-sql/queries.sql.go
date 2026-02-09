@@ -16,16 +16,14 @@ const getAuthor = `-- name: GetAuthor :one
 SELECT * FROM authors
 WHERE id = $id LIMIT 1;`
 
-type GetAuthorParams struct {
-	ID uint64 `json:"id"`
-}
-
-func (q *Queries) GetAuthor(ctx context.Context, arg GetAuthorParams) (*GetAuthorRow, error) {
-	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*GetAuthorRow, error) {
+func (q *Queries) GetAuthor(ctx context.Context,
+	id uint64,
+) (*Author, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*Author, error) {
 		row := q.db.QueryRowContext(ctx, getAuthor,
-			sql.Named("id", arg.ID),
+			sql.Named("id", id),
 		)
-		var i GetAuthorRow
+		var i Author
 		err := row.Scan(&i.ID, &i.Name)
 		if err != nil {
 			return nil, xerrors.WithStackTrace(err)
@@ -44,16 +42,16 @@ const listAuthors = `-- name: ListAuthors :many
 SELECT * FROM authors
 ORDER BY name;`
 
-func (q *Queries) ListAuthors(ctx context.Context) ([]ListAuthorsRow, error) {
-	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]ListAuthorsRow, error) {
+func (q *Queries) ListAuthors(ctx context.Context) ([]Author, error) {
+	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]Author, error) {
 		rows, err := q.db.QueryContext(ctx, listAuthors)
 		if err != nil {
 			return nil, err
 		}
 		defer rows.Close()
-		var items []ListAuthorsRow
+		var items []Author
 		for rows.Next() {
-			var i ListAuthorsRow
+			var i Author
 			if err := rows.Scan(&i.ID, &i.Name); err != nil {
 				return nil, xerrors.WithStackTrace(err)
 			}
@@ -77,16 +75,14 @@ INSERT INTO authors (name)
 VALUES ($name)
 RETURNING *;`
 
-type CreateAuthorParams struct {
-	Name string `json:"name"`
-}
-
-func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (*CreateAuthorRow, error) {
-	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*CreateAuthorRow, error) {
+func (q *Queries) CreateAuthor(ctx context.Context,
+	name string,
+) (*Author, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*Author, error) {
 		row := q.db.QueryRowContext(ctx, createAuthor,
-			sql.Named("name", arg.Name),
+			sql.Named("name", name),
 		)
-		var i CreateAuthorRow
+		var i Author
 		err := row.Scan(&i.ID, &i.Name)
 		if err != nil {
 			return nil, xerrors.WithStackTrace(err)
@@ -105,16 +101,14 @@ const getAlbum = `-- name: GetAlbum :one
 SELECT * FROM albums
 WHERE id = $id LIMIT 1;`
 
-type GetAlbumParams struct {
-	ID uint64 `json:"id"`
-}
-
-func (q *Queries) GetAlbum(ctx context.Context, arg GetAlbumParams) (*GetAlbumRow, error) {
-	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*GetAlbumRow, error) {
+func (q *Queries) GetAlbum(ctx context.Context,
+	id uint64,
+) (*Album, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*Album, error) {
 		row := q.db.QueryRowContext(ctx, getAlbum,
-			sql.Named("id", arg.ID),
+			sql.Named("id", id),
 		)
-		var i GetAlbumRow
+		var i Album
 		err := row.Scan(&i.ID, &i.Title, &i.Author_id)
 		if err != nil {
 			return nil, xerrors.WithStackTrace(err)
@@ -134,22 +128,20 @@ SELECT * FROM albums
 WHERE author_id = $author_id
 ORDER BY title;`
 
-type ListAlbumsByAuthorParams struct {
-	Author_id uint64 `json:"author_id"`
-}
-
-func (q *Queries) ListAlbumsByAuthor(ctx context.Context, arg ListAlbumsByAuthorParams) ([]ListAlbumsByAuthorRow, error) {
-	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]ListAlbumsByAuthorRow, error) {
+func (q *Queries) ListAlbumsByAuthor(ctx context.Context,
+	author_id uint64,
+) ([]Album, error) {
+	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]Album, error) {
 		rows, err := q.db.QueryContext(ctx, listAlbumsByAuthor,
-			sql.Named("author_id", arg.Author_id),
+			sql.Named("author_id", author_id),
 		)
 		if err != nil {
 			return nil, err
 		}
 		defer rows.Close()
-		var items []ListAlbumsByAuthorRow
+		var items []Album
 		for rows.Next() {
-			var i ListAlbumsByAuthorRow
+			var i Album
 			if err := rows.Scan(&i.ID, &i.Title, &i.Author_id); err != nil {
 				return nil, xerrors.WithStackTrace(err)
 			}
@@ -173,18 +165,16 @@ INSERT INTO albums (title, author_id)
 VALUES ($title, $author_id)
 RETURNING *;`
 
-type CreateAlbumParams struct {
-	Title string `json:"title"`
-	Author_id uint64 `json:"author_id"`
-}
-
-func (q *Queries) CreateAlbum(ctx context.Context, arg CreateAlbumParams) (*CreateAlbumRow, error) {
-	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*CreateAlbumRow, error) {
+func (q *Queries) CreateAlbum(ctx context.Context,
+	title string,
+	author_id uint64,
+) (*Album, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*Album, error) {
 		row := q.db.QueryRowContext(ctx, createAlbum,
-			sql.Named("title", arg.Title),
-			sql.Named("author_id", arg.Author_id),
+			sql.Named("title", title),
+			sql.Named("author_id", author_id),
 		)
-		var i CreateAlbumRow
+		var i Album
 		err := row.Scan(&i.ID, &i.Title, &i.Author_id)
 		if err != nil {
 			return nil, xerrors.WithStackTrace(err)
@@ -203,14 +193,12 @@ const deleteAlbum = `-- name: DeleteAlbum :exec
 DELETE FROM albums
 WHERE id = $id;`
 
-type DeleteAlbumParams struct {
-	ID uint64 `json:"id"`
-}
-
-func (q *Queries) DeleteAlbum(ctx context.Context, arg DeleteAlbumParams) error {
+func (q *Queries) DeleteAlbum(ctx context.Context,
+	id uint64,
+) error {
 	err := retry.Retry(ctx, func(ctx context.Context) error {
 		_, err := q.db.ExecContext(ctx, deleteAlbum,
-			sql.Named("id", arg.ID),
+			sql.Named("id", id),
 		)
 		if err != nil {
 			return xerrors.WithStackTrace(err)

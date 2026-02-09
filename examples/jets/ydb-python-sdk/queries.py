@@ -8,38 +8,37 @@ from db import models
 
 COUNT_PILOTS = """
 -- name: CountPilots :one
-SELECT COUNT(*) FROM pilots;"""
+SELECT COUNT(*) FROM pilots;
+"""
 
 
 LIST_PILOTS = """
 -- name: ListPilots :many
 SELECT * FROM pilots
-LIMIT 5;"""
+LIMIT 5;
+"""
 
 
 DELETE_PILOT = """
 -- name: DeletePilot :exec
 DELETE FROM pilots
-WHERE id = $id;"""
-
-# params: $id
+WHERE id = $id;
+"""
 
 
 GET_PILOT = """
 -- name: GetPilot :one
 SELECT * FROM pilots
-WHERE id = $id LIMIT 1;"""
-
-# params: $id
+WHERE id = $id LIMIT 1;
+"""
 
 
 CREATE_PILOT = """
 -- name: CreatePilot :one
 INSERT INTO pilots (name)
 VALUES ($name)
-RETURNING *;"""
-
-# params: $name
+RETURNING *;
+"""
 
 
 
@@ -55,10 +54,10 @@ class Querier:
         return models.CountPilotsRow(
         )
 
-    def list_pilots(self) -> Iterator[models.ListPilotsRow]:
+    def list_pilots(self) -> Iterator[models.Pilot]:
         result_sets = self._pool.execute_with_retries(LIST_PILOTS, parameters={})
         for row in result_sets[0].rows:
-            yield models.ListPilotsRow(
+            yield models.Pilot(
                 id=row.id,
                 name=row.name
             )
@@ -66,22 +65,22 @@ class Querier:
     def delete_pilot(self, *, id: int) -> None:
         self._pool.execute_with_retries(DELETE_PILOT, parameters={"$id": id})
 
-    def get_pilot(self, *, id: int) -> Optional[models.GetPilotRow]:
+    def get_pilot(self, *, id: int) -> Optional[models.Pilot]:
         result_sets = self._pool.execute_with_retries(GET_PILOT, parameters={"$id": id})
         if not result_sets or not result_sets[0].rows:
             return None
         row = result_sets[0].rows[0]
-        return models.GetPilotRow(
+        return models.Pilot(
             id=row.id,
             name=row.name
         )
 
-    def create_pilot(self, *, name: str) -> Optional[models.CreatePilotRow]:
+    def create_pilot(self, *, name: str) -> Optional[models.Pilot]:
         result_sets = self._pool.execute_with_retries(CREATE_PILOT, parameters={"$name": name})
         if not result_sets or not result_sets[0].rows:
             return None
         row = result_sets[0].rows[0]
-        return models.CreatePilotRow(
+        return models.Pilot(
             id=row.id,
             name=row.name
         )

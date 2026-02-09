@@ -9,34 +9,30 @@ from db import models
 GET_AUTHOR = """
 -- name: GetAuthor :one
 SELECT * FROM authors
-WHERE author_id = $author_id LIMIT 1;"""
-
-# params: $author_id
+WHERE author_id = $author_id LIMIT 1;
+"""
 
 
 DELETE_BOOK = """
 -- name: DeleteBook :exec
 DELETE FROM books
-WHERE book_id = $book_id;"""
-
-# params: $book_id
+WHERE book_id = $book_id;
+"""
 
 
 BOOKS_BY_YEAR = """
 -- name: BooksByYear :many
 SELECT * FROM books
-WHERE year = $year;"""
-
-# params: $year
+WHERE year = $year;
+"""
 
 
 CREATE_AUTHOR = """
 -- name: CreateAuthor :one
 INSERT INTO authors (name)
 VALUES ($name)
-RETURNING *;"""
-
-# params: $name
+RETURNING *;
+"""
 
 
 CREATE_BOOK = """
@@ -58,26 +54,23 @@ INSERT INTO books (
     $available,
     $tags
 )
-RETURNING *;"""
-
-# params: $author_id, $isbn, $book_type, $title, $year, $available, $tags
+RETURNING *;
+"""
 
 
 UPDATE_BOOK = """
 -- name: UpdateBook :exec
 UPDATE books
 SET title = $title, tags = $tags
-WHERE book_id = $book_id;"""
-
-# params: $title, $tags, $book_id
+WHERE book_id = $book_id;
+"""
 
 
 GET_BIOGRAPHY = """
 -- name: GetBiography :one
 SELECT biography FROM authors
-WHERE author_id = $author_id LIMIT 1;"""
-
-# params: $author_id
+WHERE author_id = $author_id LIMIT 1;
+"""
 
 
 
@@ -85,12 +78,12 @@ class Querier:
     def __init__(self, pool: ydb.QuerySessionPool):
         self._pool = pool
 
-    def get_author(self, *, author_id: int) -> Optional[models.GetAuthorRow]:
+    def get_author(self, *, author_id: int) -> Optional[models.Author]:
         result_sets = self._pool.execute_with_retries(GET_AUTHOR, parameters={"$author_id": author_id})
         if not result_sets or not result_sets[0].rows:
             return None
         row = result_sets[0].rows[0]
-        return models.GetAuthorRow(
+        return models.Author(
             author_id=row.author_id,
             name=row.name,
             biography=row.biography
@@ -99,10 +92,10 @@ class Querier:
     def delete_book(self, *, book_id: int) -> None:
         self._pool.execute_with_retries(DELETE_BOOK, parameters={"$book_id": book_id})
 
-    def books_by_year(self, *, year: int) -> Iterator[models.BooksByYearRow]:
+    def books_by_year(self, *, year: int) -> Iterator[models.Book]:
         result_sets = self._pool.execute_with_retries(BOOKS_BY_YEAR, parameters={"$year": year})
         for row in result_sets[0].rows:
-            yield models.BooksByYearRow(
+            yield models.Book(
                 book_id=row.book_id,
                 author_id=row.author_id,
                 isbn=row.isbn,
@@ -113,23 +106,23 @@ class Querier:
                 tags=row.tags
             )
 
-    def create_author(self, *, name: str) -> Optional[models.CreateAuthorRow]:
+    def create_author(self, *, name: str) -> Optional[models.Author]:
         result_sets = self._pool.execute_with_retries(CREATE_AUTHOR, parameters={"$name": name})
         if not result_sets or not result_sets[0].rows:
             return None
         row = result_sets[0].rows[0]
-        return models.CreateAuthorRow(
+        return models.Author(
             author_id=row.author_id,
             name=row.name,
             biography=row.biography
         )
 
-    def create_book(self, *, author_id: int, *, isbn: str, *, book_type: str, *, title: str, *, year: int, *, available: Optional[str], *, tags: Optional[str]) -> Optional[models.CreateBookRow]:
+    def create_book(self, *, author_id: int, isbn: str, book_type: str, title: str, year: int, available: Optional[str], tags: Optional[str]) -> Optional[models.Book]:
         result_sets = self._pool.execute_with_retries(CREATE_BOOK, parameters={"$author_id": author_id, "$isbn": isbn, "$book_type": book_type, "$title": title, "$year": year, "$available": available, "$tags": tags})
         if not result_sets or not result_sets[0].rows:
             return None
         row = result_sets[0].rows[0]
-        return models.CreateBookRow(
+        return models.Book(
             book_id=row.book_id,
             author_id=row.author_id,
             isbn=row.isbn,
@@ -140,7 +133,7 @@ class Querier:
             tags=row.tags
         )
 
-    def update_book(self, *, title: str, *, tags: Optional[str], *, book_id: int) -> None:
+    def update_book(self, *, title: str, tags: Optional[str], book_id: int) -> None:
         self._pool.execute_with_retries(UPDATE_BOOK, parameters={"$title": title, "$tags": tags, "$book_id": book_id})
 
     def get_biography(self, *, author_id: int) -> Optional[models.GetBiographyRow]:

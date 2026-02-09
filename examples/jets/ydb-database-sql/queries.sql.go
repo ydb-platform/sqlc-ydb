@@ -15,7 +15,7 @@ import (
 const countPilots = `-- name: CountPilots :one
 SELECT COUNT(*) FROM pilots;`
 
-func (q *Queries) CountPilots(ctx context.Context, id int64) (*interface{}, error) {
+func (q *Queries) CountPilots(ctx context.Context) (*interface{}, error) {
 	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*interface{}, error) {
 		row := q.db.QueryRowContext(ctx, countPilots)
 		var i interface{}
@@ -37,16 +37,16 @@ const listPilots = `-- name: ListPilots :many
 SELECT * FROM pilots
 LIMIT 5;`
 
-func (q *Queries) ListPilots(ctx context.Context) ([]ListPilotsRow, error) {
-	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]ListPilotsRow, error) {
+func (q *Queries) ListPilots(ctx context.Context) ([]Pilot, error) {
+	items, err := retry.RetryWithResult(ctx, func(ctx context.Context) ([]Pilot, error) {
 		rows, err := q.db.QueryContext(ctx, listPilots)
 		if err != nil {
 			return nil, err
 		}
 		defer rows.Close()
-		var items []ListPilotsRow
+		var items []Pilot
 		for rows.Next() {
-			var i ListPilotsRow
+			var i Pilot
 			if err := rows.Scan(&i.ID, &i.Name); err != nil {
 				return nil, xerrors.WithStackTrace(err)
 			}
@@ -69,14 +69,12 @@ const deletePilot = `-- name: DeletePilot :exec
 DELETE FROM pilots
 WHERE id = $id;`
 
-type DeletePilotParams struct {
-	ID uint64 `json:"id"`
-}
-
-func (q *Queries) DeletePilot(ctx context.Context, arg DeletePilotParams) error {
+func (q *Queries) DeletePilot(ctx context.Context,
+	id uint64,
+) error {
 	err := retry.Retry(ctx, func(ctx context.Context) error {
 		_, err := q.db.ExecContext(ctx, deletePilot,
-			sql.Named("id", arg.ID),
+			sql.Named("id", id),
 		)
 		if err != nil {
 			return xerrors.WithStackTrace(err)
@@ -95,16 +93,14 @@ const getPilot = `-- name: GetPilot :one
 SELECT * FROM pilots
 WHERE id = $id LIMIT 1;`
 
-type GetPilotParams struct {
-	ID uint64 `json:"id"`
-}
-
-func (q *Queries) GetPilot(ctx context.Context, arg GetPilotParams) (*GetPilotRow, error) {
-	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*GetPilotRow, error) {
+func (q *Queries) GetPilot(ctx context.Context,
+	id uint64,
+) (*Pilot, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*Pilot, error) {
 		row := q.db.QueryRowContext(ctx, getPilot,
-			sql.Named("id", arg.ID),
+			sql.Named("id", id),
 		)
-		var i GetPilotRow
+		var i Pilot
 		err := row.Scan(&i.ID, &i.Name)
 		if err != nil {
 			return nil, xerrors.WithStackTrace(err)
@@ -124,16 +120,14 @@ INSERT INTO pilots (name)
 VALUES ($name)
 RETURNING *;`
 
-type CreatePilotParams struct {
-	Name string `json:"name"`
-}
-
-func (q *Queries) CreatePilot(ctx context.Context, arg CreatePilotParams) (*CreatePilotRow, error) {
-	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*CreatePilotRow, error) {
+func (q *Queries) CreatePilot(ctx context.Context,
+	name string,
+) (*Pilot, error) {
+	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*Pilot, error) {
 		row := q.db.QueryRowContext(ctx, createPilot,
-			sql.Named("name", arg.Name),
+			sql.Named("name", name),
 		)
-		var i CreatePilotRow
+		var i Pilot
 		err := row.Scan(&i.ID, &i.Name)
 		if err != nil {
 			return nil, xerrors.WithStackTrace(err)

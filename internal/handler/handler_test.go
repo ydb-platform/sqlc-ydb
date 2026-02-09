@@ -114,3 +114,33 @@ SELECT FROM WHERE`
 	_, err := Parse(&engine.ParseRequest{Sql: sql})
 	require.Error(t, err)
 }
+
+// TestParse_ReturnsCatalog verifies that when schema_sql is provided, the ParseResponse
+// includes a Catalog (from schema) so that sqlc can pass it to codegen plugins.
+func TestParse_ReturnsCatalog(t *testing.T) {
+	schemaSQL := `CREATE TABLE authors (
+    id Uint64,
+    name Utf8 NOT NULL,
+    bio Utf8,
+    PRIMARY KEY (id)
+);`
+	sql := `-- name: GetAuthor :one
+SELECT * FROM authors WHERE id = $id LIMIT 1`
+	resp, err := Parse(&engine.ParseRequest{Sql: sql, SchemaSource: &engine.ParseRequest_SchemaSql{SchemaSql: schemaSQL}})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	cat := resp.GetCatalog()
+	require.NotNil(t, cat, "ParseResponse.Catalog should be set when schema_sql is provided")
+	require.NotEmpty(t, cat.GetSchemas(), "catalog should have at least one schema")
+	tables := cat.GetSchemas()[0].GetTables()
+	require.NotEmpty(t, tables, "catalog should have tables from schema")
+	var authors *engine.CatalogTable
+	for _, tbl := range tables {
+		if tbl.GetRel().GetName() == "authors" {
+			authors = tbl
+			break
+		}
+	}
+	require.NotNil(t, authors, "catalog should contain authors table")
+	require.Len(t, authors.GetColumns(), 3, "authors should have id, name, bio")
+}

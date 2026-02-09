@@ -3,34 +3,12 @@ import dataclasses
 from typing import Optional
 
 @dataclasses.dataclass
-class GetAuthorRow:
+class Author:
     id: int
     name: str
 
 @dataclasses.dataclass
-class ListAuthorsRow:
-    id: int
-    name: str
-
-@dataclasses.dataclass
-class CreateAuthorRow:
-    id: int
-    name: str
-
-@dataclasses.dataclass
-class GetAlbumRow:
-    id: int
-    title: str
-    author_id: int
-
-@dataclasses.dataclass
-class ListAlbumsByAuthorRow:
-    id: int
-    title: str
-    author_id: int
-
-@dataclasses.dataclass
-class CreateAlbumRow:
+class Album:
     id: int
     title: str
     author_id: int

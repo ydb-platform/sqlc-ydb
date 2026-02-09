@@ -15,17 +15,21 @@ const listCities = `-- name: ListCities :many
 SELECT * FROM city
 ORDER BY name;`
 
-func (q *Queries) ListCities(ctx context.Context, opts ...query.ExecuteOption) ([]ListCitiesRow, error) {
-	result, err := q.db.QueryResultSet(ctx, listCities, opts...)
+func (q *Queries) ListCities(ctx context.Context, opts ...query.ExecuteOption) ([]City, error) {
+	result, err := q.db.QueryResultSet(ctx, listCities,
+		append(opts, query.WithLabel("ListCities"))...,
+	)
 	if err != nil {
 		return nil, xerrors.WithStackTrace(err)
 	}
-	var items []ListCitiesRow
+
+	var items []City
 	for row, err := range result.Rows(ctx) {
 		if err != nil {
 			return nil, xerrors.WithStackTrace(err)
 		}
-		var i ListCitiesRow
+
+		var i City
 		if err := row.Scan(&i.Slug, &i.Name); err != nil {
 			return nil, xerrors.WithStackTrace(err)
 		}
@@ -34,6 +38,7 @@ func (q *Queries) ListCities(ctx context.Context, opts ...query.ExecuteOption) (
 	if err := result.Close(ctx); err != nil {
 		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return items, nil
 }
 
@@ -42,25 +47,31 @@ const getCity = `-- name: GetCity :one
 SELECT * FROM city
 WHERE slug = $slug LIMIT 1;`
 
-type GetCityParams struct {
-	Slug string `json:"slug"`
-}
-
-func (q *Queries) GetCity(ctx context.Context, arg GetCityParams, opts ...query.ExecuteOption) (GetCityRow, error) {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$slug").Text(arg.Slug)
+func (q *Queries) GetCity(ctx context.Context,
+	slug string,
+	opts ...query.ExecuteOption,
+) (*City, error) {
 	row, err := q.db.QueryRow(ctx, getCity,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$slug").Text(slug).
+				Build(),
+			),
+			query.WithLabel("GetCity"),
+		)...,
 	)
-	var i GetCityRow
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
+
+	var i City
 	err = row.Scan(&i.Slug, &i.Name)
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
-	return i, nil
+
+	return &i, nil
 }
 
 
@@ -69,27 +80,33 @@ INSERT INTO city (name, slug)
 VALUES ($name, $slug)
 RETURNING *;`
 
-type CreateCityParams struct {
-	Name string `json:"name"`
-	Slug string `json:"slug"`
-}
-
-func (q *Queries) CreateCity(ctx context.Context, arg CreateCityParams, opts ...query.ExecuteOption) (CreateCityRow, error) {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$name").Text(arg.Name)
-	parameters = parameters.Param("$slug").Text(arg.Slug)
+func (q *Queries) CreateCity(ctx context.Context,
+	name string,
+	slug string,
+	opts ...query.ExecuteOption,
+) (*City, error) {
 	row, err := q.db.QueryRow(ctx, createCity,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$name").Text(name).
+				Param("$slug").Text(slug).
+				Build(),
+			),
+			query.WithLabel("CreateCity"),
+		)...,
 	)
-	var i CreateCityRow
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
+
+	var i City
 	err = row.Scan(&i.Slug, &i.Name)
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
-	return i, nil
+
+	return &i, nil
 }
 
 
@@ -98,21 +115,26 @@ UPDATE city
 SET name = $name
 WHERE slug = $slug;`
 
-type UpdateCityNameParams struct {
-	Name string `json:"name"`
-	Slug string `json:"slug"`
-}
-
-func (q *Queries) UpdateCityName(ctx context.Context, arg UpdateCityNameParams, opts ...query.ExecuteOption) error {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$name").Text(arg.Name)
-	parameters = parameters.Param("$slug").Text(arg.Slug)
+func (q *Queries) UpdateCityName(ctx context.Context,
+	name string,
+	slug string,
+	opts ...query.ExecuteOption,
+) error {
 	err := q.db.Exec(ctx, updateCityName,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$name").Text(name).
+				Param("$slug").Text(slug).
+				Build(),
+			),
+			query.WithLabel("UpdateCityName"),
+		)...,
 	)
 	if err != nil {
 		return xerrors.WithStackTrace(err)
 	}
+
 	return nil
 }
 
@@ -122,21 +144,31 @@ SELECT * FROM venue
 WHERE city = $city
 ORDER BY name;`
 
-type ListVenuesParams struct {
-	City string `json:"city"`
-}
-
-func (q *Queries) ListVenues(ctx context.Context, opts ...query.ExecuteOption) ([]ListVenuesRow, error) {
-	result, err := q.db.QueryResultSet(ctx, listVenues, opts...)
+func (q *Queries) ListVenues(ctx context.Context,
+	city string,
+	opts ...query.ExecuteOption,
+) ([]Venue, error) {
+	result, err := q.db.QueryResultSet(ctx, listVenues,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$city").Text(city).
+				Build(),
+			),
+			query.WithLabel("ListVenues"),
+		)...,
+	)
 	if err != nil {
 		return nil, xerrors.WithStackTrace(err)
 	}
-	var items []ListVenuesRow
+
+	var items []Venue
 	for row, err := range result.Rows(ctx) {
 		if err != nil {
 			return nil, xerrors.WithStackTrace(err)
 		}
-		var i ListVenuesRow
+
+		var i Venue
 		if err := row.Scan(&i.ID, &i.Status, &i.Slug, &i.Name, &i.City, &i.Spotify_playlist, &i.Songkick_id, &i.Tags, &i.Created_at); err != nil {
 			return nil, xerrors.WithStackTrace(err)
 		}
@@ -145,6 +177,7 @@ func (q *Queries) ListVenues(ctx context.Context, opts ...query.ExecuteOption) (
 	if err := result.Close(ctx); err != nil {
 		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return items, nil
 }
 
@@ -153,19 +186,24 @@ const deleteVenue = `-- name: DeleteVenue :exec
 DELETE FROM venue
 WHERE slug = $slug;`
 
-type DeleteVenueParams struct {
-	Slug string `json:"slug"`
-}
-
-func (q *Queries) DeleteVenue(ctx context.Context, arg DeleteVenueParams, opts ...query.ExecuteOption) error {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$slug").Text(arg.Slug)
+func (q *Queries) DeleteVenue(ctx context.Context,
+	slug string,
+	opts ...query.ExecuteOption,
+) error {
 	err := q.db.Exec(ctx, deleteVenue,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$slug").Text(slug).
+				Build(),
+			),
+			query.WithLabel("DeleteVenue"),
+		)...,
 	)
 	if err != nil {
 		return xerrors.WithStackTrace(err)
 	}
+
 	return nil
 }
 
@@ -174,27 +212,33 @@ const getVenue = `-- name: GetVenue :one
 SELECT * FROM venue
 WHERE slug = $slug AND city = $city LIMIT 1;`
 
-type GetVenueParams struct {
-	Slug string `json:"slug"`
-	City string `json:"city"`
-}
-
-func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams, opts ...query.ExecuteOption) (GetVenueRow, error) {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$slug").Text(arg.Slug)
-	parameters = parameters.Param("$city").Text(arg.City)
+func (q *Queries) GetVenue(ctx context.Context,
+	slug string,
+	city string,
+	opts ...query.ExecuteOption,
+) (*Venue, error) {
 	row, err := q.db.QueryRow(ctx, getVenue,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$slug").Text(slug).
+				Param("$city").Text(city).
+				Build(),
+			),
+			query.WithLabel("GetVenue"),
+		)...,
 	)
-	var i GetVenueRow
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
+
+	var i Venue
 	err = row.Scan(&i.ID, &i.Status, &i.Slug, &i.Name, &i.City, &i.Spotify_playlist, &i.Songkick_id, &i.Tags, &i.Created_at)
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
-	return i, nil
+
+	return &i, nil
 }
 
 
@@ -220,39 +264,45 @@ INSERT INTO venue (
 )
 RETURNING id;`
 
-type CreateVenueParams struct {
-	ID uint64 `json:"id"`
-	Slug string `json:"slug"`
-	Name string `json:"name"`
-	City string `json:"city"`
-	Created_at *string `json:"created_at"`
-	Spotify_playlist string `json:"spotify_playlist"`
-	Status string `json:"status"`
-	Tags *string `json:"tags"`
-}
-
-func (q *Queries) CreateVenue(ctx context.Context, arg CreateVenueParams, opts ...query.ExecuteOption) (interface{}, error) {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$id").Uint64(arg.ID)
-	parameters = parameters.Param("$slug").Text(arg.Slug)
-	parameters = parameters.Param("$name").Text(arg.Name)
-	parameters = parameters.Param("$city").Text(arg.City)
-	parameters = parameters.Param("$created_at").BeginOptional().Text(arg.Created_at).EndOptional()
-	parameters = parameters.Param("$spotify_playlist").Text(arg.Spotify_playlist)
-	parameters = parameters.Param("$status").Text(arg.Status)
-	parameters = parameters.Param("$tags").BeginOptional().Text(arg.Tags).EndOptional()
+func (q *Queries) CreateVenue(ctx context.Context,
+	id uint64,
+	slug string,
+	name string,
+	city string,
+	created_at *string,
+	spotify_playlist string,
+	status string,
+	tags *string,
+	opts ...query.ExecuteOption,
+) (*interface{}, error) {
 	row, err := q.db.QueryRow(ctx, createVenue,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$id").Uint64(id).
+				Param("$slug").Text(slug).
+				Param("$name").Text(name).
+				Param("$city").Text(city).
+				Param("$created_at").BeginOptional().Text(created_at).EndOptional().
+				Param("$spotify_playlist").Text(spotify_playlist).
+				Param("$status").Text(status).
+				Param("$tags").BeginOptional().Text(tags).EndOptional().
+				Build(),
+			),
+			query.WithLabel("CreateVenue"),
+		)...,
 	)
-	var i interface{}
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
+
+	var i interface{}
 	err = row.Scan()
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
-	return i, nil
+
+	return &i, nil
 }
 
 
@@ -262,27 +312,33 @@ SET name = $name
 WHERE slug = $slug
 RETURNING id;`
 
-type UpdateVenueNameParams struct {
-	Name string `json:"name"`
-	Slug string `json:"slug"`
-}
-
-func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams, opts ...query.ExecuteOption) (interface{}, error) {
-	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$name").Text(arg.Name)
-	parameters = parameters.Param("$slug").Text(arg.Slug)
+func (q *Queries) UpdateVenueName(ctx context.Context,
+	name string,
+	slug string,
+	opts ...query.ExecuteOption,
+) (*interface{}, error) {
 	row, err := q.db.QueryRow(ctx, updateVenueName,
-		append(opts, query.WithParameters(parameters.Build()))...,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$name").Text(name).
+				Param("$slug").Text(slug).
+				Build(),
+			),
+			query.WithLabel("UpdateVenueName"),
+		)...,
 	)
-	var i interface{}
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
+
+	var i interface{}
 	err = row.Scan()
 	if err != nil {
-		return i, xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
-	return i, nil
+
+	return &i, nil
 }
 
 
@@ -293,15 +349,19 @@ GROUP BY city
 ORDER BY city;`
 
 func (q *Queries) VenueCountByCity(ctx context.Context, opts ...query.ExecuteOption) ([]interface{}, error) {
-	result, err := q.db.QueryResultSet(ctx, venueCountByCity, opts...)
+	result, err := q.db.QueryResultSet(ctx, venueCountByCity,
+		append(opts, query.WithLabel("VenueCountByCity"))...,
+	)
 	if err != nil {
 		return nil, xerrors.WithStackTrace(err)
 	}
+
 	var items []interface{}
 	for row, err := range result.Rows(ctx) {
 		if err != nil {
 			return nil, xerrors.WithStackTrace(err)
 		}
+
 		var i interface{}
 		if err := row.Scan(); err != nil {
 			return nil, xerrors.WithStackTrace(err)
@@ -311,6 +371,7 @@ func (q *Queries) VenueCountByCity(ctx context.Context, opts ...query.ExecuteOpt
 	if err := result.Close(ctx); err != nil {
 		return nil, xerrors.WithStackTrace(err)
 	}
+
 	return items, nil
 }
 

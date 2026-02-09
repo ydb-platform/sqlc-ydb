@@ -9,31 +9,29 @@ from db import models
 GET = """
 -- name: Get :one
 SELECT key, value FROM kv
-WHERE key = $key LIMIT 1;"""
-
-# params: $key
+WHERE key = $key LIMIT 1;
+"""
 
 
 LIST = """
 -- name: List :many
 SELECT key, value FROM kv
-ORDER BY key;"""
+ORDER BY key;
+"""
 
 
 SET = """
 -- name: Set :exec
 INSERT INTO kv (key, value)
-VALUES ($key, $value);"""
-
-# params: $key, $value
+VALUES ($key, $value);
+"""
 
 
 DELETE = """
 -- name: Delete :exec
 DELETE FROM kv
-WHERE key = $key;"""
-
-# params: $key
+WHERE key = $key;
+"""
 
 
 
@@ -55,7 +53,7 @@ class Querier:
             yield models.ListRow(
             )
 
-    def set(self, *, key: str, *, value: Optional[str]) -> None:
+    def set(self, *, key: str, value: Optional[str]) -> None:
         self._pool.execute_with_retries(SET, parameters={"$key": key, "$value": value})
 
     def delete(self, *, key: str) -> None:

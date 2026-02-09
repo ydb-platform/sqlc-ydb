@@ -3,17 +3,25 @@ import dataclasses
 from typing import Optional
 
 @dataclasses.dataclass
-class ListPilotsRow:
+class Jet:
     id: int
+    pilot_id: int
+    age: int
     name: str
+    color: str
 
 @dataclasses.dataclass
-class GetPilotRow:
+class Languag:
     id: int
-    name: str
+    language: str
 
 @dataclasses.dataclass
-class CreatePilotRow:
+class Pilot_languag:
+    pilot_id: int
+    language_id: int
+
+@dataclasses.dataclass
+class Pilot:
     id: int
     name: str
 
