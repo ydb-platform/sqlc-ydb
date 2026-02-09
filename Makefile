@@ -113,7 +113,7 @@ examples: build
 
 # Build Docker image: sqlc (from engine-plugin) + sqlc-engine-ydb + codegen plugins.
 # Optional: DOCKER_IMAGE=name, ENGINE_PLUGIN_REF=branch (docker build --build-arg).
-docker-build:
+docker:
 	docker build -t $(DOCKER_IMAGE) .
 	@echo "ok: image $(DOCKER_IMAGE)"
 
