@@ -35,7 +35,9 @@ CODEGEN_DBSQL_BIN = $(BINDIR)/sqlc-gen-ydb-database-sql
 EXAMPLES        ?= authors album kv batch booktest jets ondeck
 PLUGIN_OUTPUTS  := ydb-go-sdk ydb-database-sql
 
-.PHONY: all proto build build-engine build-codegen build-codegen-dbsql build-sqlc examples clean help
+DOCKER_IMAGE ?= sqlc-ydb
+
+.PHONY: all proto build build-engine build-codegen build-codegen-dbsql build-sqlc examples docker-build clean help
 
 all: help
 
@@ -48,9 +50,10 @@ help:
 	@echo "  build         - proto + build both plugins (ydb-go-sdk + ydb-database-sql)"
 	@echo "  build-sqlc    - build sqlc from ../engine-plugin into $(BINDIR)/sqlc (needed for examples)"
 	@echo "  examples      - run 'sqlc generate' in each example (EXAMPLES=$(EXAMPLES)); outputs: $(PLUGIN_OUTPUTS)"
+	@echo "  docker-build  - build Docker image with sqlc + plugins (DOCKER_IMAGE=$(DOCKER_IMAGE))"
 	@echo "  clean         - remove $(BINDIR)/ and generated plugin dirs under examples/"
 	@echo ""
-	@echo "Overrides: BINDIR=$(BINDIR)  SQLC=$(SQLC)"
+	@echo "Overrides: BINDIR=$(BINDIR)  SQLC=$(SQLC)  DOCKER_IMAGE=$(DOCKER_IMAGE)"
 
 # Generate plugin proto Go from the sqlc module's codegen.proto (via go get / replace).
 # Output goes to internal/codegen/pb with package pb.
@@ -107,6 +110,12 @@ examples: build
 	  (cd $(REPO_ROOT)examples/$$ex && PATH="$(REPO_ROOT)$(BINDIR):$$PATH" $(SQLC) generate) || exit 1; \
 	done
 	@echo "ok: examples generated ($(EXAMPLES) -> $(PLUGIN_OUTPUTS))"
+
+# Build Docker image: sqlc (from engine-plugin) + sqlc-engine-ydb + codegen plugins.
+# Optional: DOCKER_IMAGE=name, ENGINE_PLUGIN_REF=branch (docker build --build-arg).
+docker-build:
+	docker build -t $(DOCKER_IMAGE) .
+	@echo "ok: image $(DOCKER_IMAGE)"
 
 clean:
 	rm -rf $(REPO_ROOT)$(BINDIR)
