@@ -65,8 +65,8 @@ func (q *Queries) ListAuthors(ctx context.Context, opts ...query.ExecuteOption) 
 
 
 const createAuthor = `-- name: CreateAuthor :one
-INSERT INTO authors (name, bio)
-VALUES ($name, $bio)
+INSERT INTO authors (id, name, bio)
+VALUES ($id, $name, $bio)
 RETURNING *;`
 
 type CreateAuthorParams struct {
@@ -138,5 +138,3 @@ func (q *Queries) DeleteAuthor(ctx context.Context, arg DeleteAuthorParams, opts
 	}
 	return nil
 }
-
-
