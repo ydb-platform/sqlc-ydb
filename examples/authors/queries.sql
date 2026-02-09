@@ -7,8 +7,8 @@ SELECT * FROM authors
 ORDER BY name;
 
 -- name: CreateAuthor :one
-INSERT INTO authors (name, bio)
-VALUES ($name, $bio)
+INSERT INTO authors (id, name, bio)
+VALUES ($id, $name, $bio)
 RETURNING *;
 
 -- name: UpdateAuthor :exec

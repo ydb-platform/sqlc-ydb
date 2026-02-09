@@ -5,6 +5,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 
 	_ "github.com/ydb-platform/ydb-go-sdk/v3"
 	"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xerrors"
@@ -13,7 +14,7 @@ import (
 
 const getAuthor = `-- name: GetAuthor :one
 SELECT * FROM authors
-WHERE id =  LIMIT 1;`
+WHERE id = $id LIMIT 1;`
 
 type GetAuthorParams struct {
 	ID uint64 `json:"id"`
@@ -21,7 +22,9 @@ type GetAuthorParams struct {
 
 func (q *Queries) GetAuthor(ctx context.Context, arg GetAuthorParams) (*GetAuthorRow, error) {
 	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*GetAuthorRow, error) {
-		row := q.db.QueryRowContext(ctx, getAuthor, arg.ID)
+		row := q.db.QueryRowContext(ctx, getAuthor,
+			sql.Named("id", arg.ID),
+		)
 		var i GetAuthorRow
 		err := row.Scan(&i.ID, &i.Name, &i.Bio)
 		if err != nil {
@@ -70,18 +73,23 @@ func (q *Queries) ListAuthors(ctx context.Context) ([]ListAuthorsRow, error) {
 }
 
 const createAuthor = `-- name: CreateAuthor :one
-INSERT INTO authors (name, bio)
-VALUES (, )
+INSERT INTO authors (id, name, bio)
+VALUES ($id, $name, $bio)
 RETURNING *;`
 
 type CreateAuthorParams struct {
+	ID uint64 `json:"name"`
 	Name string `json:"name"`
 	Bio *string `json:"bio"`
 }
 
 func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (*CreateAuthorRow, error) {
 	i, err := retry.RetryWithResult(ctx, func(ctx context.Context) (*CreateAuthorRow, error) {
-		row := q.db.QueryRowContext(ctx, createAuthor, arg.Name, arg.Bio)
+		row := q.db.QueryRowContext(ctx, createAuthor,
+			sql.Named("id", arg.ID),
+			sql.Named("name", arg.Name),
+			sql.Named("bio", arg.Bio),
+		)
 		var i CreateAuthorRow
 		err := row.Scan(&i.ID, &i.Name, &i.Bio)
 		if err != nil {
@@ -99,8 +107,8 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (*Cr
 
 const updateAuthor = `-- name: UpdateAuthor :exec
 UPDATE authors
-SET name = , bio = 
-WHERE id = ;`
+SET name = $name, bio = $bio
+WHERE id = $id;`
 
 type UpdateAuthorParams struct {
 	Name string `json:"name"`
@@ -110,7 +118,11 @@ type UpdateAuthorParams struct {
 
 func (q *Queries) UpdateAuthor(ctx context.Context, arg UpdateAuthorParams) error {
 	err := retry.Retry(ctx, func(ctx context.Context) error {
-		_, err := q.db.ExecContext(ctx, updateAuthor, arg.Name, arg.Bio, arg.ID)
+		_, err := q.db.ExecContext(ctx, updateAuthor,
+			sql.Named("name", arg.Name),
+			sql.Named("bio", arg.Bio),
+			sql.Named("id", arg.ID),
+		)
 		if err != nil {
 			return xerrors.WithStackTrace(err)
 		}
@@ -126,7 +138,7 @@ func (q *Queries) UpdateAuthor(ctx context.Context, arg UpdateAuthorParams) erro
 
 const deleteAuthor = `-- name: DeleteAuthor :exec
 DELETE FROM authors
-WHERE id = ;`
+WHERE id = $id;`
 
 type DeleteAuthorParams struct {
 	ID uint64 `json:"id"`
@@ -134,7 +146,9 @@ type DeleteAuthorParams struct {
 
 func (q *Queries) DeleteAuthor(ctx context.Context, arg DeleteAuthorParams) error {
 	err := retry.Retry(ctx, func(ctx context.Context) error {
-		_, err := q.db.ExecContext(ctx, deleteAuthor, arg.ID)
+		_, err := q.db.ExecContext(ctx, deleteAuthor,
+			sql.Named("id", arg.ID),
+		)
 		if err != nil {
 			return xerrors.WithStackTrace(err)
 		}
