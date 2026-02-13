@@ -1,3 +1,5 @@
+This is experimental support of YDB over engines plugin system (see PR https://github.com/sqlc-dev/sqlc/pull/4247). SQLC external plugin engines system not supported in upstream now. We are waiting review of SQLC maintainer.
+
 # sqlc-ydb
 
 [sqlc](https://sqlc.dev) engine and codegen plugins for [YDB](https://ydb.tech).
