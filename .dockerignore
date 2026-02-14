@@ -1,0 +1,13 @@
+# Build output and generated code (rebuilt inside image)
+bin/
+examples/*/ydb-go-sdk/
+examples/*/ydb-database-sql/
+.git/
+.github/
+*.md
+!README.md
+tests/
+*.test
+*.out
+coverage.*
+.env
