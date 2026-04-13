@@ -4,10 +4,19 @@ This is experimental support of YDB over engines plugin system (see PR https://g
 
 [sqlc](https://sqlc.dev) engine and codegen plugins for [YDB](https://ydb.tech).
 
-- **sqlc-engine-ydb** — engine plugin: parses YDB schema and queries.
+- **sqlc-engine-ydb** — engine plugin: implements **`EngineService` / `Parse`** from sqlc’s `protos/engine/engine.proto` (in the **engine-plugin** checkout; same stdin/stdout protobuf contract as other engine plugins; sqlc appends `/engine.EngineService/Parse` as the last argv token). Parses YDB schema and queries.
 - **sqlc-gen-ydb-go-sdk** — generates Go code for [ydb-go-sdk](https://github.com/ydb-platform/ydb-go-sdk) (query API, `ParamsBuilder`, `QueryRow`, `Exec`).
 - **sqlc-gen-ydb-database-sql** — generates Go code for `database/sql` with YDB driver (DBTX, `ExecContext`, `QueryContext`, `QueryRowContext`).
 - **sqlc-gen-ydb-python-sdk** — generates Python code for [ydb-python-sdk](https://github.com/ydb-platform/ydb-python-sdk) (`QuerySessionPool`, `execute_with_retries`, `$name` parameters).
+
+## Engine plugin contract (`sqlc-engine-ydb` and sqlc)
+
+- **Proto:** `service EngineService { rpc Parse (ParseRequest) returns (ParseResponse); }` in sqlc’s `protos/engine/engine.proto` (import path in Go: `github.com/sqlc-dev/sqlc/pkg/engine`).
+- **Transport:** protobuf on stdin/stdout (no TCP gRPC). sqlc uses the generated client + `process.Runner`, like codegen plugins.
+- **Invocation:** in `sqlc.yaml`, set `engines[].process.cmd` to the executable only (and optional static flags), e.g. `sqlc-engine-ydb`. sqlc **appends** `/engine.EngineService/Parse` when spawning the process — do not add it to `cmd` yourself.
+- **Docs:** in the sqlc **engine-plugin** tree: `docs/howto/engine-plugins.md` (entry point) and `docs/guides/engine-plugins.md` (full guide). Published copies may appear under `docs.sqlc.dev` once the engine-plugin docs are released.
+
+This repo’s `go.mod` uses `replace github.com/sqlc-dev/sqlc => ../engine-plugin` so the engine API matches your checkout of **engine-plugin** (or a fork with the same protos).
 
 ## Configuration (sqlc.yaml)
 

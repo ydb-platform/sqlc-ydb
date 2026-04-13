@@ -245,8 +245,8 @@ func (s *listener) enterCreateView(n *parser.Create_view_stmtContext) {
 		return
 	}
 	// View columns could be derived from SELECT; for now register view with empty columns.
-	// Registry.Columns(viewName) will return ([], true) so the view is known.
-	s.tables[viewName] = nil
+	// Use a non-nil empty slice so Columns returns ([], true); a nil slice would be (nil, true).
+	s.tables[viewName] = []schema.ColumnInfo{}
 }
 
 func (s *listener) enterDropView(n *parser.Drop_view_stmtContext) {

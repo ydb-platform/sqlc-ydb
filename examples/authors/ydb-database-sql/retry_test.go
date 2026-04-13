@@ -10,12 +10,12 @@ import (
 )
 
 func TestQueries_CreateAuthor_Retry(t *testing.T) {
-	args := CreateAuthorParams{
-		Name: "John Doe",
-		Bio: func(bio string) *string {
-			return &bio
-		}("John Doe bio"),
-	}
+	id := uint64(1)
+	name := "John Doe"
+	bio := "John Doe bio"
+	bioPtr := &bio
+
+	// SQL uses $id/$name/$bio — sqlmock's default matcher treats $ as regexp; use equality.
 	for _, tt := range []struct {
 		name string
 		db   func(ctx context.Context) (DBTX, error)
@@ -24,17 +24,18 @@ func TestQueries_CreateAuthor_Retry(t *testing.T) {
 		{
 			name: "database/sql driver",
 			db: func(ctx context.Context) (DBTX, error) {
-				db, mock, err := sqlmock.New()
+				db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 				if err != nil {
 					return nil, err
 				}
 				mock.ExpectQuery(createAuthor).
 					WithArgs(
-						sql.Named("name", args.Name),
-						sql.Named("bio", args.Bio),
+						sql.Named("id", id),
+						sql.Named("name", name),
+						sql.Named("bio", bioPtr),
 					).
 					WillReturnRows(sqlmock.NewRows([]string{"id", "name", "bio"}).
-						AddRow(1, args.Name, args.Bio))
+						AddRow(id, name, bioPtr))
 
 				return db, nil
 			},
@@ -43,14 +44,18 @@ func TestQueries_CreateAuthor_Retry(t *testing.T) {
 		{
 			name: "database/sql conn",
 			db: func(ctx context.Context) (DBTX, error) {
-				db, mock, err := sqlmock.New()
+				db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 				if err != nil {
 					return nil, err
 				}
-				mock.ExpectQuery(`^SELECT name, email FROM users WHERE id = \?$`).
-					WithArgs(1).
-					WillReturnRows(sqlmock.NewRows([]string{"name", "email"}).
-						AddRow(args.Name, "John Doe bio"))
+				mock.ExpectQuery(createAuthor).
+					WithArgs(
+						sql.Named("id", id),
+						sql.Named("name", name),
+						sql.Named("bio", bioPtr),
+					).
+					WillReturnRows(sqlmock.NewRows([]string{"id", "name", "bio"}).
+						AddRow(id, name, bioPtr))
 				cc, err := db.Conn(ctx)
 				if err != nil {
 					return nil, err
@@ -63,16 +68,19 @@ func TestQueries_CreateAuthor_Retry(t *testing.T) {
 		{
 			name: "database/sql tx",
 			db: func(ctx context.Context) (DBTX, error) {
-				db, mock, err := sqlmock.New()
+				db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 				if err != nil {
 					return nil, err
 				}
 				mock.ExpectBegin()
-				mock.ExpectQuery(`^SELECT name, email FROM users WHERE id = \?$`).
-					WithArgs(1).
-					WillReturnRows(sqlmock.NewRows([]string{"name", "email"}).
-						AddRow("John Doe", "john@example.com"))
-				mock.ExpectCommit()
+				mock.ExpectQuery(createAuthor).
+					WithArgs(
+						sql.Named("id", id),
+						sql.Named("name", name),
+						sql.Named("bio", bioPtr),
+					).
+					WillReturnRows(sqlmock.NewRows([]string{"id", "name", "bio"}).
+						AddRow(id, name, bioPtr))
 				tx, err := db.BeginTx(ctx, nil)
 				if err != nil {
 					return nil, err
@@ -84,9 +92,10 @@ func TestQueries_CreateAuthor_Retry(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			dbtx, err := tt.db(t.Context())
+			ctx := t.Context()
+			dbtx, err := tt.db(ctx)
 			require.NoError(t, err)
-			_, err = New(dbtx).CreateAuthor(t.Context(), args)
+			_, err = New(dbtx).CreateAuthor(ctx, id, name, bioPtr)
 			if tt.err != nil {
 				require.Error(t, err)
 				require.ErrorIs(t, err, tt.err)

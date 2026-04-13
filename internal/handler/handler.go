@@ -15,7 +15,7 @@ import (
 // YDBCommentSyntax: query files use "--" for annotations (e.g. "-- name: GetAuthor :one").
 var ydbCommentSyntax = engine.CommentSyntax{Dash: true}
 
-// Parse implements the engine plugin Parse RPC.
+// Parse implements engine.EngineService/Parse (see sqlc protos/engine/engine.proto).
 // It splits the request SQL by " name: X :cmd" (via engine.QueryBlocks), parses each block
 // with the YDB parser, and returns one Statement per block with parameters and result columns.
 func Parse(req *engine.ParseRequest) (*engine.ParseResponse, error) {
@@ -73,12 +73,12 @@ func registryToEngineCatalog(reg schema.Registry) *engine.Catalog {
 		var engineCols []*engine.CatalogColumn
 		for _, c := range cols {
 			engineCols = append(engineCols, &engine.CatalogColumn{
-				Name:    c.Name,
-				NotNull: !c.Nullable,
-				IsArray: c.IsArray,
+				Name:      c.Name,
+				NotNull:   !c.Nullable,
+				IsArray:   c.IsArray,
 				ArrayDims: c.ArrayDims,
-				Type:   &engine.Identifier{Name: strings.ToLower(c.DataType)},
-				Table:  rel,
+				Type:      &engine.Identifier{Name: strings.ToLower(c.DataType)},
+				Table:     rel,
 			})
 		}
 		tables = append(tables, &engine.CatalogTable{Rel: rel, Columns: engineCols})
