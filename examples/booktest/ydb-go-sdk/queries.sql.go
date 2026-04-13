@@ -19,11 +19,16 @@ func (q *Queries) GetAuthor(ctx context.Context,
 	author_id uint64,
 	opts ...query.ExecuteOption,
 ) (*Author, error) {
-	row, err := q.db.QueryRow(ctx, getAuthor, append(opts, query.WithParameters(
-		ydb.ParamsBuilder().
-			Param("$author_id").Uint64(author_id).
-			Build(),
-	), query.WithLabel("GetAuthor"))...)
+	row, err := q.db.QueryRow(ctx, getAuthor,
+		append(opts,
+			query.WithParameters(
+				ydb.ParamsBuilder().
+				Param("$author_id").Uint64(author_id).
+				Build(),
+			),
+			query.WithLabel("GetAuthor"),
+		)...,
+	)
 	if err != nil {
 		return nil, xerrors.WithStackTrace(err)
 	}
@@ -37,6 +42,7 @@ func (q *Queries) GetAuthor(ctx context.Context,
 	return &i, nil
 }
 
+
 const getBook = `-- name: GetBook :one
 SELECT * FROM books
 WHERE book_id = $book_id LIMIT 1;`
@@ -49,8 +55,8 @@ func (q *Queries) GetBook(ctx context.Context,
 		append(opts,
 			query.WithParameters(
 				ydb.ParamsBuilder().
-					Param("$book_id").Uint64(book_id).
-					Build(),
+				Param("$book_id").Uint64(book_id).
+				Build(),
 			),
 			query.WithLabel("GetBook"),
 		)...,
@@ -68,6 +74,7 @@ func (q *Queries) GetBook(ctx context.Context,
 	return &i, nil
 }
 
+
 const deleteBook = `-- name: DeleteBook :exec
 DELETE FROM books
 WHERE book_id = $book_id;`
@@ -80,8 +87,8 @@ func (q *Queries) DeleteBook(ctx context.Context,
 		append(opts,
 			query.WithParameters(
 				ydb.ParamsBuilder().
-					Param("$book_id").Uint64(book_id).
-					Build(),
+				Param("$book_id").Uint64(book_id).
+				Build(),
 			),
 			query.WithLabel("DeleteBook"),
 		)...,
@@ -92,6 +99,7 @@ func (q *Queries) DeleteBook(ctx context.Context,
 
 	return nil
 }
+
 
 const booksByTitleYear = `-- name: BooksByTitleYear :many
 SELECT * FROM books
@@ -106,9 +114,9 @@ func (q *Queries) BooksByTitleYear(ctx context.Context,
 		append(opts,
 			query.WithParameters(
 				ydb.ParamsBuilder().
-					Param("$title").Text(title).
-					Param("$year").Uint64(year).
-					Build(),
+				Param("$title").Text(title).
+				Param("$year").Uint64(year).
+				Build(),
 			),
 			query.WithLabel("BooksByTitleYear"),
 		)...,
@@ -136,6 +144,7 @@ func (q *Queries) BooksByTitleYear(ctx context.Context,
 	return items, nil
 }
 
+
 const createAuthor = `-- name: CreateAuthor :one
 INSERT INTO authors (name)
 VALUES ($name)
@@ -149,8 +158,8 @@ func (q *Queries) CreateAuthor(ctx context.Context,
 		append(opts,
 			query.WithParameters(
 				ydb.ParamsBuilder().
-					Param("$name").Text(name).
-					Build(),
+				Param("$name").Text(name).
+				Build(),
 			),
 			query.WithLabel("CreateAuthor"),
 		)...,
@@ -167,6 +176,7 @@ func (q *Queries) CreateAuthor(ctx context.Context,
 
 	return &i, nil
 }
+
 
 const createBook = `-- name: CreateBook :one
 INSERT INTO books (
@@ -202,14 +212,14 @@ func (q *Queries) CreateBook(ctx context.Context,
 		append(opts,
 			query.WithParameters(
 				ydb.ParamsBuilder().
-					Param("$author_id").Uint64(author_id).
-					Param("$isbn").Text(isbn).
-					Param("$book_type").Text(book_type).
-					Param("$title").Text(title).
-					Param("$year").Uint64(year).
-					Param("$available").BeginOptional().Text(available).EndOptional().
-					Param("$tags").BeginOptional().Text(tags).EndOptional().
-					Build(),
+				Param("$author_id").Uint64(author_id).
+				Param("$isbn").Text(isbn).
+				Param("$book_type").Text(book_type).
+				Param("$title").Text(title).
+				Param("$year").Uint64(year).
+				Param("$available").BeginOptional().Text(available).EndOptional().
+				Param("$tags").BeginOptional().Text(tags).EndOptional().
+				Build(),
 			),
 			query.WithLabel("CreateBook"),
 		)...,
@@ -227,6 +237,7 @@ func (q *Queries) CreateBook(ctx context.Context,
 	return &i, nil
 }
 
+
 const updateBook = `-- name: UpdateBook :exec
 UPDATE books
 SET title = $title, tags = $tags
@@ -242,10 +253,10 @@ func (q *Queries) UpdateBook(ctx context.Context,
 		append(opts,
 			query.WithParameters(
 				ydb.ParamsBuilder().
-					Param("$title").Text(title).
-					Param("$tags").BeginOptional().Text(tags).EndOptional().
-					Param("$book_id").Uint64(book_id).
-					Build(),
+				Param("$title").Text(title).
+				Param("$tags").BeginOptional().Text(tags).EndOptional().
+				Param("$book_id").Uint64(book_id).
+				Build(),
 			),
 			query.WithLabel("UpdateBook"),
 		)...,
@@ -256,6 +267,7 @@ func (q *Queries) UpdateBook(ctx context.Context,
 
 	return nil
 }
+
 
 const updateBookISBN = `-- name: UpdateBookISBN :exec
 UPDATE books
@@ -273,11 +285,11 @@ func (q *Queries) UpdateBookISBN(ctx context.Context,
 		append(opts,
 			query.WithParameters(
 				ydb.ParamsBuilder().
-					Param("$title").Text(title).
-					Param("$tags").BeginOptional().Text(tags).EndOptional().
-					Param("$isbn").Text(isbn).
-					Param("$book_id").Uint64(book_id).
-					Build(),
+				Param("$title").Text(title).
+				Param("$tags").BeginOptional().Text(tags).EndOptional().
+				Param("$isbn").Text(isbn).
+				Param("$book_id").Uint64(book_id).
+				Build(),
 			),
 			query.WithLabel("UpdateBookISBN"),
 		)...,
@@ -288,3 +300,5 @@ func (q *Queries) UpdateBookISBN(ctx context.Context,
 
 	return nil
 }
+
+

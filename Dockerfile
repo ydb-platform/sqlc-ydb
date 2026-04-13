@@ -5,7 +5,8 @@
 # Fork with engine support: https://github.com/ydb-platform/sqlc, branch engine-plugin.
 # Optional build-arg: ENGINE_PLUGIN_REF=engine-plugin (branch/tag to clone).
 
-ARG GO_VERSION=1.24
+# Must satisfy sqlc-ydb/go.mod (e.g. go 1.26.0) and the cloned engine-plugin go version.
+ARG GO_VERSION=1.26
 ARG ENGINE_PLUGIN_REF=engine-plugin
 
 # --- Build sqlc and sqlc-ydb plugins ---

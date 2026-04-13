@@ -1,23 +1,23 @@
 # sqlc-ydb: engine plugin + ydb-go-sdk codegen plugin for sqlc (v2 config)
 #
 # Prerequisites:
-#   - Go 1.24+
+#   - Go 1.26+ (match go.mod)
 #   - protoc + protoc-gen-go (for proto). go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 #   - go mod download (so SQLC_MOD_DIR is available for proto)
-#   - sqlc with plugin support (for examples), on PATH
+#   - ../engine-plugin (clone next to this repo) — required for `make build-sqlc` / `make examples`
 #
 # Overrides:
-#   BINDIR     where to install plugin binaries (default: bin)
-#   SQLC       sqlc binary for examples (default: bin/sqlc if build-sqlc was run, else sqlc)
+#   BINDIR        where to install plugin binaries (default: bin)
+#   EXAMPLES_SQLC sqlc binary for `make examples` (default: $(BINDIR)/sqlc from build-sqlc)
 #
-# Default: show help. Run 'make build' then 'make build-sqlc' then 'make examples' to generate code.
-# build-sqlc builds sqlc from ../engine-plugin (required for plugin support).
+# Default: show help. `make examples` runs `build` + `build-sqlc` and always uses plugin-aware sqlc
+# from $(BINDIR)/sqlc. Using the system `sqlc` without engine plugins causes obscure errors
+# (e.g. JSON parse failures on protobuf stdin).
 
 REPO_ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
-BINDIR    ?= bin
-# Prefer bin/sqlc from build-sqlc when present
-SQLC      ?= $(firstword $(wildcard $(REPO_ROOT)$(BINDIR)/sqlc) sqlc)
+BINDIR         ?= bin
 ENGINE_PLUGIN_DIR := $(REPO_ROOT)../engine-plugin
+EXAMPLES_SQLC  ?= $(REPO_ROOT)$(BINDIR)/sqlc
 
 # Use codegen.proto from the sqlc module (via replace => ../engine-plugin or go get).
 SQLC_MOD_DIR := $(shell go list -m -f '{{.Dir}}' github.com/sqlc-dev/sqlc)
@@ -40,7 +40,7 @@ PLUGIN_OUTPUTS  := ydb-go-sdk ydb-database-sql ydb-python-sdk
 
 DOCKER_IMAGE ?= sqlc-ydb
 
-.PHONY: all proto build build-engine build-codegen build-codegen-dbsql build-codegen-pysdk build-sqlc examples docker-build clean help
+.PHONY: all proto build build-engine build-codegen build-codegen-dbsql build-codegen-pysdk build-sqlc examples docker docker-build clean help
 
 all: help
 
@@ -53,11 +53,11 @@ help:
 	@echo "  build-codegen-pysdk - build sqlc-gen-ydb-python-sdk into $(BINDIR)/ (depends on proto)"
 	@echo "  build         - proto + build all plugins (ydb-go-sdk, ydb-database-sql, ydb-python-sdk)"
 	@echo "  build-sqlc    - build sqlc from ../engine-plugin into $(BINDIR)/sqlc (needed for examples)"
-	@echo "  examples      - run 'sqlc generate' in each example (EXAMPLES=$(EXAMPLES)); outputs: $(PLUGIN_OUTPUTS)"
+	@echo "  examples      - build-sqlc + run '$(BINDIR)/sqlc generate' in each example (EXAMPLES=$(EXAMPLES))"
 	@echo "  docker-build  - build Docker image with sqlc + plugins (DOCKER_IMAGE=$(DOCKER_IMAGE))"
 	@echo "  clean         - remove $(BINDIR)/ and generated plugin dirs under examples/"
 	@echo ""
-	@echo "Overrides: BINDIR=$(BINDIR)  SQLC=$(SQLC)  DOCKER_IMAGE=$(DOCKER_IMAGE)"
+	@echo "Overrides: BINDIR=$(BINDIR)  EXAMPLES_SQLC=$(EXAMPLES_SQLC)  DOCKER_IMAGE=$(DOCKER_IMAGE)"
 
 # Generate plugin proto Go from the sqlc module's codegen.proto (via go get / replace).
 # Output goes to internal/codegen/pb with package pb.
@@ -112,19 +112,22 @@ $(BINDIR):
 	mkdir -p $(BINDIR)
 
 # Run sqlc generate in each example dir. One run per example generates all plugin outputs (ydb-go-sdk, ydb-database-sql).
-examples: build
-	@which $(SQLC) >/dev/null 2>/dev/null || (echo "error: sqlc not found. Run 'make build-sqlc' or set SQLC to a plugin-aware sqlc binary" >&2; exit 1)
+examples: build build-sqlc
+	@test -x "$(EXAMPLES_SQLC)" || (echo "error: $(EXAMPLES_SQLC) not found or not executable (build-sqlc failed?)" >&2; exit 1)
 	@for ex in $(EXAMPLES); do \
 	  echo "sqlc generate in examples/$$ex ..."; \
-	  (cd $(REPO_ROOT)examples/$$ex && PATH="$(REPO_ROOT)$(BINDIR):$$PATH" $(SQLC) generate) || exit 1; \
+	  (cd $(REPO_ROOT)examples/$$ex && PATH="$(REPO_ROOT)$(BINDIR):$$PATH" "$(EXAMPLES_SQLC)" generate) || exit 1; \
 	done
 	@echo "ok: examples generated ($(EXAMPLES) -> $(PLUGIN_OUTPUTS))"
 
 # Build Docker image: sqlc (from engine-plugin) + sqlc-engine-ydb + codegen plugins.
 # Optional: DOCKER_IMAGE=name, ENGINE_PLUGIN_REF=branch (docker build --build-arg).
-docker:
+docker-build:
 	docker build -t $(DOCKER_IMAGE) .
 	@echo "ok: image $(DOCKER_IMAGE)"
+
+# Alias for older scripts that used `make docker`.
+docker: docker-build
 
 clean:
 	rm -rf $(REPO_ROOT)$(BINDIR)

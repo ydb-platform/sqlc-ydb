@@ -167,4 +167,4 @@ The `examples/authors` project uses the v2 config with the **sqlc-engine-ydb** e
    make examples
    ```
 
-Generated files appear under each example: `ydb-go-sdk/` and `ydb-database-sql/` (Go: `models.go`, `db.go`, `queries.sql.go`), `ydb-python-sdk/` (Python: `models.py`, `queries.py`, `__init__.py`). The Makefile uses `bin/sqlc` from `make build-sqlc` by default; override with `make examples SQLC=/path/to/sqlc`.
+Generated files appear under each example: `ydb-go-sdk/` and `ydb-database-sql/` (Go: `models.go`, `db.go`, `queries.sql.go`), `ydb-python-sdk/` (Python: `models.py`, `queries.py`, `__init__.py`). `make examples` runs `build-sqlc` and uses **`bin/sqlc`** from **engine-plugin** (required: engine + process plugins). Override with `make examples EXAMPLES_SQLC=/path/to/sqlc` if needed.

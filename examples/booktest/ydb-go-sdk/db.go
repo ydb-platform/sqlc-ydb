@@ -8,18 +8,10 @@ import (
 )
 
 type DBTX interface {
-	Exec(ctx context.Context,
-		sql string, opts ...query.ExecuteOption,
-	) error
-	Query(ctx context.Context,
-		sql string, opts ...query.ExecuteOption,
-	) (query.Result, error)
-	QueryResultSet(ctx context.Context,
-		sql string, opts ...query.ExecuteOption,
-	) (query.ClosableResultSet, error)
-	QueryRow(ctx context.Context,
-		sql string, opts ...query.ExecuteOption,
-	) (query.Row, error)
+	Exec(ctx context.Context, sql string, opts ...query.ExecuteOption) error
+	Query(ctx context.Context, sql string, opts ...query.ExecuteOption) (query.Result, error)
+	QueryResultSet(ctx context.Context, sql string, opts ...query.ExecuteOption) (query.ClosableResultSet, error)
+	QueryRow(ctx context.Context, sql string, opts ...query.ExecuteOption) (query.Row, error)
 }
 
 func New(db DBTX) *Queries {

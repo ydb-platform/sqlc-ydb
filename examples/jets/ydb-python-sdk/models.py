@@ -3,6 +3,11 @@ import dataclasses
 from typing import Optional
 
 @dataclasses.dataclass
+class Pilot:
+    id: int
+    name: str
+
+@dataclasses.dataclass
 class Jet:
     id: int
     pilot_id: int
@@ -19,9 +24,4 @@ class Languag:
 class Pilot_languag:
     pilot_id: int
     language_id: int
-
-@dataclasses.dataclass
-class Pilot:
-    id: int
-    name: str
 
