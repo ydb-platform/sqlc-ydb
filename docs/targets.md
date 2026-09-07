@@ -47,8 +47,8 @@ they do not infer ORM entities from query results.
 
 Generated code uses caller-provided clients/connections. The caller controls
 connection lifetime and credentials. Transaction behavior is target-specific:
-native C++ and Java execute a transaction per method; connection and framework
-profiles use the caller's transaction. Generated DB-API code closes
+both C++ profiles and native Java execute a transaction per method; C#, JDBC,
+Spring, and Hibernate use the caller's connection or transaction. Generated DB-API code closes
 its own cursors and does not commit caller-owned transactions.
 
 The verified `ydb-sqlalchemy` 0.1.22 has no asynchronous dialect. Requests for

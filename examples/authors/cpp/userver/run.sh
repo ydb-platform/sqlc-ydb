@@ -3,7 +3,7 @@ set -euo pipefail
 
 : "${SQLC_YDB_TEST_DSN:=grpc://localhost:2136/local}"
 
-if [[ ! "${SQLC_YDB_TEST_DSN}" =~ ^(grpc://[^/]+)(/.*)$ ]]; then
+if [[ ! "${SQLC_YDB_TEST_DSN}" =~ ^grpc://([^/]+)(/.*)$ ]]; then
     echo "SQLC_YDB_TEST_DSN must look like grpc://host:port/database" >&2
     exit 2
 fi

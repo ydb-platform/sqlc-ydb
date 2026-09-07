@@ -29,19 +29,21 @@ std::string ReadSchema() {
 }
 
 struct TestDatabase final {
-    std::string endpoint;
-    std::string database;
+    std::string_view endpoint;
+    std::string_view database;
 };
 
-TestDatabase ParseTestDsn(const char* dsn) {
-    const std::string value{dsn};
+constexpr TestDatabase ParseTestDsn(std::string_view value) {
     constexpr std::string_view kPrefix{"grpc://"};
     const auto database_pos = value.find('/', kPrefix.size());
     if (!value.starts_with(kPrefix) || database_pos == std::string::npos || database_pos == kPrefix.size()) {
         throw std::runtime_error("SQLC_YDB_TEST_DSN must look like grpc://host:port/database");
     }
-    return {value.substr(0, database_pos), value.substr(database_pos)};
+    return {value.substr(kPrefix.size(), database_pos - kPrefix.size()), value.substr(database_pos)};
 }
+
+static_assert(ParseTestDsn("grpc://localhost:2136/local").endpoint == "localhost:2136");
+static_assert(ParseTestDsn("grpc://localhost:2136/local").database == "/local");
 
 void ExecuteStatement(NYdb::NQuery::TQueryClient& client, const std::string& statement) {
     const auto status = client.RetryQuerySync([&](NYdb::NQuery::TSession session) -> NYdb::TStatus {
@@ -87,7 +89,7 @@ int main() {
     try {
         const auto test_database = ParseTestDsn(dsn);
         NYdb::TDriverConfig driver_config;
-        driver_config.SetEndpoint(test_database.endpoint).SetDatabase(test_database.database);
+        driver_config.SetEndpoint(std::string{test_database.endpoint}).SetDatabase(std::string{test_database.database});
         NYdb::TDriver driver{driver_config};
         NYdb::NQuery::TQueryClient client{driver};
         ExecuteStatement(client, ReadSchema());

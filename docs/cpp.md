@@ -81,7 +81,7 @@ docker run --rm \
   bash -lc 'cmake -S examples/authors/cpp -B examples/authors/cpp/build -GNinja -DCMAKE_PREFIX_PATH=/usr/share/yandex && cmake --build examples/authors/cpp/build --target authors_native authors_userver -j1'
 ```
 
-Both live smokes expect to run with `examples/authors` as the working directory and use `SQLC_YDB_TEST_DSN`, defaulting in the wrappers to `grpc://localhost:2136/local`. The smoke launchers split that value into the SDK endpoint `grpc://localhost:2136` and database `/local`; this matches `TDriverConfig::SetEndpoint` plus `SetDatabase` and userver's YDB component schema. They create the `authors` table from `schema.sql` without `IF NOT EXISTS`, test maximum `Uint64`, present and null optionals, missing `:one`, the named single-column query, `:many`, and `:exec`, then drop the table. Cleanup is armed only after table creation succeeds.
+Both live smokes expect to run with `examples/authors` as the working directory and use `SQLC_YDB_TEST_DSN`, defaulting in the wrappers to `grpc://localhost:2136/local`. The smoke launchers split that value into the SDK endpoint `localhost:2136` and database `/local`. SDK 3.21.1 stores `TDriverConfig::SetEndpoint` input verbatim, and userver passes its configured endpoint directly to that method, so the protocol prefix belongs only to the external smoke DSN. They create the `authors` table from `schema.sql` without `IF NOT EXISTS`, test maximum `Uint64`, present and null optionals, missing `:one`, the named single-column query, `:many`, and `:exec`, then drop the table. Cleanup is armed only after table creation succeeds.
 
 ```bash
 # Run from the repository root after a disposable YDB is ready on port 2136.
