@@ -18,7 +18,7 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, erro
 }
 
 const queryListAuthors = `-- name: ListAuthors :many
-SELECT id, name, bio FROM authors ORDER BY id;`
+SELECT id, name, bio FROM authors ORDER BY name;`
 
 func (q *Queries) ListAuthors(ctx context.Context) ([]ListAuthorsRow, error) {
 	rows, err := q.db.QueryContext(ctx, queryListAuthors)
@@ -44,6 +44,20 @@ SELECT name FROM authors WHERE id = $author_id;`
 func (q *Queries) GetAuthorName(ctx context.Context, arg uint64) (GetAuthorNameRow, error) {
 	var row GetAuthorNameRow
 	err := q.db.QueryRowContext(ctx, queryGetAuthorName, sql.Named("author_id", arg)).Scan(&row.Name)
+	return row, err
+}
+
+const queryCreateAuthor = `-- name: CreateAuthor :one
+DECLARE $author_id AS Uint64;
+DECLARE $author_name AS Utf8;
+DECLARE $biography AS Optional<Utf8>;
+INSERT INTO authors (id, name, bio)
+VALUES ($author_id, $author_name, $biography)
+RETURNING id, name, bio;`
+
+func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (CreateAuthorRow, error) {
+	var row CreateAuthorRow
+	err := q.db.QueryRowContext(ctx, queryCreateAuthor, sql.Named("author_id", arg.AuthorID), sql.Named("author_name", arg.AuthorName), sql.Named("biography", arg.Biography)).Scan(&row.ID, &row.Name, &row.Bio)
 	return row, err
 }
 

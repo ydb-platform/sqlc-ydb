@@ -16,11 +16,19 @@ DECLARE $author_id AS Uint64;
 SELECT id, name, bio FROM authors WHERE id = $author_id;)sqlc";
 
 const std::string kListAuthorsSql = R"sqlc(-- name: ListAuthors :many
-SELECT id, name, bio FROM authors ORDER BY id;)sqlc";
+SELECT id, name, bio FROM authors ORDER BY name;)sqlc";
 
 const std::string kGetAuthorNameSql = R"sqlc(-- name: GetAuthorName :one
 DECLARE $author_id AS Uint64;
 SELECT name FROM authors WHERE id = $author_id;)sqlc";
+
+const std::string kCreateAuthorSql = R"sqlc(-- name: CreateAuthor :one
+DECLARE $author_id AS Uint64;
+DECLARE $author_name AS Utf8;
+DECLARE $biography AS Optional<Utf8>;
+INSERT INTO authors (id, name, bio)
+VALUES ($author_id, $author_name, $biography)
+RETURNING id, name, bio;)sqlc";
 
 const std::string kUpsertAuthorSql = R"sqlc(-- name: UpsertAuthor :exec
 DECLARE $author_id AS Uint64;
@@ -122,6 +130,40 @@ std::optional<GetAuthorNameRow> Queries::GetAuthorName(std::uint64_t author_id) 
     }
     GetAuthorNameRow sqlc_row{
         sqlc_parser.ColumnParser("name").GetUtf8(),
+    };
+    return sqlc_row;
+}
+
+std::optional<CreateAuthorRow> Queries::CreateAuthor(std::uint64_t author_id, const std::string& author_name, const std::optional<std::string>& biography) const {
+    std::optional<NYdb::TResultSet> sqlc_result_set;
+    const auto sqlc_status = this->client_.RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+        auto sqlc_params = NYdb::TParamsBuilder()
+            .AddParam("$author_id").Uint64(author_id).Build()
+            .AddParam("$author_name").Utf8(author_name).Build()
+            .AddParam("$biography").OptionalUtf8(biography).Build()
+            .Build();
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            kCreateAuthorSql,
+            NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),
+            sqlc_params
+        ).GetValueSync();
+        if (sqlc_result.IsSuccess() && !sqlc_result.GetResultSets().empty()) {
+            sqlc_result_set = sqlc_result.GetResultSet(0);
+        }
+        return sqlc_result;
+    });
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+    if (!sqlc_result_set) {
+        throw std::runtime_error("CreateAuthor: successful query returned no result set");
+    }
+    NYdb::TResultSetParser sqlc_parser(*sqlc_result_set);
+    if (!sqlc_parser.TryNextRow()) {
+        return std::nullopt;
+    }
+    CreateAuthorRow sqlc_row{
+        sqlc_parser.ColumnParser("id").GetUint64(),
+        sqlc_parser.ColumnParser("name").GetUtf8(),
+        sqlc_parser.ColumnParser("bio").GetOptionalUtf8(),
     };
     return sqlc_row;
 }

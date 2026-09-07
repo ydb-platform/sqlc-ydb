@@ -1,0 +1,20 @@
+version: "2"
+sql:
+  - name: native
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      go:
+        package: jets
+        out: go/native
+        sql_package: ydb
+  - name: portable
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      go:
+        package: jets
+        out: go/database/sql
+        sql_package: database/sql

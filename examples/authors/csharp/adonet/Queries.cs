@@ -50,7 +50,7 @@ public sealed class Queries
 
     private const string SqlListAuthors =
         "-- name: ListAuthors :many\n" +
-        "SELECT id, name, bio FROM authors ORDER BY id;";
+        "SELECT id, name, bio FROM authors ORDER BY name;";
 
     public async Task<IReadOnlyList<ListAuthorsRow>> ListAuthorsAsync(CancellationToken cancellationToken = default)
     {
@@ -89,6 +89,35 @@ public sealed class Queries
 
     private static GetAuthorNameRow GetAuthorNameRowFrom(DbDataReader reader) => new(
         reader.GetFieldValue<string>(0)
+    );
+
+    private const string SqlCreateAuthor =
+        "-- name: CreateAuthor :one\n" +
+        "DECLARE $author_id AS Uint64;\n" +
+        "DECLARE $author_name AS Utf8;\n" +
+        "DECLARE $biography AS Optional<Utf8>;\n" +
+        "INSERT INTO authors (id, name, bio)\n" +
+        "VALUES ($author_id, $author_name, $biography)\n" +
+        "RETURNING id, name, bio;";
+
+    public async Task<CreateAuthorRow> CreateAuthorAsync(CreateAuthorParams args, CancellationToken cancellationToken = default)
+    {
+        await using var command = new YdbCommand(SqlCreateAuthor, _connection) { Transaction = _transaction };
+        command.Parameters.Add(new YdbParameter("$author_id", DbType.UInt64, args.AuthorID));
+        command.Parameters.Add(new YdbParameter("$author_name", DbType.String, args.AuthorName));
+        command.Parameters.Add(new YdbParameter("$biography", YdbValue.MakeOptionalUtf8(args.Biography)));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException("query returned no rows");
+        }
+        return CreateAuthorRowFrom(reader);
+    }
+
+    private static CreateAuthorRow CreateAuthorRowFrom(DbDataReader reader) => new(
+        reader.GetFieldValue<ulong>(0),
+        reader.GetFieldValue<string>(1),
+        reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)
     );
 
     private const string SqlUpsertAuthor =

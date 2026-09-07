@@ -97,6 +97,12 @@ suffixes and ranges follow the [YQL lexical rules](https://ydb.tech/docs/en/yql/
 Non-column projections need an explicit `AS` name. A compound expression such
 as `$value = 1ul` is rejected instead of inheriting the parameter's type.
 
+Scalar `SELECT` queries can omit `FROM`. String concatenation with `||` is
+supported for direct string literals and declared parameters of the same string
+family (`String` or `Utf8`); an optional operand makes the result optional.
+Mixed families, nested expressions and computed operands remain unsupported.
+The [booktest greeting](../examples/booktest/queries.sql) exercises this path.
+
 This is a deliberately limited first semantic implementation. General computed
 projections and casts, CTEs/subqueries,
 multiple result sets, FLATTEN, full function/type inference and the full YQL

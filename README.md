@@ -32,6 +32,10 @@ The example groups generated code and dependencies by language:
 `java/{native,jdbc,spring,hibernate}`. Shared `schema.sql`, `queries.sql`, and `sqlc.yaml` stay in
 `examples/authors`.
 
+[All upstream example families](examples/README.md) are also adapted for YDB:
+authors, batch, booktest, jets and ondeck. Run `make generate` to regenerate them
+and `make check-examples` to verify SQL and generated Go code.
+
 ```yaml
 version: "2"
 sql:

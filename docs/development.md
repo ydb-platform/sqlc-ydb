@@ -45,15 +45,18 @@ These compile every supported scalar and nullable scalar binding using the
 real .NET and Java dependencies. C# also compiles and runs its SQL byte checks.
 No generated runtime imports are added to the generator's Go module.
 
-The authors example keeps its Go module and tests in `go/`, and Python packages,
-requirements and tests in `python/`. Schema, queries and generator configuration
-are shared in the example root. Check generated packages with:
+The [examples](../examples/README.md) share one Go module in `examples/`; generated
+code and tests live under each example's `go/` directory. The authors example
+also keeps Python packages, requirements and tests in `python/` and other
+language builds alongside them. Schema, queries and generator configuration are
+shared in each example root. `make generate` and `make check-examples` cover every
+example configuration; the release smoke test also compiles and diffs all of them.
+Check generated packages with:
 
 ```sh
-cd examples/authors/go
-go test ./...
-cd ..
-python3 -m compileall -q python
+cd examples
+go test -p 1 ./...
+python3 -m compileall -q authors/python
 ```
 
 Optional live generator tests use `SQLC_YDB_TEST_DSN` to select an isolated YDB
@@ -85,15 +88,16 @@ virtual environment, then set `SQLC_YDB_TEST_PYTHON` to its interpreter and run
 `go test -p 1 ./internal/codegen/python -run TestLiveYDBGeneratedRuntimes -v` with the
 same DSN.
 
-The actual CLI-generated authors example has its own end-to-end checks. These
-require a disposable database with no existing `authors` table. Setup fails
-without dropping an existing table; successful tests remove the table they made.
-Run these sequentially:
+Each Go example executes the actual CLI-generated queries against a disposable
+database, including JSON and timestamp bindings, joins, aggregates and migrations.
+The database must not already contain any example tables. Cleanup is registered
+after successful schema files; a failed file can leave partially created tables,
+but must never drop a pre-existing table. Run all example packages sequentially:
 
 ```sh
-cd examples/authors/go
-SQLC_YDB_TEST_DSN=grpc://localhost:2136/local go test -p 1 -count=1 -timeout=90s -v ./...
-cd ..
+cd examples
+SQLC_YDB_TEST_DSN=grpc://localhost:2136/local go test -p 1 -count=1 -timeout=180s -v ./...
+cd authors
 SQLC_YDB_TEST_DSN=grpc://localhost:2136/local python -m python.smoke
 ```
 

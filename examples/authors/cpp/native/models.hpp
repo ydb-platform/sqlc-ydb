@@ -23,4 +23,10 @@ struct GetAuthorNameRow final {
     std::string name;
 };
 
+struct CreateAuthorRow final {
+    std::uint64_t id;
+    std::string name;
+    std::optional<std::string> bio;
+};
+
 }  // namespace authors::native

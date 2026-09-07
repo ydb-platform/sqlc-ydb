@@ -25,7 +25,7 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, erro
 }
 
 const queryListAuthors = `-- name: ListAuthors :many
-SELECT id, name, bio FROM authors ORDER BY id;`
+SELECT id, name, bio FROM authors ORDER BY name;`
 
 func (q *Queries) ListAuthors(ctx context.Context) ([]ListAuthorsRow, error) {
 	result, err := q.db.QueryResultSet(ctx, queryListAuthors)
@@ -59,6 +59,26 @@ func (q *Queries) GetAuthorName(ctx context.Context, arg uint64) (GetAuthorNameR
 	var row GetAuthorNameRow
 	if err := result.Scan(&row.Name); err != nil {
 		return GetAuthorNameRow{}, err
+	}
+	return row, nil
+}
+
+const queryCreateAuthor = `-- name: CreateAuthor :one
+DECLARE $author_id AS Uint64;
+DECLARE $author_name AS Utf8;
+DECLARE $biography AS Optional<Utf8>;
+INSERT INTO authors (id, name, bio)
+VALUES ($author_id, $author_name, $biography)
+RETURNING id, name, bio;`
+
+func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (CreateAuthorRow, error) {
+	result, err := q.db.QueryRow(ctx, queryCreateAuthor, query.WithParameters(ydb.ParamsBuilder().Param("$author_id").Uint64(arg.AuthorID).Param("$author_name").Text(arg.AuthorName).Param("$biography").BeginOptional().Text(arg.Biography).EndOptional().Build()))
+	if err != nil {
+		return CreateAuthorRow{}, err
+	}
+	var row CreateAuthorRow
+	if err := result.Scan(&row.ID, &row.Name, &row.Bio); err != nil {
+		return CreateAuthorRow{}, err
 	}
 	return row, nil
 }

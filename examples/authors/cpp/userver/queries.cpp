@@ -17,7 +17,7 @@ SELECT id, name, bio FROM authors WHERE id = $author_id;)sqlc",
 
 const ::userver::ydb::Query kListAuthorsQuery{
     R"sqlc(-- name: ListAuthors :many
-SELECT id, name, bio FROM authors ORDER BY id;)sqlc",
+SELECT id, name, bio FROM authors ORDER BY name;)sqlc",
     ::userver::ydb::Query::NameLiteral{"ListAuthors"},
     ::userver::ydb::Query::LogMode::kNameOnly,
 };
@@ -27,6 +27,18 @@ const ::userver::ydb::Query kGetAuthorNameQuery{
 DECLARE $author_id AS Uint64;
 SELECT name FROM authors WHERE id = $author_id;)sqlc",
     ::userver::ydb::Query::NameLiteral{"GetAuthorName"},
+    ::userver::ydb::Query::LogMode::kNameOnly,
+};
+
+const ::userver::ydb::Query kCreateAuthorQuery{
+    R"sqlc(-- name: CreateAuthor :one
+DECLARE $author_id AS Uint64;
+DECLARE $author_name AS Utf8;
+DECLARE $biography AS Optional<Utf8>;
+INSERT INTO authors (id, name, bio)
+VALUES ($author_id, $author_name, $biography)
+RETURNING id, name, bio;)sqlc",
+    ::userver::ydb::Query::NameLiteral{"CreateAuthor"},
     ::userver::ydb::Query::LogMode::kNameOnly,
 };
 
@@ -89,6 +101,20 @@ std::optional<GetAuthorNameRow> Queries::GetAuthorName(std::uint64_t author_id) 
     auto sqlc_row = sqlc_cursor.GetFirstRow();
     return GetAuthorNameRow{
         sqlc_row.Get<::userver::ydb::Utf8>("name"),
+    };
+}
+
+std::optional<CreateAuthorRow> Queries::CreateAuthor(std::uint64_t author_id, const ::userver::ydb::Utf8& author_name, const std::optional<::userver::ydb::Utf8>& biography) const {
+    auto sqlc_response = this->client_.ExecuteQuery(kCreateAuthorQuery, "$author_id", author_id, "$author_name", author_name, "$biography", biography);
+    auto sqlc_cursor = sqlc_response.GetSingleCursor();
+    if (sqlc_cursor.empty()) {
+        return std::nullopt;
+    }
+    auto sqlc_row = sqlc_cursor.GetFirstRow();
+    return CreateAuthorRow{
+        sqlc_row.Get<std::uint64_t>("id"),
+        sqlc_row.Get<::userver::ydb::Utf8>("name"),
+        sqlc_row.Get<std::optional<::userver::ydb::Utf8>>("bio"),
     };
 }
 

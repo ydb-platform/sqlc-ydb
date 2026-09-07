@@ -38,7 +38,7 @@ SELECT id, name, bio FROM authors WHERE id = $author_id;\
 
     private static final String listAuthorsSql = """
 -- name: ListAuthors :many
-SELECT id, name, bio FROM authors ORDER BY id;\
+SELECT id, name, bio FROM authors ORDER BY name;\
 """;
 
     public java.util.List<ListAuthorsRow> listAuthors() {
@@ -74,6 +74,35 @@ SELECT name FROM authors WHERE id = $author_id;\
                     if (!_rows.next()) return java.util.Optional.empty();
                     String _value0 = _rows.getString(1);
                     return java.util.Optional.of(new GetAuthorNameRow(_value0));
+                }
+            }
+        });
+    }
+
+    private static final String createAuthorSql = """
+-- name: CreateAuthor :one
+DECLARE $author_id AS Uint64;
+DECLARE $author_name AS Utf8;
+DECLARE $biography AS Optional<Utf8>;
+INSERT INTO authors (id, name, bio)
+VALUES ($author_id, $author_name, $biography)
+RETURNING id, name, bio;\
+""";
+
+    public java.util.Optional<CreateAuthorRow> createAuthor(long authorId, String authorName, String biography) {
+        return client.execute((org.springframework.jdbc.core.ConnectionCallback<java.util.Optional<CreateAuthorRow>>) _connection -> {
+            try (var _prepared = _connection.prepareStatement(createAuthorSql)) {
+                var _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement.class);
+                _statement.setObject("author_id", PrimitiveValue.newUint64(authorId));
+                _statement.setObject("author_name", PrimitiveValue.newText(authorName));
+                _statement.setObject("biography", biography == null ? OptionalType.of(PrimitiveType.Text).emptyValue() : OptionalType.of(PrimitiveType.Text).newValue(PrimitiveValue.newText(biography)));
+                try (var _rows = _prepared.executeQuery()) {
+                    if (!_rows.next()) return java.util.Optional.empty();
+                    long _value0 = _rows.getLong(1);
+                    String _value1 = _rows.getString(2);
+                    String _value2 = _rows.getString(3);
+                    if (_rows.wasNull()) _value2 = null;
+                    return java.util.Optional.of(new CreateAuthorRow(_value0, _value1, _value2));
                 }
             }
         });

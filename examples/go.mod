@@ -1,4 +1,4 @@
-module example.com/sqlc-ydb-authors
+module example.com/sqlc-ydb-examples
 
 go 1.26.0
 

@@ -16,7 +16,7 @@ limits; successful parsing alone does not establish semantic support.
 | `internal/model` | Resolved query/catalog data shared by generators; not an AST |
 | `internal/codegen/{golang,python,cpp,csharp,java}` | Language naming and SDK-specific bindings, decoding and source rendering |
 | `internal/endtoend` | CLI fixtures, expected diagnostics and generated golden files |
-| `examples/authors` | Shared schema/config with language-specific dependencies and executable examples |
+| `examples` | All upstream example families adapted for YDB; shared Go module and sequential live tests; authors covers every language |
 | `.github/workflows` | Offline verification and sequential acceptance steps per host |
 
 ## Sources of truth

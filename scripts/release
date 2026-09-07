@@ -166,14 +166,16 @@ smoke_archive() {
     tar -C "$temporary/smoke" -xzf "$archive"
   fi
   local executable="$temporary/smoke/$base/$binary"
-  local actual verbose
+  local actual verbose config
   actual=$("$executable" version)
   [[ $actual == "$version" ]] || fail "host smoke returned version $actual, expected $version"
   verbose=$("$executable" version --verbose)
   [[ $verbose == *"$version"* && $verbose == *"$commit"* ]] || \
     fail "host verbose version does not contain version and commit"
-  "$executable" compile -f examples/authors/sqlc.yaml
-  "$executable" diff -f examples/authors/sqlc.yaml
+  for config in examples/*/sqlc.yaml; do
+    "$executable" compile -f "$config"
+    "$executable" diff -f "$config"
+  done
 }
 
 verify_release() {

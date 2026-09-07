@@ -1,55 +1,24 @@
 package authors_test
 
 import (
-	"context"
-	"database/sql"
-	"os"
 	"testing"
-	"time"
 
-	sq "example.com/sqlc-ydb-authors/database/sql"
-	native "example.com/sqlc-ydb-authors/native"
-	"github.com/ydb-platform/ydb-go-sdk/v3"
+	sq "example.com/sqlc-ydb-examples/authors/go/database/sql"
+	native "example.com/sqlc-ydb-examples/authors/go/native"
+	"example.com/sqlc-ydb-examples/internal/testdb"
 )
 
 // TestGeneratedExample executes the actual CLI-generated example. It requires a
 // disposable database without an existing authors table; it never drops an
 // existing table when setup fails.
 func TestGeneratedExample(t *testing.T) {
-	dsn := os.Getenv("SQLC_YDB_TEST_DSN")
-	if dsn == "" {
-		t.Skip("set SQLC_YDB_TEST_DSN for live acceptance")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	defer cancel()
-	db, err := ydb.Open(ctx, dsn, ydb.WithAnonymousCredentials())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = db.Close(ctx)
-	}()
-	schema, err := os.ReadFile("../schema.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = db.Query().Exec(ctx, string(schema)); err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := db.Query().Exec(ctx, "DROP TABLE authors;"); err != nil {
-			t.Errorf("cleanup: %v", err)
-		}
-	}()
-	standard := sql.OpenDB(ydb.MustConnector(db))
-	defer standard.Close()
-	n, s := native.New(db.Query()), sq.New(standard)
+	db := testdb.Open(t)
+	db.Apply(t, "../schema.sql", "DROP TABLE authors;")
+	ctx := db.Context
+	n, s := native.New(db.Native), sq.New(db.SQL)
 	for _, tc := range []struct {
 		name       string
+		create     func(uint64, string, *string) (string, *string, error)
 		put        func(uint64, string, *string) error
 		get        func(uint64) (string, *string, error)
 		projection func(uint64) (string, error)
@@ -57,6 +26,10 @@ func TestGeneratedExample(t *testing.T) {
 		remove     func(uint64) error
 	}{
 		{"native",
+			func(id uint64, name string, bio *string) (string, *string, error) {
+				r, err := n.CreateAuthor(ctx, native.CreateAuthorParams{AuthorID: id, AuthorName: name, Biography: bio})
+				return r.Name, r.Bio, err
+			},
 			func(id uint64, name string, bio *string) error {
 				return n.UpsertAuthor(ctx, native.UpsertAuthorParams{AuthorID: id, AuthorName: name, Biography: bio})
 			},
@@ -66,6 +39,10 @@ func TestGeneratedExample(t *testing.T) {
 			func(id uint64) error { return n.DeleteAuthor(ctx, id) },
 		},
 		{"database/sql",
+			func(id uint64, name string, bio *string) (string, *string, error) {
+				r, err := s.CreateAuthor(ctx, sq.CreateAuthorParams{AuthorID: id, AuthorName: name, Biography: bio})
+				return r.Name, r.Bio, err
+			},
 			func(id uint64, name string, bio *string) error {
 				return s.UpsertAuthor(ctx, sq.UpsertAuthorParams{AuthorID: id, AuthorName: name, Biography: bio})
 			},
@@ -77,6 +54,9 @@ func TestGeneratedExample(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			id := ^uint64(0)
+			if name, bio, err := tc.create(id, "Автор", nil); err != nil || name != "Автор" || bio != nil {
+				t.Fatalf("insert returning: %q %v %v", name, bio, err)
+			}
 			if err := tc.put(id, "Автор", nil); err != nil {
 				t.Fatal(err)
 			}

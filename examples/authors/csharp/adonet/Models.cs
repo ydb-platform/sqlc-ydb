@@ -25,6 +25,18 @@ public sealed record GetAuthorNameRow(
     string Name
 );
 
+public sealed record CreateAuthorParams(
+    ulong AuthorID,
+    string AuthorName,
+    string? Biography
+);
+
+public sealed record CreateAuthorRow(
+    ulong ID,
+    string Name,
+    string? Bio
+);
+
 public sealed record UpsertAuthorParams(
     ulong AuthorID,
     string AuthorName,

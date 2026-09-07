@@ -1,0 +1,1 @@
+ALTER TABLE venue DROP COLUMN dropped;

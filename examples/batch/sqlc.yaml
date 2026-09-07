@@ -1,0 +1,22 @@
+version: "2"
+sql:
+  - name: native
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      go:
+        package: batch
+        out: go/native
+        sql_package: ydb
+        emit_json_tags: true
+        emit_interface: true
+  - name: portable
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      go:
+        package: batch
+        out: go/database/sql
+        sql_package: database/sql

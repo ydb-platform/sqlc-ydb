@@ -19,6 +19,18 @@ type GetAuthorNameRow struct {
 	Name string `json:"name"`
 }
 
+type CreateAuthorRow struct {
+	ID   uint64  `json:"id"`
+	Name string  `json:"name"`
+	Bio  *string `json:"bio"`
+}
+
+type CreateAuthorParams struct {
+	AuthorID   uint64  `json:"author_id"`
+	AuthorName string  `json:"author_name"`
+	Biography  *string `json:"biography"`
+}
+
 type UpsertAuthorParams struct {
 	AuthorID   uint64  `json:"author_id"`
 	AuthorName string  `json:"author_name"`
@@ -29,6 +41,7 @@ type Querier interface {
 	GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, error)
 	ListAuthors(ctx context.Context) ([]ListAuthorsRow, error)
 	GetAuthorName(ctx context.Context, arg uint64) (GetAuthorNameRow, error)
+	CreateAuthor(ctx context.Context, arg CreateAuthorParams) (CreateAuthorRow, error)
 	UpsertAuthor(ctx context.Context, arg UpsertAuthorParams) error
 	DeleteAuthor(ctx context.Context, arg uint64) error
 }

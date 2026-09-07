@@ -106,7 +106,7 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		}
 	}
 
-	if len(relations) != 0 {
+	if len(relations) != 0 || len(tree.selects) == 1 {
 		diagnostics = append(diagnostics, validateColumnReferences(block, parsed.tree, relations)...)
 	}
 
@@ -346,7 +346,7 @@ func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser
 			}
 		}
 	}
-	if len(relations) == 0 {
+	if len(relations) == 0 && len(selectCore.AllJoin_source()) != 0 {
 		diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, selectCore, "SELECT without a catalog table is unsupported"))
 	}
 	return relations, diagnostics
@@ -412,6 +412,9 @@ func expressionColumn(expr parser.IExprContext, relations []relation, declared m
 	if hasCast {
 		return model.Column{}, false, fmt.Errorf("CAST result nullability is not yet supported")
 	}
+	if typeValue, ok, err := concatenationType(expr, declared); ok {
+		return model.Column{Type: typeValue}, false, err
+	}
 	if function, ok := topFunction(expr); ok {
 		switch strings.ToLower(function) {
 		case "count":
@@ -449,6 +452,71 @@ func expressionColumn(expr parser.IExprContext, relations []relation, declared m
 		return model.Column{Type: literal}, false, nil
 	}
 	return model.Column{}, false, fmt.Errorf("unsupported result expression %q", expr.GetText())
+}
+
+func concatenationType(expr parser.IExprContext, declared map[string]model.Type) (model.Type, bool, error) {
+	var concatenations []*parser.Mul_subexprContext
+	descendants(expr, func(node antlr.Tree) {
+		ctx, ok := node.(*parser.Mul_subexprContext)
+		if ok && len(ctx.AllDOUBLE_PIPE()) != 0 {
+			concatenations = append(concatenations, ctx)
+		}
+	})
+	if len(concatenations) == 0 {
+		return model.Type{}, false, nil
+	}
+	if len(concatenations) != 1 || concatenations[0].GetStart() != expr.GetStart() || concatenations[0].GetStop() != expr.GetStop() {
+		return model.Type{}, true, fmt.Errorf("nested concatenation result expressions are not supported")
+	}
+
+	operands := concatenations[0].AllCon_subexpr()
+	var result model.Type
+	optional := false
+	for _, operand := range operands {
+		typeValue, err := concatenationOperandType(operand, declared)
+		if err != nil {
+			return model.Type{}, true, err
+		}
+		optional = optional || typeValue.IsOptional()
+		base := typeValue.UnwrapOptional()
+		if base.Kind != "String" && base.Kind != "Utf8" {
+			return model.Type{}, true, fmt.Errorf("concatenation operand %s has unsupported type %s", operand.GetText(), typeString(typeValue))
+		}
+		if result.Kind == "" {
+			result = base
+		} else if !sameType(result, base) {
+			return model.Type{}, true, fmt.Errorf("concatenation operands must both be String or both be Utf8")
+		}
+	}
+	if optional {
+		result = model.Optional(result)
+	}
+	return result, true, nil
+}
+
+func concatenationOperandType(operand parser.ICon_subexprContext, declared map[string]model.Type) (model.Type, error) {
+	var binds []parser.IBind_parameterContext
+	var literals []parser.ILiteral_valueContext
+	descendants(operand, func(node antlr.Tree) {
+		switch ctx := node.(type) {
+		case *parser.Bind_parameterContext:
+			binds = append(binds, ctx)
+		case parser.ILiteral_valueContext:
+			literals = append(literals, ctx)
+		}
+	})
+	if len(binds) == 1 && len(literals) == 0 && operand.GetText() == binds[0].GetText() {
+		name := bindName(binds[0])
+		typeValue, ok := declared[name]
+		if !ok {
+			return model.Type{}, fmt.Errorf("cannot resolve type of parameter $%s in concatenation", name)
+		}
+		return typeValue, nil
+	}
+	if len(literals) == 1 && len(binds) == 0 && operand.GetText() == literals[0].GetText() && literals[0].STRING_VALUE() != nil {
+		return stringLiteralType(literals[0].GetText())
+	}
+	return model.Type{}, fmt.Errorf("unsupported concatenation operand %q; only string literals and declared parameters are supported", operand.GetText())
 }
 
 type columnRef struct {

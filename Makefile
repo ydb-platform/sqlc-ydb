@@ -1,4 +1,6 @@
-.PHONY: build test test-release generate check clean
+.PHONY: build test test-release generate check check-examples clean
+
+EXAMPLE_CONFIGS := $(wildcard examples/*/sqlc.yaml)
 
 build:
 	go build -trimpath -o bin/sqlc-ydb ./cmd/sqlc-ydb
@@ -9,12 +11,22 @@ test:
 test-release:
 	python3 -m unittest discover -s scripts -p 'test_*.py'
 
-generate:
-	go run ./cmd/sqlc-ydb generate -f examples/authors/sqlc.yaml
+generate: build
+	@set -e; for config in $(EXAMPLE_CONFIGS); do \
+		./bin/sqlc-ydb generate -f "$$config"; \
+	done
 
 check: test-release
 	go test -p 1 ./...
-	go run ./cmd/sqlc-ydb diff -f examples/authors/sqlc.yaml
+	$(MAKE) check-examples
+
+check-examples: build
+	@set -e; for config in $(EXAMPLE_CONFIGS); do \
+		./bin/sqlc-ydb compile -f "$$config"; \
+		./bin/sqlc-ydb diff -f "$$config"; \
+	done
+	cd examples && go test -p 1 ./...
+	python3 -m compileall -q examples/authors/python
 
 clean:
 	rm -f bin/sqlc-ydb

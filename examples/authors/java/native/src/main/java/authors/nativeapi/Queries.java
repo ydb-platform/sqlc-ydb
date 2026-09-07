@@ -39,7 +39,7 @@ SELECT id, name, bio FROM authors WHERE id = $author_id;\
 
     private static final String listAuthorsSql = """
 -- name: ListAuthors :many
-SELECT id, name, bio FROM authors ORDER BY id;\
+SELECT id, name, bio FROM authors ORDER BY name;\
 """;
 
     public java.util.List<ListAuthorsRow> listAuthors() {
@@ -74,6 +74,32 @@ SELECT name FROM authors WHERE id = $author_id;\
         if (!_rows.next()) return java.util.Optional.empty();
         String _value0 = _rows.getColumn(0).getText();
         return java.util.Optional.of(new GetAuthorNameRow(_value0));
+    }
+
+    private static final String createAuthorSql = """
+-- name: CreateAuthor :one
+DECLARE $author_id AS Uint64;
+DECLARE $author_name AS Utf8;
+DECLARE $biography AS Optional<Utf8>;
+INSERT INTO authors (id, name, bio)
+VALUES ($author_id, $author_name, $biography)
+RETURNING id, name, bio;\
+""";
+
+    public java.util.Optional<CreateAuthorRow> createAuthor(long authorId, String authorName, String biography) {
+        var _params = Params.create();
+        _params.put("$author_id", PrimitiveValue.newUint64(authorId));
+        _params.put("$author_name", PrimitiveValue.newText(authorName));
+        _params.put("$biography", biography == null ? OptionalType.of(PrimitiveType.Text).emptyValue() : OptionalType.of(PrimitiveType.Text).newValue(PrimitiveValue.newText(biography)));
+        var _query = client.supplyResult(_session -> QueryReader.readFrom(
+                _session.createQuery(createAuthorSql, TxMode.SERIALIZABLE_RW, _params))).join().getValue();
+        if (_query.getResultSetCount() != 1) throw new IllegalStateException("Expected one result set");
+        var _rows = _query.getResultSet(0);
+        if (!_rows.next()) return java.util.Optional.empty();
+        long _value0 = _rows.getColumn(0).getUint64();
+        String _value1 = _rows.getColumn(1).getText();
+        String _value2 = _rows.getColumn(2).isOptionalItemPresent() ? _rows.getColumn(2).getOptionalItem().getText() : null;
+        return java.util.Optional.of(new CreateAuthorRow(_value0, _value1, _value2));
     }
 
     private static final String upsertAuthorSql = """

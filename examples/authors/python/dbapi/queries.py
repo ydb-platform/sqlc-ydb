@@ -9,11 +9,19 @@ DECLARE $author_id AS Uint64;
 SELECT id, name, bio FROM authors WHERE id = $author_id;"""
 
 SQL_LIST_AUTHORS = """-- name: ListAuthors :many
-SELECT id, name, bio FROM authors ORDER BY id;"""
+SELECT id, name, bio FROM authors ORDER BY name;"""
 
 SQL_GET_AUTHOR_NAME = """-- name: GetAuthorName :one
 DECLARE $author_id AS Uint64;
 SELECT name FROM authors WHERE id = $author_id;"""
+
+SQL_CREATE_AUTHOR = """-- name: CreateAuthor :one
+DECLARE $author_id AS Uint64;
+DECLARE $author_name AS Utf8;
+DECLARE $biography AS Optional<Utf8>;
+INSERT INTO authors (id, name, bio)
+VALUES ($author_id, $author_name, $biography)
+RETURNING id, name, bio;"""
 
 SQL_UPSERT_AUTHOR = """-- name: UpsertAuthor :exec
 DECLARE $author_id AS Uint64;
@@ -77,6 +85,23 @@ class Querier:
             row = rows[0]
             return models.GetAuthorNameRow(
                 name=row[0],
+            )
+        finally:
+            cursor.close()
+
+    def create_author(self, author_id: int, author_name: str, biography: Optional[str]) -> Optional[models.Author]:
+        parameters = {"$author_id": _typed(author_id, ydb.PrimitiveType.Uint64),"$author_name": _typed(author_name, ydb.PrimitiveType.Utf8),"$biography": _typed(biography, ydb.OptionalType(ydb.PrimitiveType.Utf8))}
+        cursor = self._connection.cursor()
+        try:
+            cursor.execute(SQL_CREATE_AUTHOR, parameters)
+            rows = cursor.fetchall()
+            if not rows:
+                return None
+            row = rows[0]
+            return models.Author(
+                id=row[0],
+                name=row[1],
+                bio=row[2],
             )
         finally:
             cursor.close()

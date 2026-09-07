@@ -301,9 +301,7 @@ func compileInput(t *testing.T, input *model.AnalysisResult, opts Options) {
 		}
 	}
 	mod := "module generated\n\ngo 1.26.0\n"
-	if opts.Runtime == "ydb" {
-		mod += "\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"
-	}
+	mod += "\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(mod), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -379,6 +377,57 @@ func TestQueryConstantsPreserveCaseDistinctNames(t *testing.T) {
 		{Name: "Foo", Command: model.Exec, SQL: "SELECT 1;"},
 		{Name: "foo", Command: model.Exec, SQL: "SELECT 2;"},
 	}}
+	compileInput(t, in, Options{Package: "db", Runtime: "database/sql"})
+}
+
+func TestGenerateCompilesYDBJSONAndTimestampParameters(t *testing.T) {
+	jsonType := model.Type{Kind: "Json"}
+	jsonDocumentType := model.Type{Kind: "JsonDocument"}
+	in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name:    "PutBook",
+		Command: model.Exec,
+		Parameters: []model.Parameter{
+			{Name: "tags", Type: jsonType},
+			{Name: "biography", Type: model.Optional(jsonType)},
+			{Name: "document", Type: jsonDocumentType},
+			{Name: "optional_document", Type: model.Optional(jsonDocumentType)},
+			{Name: "available", Type: model.Type{Kind: "Timestamp"}},
+		},
+	}}}
+	compileInput(t, in, Options{Package: "db", Runtime: "ydb"})
+	compileInput(t, in, Options{Package: "db", Runtime: "database/sql"})
+	files, err := Generate(in, Options{Package: "db", Runtime: "database/sql"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var source string
+	for _, file := range files {
+		if strings.Contains(file.Name, ".sql.go") {
+			source = string(file.Content)
+			break
+		}
+	}
+	for _, call := range []string{
+		`table.ValueParam("$tags", types.JSONValue(arg.Tags))`,
+		`table.ValueParam("$biography", types.NullableJSONValue(arg.Biography))`,
+		`table.ValueParam("$document", types.JSONDocumentValue(arg.Document))`,
+		`table.ValueParam("$optional_document", types.NullableJSONDocumentValue(arg.OptionalDocument))`,
+		`sql.Named("available", arg.Available)`,
+	} {
+		if !strings.Contains(source, call) {
+			t.Fatalf("database/sql binding lacks %s:\n%s", call, source)
+		}
+	}
+}
+
+func TestGenerateCompilesDatabaseSQLJSONOnlyQueryFile(t *testing.T) {
+	jsonType := model.Type{Kind: "Json"}
+	in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name:       "FindByDocument",
+		Command:    model.Exec,
+		Source:     model.Position{File: "json.sql"},
+		Parameters: []model.Parameter{{Name: "document", Type: jsonType}},
+	}}}
 	compileInput(t, in, Options{Package: "db", Runtime: "database/sql"})
 }
 

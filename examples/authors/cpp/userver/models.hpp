@@ -25,4 +25,10 @@ struct GetAuthorNameRow final {
     ::userver::ydb::Utf8 name;
 };
 
+struct CreateAuthorRow final {
+    std::uint64_t id;
+    ::userver::ydb::Utf8 name;
+    std::optional<::userver::ydb::Utf8> bio;
+};
+
 }  // namespace authors::userver

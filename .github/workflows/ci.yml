@@ -34,13 +34,7 @@ jobs:
           DOTNET_CLI_TELEMETRY_OPTOUT: '1'
         run: go test -p 1 -count=1 ./internal/codegen/csharp ./internal/codegen/java
       - name: Verify generated examples
-        run: |
-          ./bin/sqlc-ydb compile -f examples/authors/sqlc.yaml
-          ./bin/sqlc-ydb diff -f examples/authors/sqlc.yaml
-          python3 -m compileall -q examples/authors/python
-      - name: Compile generated Go packages
-        working-directory: examples/authors/go
-        run: go test ./...
+        run: make check-examples
 
   ydb-acceptance:
     runs-on: ubuntu-latest
@@ -85,14 +79,15 @@ jobs:
         run: go test -p 1 -count=1 -timeout=180s ./internal/codegen/golang -run TestLiveYDB -v
       - name: Run Python generator runtime tests
         run: go test -p 1 -count=1 -timeout=180s ./internal/codegen/python -run TestLiveYDB -v
-      - name: Generate and execute the complete example
+      - name: Generate and execute all Go examples sequentially
         run: |
-          go run ./cmd/sqlc-ydb generate -f examples/authors/sqlc.yaml
-          git diff --exit-code -- examples/authors
-          cd examples/authors/go
-          go test -p 1 -count=1 -timeout=90s ./... -v
-          cd ..
-          python3 -m python.smoke
+          make generate
+          git diff --exit-code -- examples
+          cd examples
+          go test -p 1 -count=1 -timeout=180s ./... -v
+      - name: Run Python authors example
+        working-directory: examples/authors
+        run: python3 -m python.smoke
       - name: Run C# ADO.NET example
         working-directory: examples/authors
         env:

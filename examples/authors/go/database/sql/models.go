@@ -17,6 +17,18 @@ type GetAuthorNameRow struct {
 	Name string
 }
 
+type CreateAuthorRow struct {
+	ID   uint64
+	Name string
+	Bio  *string
+}
+
+type CreateAuthorParams struct {
+	AuthorID   uint64
+	AuthorName string
+	Biography  *string
+}
+
 type UpsertAuthorParams struct {
 	AuthorID   uint64
 	AuthorName string

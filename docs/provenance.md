@@ -16,8 +16,23 @@ Behavior/API references:
 The parser is an external dependency from `ydb-platform/yql-parsers`, pinned to
 `2fbaa5e71a0388828bffc5c6a2c2b0e2cf9680dc` (YQL source
 `d9544073fd13d17b30f609fa4fe7b034cd28ba02`). Dependency license notices remain in
-their modules. If upstream source code or tests are copied in future changes,
-record the source commit and preserve the applicable notices alongside them.
+their modules.
+
+The [examples](../examples/README.md) adapt SQL schemas, queries and scenarios
+from all five families in `sqlc-dev/sqlc` at commit
+[`3c2546a4b47fabbcec3e07df420effb1a464728f`](https://github.com/sqlc-dev/sqlc/tree/3c2546a4b47fabbcec3e07df420effb1a464728f/examples).
+The upstream MIT notice is preserved in [UPSTREAM_LICENSE](../examples/UPSTREAM_LICENSE).
+PostgreSQL/MySQL/SQLite variants were inspected for distinct scenarios; the
+adaptations use YDB SQL and SDKs. Each example README records material changes.
+Upstream generated Go, pgx batch wrappers and multi-engine test helpers are not
+embedded in this implementation.
+
+YDB-specific adaptations follow the main documentation for
+[scalar SELECT](https://ydb.tech/docs/en/yql/reference/syntax/select/?version=main),
+[string concatenation](https://ydb.tech/docs/en/yql/reference/syntax/expressions?version=main),
+[Yson JSON conversion](https://ydb.tech/docs/en/yql/reference/udf/list/yson?version=main),
+and [set operations](https://ydb.tech/docs/en/yql/reference/builtins/dict).
+Runtime checks execute the resulting SQL on the local-ydb version pinned in CI.
 
 ## Java SDK and framework references
 
