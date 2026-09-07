@@ -70,7 +70,8 @@ and result columns; it is not an intermediate AST. Unsupported constructs and
 unresolved types must produce an error rather than an untyped fallback.
 
 See [compatibility](docs/compatibility.md), [targets](docs/targets.md),
-[architecture](docs/architecture.md), and [development](docs/development.md) for
+[architecture](docs/architecture.md), [compiler roadmap](docs/roadmap.md), and
+[development](docs/development.md) for
 the implemented scope and remaining work. Target-specific configuration and
 examples are described in [C++](docs/cpp.md), [C#](docs/csharp.md), and
 [Java](docs/java.md).

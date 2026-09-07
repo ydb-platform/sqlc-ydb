@@ -186,8 +186,8 @@ SELECT id FROM authors WHERE id = $id;`}}
 func TestAnalyzeRejectsUnsupportedSchemaStatements(t *testing.T) {
 	result, err := Analyze([]model.Source{{Name: "schema.sql", Text: `
 CREATE TABLE authors (id Uint64 NOT NULL, PRIMARY KEY (id));
-DROP TABLE authors;`}}, nil)
-	if err == nil || result == nil || !strings.Contains(err.Error(), "only CREATE TABLE is currently supported") {
+UPSERT INTO authors (id) VALUES (1);`}}, nil)
+	if err == nil || result == nil || !strings.Contains(err.Error(), "unsupported schema statement") {
 		t.Fatalf("error = %v; result = %#v", err, result)
 	}
 }

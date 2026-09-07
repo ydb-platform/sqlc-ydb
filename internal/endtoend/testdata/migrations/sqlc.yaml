@@ -1,0 +1,12 @@
+version: "2"
+sql:
+  - engine: ydb
+    schema: migrations
+    queries: queries.sql
+    gen:
+      go:
+        out: db
+        sql_package: ydb
+      python:
+        out: py
+        runtime: sqlalchemy

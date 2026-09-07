@@ -28,6 +28,9 @@ internal data structures and source history are not a dependency.
   lexical order. Hidden files and `*.down.sql` are excluded.
 - Schema rollback sections for goose, sql-migrate, tern and dbmate are excluded.
   Migration markers inside string literals are preserved.
+- Schema migrations update an in-memory catalog in input order. Supported DDL:
+  `CREATE TABLE [IF NOT EXISTS]`, `DROP TABLE [IF EXISTS]`, and `ALTER TABLE`
+  with `ADD [COLUMN]`, `DROP [COLUMN]`, or table `RENAME TO`.
 - Query annotations `-- name: QueryName :one|:many|:exec`. `:execrows` is parsed
   but generation rejects it: the selected YDB APIs cannot provide its required
   affected-row count.
@@ -57,15 +60,16 @@ fixture and, for runtime-sensitive behavior, an execution test.
 
 ## Current analyzer coverage
 
-The initial analyzer supports explicit `CREATE TABLE` catalogs, table column
+The analyzer supports explicit `CREATE TABLE` catalogs and the schema migration
+operations listed below, table column
 projections and `*`, table/column aliases, supported joins and their optional
 sides, `COUNT`, `DECLARE`, direct comparison parameter inference, selected scalar
 local bindings, `INSERT`/`UPSERT ... VALUES`, `UPDATE ... SET`, `DELETE`, and
 `RETURNING`. It validates names outside the projection and conflicting parameter
 constraints. Diagnostics include source file, line and column.
 
-This is a deliberately limited first semantic implementation. Schema evolution
-through ALTER/DROP, general computed projections and casts, CTEs/subqueries,
+This is a deliberately limited first semantic implementation. General computed
+projections and casts, CTEs/subqueries,
 multiple result sets, FLATTEN, full function/type inference and the full YQL
 grammar semantics are subsequent work. Accepted syntax is not a claim of full
 equivalence to the YDB server's type checker.
@@ -74,3 +78,34 @@ Current INSERT/UPSERT VALUES and UPDATE SET values must be direct parameters;
 literal and computed assignments are explicitly rejected. Shared query-file
 declarations must currently be moved into each named query. These are temporary
 coverage limits, separate from the permanent decision to exclude plugins.
+
+## Schema migration coverage
+
+Use a migration directory, glob or ordered file list as `schema`. The analyzer
+applies its supported Up statements to the catalog before analyzing any query.
+It never executes migrations or data statements against YDB. Dropping and
+recreating a table replaces its schema; renaming updates column ownership.
+Adding a column preserves its declared YQL type and nullability, and dropping a
+primary-key column fails. Table/column order stays deterministic.
+
+An ALTER with several supported column actions is applied atomically to the
+in-memory catalog. This does not describe server transaction behavior. Missing
+objects, duplicate names, rename collisions and invalid primary keys produce
+source-located errors. Existing tables remain unchanged by a guarded CREATE.
+`RENAME TO` must currently be the only action in its ALTER statement. DDL inside
+action definitions and EXPLAIN statements is rejected, not applied to the catalog.
+
+`ALTER COLUMN` changes to types/nullability/defaults and other ALTER actions
+such as indexes, changefeeds or table settings are currently rejected. External
+tables, views, table stores and CREATE TABLE AS are also outside this catalog's
+scope. Physical CREATE options that do not affect modeled columns are not
+represented in the catalog; this is not a full server DDL validator.
+
+References: YDB [columns](https://ydb.tech/docs/en/yql/reference/syntax/alter_table/columns),
+[table rename](https://ydb.tech/docs/en/yql/reference/syntax/alter_table/rename),
+and [DROP TABLE](https://ydb.tech/docs/en/yql/reference/syntax/drop_table).
+YQL main at `d62403dadf7588c33d2d0a61296a157b61163d52` explicitly handles
+[`DROP TABLE IF EXISTS` through `missingOk`](https://github.com/ydb-platform/ydb/blob/d62403dadf7588c33d2d0a61296a157b61163d52/yql/essentials/sql/v1/translation/sql_query.cpp#L575)
+and [rejects combining RENAME TO with other ALTER actions](https://github.com/ydb-platform/ydb/blob/d62403dadf7588c33d2d0a61296a157b61163d52/yql/essentials/sql/v1/translation/sql_query.cpp#L2399).
+See [the roadmap](roadmap.md) for shared macros and deferred database-assisted
+analysis.

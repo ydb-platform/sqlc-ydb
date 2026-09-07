@@ -13,52 +13,188 @@ import (
 func buildCatalog(sources []model.Source) (model.Catalog, []model.Diagnostic) {
 	catalog := model.Catalog{}
 	var diagnostics []model.Diagnostic
-	seen := map[string]bool{}
 	for _, source := range sources {
 		parsed, syntaxDiagnostics := parseYQL(source.Name, source.Text, 0)
 		diagnostics = append(diagnostics, syntaxDiagnostics...)
 		if len(syntaxDiagnostics) != 0 {
 			continue
 		}
-		var statements []*parser.Sql_stmtContext
-		descendants(parsed.tree, func(node antlr.Tree) {
-			if ctx, ok := node.(*parser.Sql_stmtContext); ok {
-				statements = append(statements, ctx)
-			}
-		})
-		for _, statement := range statements {
-			var creates []*parser.Create_table_stmtContext
-			descendants(statement, func(node antlr.Tree) {
-				if ctx, ok := node.(*parser.Create_table_stmtContext); ok {
-					creates = append(creates, ctx)
-				}
-			})
-			if len(creates) != 1 {
-				diagnostics = append(diagnostics, diagnosticAt(source.Name, 0, statement, fmt.Sprintf("unsupported schema statement %q; only CREATE TABLE is currently supported", statement.GetText())))
+		statementList := parsed.tree.Sql_stmt_list()
+		if statementList == nil {
+			diagnostics = append(diagnostics, model.Diagnostic{Position: model.Position{File: source.Name, Line: 1, Column: 1}, Message: "unsupported schema query form"})
+			continue
+		}
+		for _, statement := range statementList.AllSql_stmt() {
+			core := statement.Sql_stmt_core()
+			if statement.EXPLAIN() != nil || core == nil {
+				diagnostics = append(diagnostics, diagnosticAt(source.Name, 0, statement, fmt.Sprintf("unsupported schema statement %q; supported statements are CREATE TABLE, ALTER TABLE, and DROP TABLE", statement.GetText())))
 				continue
 			}
-			create := creates[0]
-			table, tableDiagnostics := catalogTable(source.Name, create)
-			diagnostics = append(diagnostics, tableDiagnostics...)
-			if len(tableDiagnostics) != 0 {
+			if create := core.Create_table_stmt(); create != nil {
+				diagnostics = append(diagnostics, applyCreateTable(&catalog, source.Name, create)...)
 				continue
 			}
-			key := strings.ToLower(table.Name)
-			if seen[key] {
-				diagnostics = append(diagnostics, diagnosticAt(source.Name, 0, create, fmt.Sprintf("table %q is declared more than once", table.Name)))
+			if alter := core.Alter_table_stmt(); alter != nil {
+				diagnostics = append(diagnostics, applyAlterTable(&catalog, source.Name, alter)...)
 				continue
 			}
-			seen[key] = true
-			catalog.Tables = append(catalog.Tables, table)
+			if drop := core.Drop_table_stmt(); drop != nil {
+				diagnostics = append(diagnostics, applyDropTable(&catalog, source.Name, drop)...)
+				continue
+			}
+			diagnostics = append(diagnostics, diagnosticAt(source.Name, 0, statement, fmt.Sprintf("unsupported schema statement %q; supported statements are CREATE TABLE, ALTER TABLE, and DROP TABLE", statement.GetText())))
 		}
 	}
 	return catalog, diagnostics
 }
 
-func catalogTable(file string, create *parser.Create_table_stmtContext) (model.Table, []model.Diagnostic) {
+func applyCreateTable(catalog *model.Catalog, file string, create parser.ICreate_table_stmtContext) []model.Diagnostic {
+	if diagnostic := validateCreateTableShape(file, create); diagnostic != nil {
+		return []model.Diagnostic{*diagnostic}
+	}
+	name := simpleTableName(create.Simple_table_ref())
+	if name != "" {
+		if _, exists := catalogTableIndex(*catalog, name); exists {
+			if create.IF() != nil && create.NOT() != nil && create.EXISTS() != nil {
+				// YDB skips the entire CREATE TABLE IF NOT EXISTS statement when the
+				// object exists, including validation of the proposed replacement schema.
+				return nil
+			}
+			return []model.Diagnostic{diagnosticAt(file, 0, create, fmt.Sprintf("table %q already exists", name))}
+		}
+	}
+	table, diagnostics := catalogTable(file, create)
+	if len(diagnostics) != 0 {
+		return diagnostics
+	}
+	catalog.Tables = append(catalog.Tables, table)
+	return nil
+}
+
+func applyDropTable(catalog *model.Catalog, file string, drop parser.IDrop_table_stmtContext) []model.Diagnostic {
+	if drop.TABLE() == nil || drop.EXTERNAL() != nil || drop.TABLESTORE() != nil {
+		return []model.Diagnostic{diagnosticAt(file, 0, drop, "only ordinary DROP TABLE is supported")}
+	}
+	name := simpleTableName(drop.Simple_table_ref())
+	if name == "" {
+		return []model.Diagnostic{diagnosticAt(file, 0, drop, "DROP TABLE has no resolvable table name")}
+	}
+	index, exists := catalogTableIndex(*catalog, name)
+	if !exists {
+		if drop.IF() != nil && drop.EXISTS() != nil {
+			return nil
+		}
+		return []model.Diagnostic{diagnosticAt(file, 0, drop, fmt.Sprintf("table %q does not exist", name))}
+	}
+	catalog.Tables = append(catalog.Tables[:index], catalog.Tables[index+1:]...)
+	return nil
+}
+
+func applyAlterTable(catalog *model.Catalog, file string, alter parser.IAlter_table_stmtContext) []model.Diagnostic {
+	name := simpleTableName(alter.Simple_table_ref())
+	if name == "" {
+		return []model.Diagnostic{diagnosticAt(file, 0, alter, "ALTER TABLE has no resolvable table name")}
+	}
+	index, exists := catalogTableIndex(*catalog, name)
+	if !exists {
+		return []model.Diagnostic{diagnosticAt(file, 0, alter, fmt.Sprintf("table %q does not exist", name))}
+	}
+	working := cloneTable(catalog.Tables[index])
 	var diagnostics []model.Diagnostic
+	actions := alter.AllAlter_table_action()
+	if len(actions) > 1 {
+		for _, action := range actions {
+			if action.Alter_table_rename_to() != nil {
+				return []model.Diagnostic{diagnosticAt(file, 0, action, "RENAME TO must be the only action in an ALTER TABLE statement")}
+			}
+		}
+	}
+	for _, action := range actions {
+		diagnostics = append(diagnostics, applyAlterTableAction(*catalog, index, &working, file, action)...)
+		if len(diagnostics) != 0 {
+			return diagnostics
+		}
+	}
+	catalog.Tables[index] = working
+	return nil
+}
+
+func applyAlterTableAction(catalog model.Catalog, tableIndex int, table *model.Table, file string, action parser.IAlter_table_actionContext) []model.Diagnostic {
+	if add := action.Alter_table_add_column(); add != nil {
+		column, err := catalogColumn(table.Name, add.Column_schema())
+		if err != nil {
+			return []model.Diagnostic{diagnosticAt(file, 0, add, err.Error())}
+		}
+		if _, exists := catalogColumnIndex(*table, column.Name); exists {
+			return []model.Diagnostic{diagnosticAt(file, 0, add.Column_schema(), fmt.Sprintf("column %q already exists in table %q", column.Name, table.Name))}
+		}
+		table.Columns = append(table.Columns, column)
+		return nil
+	}
+	if drop := action.Alter_table_drop_column(); drop != nil {
+		name := identifier(drop.An_id().GetText())
+		columnIndex, exists := catalogColumnIndex(*table, name)
+		if !exists {
+			return []model.Diagnostic{diagnosticAt(file, 0, drop, fmt.Sprintf("column %q does not exist in table %q", name, table.Name))}
+		}
+		for _, key := range table.PrimaryKey {
+			if strings.EqualFold(key, name) {
+				return []model.Diagnostic{diagnosticAt(file, 0, drop, fmt.Sprintf("cannot drop primary key column %q from table %q", name, table.Name))}
+			}
+		}
+		table.Columns = append(table.Columns[:columnIndex], table.Columns[columnIndex+1:]...)
+		return nil
+	}
+	if rename := action.Alter_table_rename_to(); rename != nil {
+		newName := identifier(rename.An_id_table().GetText())
+		if otherIndex, exists := catalogTableIndex(catalog, newName); exists && otherIndex != tableIndex {
+			return []model.Diagnostic{diagnosticAt(file, 0, rename, fmt.Sprintf("table %q already exists", newName))}
+		}
+		table.Name = newName
+		for i := range table.Columns {
+			table.Columns[i].Table = newName
+		}
+		return nil
+	}
+	return []model.Diagnostic{diagnosticAt(file, 0, action, fmt.Sprintf("unsupported ALTER TABLE action %q; supported actions are ADD COLUMN, DROP COLUMN, and RENAME TO", action.GetText()))}
+}
+
+func catalogTableIndex(catalog model.Catalog, name string) (int, bool) {
+	for i := range catalog.Tables {
+		if strings.EqualFold(catalog.Tables[i].Name, name) {
+			return i, true
+		}
+	}
+	return -1, false
+}
+
+func catalogColumnIndex(table model.Table, name string) (int, bool) {
+	for i := range table.Columns {
+		if strings.EqualFold(table.Columns[i].Name, name) {
+			return i, true
+		}
+	}
+	return -1, false
+}
+
+func cloneTable(table model.Table) model.Table {
+	table.Columns = append([]model.Column(nil), table.Columns...)
+	table.PrimaryKey = append([]string(nil), table.PrimaryKey...)
+	return table
+}
+
+func validateCreateTableShape(file string, create parser.ICreate_table_stmtContext) *model.Diagnostic {
 	if create.TABLE() == nil || create.EXTERNAL() != nil || create.TABLESTORE() != nil || create.Table_as_source() != nil {
-		return model.Table{}, []model.Diagnostic{diagnosticAt(file, 0, create, "only CREATE TABLE with an explicit column list is supported")}
+		diagnostic := diagnosticAt(file, 0, create, "only CREATE TABLE with an explicit column list is supported")
+		return &diagnostic
+	}
+	return nil
+}
+
+func catalogTable(file string, create parser.ICreate_table_stmtContext) (model.Table, []model.Diagnostic) {
+	var diagnostics []model.Diagnostic
+	if diagnostic := validateCreateTableShape(file, create); diagnostic != nil {
+		return model.Table{}, []model.Diagnostic{*diagnostic}
 	}
 	ref := create.Simple_table_ref()
 	if ref == nil || ref.Simple_table_ref_core() == nil {
@@ -66,6 +202,8 @@ func catalogTable(file string, create *parser.Create_table_stmtContext) (model.T
 	}
 	table := model.Table{Name: identifier(ref.Simple_table_ref_core().GetText())}
 	columnNames := map[string]bool{}
+	primaryKeyNames := map[string]bool{}
+	primaryKeyDeclarations := 0
 	for _, entry := range create.AllCreate_table_entry() {
 		if columnContext := entry.Column_schema(); columnContext != nil {
 			column, err := catalogColumn(table.Name, columnContext)
@@ -87,8 +225,16 @@ func catalogTable(file string, create *parser.Create_table_stmtContext) (model.T
 				diagnostics = append(diagnostics, diagnosticAt(file, 0, constraint, "only PRIMARY KEY table constraints are supported"))
 				continue
 			}
+			primaryKeyDeclarations++
 			for _, id := range constraint.AllAn_id() {
-				table.PrimaryKey = append(table.PrimaryKey, identifier(id.GetText()))
+				name := identifier(id.GetText())
+				key := strings.ToLower(name)
+				if primaryKeyNames[key] {
+					diagnostics = append(diagnostics, diagnosticAt(file, 0, id, fmt.Sprintf("primary key column %q is declared more than once", name)))
+					continue
+				}
+				primaryKeyNames[key] = true
+				table.PrimaryKey = append(table.PrimaryKey, name)
 			}
 			continue
 		}
@@ -97,11 +243,18 @@ func catalogTable(file string, create *parser.Create_table_stmtContext) (model.T
 	if len(table.Columns) == 0 {
 		diagnostics = append(diagnostics, diagnosticAt(file, 0, create, fmt.Sprintf("table %q has no columns", table.Name)))
 	}
+	if primaryKeyDeclarations == 0 {
+		diagnostics = append(diagnostics, diagnosticAt(file, 0, create, fmt.Sprintf("table %q must declare a PRIMARY KEY", table.Name)))
+	} else if primaryKeyDeclarations > 1 {
+		diagnostics = append(diagnostics, diagnosticAt(file, 0, create, fmt.Sprintf("table %q declares PRIMARY KEY more than once", table.Name)))
+	}
 	for _, key := range table.PrimaryKey {
 		if !columnNames[strings.ToLower(key)] {
 			diagnostics = append(diagnostics, diagnosticAt(file, 0, create, fmt.Sprintf("primary key column %q does not exist", key)))
 		}
 	}
+	// PARTITION BY and WITH describe physical storage and do not change the
+	// tables, columns, types, or primary keys represented by model.Catalog.
 	return table, diagnostics
 }
 

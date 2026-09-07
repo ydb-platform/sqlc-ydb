@@ -33,6 +33,37 @@ prepared before writes start. Each file is replaced through a temporary sibling;
 this protects individual files from interrupted writes, but does not promise a
 filesystem transaction covering every output.
 
+## Where is the compiler?
+
+Compilation is present as a stage, but there is currently no `internal/compiler`
+package or `Compiler` object. Its responsibilities are distributed as follows:
+
+| Responsibility | Current owner |
+| --- | --- |
+| Resolve source paths, order migrations, keep Up sections | `internal/source` |
+| Parse YQL, apply schema statements to the catalog, analyze named queries | `internal/analyzer` |
+| Return resolved catalog, parameters, result columns and diagnostics | `model.AnalysisResult` |
+| Invoke analysis once per `sql` configuration entry, then its generators | `internal/cli.prepare` |
+| Render source files for each selected language/runtime | `internal/codegen/*` |
+
+In upstream sqlc, `internal/compiler.Compiler` owns catalog/query compilation,
+parser selection, analysis and SQL rewrites; code generation is dispatched by
+`internal/cmd`. A compiler therefore is not another syntax representation and
+does not imply an intermediate AST or a native-code backend. The comparable
+boundary here is `analyzer.Analyze(...) -> model.AnalysisResult`.
+
+Macro handling and semantic analysis must share one compilation boundary before
+generation. This can remain in `internal/analyzer`; a separate `internal/compiler`
+package is an implementation option, not a requirement. Extract orchestration
+only if the added responsibilities justify it. The CLI retains configuration,
+source/output paths and file IO. No engine registry, plugin interface or second
+AST is needed. See [the compiler roadmap](roadmap.md) for ordering and acceptance
+criteria.
+
+Reference: upstream sqlc
+[`Compiler`](https://github.com/sqlc-dev/sqlc/blob/23e357a414310aa8846e64624da8b8a626b3a610/internal/compiler/engine.go)
+and [generation dispatch](https://github.com/sqlc-dev/sqlc/blob/23e357a414310aa8846e64624da8b8a626b3a610/internal/cmd/generate.go).
+
 ## Development decisions
 
 - Develop the independent implementation in the existing repository. Do not
