@@ -75,7 +75,6 @@ func runLiveGenerated(t *testing.T, dsn, table, runtime string) {
 	defer cancel()
 	cmd := exec.CommandContext(commandCtx, "go", "test", "-mod=mod", ".")
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GOCACHE=/private/tmp/sqlc-ydb-go-build", "GOSUMDB=off")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("live %s adapter failed against %s:\n%s", runtime, dsn, out)
@@ -124,7 +123,6 @@ func TestAbsoluteSourceIsCompilableQueryFile(t *testing.T) {
 	}
 	cmd := exec.Command("go", "test", ".")
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GOCACHE=/private/tmp/sqlc-ydb-go-build")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("absolute source query file was ignored or failed to compile:\n%s", out)
 	}
@@ -160,7 +158,6 @@ func TestGeneratedDatabaseSQLRuntime(t *testing.T) {
 	}
 	cmd := exec.Command("go", "test", "-mod=mod", ".")
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GOCACHE=/private/tmp/sqlc-ydb-go-build")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("generated runtime behavior failed:\n%s", out)
@@ -207,7 +204,6 @@ func compileInput(t *testing.T, input *model.AnalysisResult, opts Options) {
 	}
 	cmd := exec.Command("go", "test", "-mod=mod", ".")
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GOCACHE=/private/tmp/sqlc-ydb-go-build", "GOSUMDB=off")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("generated %s code does not compile:\n%s", opts.Runtime, out)
