@@ -1,0 +1,2 @@
+# Keep release scripts and generated fixtures identical across checkout platforms.
+* text=auto eol=lf

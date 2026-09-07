@@ -17,6 +17,10 @@ contents and expected diagnostics. Fixture updates are explicit, never an
 automatic part of tests. Semantic unit tests independently assert resolved
 parameters, result columns and errors.
 
+[Git attributes](../.gitattributes) keep text files in LF form on every host.
+Release scripts and generated fixtures must survive a Windows checkout without
+byte changes; `make test-release` checks this with `core.autocrlf=true`.
+
 CI separates this fast offline suite from Linux acceptance jobs. Each acceptance
 host runs a single pinned YDB service and waits for the image's health check;
 there is no multi-database startup framework, engine matrix, plugin subprocess
