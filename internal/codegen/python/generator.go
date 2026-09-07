@@ -279,7 +279,7 @@ func renderQueries(a *model.AnalysisResult, o Options) (string, error) {
 				return "", err
 			}
 		}
-		b.WriteString(constName(q.Name) + " = " + pyString(sql) + "\n\n")
+		b.WriteString(constName(q.Name) + " = " + pySQLString(sql) + "\n\n")
 	}
 	if o.Runtime == "ydb" {
 		b.WriteString(ydbHelpers)
@@ -677,6 +677,32 @@ func ydbTypeExpr(t model.Type) string {
 	return "ydb.PrimitiveType." + n
 }
 func pyString(s string) string { return strconv.Quote(s) }
+
+func pySQLString(s string) string {
+	var b strings.Builder
+	b.WriteString(`"""`)
+	for _, r := range s {
+		switch r {
+		case '\\':
+			b.WriteString(`\\`)
+		case '"':
+			b.WriteString(`\"`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\n', '\t':
+			b.WriteRune(r)
+		default:
+			if unicode.IsControl(r) {
+				quoted := strconv.QuoteRune(r)
+				b.WriteString(quoted[1 : len(quoted)-1])
+			} else {
+				b.WriteRune(r)
+			}
+		}
+	}
+	b.WriteString(`"""`)
+	return b.String()
+}
 func constName(s string) string {
 	x := strings.ToUpper(snake(s))
 	if x == "" {

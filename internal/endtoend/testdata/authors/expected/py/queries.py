@@ -4,7 +4,9 @@ from typing import Iterable, Optional
 from . import models
 import ydb
 
-SQL_GET_AUTHOR = "-- name: GetAuthor :one\nDECLARE $author_id AS Uint64;\nSELECT id, name, bio FROM authors WHERE id = $author_id;"
+SQL_GET_AUTHOR = """-- name: GetAuthor :one
+DECLARE $author_id AS Uint64;
+SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;"""
 
 
 def _row_value(row, name, index):

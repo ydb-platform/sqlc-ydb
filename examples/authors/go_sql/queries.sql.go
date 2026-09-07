@@ -7,7 +7,9 @@ import (
 	"database/sql"
 )
 
-const getAuthor = "-- name: GetAuthor :one\nDECLARE $author_id AS Uint64;\nSELECT id, name, bio FROM authors WHERE id = $author_id;"
+const getAuthor = `-- name: GetAuthor :one
+DECLARE $author_id AS Uint64;
+SELECT id, name, bio FROM authors WHERE id = $author_id;`
 
 func (q *Queries) GetAuthor(ctx context.Context, author_id uint64) (GetAuthorRow, error) {
 	var row GetAuthorRow
@@ -15,7 +17,8 @@ func (q *Queries) GetAuthor(ctx context.Context, author_id uint64) (GetAuthorRow
 	return row, err
 }
 
-const listAuthors = "-- name: ListAuthors :many\nSELECT id, name, bio FROM authors ORDER BY id;"
+const listAuthors = `-- name: ListAuthors :many
+SELECT id, name, bio FROM authors ORDER BY id;`
 
 func (q *Queries) ListAuthors(ctx context.Context) ([]ListAuthorsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listAuthors)
@@ -34,7 +37,9 @@ func (q *Queries) ListAuthors(ctx context.Context) ([]ListAuthorsRow, error) {
 	return items, rows.Err()
 }
 
-const getAuthorName = "-- name: GetAuthorName :one\nDECLARE $author_id AS Uint64;\nSELECT name FROM authors WHERE id = $author_id;"
+const getAuthorName = `-- name: GetAuthorName :one
+DECLARE $author_id AS Uint64;
+SELECT name FROM authors WHERE id = $author_id;`
 
 func (q *Queries) GetAuthorName(ctx context.Context, author_id uint64) (GetAuthorNameRow, error) {
 	var row GetAuthorNameRow
@@ -42,14 +47,21 @@ func (q *Queries) GetAuthorName(ctx context.Context, author_id uint64) (GetAutho
 	return row, err
 }
 
-const upsertAuthor = "-- name: UpsertAuthor :exec\nDECLARE $author_id AS Uint64;\nDECLARE $author_name AS Utf8;\nDECLARE $biography AS Optional<Utf8>;\nUPSERT INTO authors (id, name, bio)\nVALUES ($author_id, $author_name, $biography);"
+const upsertAuthor = `-- name: UpsertAuthor :exec
+DECLARE $author_id AS Uint64;
+DECLARE $author_name AS Utf8;
+DECLARE $biography AS Optional<Utf8>;
+UPSERT INTO authors (id, name, bio)
+VALUES ($author_id, $author_name, $biography);`
 
 func (q *Queries) UpsertAuthor(ctx context.Context, arg UpsertAuthorParams) error {
 	_, err := q.db.ExecContext(ctx, upsertAuthor, sql.Named("author_id", arg.AuthorID), sql.Named("author_name", arg.AuthorName), sql.Named("biography", arg.Biography))
 	return err
 }
 
-const deleteAuthor = "-- name: DeleteAuthor :exec\nDECLARE $author_id AS Uint64;\nDELETE FROM authors WHERE id = $author_id;"
+const deleteAuthor = `-- name: DeleteAuthor :exec
+DECLARE $author_id AS Uint64;
+DELETE FROM authors WHERE id = $author_id;`
 
 func (q *Queries) DeleteAuthor(ctx context.Context, author_id uint64) error {
 	_, err := q.db.ExecContext(ctx, deleteAuthor, sql.Named("author_id", author_id))

@@ -117,6 +117,64 @@ func TestSQLAlchemyParameterScannerPreservesLiterals(t *testing.T) {
 	}
 }
 
+func TestGeneratedMultilineSQLConstantIsReadableAndRoundTrips(t *testing.T) {
+	queries := []struct {
+		name string
+		sql  string
+	}{
+		{"multiline_sql", "-- Привет\r\n\tSELECT \"\"\"quoted\"\"\" AS text;\r\n\\"},
+		{"trailing_single_quote", `SELECT "`},
+		{"trailing_double_quote", `SELECT ""`},
+		{"four_quotes", `SELECT """"`},
+		{"five_quotes", `SELECT """""`},
+	}
+	a := &model.AnalysisResult{}
+	for _, q := range queries {
+		a.Queries = append(a.Queries, model.AnalyzedQuery{Name: q.name, Command: model.Exec, SQL: q.sql})
+	}
+	files, err := Generate(a, Options{Runtime: "dbapi", EmitSyncQuerier: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(files[1].Content)
+	start := strings.Index(source, "SQL_MULTILINE_SQL = ")
+	if start < 0 {
+		t.Fatalf("missing SQL constant: %s", source)
+	}
+	literal := source[start : start+strings.Index(source[start:], "\n\n")]
+	if !strings.HasPrefix(literal, "SQL_MULTILINE_SQL = \"\"\"") || strings.Contains(literal, `\n`) {
+		t.Fatalf("SQL constant is not a readable multiline literal: %q", literal)
+	}
+	if !strings.Contains(literal, "\n\tSELECT") || strings.Contains(literal, `\tSELECT`) {
+		t.Fatalf("SQL literal did not retain tab indentation: %q", literal)
+	}
+	if !strings.Contains(literal, `\"\"\"quoted\"\"\"`) || !strings.HasSuffix(literal, `\\"""`) {
+		t.Fatalf("SQL literal did not safely escape quote delimiters or a trailing backslash: %q", literal)
+	}
+	dir := t.TempDir()
+	pkg := filepath.Join(dir, "db")
+	if err := os.Mkdir(pkg, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if err := os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "ydb.py"), []byte(""), 0600); err != nil {
+		t.Fatal(err)
+	}
+	script := fmt.Sprintf("import sys; sys.path.insert(0, %q); from db import queries\n", dir)
+	for _, q := range queries {
+		script += fmt.Sprintf("assert queries.SQL_%s == %q, repr(queries.SQL_%s)\n", strings.ToUpper(q.name), q.sql, strings.ToUpper(q.name))
+	}
+	cmd := exec.Command("python3", "-c", script)
+	cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("multiline SQL did not round-trip through Python: %v\n%s\n%s", err, out, source)
+	}
+}
+
 func TestGeneratedYDBQuerierWithMockAdapter(t *testing.T) {
 	a := sampleAnalysis()
 	a.Queries = a.Queries[:1]

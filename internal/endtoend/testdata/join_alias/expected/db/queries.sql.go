@@ -8,7 +8,9 @@ import (
 	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 
-const listAuthorBooks = "-- name: ListAuthorBooks :many\nSELECT a.id AS author_id, a.name AS author_name, b.title AS book_title\nFROM authors AS a JOIN books AS b ON a.id = b.author_id;"
+const listAuthorBooks = `-- name: ListAuthorBooks :many
+SELECT a.id AS author_id, a.name AS author_name, b.title AS book_title
+FROM authors AS a JOIN books AS b ON a.id = b.author_id;`
 
 func (q *Queries) ListAuthorBooks(ctx context.Context) ([]ListAuthorBooksRow, error) {
 	result, err := q.db.QueryResultSet(ctx, listAuthorBooks)

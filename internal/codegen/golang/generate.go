@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/model"
 )
@@ -307,7 +308,7 @@ func queryFile(source string, qs []model.AnalyzedQuery, o Options) []byte {
 }
 
 func writeQuery(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
-	c := "const " + lower(q.Name) + " = " + strconv.Quote(q.SQL) + "\n\n"
+	c := "const " + lower(q.Name) + " = " + sqlLiteral(q.SQL) + "\n\n"
 	b.WriteString(c)
 	ret := "error"
 	if q.Command == model.One {
@@ -327,6 +328,22 @@ func writeQuery(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 		writeYDB(b, q, args, o)
 	}
 	b.WriteString("}\n\n")
+}
+
+func sqlLiteral(sql string) string {
+	if !strings.ContainsAny(sql, "`\r\x00") && utf8.ValidString(sql) {
+		return "`" + sql + "`"
+	}
+	// Keep each SQL line intact when raw strings cannot represent its contents.
+	// SplitAfter retains line endings, including the final newline if present.
+	lines := strings.SplitAfter(sql, "\n")
+	if lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	for i, line := range lines {
+		lines[i] = strconv.Quote(line)
+	}
+	return strings.Join(lines, " +\n")
 }
 
 func methodArgs(q model.AnalyzedQuery) (string, string) {

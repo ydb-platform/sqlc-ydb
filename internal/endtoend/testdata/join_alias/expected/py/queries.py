@@ -9,7 +9,9 @@ def _typed(value, typ):
     return (value, typ)
 
 
-SQL_LIST_AUTHOR_BOOKS = "-- name\\: ListAuthorBooks \\:many\nSELECT a.id AS author_id, a.name AS author_name, b.title AS book_title\nFROM authors AS a JOIN books AS b ON a.id = b.author_id;"
+SQL_LIST_AUTHOR_BOOKS = """-- name\\: ListAuthorBooks \\:many
+SELECT a.id AS author_id, a.name AS author_name, b.title AS book_title
+FROM authors AS a JOIN books AS b ON a.id = b.author_id;"""
 
 
 def _row_value(row, name, index):

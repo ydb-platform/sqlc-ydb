@@ -7,7 +7,9 @@ import (
 	"database/sql"
 )
 
-const getAuthor = "-- name: GetAuthor :one\nDECLARE $author_id AS Uint64;\nSELECT id, name, bio FROM authors WHERE id = $author_id;"
+const getAuthor = "-- name: GetAuthor :one\n" +
+	"DECLARE $author_id AS Uint64;\n" +
+	"SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;"
 
 func (q *Queries) GetAuthor(ctx context.Context, author_id uint64) (GetAuthorRow, error) {
 	var row GetAuthorRow

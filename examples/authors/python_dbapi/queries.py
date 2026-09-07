@@ -4,15 +4,27 @@ from typing import Iterable, Optional
 from . import models
 import ydb
 
-SQL_GET_AUTHOR = "-- name: GetAuthor :one\nDECLARE $author_id AS Uint64;\nSELECT id, name, bio FROM authors WHERE id = $author_id;"
+SQL_GET_AUTHOR = """-- name: GetAuthor :one
+DECLARE $author_id AS Uint64;
+SELECT id, name, bio FROM authors WHERE id = $author_id;"""
 
-SQL_LIST_AUTHORS = "-- name: ListAuthors :many\nSELECT id, name, bio FROM authors ORDER BY id;"
+SQL_LIST_AUTHORS = """-- name: ListAuthors :many
+SELECT id, name, bio FROM authors ORDER BY id;"""
 
-SQL_GET_AUTHOR_NAME = "-- name: GetAuthorName :one\nDECLARE $author_id AS Uint64;\nSELECT name FROM authors WHERE id = $author_id;"
+SQL_GET_AUTHOR_NAME = """-- name: GetAuthorName :one
+DECLARE $author_id AS Uint64;
+SELECT name FROM authors WHERE id = $author_id;"""
 
-SQL_UPSERT_AUTHOR = "-- name: UpsertAuthor :exec\nDECLARE $author_id AS Uint64;\nDECLARE $author_name AS Utf8;\nDECLARE $biography AS Optional<Utf8>;\nUPSERT INTO authors (id, name, bio)\nVALUES ($author_id, $author_name, $biography);"
+SQL_UPSERT_AUTHOR = """-- name: UpsertAuthor :exec
+DECLARE $author_id AS Uint64;
+DECLARE $author_name AS Utf8;
+DECLARE $biography AS Optional<Utf8>;
+UPSERT INTO authors (id, name, bio)
+VALUES ($author_id, $author_name, $biography);"""
 
-SQL_DELETE_AUTHOR = "-- name: DeleteAuthor :exec\nDECLARE $author_id AS Uint64;\nDELETE FROM authors WHERE id = $author_id;"
+SQL_DELETE_AUTHOR = """-- name: DeleteAuthor :exec
+DECLARE $author_id AS Uint64;
+DELETE FROM authors WHERE id = $author_id;"""
 
 
 def _typed(value, typ):

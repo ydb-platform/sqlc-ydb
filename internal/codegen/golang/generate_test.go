@@ -3,6 +3,11 @@ package golang
 import (
 	"context"
 	"fmt"
+	"go/ast"
+	"go/constant"
+	"go/parser"
+	"go/token"
+	"go/types"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +26,65 @@ func sample() *model.AnalysisResult {
 		{Name: "ListUsers", Command: model.Many, SQL: "SELECT `id`, `name` FROM `users`;", ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}}, {Name: "name", Type: utf8}}}}},
 		{Name: "UpdateUser", Command: model.Exec, SQL: "DECLARE $name AS Utf8; DECLARE $bio AS Optional<Utf8>; UPDATE `users` SET name = $name, bio = $bio;", Parameters: []model.Parameter{{Name: "name", Type: utf8}, {Name: "bio", Type: model.Optional(utf8)}}},
 	}}
+}
+
+func TestGeneratedSQLIsMultilineAndPreservesText(t *testing.T) {
+	for _, tc := range []struct {
+		sql, wantLiteral string
+	}{
+		{"-- name: GetUser :one\nDECLARE $id AS Uint64;\nSELECT id, bio FROM users WHERE id = $id;", "`-- name: GetUser :one\n"},
+		{"-- name: GetUser :one\nSELECT `id`, `bio` FROM `users`\nWHERE name = 'Автор' AND path = 'C:\\data';", "\"-- name: GetUser :one\\n\" +\n"},
+		{"-- name: GetUser :one\r\nSELECT id, bio FROM users;\r\n", "\"-- name: GetUser :one\\r\\n\" +\n"},
+		{"-- name: GetUser :one\nSELECT '\x00' FROM users;", "\"-- name: GetUser :one\\n\" +\n"},
+	} {
+		for _, runtime := range []string{"database/sql", "ydb"} {
+			in := sample()
+			in.Queries = in.Queries[:1]
+			in.Queries[0].SQL = tc.sql
+			files, err := Generate(in, Options{Package: "db", Runtime: runtime})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var source []byte
+			for _, file := range files {
+				if file.Name == "query.sql.go" {
+					source = file.Content
+				}
+			}
+			if !strings.Contains(string(source), "const getUser = "+tc.wantLiteral) {
+				t.Fatalf("%s SQL is not a readable multiline literal:\n%s", runtime, source)
+			}
+			if strings.Contains(tc.sql, "`id`") && !strings.Contains(string(source), "\"SELECT `id`, `bio` FROM `users`\\n\"") {
+				t.Fatalf("quoted identifiers split across Go literals:\n%s", source)
+			}
+			fset := token.NewFileSet()
+			file, err := parser.ParseFile(fset, "query.sql.go", source, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			found := false
+			ast.Inspect(file, func(node ast.Node) bool {
+				decl, ok := node.(*ast.ValueSpec)
+				if !ok || len(decl.Names) != 1 || decl.Names[0].Name != "getUser" {
+					return true
+				}
+				found = true
+				expr := decl.Values[0]
+				start, end := fset.Position(expr.Pos()).Offset, fset.Position(expr.End()).Offset
+				value, err := types.Eval(fset, nil, token.NoPos, string(source[start:end]))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got := constant.StringVal(value.Value); got != tc.sql {
+					t.Fatalf("%s SQL changed: got %q, want %q", runtime, got, tc.sql)
+				}
+				return false
+			})
+			if !found {
+				t.Fatal("generated SQL constant missing")
+			}
+		}
+	}
 }
 
 // TestLiveYDB is deliberately opt-in: it creates and drops its own table on the
