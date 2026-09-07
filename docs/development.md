@@ -22,8 +22,20 @@ and baseline update command.
 
 Generator tests compile generated Go against the selected SDK in a temporary
 module and execute generated code using mock adapters. Python 3.9 or newer must
-be available as `python3` for the Python generator's execution tests. A normal
-generator build has no dependency on Python.
+be available as `python3` for the Python generator's execution tests. Java 17+
+(`javac` and `java`) and a C++20 compiler are used for exact SQL literal
+round-trip checks. A normal generator build needs only Go.
+
+Published SDK checks are opt-in locally and enabled in CI:
+
+```sh
+SQLC_YDB_CSHARP_DOTNET=dotnet go test ./internal/codegen/csharp
+SQLC_YDB_TEST_MAVEN=mvn go test ./internal/codegen/java
+```
+
+These compile every supported scalar and nullable scalar binding using the
+real .NET and Java dependencies. C# also compiles and runs its SQL byte checks.
+No generated runtime imports are added to the generator's Go module.
 
 The authors example keeps its Go module and tests in `go/`, and Python packages,
 requirements and tests in `python/`. Schema, queries and generator configuration
@@ -49,6 +61,12 @@ containers; memory limits are a known constraint for these tests.
 The `make test` and `make check` targets also serialize Go packages, so setting
 the live-test environment variables does not accidentally run language suites
 in parallel.
+
+C# and the four Java profiles run in successive acceptance steps too. C++ uses
+the pinned userver/SDK development image to compile both executables before
+starting local-ydb; native and userver runtime probes then execute sequentially.
+The test image and its CMake packaging workaround are in
+`examples/authors/cpp/Dockerfile`; see [C++](cpp.md) for commands.
 
 ```sh
 SQLC_YDB_TEST_DSN=grpc://localhost:2136/local go test -p 1 -count=1 -timeout=180s ./internal/codegen/golang -run TestLiveYDB -v
@@ -77,6 +95,18 @@ this directory so the generated `python/sqlalchemy` package does not shadow
 the installed SQLAlchemy library.
 Integration checks include the maximum Uint64 value, UTF-8 text, optional values,
 single-column projections, list queries, writes and missing rows.
+
+From `examples/authors`, the additional live checks are:
+
+```sh
+SQLC_YDB_TEST_DSN='Host=localhost;Port=2136;Database=/local' \
+  dotnet run --project csharp/adonet/Authors.AdoNet.csproj
+SQLC_YDB_TEST_DSN=grpc://localhost:2136/local sh java/run-smoke.sh
+```
+
+Each creates and drops its own `authors` table only after a successful create.
+Use an otherwise empty disposable database. Java/.NET runtime builds and tests
+are separate from offline SQL generation.
 
 Build a container with `docker build -t sqlc-ydb:dev .`. The ANTLR-generated Go
 parser is large; the Docker build limits compile concurrency and uses more

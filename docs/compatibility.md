@@ -12,6 +12,10 @@ internal data structures and source history are not a dependency.
   message. A new generator must be implemented in this repository.
 - `gen.python` selects a built-in generator. `runtime` chooses `ydb`, `dbapi`, or
   `sqlalchemy`. Go adds `sql_package: ydb` alongside `database/sql`.
+- `gen.cpp` selects `runtime: ydb|userver`; `gen.java` selects
+  `runtime: ydb|jdbc|spring|hibernate`. `native` is an alias for `ydb` in these
+  two targets. `gen.csharp` uses the modern YDB ADO.NET SDK without a runtime
+  selector: the SDK's native API is already ADO.NET.
 - No intermediate AST. ANTLR parse contexts feed semantic analysis directly.
 
 ## Implemented workflow
@@ -32,6 +36,9 @@ internal data structures and source history are not a dependency.
 - Python options `package`, `out`, `runtime`, `emit_sync_querier`,
   `emit_async_querier`. Synchronous generation defaults to enabled; requesting
   asynchronous generation currently fails explicitly.
+- C++ options `namespace`, `out`, `runtime`; C# options `namespace`, `out`;
+  Java options `package`, `out`, `runtime`. These are built-in extensions to
+  the sqlc configuration shape, not external plugin options.
 - Unknown configuration options produce errors. Generation never silently
   discards an option that has not been implemented.
 

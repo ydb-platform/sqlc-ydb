@@ -12,7 +12,10 @@ import (
 	"strings"
 
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/analyzer"
+	"github.com/ydb-platform/sqlc-engine-ydb/internal/codegen/cpp"
+	"github.com/ydb-platform/sqlc-engine-ydb/internal/codegen/csharp"
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/codegen/golang"
+	"github.com/ydb-platform/sqlc-engine-ydb/internal/codegen/java"
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/codegen/python"
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/config"
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/model"
@@ -21,7 +24,7 @@ import (
 
 var Version = "0.1.0-dev"
 
-const help = `sqlc-ydb generates typed Go and Python code from YQL.
+const help = `sqlc-ydb generates typed code from YQL.
 
 Usage:
   sqlc-ydb <command> [-f sqlc.yaml]
@@ -194,8 +197,8 @@ func prepare(c *config.Config, generate bool) ([]output, error) {
 		if !generate {
 			continue
 		}
-		if s.Gen.Go == nil && s.Gen.Python == nil {
-			return nil, errors.New("generation requires gen.go or gen.python")
+		if s.Gen.Go == nil && s.Gen.Python == nil && s.Gen.CSharp == nil && s.Gen.Java == nil && s.Gen.CPP == nil {
+			return nil, errors.New("generation requires a built-in generator in gen")
 		}
 		add := func(dir string, files []model.File) error {
 			if !filepath.IsAbs(dir) {
@@ -233,6 +236,33 @@ func prepare(c *config.Config, generate bool) ([]output, error) {
 				return nil, fmt.Errorf("Python generation: %w", err)
 			}
 			if err := add(p.Out, files); err != nil {
+				return nil, err
+			}
+		}
+		if g := s.Gen.CSharp; g != nil {
+			files, err := csharp.Generate(result, csharp.Options{Namespace: g.Namespace})
+			if err != nil {
+				return nil, fmt.Errorf("C# generation: %w", err)
+			}
+			if err := add(g.Out, files); err != nil {
+				return nil, err
+			}
+		}
+		if g := s.Gen.Java; g != nil {
+			files, err := java.Generate(result, java.Options{Package: g.Package, Runtime: g.Runtime})
+			if err != nil {
+				return nil, fmt.Errorf("Java generation: %w", err)
+			}
+			if err := add(g.Out, files); err != nil {
+				return nil, err
+			}
+		}
+		if g := s.Gen.CPP; g != nil {
+			files, err := cpp.Generate(result, cpp.Options{Namespace: g.Namespace, Runtime: g.Runtime})
+			if err != nil {
+				return nil, fmt.Errorf("C++ generation: %w", err)
+			}
+			if err := add(g.Out, files); err != nil {
 				return nil, err
 			}
 		}

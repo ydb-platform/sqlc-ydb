@@ -1,0 +1,38 @@
+components_manager:
+    task_processors:
+        main-task-processor:
+            worker_threads: 2
+        fs-task-processor:
+            worker_threads: 1
+    default_task_processor: main-task-processor
+    components:
+        server:
+            listener:
+                port: 8080
+                task_processor: main-task-processor
+        logging:
+            fs-task-processor: fs-task-processor
+            loggers:
+                default:
+                    file_path: '@stderr'
+                    level: info
+                    overflow_behavior: discard
+        default-secdist-provider:
+            inline: {}
+        dynamic-config:
+            updates-enabled: false
+            fs-task-processor: fs-task-processor
+        ydb:
+            operation-settings:
+                client-timeout: 2s
+                retries: 3
+            databases:
+                authors:
+                    endpoint: $ydb-endpoint
+                    database: $ydb-database
+                    min_pool_size: 1
+                    max_pool_size: 2
+        handler-authors-smoke:
+            method: GET
+            path: /smoke
+            task_processor: main-task-processor

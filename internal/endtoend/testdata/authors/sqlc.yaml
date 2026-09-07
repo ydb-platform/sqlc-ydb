@@ -10,3 +10,42 @@ sql:
       python:
         out: py
         runtime: ydb
+      cpp:
+        namespace: authors::native
+        out: cpp/native
+        runtime: ydb
+      csharp:
+        namespace: Authors.AdoNet
+        out: cs
+      java:
+        package: authors.nativeapi
+        out: java/native
+        runtime: ydb
+  - engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      cpp:
+        namespace: authors::userver
+        out: cpp/userver
+        runtime: userver
+      java:
+        package: authors.jdbc
+        out: java/jdbc
+        runtime: jdbc
+  - engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      java:
+        package: authors.spring
+        out: java/spring
+        runtime: spring
+  - engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      java:
+        package: authors.hibernate
+        out: java/hibernate
+        runtime: hibernate

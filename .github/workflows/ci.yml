@@ -14,10 +14,24 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
       - name: Build and test standalone generator
         run: |
-          go test ./...
+          go test -p 1 ./...
           make build
+      - name: Compile all generated scalar bindings against published SDKs
+        env:
+          SQLC_YDB_CSHARP_DOTNET: dotnet
+          SQLC_YDB_TEST_MAVEN: mvn
+          DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+        run: go test -p 1 -count=1 ./internal/codegen/csharp ./internal/codegen/java
       - name: Verify generated examples
         run: |
           ./bin/sqlc-ydb compile -f examples/authors/sqlc.yaml
@@ -29,7 +43,7 @@ jobs:
 
   ydb-acceptance:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     services:
       ydb:
         image: ydbplatform/local-ydb:26.3.1.8
@@ -54,6 +68,14 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
       - name: Install tested Python runtimes
         run: python3 -m pip install -r examples/authors/python/requirements.txt
       # Keep local-ydb acceptance sequential: concurrent tests/compilers can
@@ -70,3 +92,45 @@ jobs:
           go test -p 1 -count=1 -timeout=90s ./... -v
           cd ..
           python3 -m python.smoke
+      - name: Run C# ADO.NET example
+        working-directory: examples/authors
+        env:
+          SQLC_YDB_TEST_DSN: Host=localhost;Port=2136;Database=/local
+          DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+        run: dotnet run --project csharp/adonet/Authors.AdoNet.csproj
+      - name: Run Java native, JDBC, Spring and Hibernate examples sequentially
+        run: sh examples/authors/java/run-smoke.sh
+
+  cpp-acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      # Finish SDK compilation before starting YDB on this host.
+      - name: Build C++ native and userver examples with the pinned SDK image
+        run: |
+          docker build -t sqlc-ydb-cpp-tests -f examples/authors/cpp/Dockerfile examples/authors/cpp
+          docker run --rm -v "$PWD:/workspace" -w /workspace sqlc-ydb-cpp-tests \
+            bash -lc 'cmake -S examples/authors/cpp -B examples/authors/cpp/build -GNinja -DCMAKE_PREFIX_PATH=/usr/share/yandex && cmake --build examples/authors/cpp/build --target authors_native authors_userver -j1'
+      - name: Start one disposable YDB service
+        run: |
+          docker run -d --name sqlc-ydb-cpp-server --hostname localhost \
+            -p 2136:2136 -e GRPC_PORT=2136 \
+            -e YDB_USE_IN_MEMORY_PDISKS=true -e YDB_DEFAULT_LOG_LEVEL=ERROR \
+            ydbplatform/local-ydb:26.3.1.8
+          for attempt in {1..60}; do
+            if timeout 10 docker exec sqlc-ydb-cpp-server /health_check; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs --tail 100 sqlc-ydb-cpp-server
+          exit 1
+      - name: Run C++ native and userver examples sequentially
+        run: |
+          docker run --rm --network host -v "$PWD:/workspace" -w /workspace \
+            -e SQLC_YDB_TEST_DSN=grpc://localhost:2136/local \
+            sqlc-ydb-cpp-tests bash examples/authors/cpp/run-smoke.sh
+      - name: Stop the disposable YDB service
+        if: always()
+        run: docker rm -f sqlc-ydb-cpp-server || true

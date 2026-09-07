@@ -51,9 +51,29 @@ type Python struct {
 	EmitAsyncQuerier bool   `yaml:"emit_async_querier"`
 }
 
+type CPP struct {
+	Namespace string `yaml:"namespace"`
+	Out       string `yaml:"out"`
+	Runtime   string `yaml:"runtime"`
+}
+
+type CSharp struct {
+	Namespace string `yaml:"namespace"`
+	Out       string `yaml:"out"`
+}
+
+type Java struct {
+	Package string `yaml:"package"`
+	Out     string `yaml:"out"`
+	Runtime string `yaml:"runtime"`
+}
+
 type Gen struct {
 	Go     *Go     `yaml:"go"`
 	Python *Python `yaml:"python"`
+	CPP    *CPP    `yaml:"cpp"`
+	CSharp *CSharp `yaml:"csharp"`
+	Java   *Java   `yaml:"java"`
 }
 
 type SQL struct {
@@ -207,10 +227,48 @@ func Parse(data []byte) (*Config, error) {
 				return nil, errors.New("Python requires emit_sync_querier or emit_async_querier")
 			}
 		}
+		if g := s.Gen.CPP; g != nil {
+			if g.Out == "" {
+				return nil, fmt.Errorf("sql[%d].gen.cpp.out is required", i)
+			}
+			if g.Namespace == "" {
+				g.Namespace = "db"
+			}
+			if g.Runtime == "" || g.Runtime == "native" {
+				g.Runtime = "ydb"
+			}
+			if g.Runtime != "ydb" && g.Runtime != "userver" {
+				return nil, fmt.Errorf("sql[%d]: unsupported C++ runtime %q", i, g.Runtime)
+			}
+		}
+		if g := s.Gen.CSharp; g != nil {
+			if g.Out == "" {
+				return nil, fmt.Errorf("sql[%d].gen.csharp.out is required", i)
+			}
+			if g.Namespace == "" {
+				g.Namespace = "Db"
+			}
+		}
+		if g := s.Gen.Java; g != nil {
+			if g.Out == "" {
+				return nil, fmt.Errorf("sql[%d].gen.java.out is required", i)
+			}
+			if g.Package == "" {
+				g.Package = "db"
+			}
+			if g.Runtime == "" || g.Runtime == "native" {
+				g.Runtime = "ydb"
+			}
+			switch g.Runtime {
+			case "ydb", "jdbc", "spring", "hibernate":
+			default:
+				return nil, fmt.Errorf("sql[%d]: unsupported Java runtime %q", i, g.Runtime)
+			}
+		}
 	}
 	return &c, nil
 }
 
 func pluginError() error {
-	return errors.New("external plugins and codegen are not supported: migrate to sql[].gen.go or sql[].gen.python; generators are built into sqlc-ydb")
+	return errors.New("external plugins and codegen are not supported: migrate to built-in sql[].gen.go, python, cpp, csharp or java generators")
 }

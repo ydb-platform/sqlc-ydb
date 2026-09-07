@@ -1,6 +1,6 @@
 # sqlc-ydb
 
-Generate typed Go and Python query code from YQL for YDB. One executable contains
+Generate typed Go, Python, C++, C#, and Java query code from YQL for YDB. One executable contains
 the parser, semantic analyzer, and generators. Generation works offline and does
 not require a running YDB, Python, or any separately installed codegen plugin.
 
@@ -18,13 +18,16 @@ go build -o bin/sqlc-ydb ./cmd/sqlc-ydb
 ./bin/sqlc-ydb diff -f examples/authors/sqlc.yaml
 ```
 
-The example generates Go using the native YDB SDK and `database/sql`, and Python
-using the native SDK, DB-API, and SQLAlchemy. The generated application needs the
+The example generates Go using the native YDB SDK and `database/sql`; Python
+using the native SDK, DB-API, and SQLAlchemy; C++ using the native SDK and userver;
+C# using `Ydb.Sdk.Ado`; and Java using the native SDK, JDBC, Spring JDBC, and
+Hibernate. The generated application needs the
 corresponding runtime library; the generator itself does not.
 
 The example groups generated code and dependencies by language:
 `go/database/sql`, `go/native`, `python/dbapi`, `python/sqlalchemy`, and
-`python/native`. Shared `schema.sql`, `queries.sql`, and `sqlc.yaml` stay in
+`python/native`, `cpp/native`, `cpp/userver`, `csharp/adonet`, and
+`java/{native,jdbc,spring,hibernate}`. Shared `schema.sql`, `queries.sql`, and `sqlc.yaml` stay in
 `examples/authors`.
 
 ```yaml
@@ -59,7 +62,7 @@ exits with status 1 if generated contents differ.
 The familiar sqlc workflow is the compatibility target. This project has its own
 implementation and release cycle. It supports only YDB, with built-in generators;
 external engine/codegen plugins and their protocols are intentionally excluded.
-Plugin configurations require migration to `gen.go` / `gen.python`.
+Plugin configurations require migration to built-in `gen` entries.
 
 The analyzer reads the ANTLR YQL parse tree directly. It resolves names and types
 before generators see a query. The shared semantic result describes parameters
@@ -68,5 +71,6 @@ unresolved types must produce an error rather than an untyped fallback.
 
 See [compatibility](docs/compatibility.md), [targets](docs/targets.md),
 [architecture](docs/architecture.md), and [development](docs/development.md) for
-the implemented scope and remaining work. More languages follow after the Go and
-Python pipeline is established.
+the implemented scope and remaining work. Target-specific configuration and
+examples are described in [C++](docs/cpp.md), [C#](docs/csharp.md), and
+[Java](docs/java.md).

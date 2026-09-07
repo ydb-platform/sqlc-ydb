@@ -16,6 +16,17 @@ sql:
         package: authors
         out: python/native
         runtime: ydb
+      csharp:
+        namespace: Authors.AdoNet
+        out: csharp/adonet
+      cpp:
+        namespace: authors::native
+        out: cpp/native
+        runtime: ydb
+      java:
+        package: authors.nativeapi
+        out: java/native/src/main/java/authors/nativeapi
+        runtime: ydb
   - name: portable
     engine: ydb
     schema: schema.sql
@@ -29,6 +40,10 @@ sql:
         package: authors
         out: python/dbapi
         runtime: dbapi
+      java:
+        package: authors.jdbc
+        out: java/jdbc/src/main/java/authors/jdbc
+        runtime: jdbc
   - name: sqlalchemy
     engine: ydb
     schema: schema.sql
@@ -39,3 +54,25 @@ sql:
         out: python/sqlalchemy
         runtime: sqlalchemy
         emit_sync_querier: true
+  - name: spring
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      java:
+        package: authors.spring
+        out: java/spring/src/main/java/authors/spring
+        runtime: spring
+      cpp:
+        namespace: authors::userver
+        out: cpp/userver
+        runtime: userver
+  - name: hibernate
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      java:
+        package: authors.hibernate
+        out: java/hibernate/src/main/java/authors/hibernate
+        runtime: hibernate

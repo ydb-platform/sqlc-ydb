@@ -7,6 +7,9 @@ flowchart LR
   C --> D[Resolved catalog and queries]
   D --> E[Built-in Go generator]
   D --> F[Built-in Python generator]
+  D --> G[Built-in C++ generator]
+  D --> H[Built-in C# generator]
+  D --> I[Built-in Java generator]
 ```
 
 `internal/source` loads files and migration inputs. `internal/analyzer` owns
@@ -19,7 +22,7 @@ identity, parameters, result sets and source locations. Nullability is an
 `Optional` type, and compound type metadata is retained. A table catalog and a
 query projection are distinct: `SELECT name` does not generate the whole table.
 
-`internal/codegen/golang` and `internal/codegen/python` produce files from that
+The language packages in `internal/codegen` produce files from that
 resolved model. They handle naming, runtime-specific parameter binding, result
 decoding and resource lifetimes. They do not analyze SQL or load external code.
 Lexical adaptation of parameter placeholders for a driver is separate from
@@ -38,7 +41,7 @@ filesystem transaction covering every output.
   it and cannot serve as the semantic correctness baseline.
 - Do not add an intermediate AST. The typed analysis result is necessary for
   code generation and is not a syntax representation.
-- Start with Go and Python. C++, Java, C#, then JS/PHP/Rust follow later. SDK
+- Built-in generators cover Go, Python, C++, Java, and C#. JS/PHP/Rust follow later. SDK
   maintainers are already in the product team and can review generated APIs.
 - Track upstream product behavior and selectively adapt relevant tests. Record
   source provenance and retain license notices whenever code is copied.

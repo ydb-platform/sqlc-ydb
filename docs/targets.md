@@ -7,6 +7,13 @@
 | Python native SDK | `gen.python.runtime: ydb` | dataclasses and `Querier(QuerySessionPool)` |
 | Python DB-API | `gen.python.runtime: dbapi` | dataclasses and a connection-based `Querier` |
 | Python SQLAlchemy | `gen.python.runtime: sqlalchemy` | dataclasses and synchronous `Querier` |
+| C++ native SDK | `gen.cpp.runtime: ydb` | `Queries(TQueryClient&)`, structs, optional/vector results |
+| C++ userver | `gen.cpp.runtime: userver` | `Queries(TableClient&)`, userver YDB bindings |
+| C# ADO.NET | `gen.csharp` | async `Queries(YdbConnection)`, records, cancellation and transactions |
+| Java native SDK | `gen.java.runtime: ydb` | `Queries(SessionRetryContext)`, Java 17 records |
+| Java JDBC | `gen.java.runtime: jdbc` | `Queries(Connection)`, named YDB prepared statements |
+| Java Spring JDBC | `gen.java.runtime: spring` | `Queries(JdbcTemplate)`, framework-owned connections |
+| Java Hibernate | `gen.java.runtime: hibernate` | `Queries(Session)`, JDBC work inside the session |
 
 Output references: the legacy YDB generators preserved at archive commit
 `da046efe95d7ec65c13cd1f88a9f55804c322f73`, sqlc's Go generator, and
@@ -25,8 +32,23 @@ row exists. `:many` returns a Go slice or Python iterable. `:exec` returns only
 execution status. The selected YDB SDK/driver APIs do not expose a portable
 affected-row count, so all generators reject `:execrows`.
 
+C++ and Java `:one` results are optional; C# throws `InvalidOperationException`
+when no row exists. All
+return the first row when present. `:many` returns a typed collection. Java
+represents `Uint64` as the full 64-bit `long` bit pattern; use
+`Long.toUnsignedString` for unsigned decimal formatting. C++ uses `uint64_t`
+and C# uses `ulong`. Binary YQL `String` stays binary in every target.
+
+The C++/C#/Java generators initially cover scalar primitives and their optional
+forms. Unsupported temporal, decimal, or container types fail explicitly; see
+the individual [C++](cpp.md), [C#](csharp.md), and [Java](java.md) target docs.
+Spring and Hibernate integrations generate query projections and methods;
+they do not infer ORM entities from query results.
+
 Generated code uses caller-provided clients/connections. The caller controls
-connection lifetime, credentials and transactions. Generated DB-API code closes
+connection lifetime and credentials. Transaction behavior is target-specific:
+native C++ and Java execute a transaction per method; connection and framework
+profiles use the caller's transaction. Generated DB-API code closes
 its own cursors and does not commit caller-owned transactions.
 
 The verified `ydb-sqlalchemy` 0.1.22 has no asynchronous dialect. Requests for

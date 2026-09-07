@@ -1,0 +1,410 @@
+// Package java generates SQL-first Java APIs for the YDB SDK and JDBC integrations.
+package java
+
+import (
+	"fmt"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/ydb-platform/sqlc-engine-ydb/internal/model"
+)
+
+type Options struct{ Package, Runtime string }
+
+type scalar struct{ typ, boxed, sdk, jdbc, sqlType string }
+
+var scalars = map[string]scalar{
+	"Bool":   {"boolean", "Boolean", "Bool", "Boolean", "BOOLEAN"},
+	"Int8":   {"byte", "Byte", "Int8", "Byte", "TINYINT"},
+	"Uint8":  {"int", "Integer", "Uint8", "Int", "INTEGER"},
+	"Int16":  {"short", "Short", "Int16", "Short", "SMALLINT"},
+	"Uint16": {"int", "Integer", "Uint16", "Int", "INTEGER"},
+	"Int32":  {"int", "Integer", "Int32", "Int", "INTEGER"},
+	"Uint32": {"long", "Long", "Uint32", "Long", "BIGINT"},
+	"Int64":  {"long", "Long", "Int64", "Long", "BIGINT"},
+	"Uint64": {"long", "Long", "Uint64", "Long", "BIGINT"},
+	"Float":  {"float", "Float", "Float", "Float", "FLOAT"},
+	"Double": {"double", "Double", "Double", "Double", "DOUBLE"},
+	"Utf8":   {"String", "String", "Text", "String", "VARCHAR"},
+	"String": {"byte[]", "byte[]", "Bytes", "Bytes", "BINARY"},
+}
+
+func typeInfo(t model.Type) (scalar, string, error) {
+	s, ok := scalars[t.UnwrapOptional().Kind]
+	if !ok {
+		return s, "", fmt.Errorf("unsupported Java type %s", t.Kind)
+	}
+	if t.IsOptional() {
+		return s, s.boxed, nil
+	}
+	return s, s.typ, nil
+}
+
+var reserved = func() map[string]bool {
+	m := map[string]bool{}
+	for _, s := range strings.Fields("abstract assert boolean break byte case catch char class const continue default do double else enum extends final finally float for goto if implements import instanceof int interface long native new package private protected public return short static strictfp super switch synchronized this throw throws transient try void volatile while true false null _ record sealed permits var yield when clone finalize getClass hashCode notify notifyAll toString wait") {
+		m[s] = true
+	}
+	return m
+}()
+
+func identifier(s string) bool {
+	if s == "" || reserved[s] {
+		return false
+	}
+	for i, r := range s {
+		if !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || r == '_' || (i > 0 && r >= '0' && r <= '9')) {
+			return false
+		}
+	}
+	return true
+}
+
+func name(s string, upper bool) (string, error) {
+	var b strings.Builder
+	for _, r := range s {
+		if r == '_' || r == '-' || r == ' ' || r == '.' {
+			upper = true
+			continue
+		}
+		if upper && r >= 'a' && r <= 'z' {
+			r -= 'a' - 'A'
+		} else if b.Len() == 0 && !upper && r >= 'A' && r <= 'Z' {
+			r += 'a' - 'A'
+		}
+		b.WriteRune(r)
+		upper = false
+	}
+	n := b.String()
+	if reserved[n] {
+		n += "_"
+	}
+	if !identifier(n) {
+		return "", fmt.Errorf("cannot represent %q as a Java identifier", s)
+	}
+	return n, nil
+}
+
+// quoted also escapes backslashes preceding u: Java Unicode escapes are processed
+// before tokenization. Doubling every input backslash keeps them literal.
+func quoted(s string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '\\', '"':
+			b.WriteByte('\\')
+			b.WriteRune(r)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		default:
+			if r < 32 || r == 127 {
+				fmt.Fprintf(&b, "\\%03o", r)
+			} else {
+				b.WriteRune(r)
+			}
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
+}
+
+// sqlLiteral emits a Java 17 text block. Escaped quotes cannot close the block;
+// escaped trailing spaces survive incidental whitespace stripping. The final
+// continuation suppresses only the newline introduced by the closing delimiter.
+func sqlLiteral(s string) string {
+	var b strings.Builder
+	b.WriteString("\"\"\"\n")
+	for i, line := range strings.Split(s, "\n") {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		encoded := quoted(line)
+		encoded = encoded[1 : len(encoded)-1]
+		if strings.HasSuffix(encoded, " ") {
+			encoded = strings.TrimSuffix(encoded, " ") + `\s`
+		}
+		b.WriteString(encoded)
+	}
+	b.WriteString("\\\n\"\"\"")
+	return b.String()
+}
+
+func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
+	if a == nil {
+		return nil, fmt.Errorf("nil analysis result")
+	}
+	if len(a.Diagnostics) != 0 {
+		return nil, fmt.Errorf("cannot generate Java with analysis diagnostics")
+	}
+	if o.Package == "" {
+		o.Package = "db"
+	}
+	if o.Package == "java" || strings.HasPrefix(o.Package, "java.") {
+		return nil, fmt.Errorf("invalid Java package %q: java packages are reserved by the JVM", o.Package)
+	}
+	for _, p := range strings.Split(o.Package, ".") {
+		if !identifier(p) {
+			return nil, fmt.Errorf("invalid Java package %q", o.Package)
+		}
+	}
+	if o.Runtime == "" || o.Runtime == "native" {
+		o.Runtime = "ydb"
+	}
+	if o.Runtime != "ydb" && o.Runtime != "jdbc" && o.Runtime != "spring" && o.Runtime != "hibernate" {
+		return nil, fmt.Errorf("unsupported Java runtime %q", o.Runtime)
+	}
+	header := "// Code generated by sqlc-ydb. DO NOT EDIT.\npackage " + o.Package + ";\n\n"
+	files := []model.File{}
+	types := map[string]bool{"Queries": true, "String": true, "Long": true, "Integer": true, "Short": true, "Byte": true, "Boolean": true, "Float": true, "Double": true}
+	for _, n := range []string{"SessionRetryContext", "QueryReader", "TxMode", "Params", "PrimitiveValue", "PrimitiveType", "OptionalType", "IllegalStateException"} {
+		types[n] = true
+	}
+	addRecord := func(n string, cols []model.Column) error {
+		if types[n] {
+			return fmt.Errorf("Java type name collision: %s", n)
+		}
+		types[n] = true
+		fields := []string{}
+		seen := map[string]bool{}
+		for _, c := range cols {
+			field, err := name(c.Name, false)
+			if err != nil {
+				return err
+			}
+			if seen[field] {
+				return fmt.Errorf("Java field name collision in %s: %s", n, field)
+			}
+			seen[field] = true
+			_, t, err := typeInfo(c.Type)
+			if err != nil {
+				return fmt.Errorf("%s.%s: %w", n, c.Name, err)
+			}
+			fields = append(fields, t+" "+field)
+		}
+		files = append(files, model.File{Name: n + ".java", Content: []byte(header + "public record " + n + "(" + strings.Join(fields, ", ") + ") {}\n")})
+		return nil
+	}
+	for _, table := range a.Catalog.Tables {
+		n, err := name(table.Name, true)
+		if err != nil {
+			return nil, err
+		}
+		if err := addRecord(n, table.Columns); err != nil {
+			return nil, err
+		}
+	}
+	var b strings.Builder
+	b.WriteString(header)
+	if o.Runtime == "ydb" {
+		b.WriteString("import tech.ydb.query.tools.SessionRetryContext;\nimport tech.ydb.query.tools.QueryReader;\nimport tech.ydb.common.transaction.TxMode;\nimport tech.ydb.table.query.Params;\n")
+	}
+	needsValues := o.Runtime == "ydb"
+	for _, q := range a.Queries {
+		needsValues = needsValues || len(q.Parameters) > 0
+	}
+	if needsValues {
+		b.WriteString("import tech.ydb.table.values.PrimitiveValue;\nimport tech.ydb.table.values.PrimitiveType;\nimport tech.ydb.table.values.OptionalType;\n\n")
+	}
+	owner := map[string]string{"ydb": "SessionRetryContext", "jdbc": "java.sql.Connection", "spring": "org.springframework.jdbc.core.JdbcTemplate", "hibernate": "org.hibernate.Session"}[o.Runtime]
+	fmt.Fprintf(&b, "// The caller owns the injected client and its lifecycle.\npublic final class Queries {\n    private final %s client;\n\n    public Queries(%s client) {\n        this.client = java.util.Objects.requireNonNull(client);\n    }\n", owner, owner)
+	methods := map[string]bool{}
+	for _, q := range a.Queries {
+		if !utf8.ValidString(q.SQL) {
+			return nil, fmt.Errorf("%s: Java SQL must be valid UTF-8", q.Name)
+		}
+		method, err := name(q.Name, false)
+		if err != nil {
+			return nil, err
+		}
+		if methods[method] {
+			return nil, fmt.Errorf("Java method name collision: %s", method)
+		}
+		methods[method] = true
+		row, _ := name(q.Name, true)
+		row += "Row"
+		ret := "void"
+		switch q.Command {
+		case model.One, model.Many:
+			if len(q.ResultSets) != 1 || len(q.ResultSets[0].Columns) == 0 {
+				return nil, fmt.Errorf("%s: %s requires one nonempty result set", q.Name, q.Command)
+			}
+			if err := addRecord(row, q.ResultSets[0].Columns); err != nil {
+				return nil, err
+			}
+			if q.Command == model.One {
+				ret = "java.util.Optional<" + row + ">"
+			} else {
+				ret = "java.util.List<" + row + ">"
+			}
+		case model.Exec:
+		default:
+			return nil, fmt.Errorf("%s: Java does not support %s", q.Name, q.Command)
+		}
+		params := []string{}
+		paramNames := []string{}
+		seen := map[string]bool{"client": true, "_params": true, "_query": true, "_connection": true, "_statement": true, "_prepared": true, "_rows": true, "_items": true}
+		for _, p := range q.Parameters {
+			n, err := name(p.Name, false)
+			if err != nil {
+				return nil, err
+			}
+			if seen[n] {
+				return nil, fmt.Errorf("%s: Java parameter name collision: %s", q.Name, n)
+			}
+			seen[n] = true
+			_, typ, err := typeInfo(p.Type)
+			if err != nil {
+				return nil, fmt.Errorf("%s parameter %s: %w", q.Name, p.Name, err)
+			}
+			params = append(params, typ+" "+n)
+			paramNames = append(paramNames, n)
+		}
+		constant := method + "Sql"
+		fmt.Fprintf(&b, "\n    private static final String %s = %s;\n", constant, sqlLiteral(q.SQL))
+		throws := ""
+		if o.Runtime == "jdbc" {
+			throws = " throws java.sql.SQLException"
+		}
+		fmt.Fprintf(&b, "\n    public %s %s(%s)%s {\n", ret, method, strings.Join(params, ", "), throws)
+		// Java's wider signed carriers must not be silently narrowed by the SDK.
+		// Uint64 deliberately uses all 64 bits of long and needs no range check.
+		for i, p := range q.Parameters {
+			max := map[string]string{"Uint8": "255", "Uint16": "65535", "Uint32": "4294967295L"}[p.Type.UnwrapOptional().Kind]
+			if max == "" {
+				continue
+			}
+			n := paramNames[i]
+			condition := n + " < 0 || " + n + " > " + max
+			if p.Type.IsOptional() {
+				condition = n + " != null && (" + condition + ")"
+			}
+			fmt.Fprintf(&b, "        if (%s) throw new IllegalArgumentException(%s);\n", condition, quoted("parameter $"+p.Name+" is outside "+p.Type.UnwrapOptional().Kind+" range"))
+		}
+		if o.Runtime == "ydb" {
+			emitNative(&b, q, paramNames, constant, row)
+		} else {
+			emitJDBC(&b, q, paramNames, constant, row, ret, o.Runtime)
+		}
+		b.WriteString("    }\n")
+	}
+	b.WriteString("}\n")
+	files = append(files, model.File{Name: "Queries.java", Content: []byte(b.String())})
+	return files, nil
+}
+
+func emitNative(b *strings.Builder, q model.AnalyzedQuery, names []string, constant, row string) {
+	b.WriteString("        var _params = Params.create();\n")
+	for i, p := range q.Parameters {
+		fmt.Fprintf(b, "        _params.put(%s, %s);\n", quoted("$"+p.Name), parameterValue(p, names[i]))
+	}
+	b.WriteString("        var _query = client.supplyResult(_session -> QueryReader.readFrom(\n")
+	fmt.Fprintf(b, "                _session.createQuery(%s, TxMode.SERIALIZABLE_RW, _params))).join().getValue();\n", constant)
+	if q.Command == model.Exec {
+		return
+	}
+	b.WriteString("        if (_query.getResultSetCount() != 1) throw new IllegalStateException(\"Expected one result set\");\n        var _rows = _query.getResultSet(0);\n")
+	emitRows(b, q, row, "        ", true)
+}
+
+func parameterValue(p model.Parameter, name string) string {
+	s, _, _ := typeInfo(p.Type)
+	value := "PrimitiveValue.new" + s.sdk + "(" + name + ")"
+	if p.Type.IsOptional() {
+		o := "OptionalType.of(PrimitiveType." + s.sdk + ")"
+		value = name + " == null ? " + o + ".emptyValue() : " + o + ".newValue(" + value + ")"
+	}
+	return value
+}
+
+func emitJDBC(b *strings.Builder, q model.AnalyzedQuery, names []string, constant, row, ret, runtime string) {
+	indent := "        "
+	connection := "client"
+	if runtime == "spring" {
+		callbackRet := ret
+		if ret == "void" {
+			callbackRet = "Void"
+		} else {
+			b.WriteString(indent + "return ")
+		}
+		if ret == "void" {
+			b.WriteString(indent)
+		}
+		fmt.Fprintf(b, "client.execute((org.springframework.jdbc.core.ConnectionCallback<%s>) _connection -> {\n", callbackRet)
+		connection = "_connection"
+		indent += "    "
+	} else if runtime == "hibernate" {
+		b.WriteString(indent)
+		if ret != "void" {
+			b.WriteString("return ")
+		}
+		b.WriteString("client.doReturningWork(_connection -> {\n")
+		connection = "_connection"
+		indent += "    "
+	}
+	fmt.Fprintf(b, "%stry (var _prepared = %s.prepareStatement(%s)) {\n", indent, connection, constant)
+	indent += "    "
+	if len(q.Parameters) > 0 {
+		b.WriteString(indent + "var _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement.class);\n")
+	}
+	for i, p := range q.Parameters {
+		// YdbPreparedStatement adds '$' to a parameter name itself. Passing an
+		// SDK Value preserves inferred YQL types even when SQL omits DECLARE.
+		fmt.Fprintf(b, "%s_statement.setObject(%s, %s);\n", indent, quoted(p.Name), parameterValue(p, names[i]))
+	}
+	if q.Command == model.Exec {
+		b.WriteString(indent + "_prepared.execute();\n")
+		if runtime != "jdbc" {
+			b.WriteString(indent + "return null;\n")
+		}
+	} else {
+		b.WriteString(indent + "try (var _rows = _prepared.executeQuery()) {\n")
+		emitRows(b, q, row, indent+"    ", false)
+		b.WriteString(indent + "}\n")
+	}
+	indent = strings.TrimSuffix(indent, "    ")
+	b.WriteString(indent + "}\n")
+	if runtime != "jdbc" {
+		b.WriteString("        });\n")
+	}
+}
+
+func emitRows(b *strings.Builder, q model.AnalyzedQuery, row, indent string, native bool) {
+	if q.Command == model.One {
+		b.WriteString(indent + "if (!_rows.next()) return java.util.Optional.empty();\n")
+	} else {
+		fmt.Fprintf(b, "%svar _items = new java.util.ArrayList<%s>();\n%swhile (_rows.next()) {\n", indent, row, indent)
+		indent += "    "
+	}
+	values := []string{}
+	for i, c := range q.ResultSets[0].Columns {
+		s, typ, _ := typeInfo(c.Type)
+		n := fmt.Sprintf("_value%d", i)
+		if native {
+			reader := fmt.Sprintf("_rows.getColumn(%d)", i)
+			if c.Type.IsOptional() {
+				fmt.Fprintf(b, "%s%s %s = %s.isOptionalItemPresent() ? %s.getOptionalItem().get%s() : null;\n", indent, typ, n, reader, reader, s.sdk)
+			} else {
+				fmt.Fprintf(b, "%s%s %s = %s.get%s();\n", indent, typ, n, reader, s.sdk)
+			}
+		} else {
+			fmt.Fprintf(b, "%s%s %s = _rows.get%s(%d);\n", indent, typ, n, s.jdbc, i+1)
+			if c.Type.IsOptional() {
+				fmt.Fprintf(b, "%sif (_rows.wasNull()) %s = null;\n", indent, n)
+			}
+		}
+		values = append(values, n)
+	}
+	newRow := "new " + row + "(" + strings.Join(values, ", ") + ")"
+	if q.Command == model.One {
+		fmt.Fprintf(b, "%sreturn java.util.Optional.of(%s);\n", indent, newRow)
+	} else {
+		fmt.Fprintf(b, "%s_items.add(%s);\n", indent, newRow)
+		indent = strings.TrimSuffix(indent, "    ")
+		b.WriteString(indent + "}\n" + indent + "return _items;\n")
+	}
+}

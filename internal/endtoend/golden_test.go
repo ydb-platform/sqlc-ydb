@@ -15,6 +15,8 @@ import (
 
 var update = flag.Bool("update", false, "update end-to-end expected output")
 
+var outputRoots = []string{"db", "py", "cpp", "cs", "java"}
+
 func TestGolden(t *testing.T) {
 	fixtures, err := os.ReadDir("testdata")
 	if err != nil {
@@ -102,7 +104,7 @@ func updateExpected(t *testing.T, fixture, dir string) {
 	if err := os.RemoveAll(expected); err != nil {
 		t.Fatal(err)
 	}
-	for _, root := range []string{"db", "py"} {
+	for _, root := range outputRoots {
 		from := filepath.Join(dir, root)
 		if _, err := os.Stat(from); os.IsNotExist(err) {
 			continue
@@ -169,7 +171,7 @@ func generated(t *testing.T, root string, want map[string][]byte) map[string][]b
 		}
 		got[rel] = data
 	}
-	for _, d := range []string{"db", "py"} {
+	for _, d := range outputRoots {
 		base := filepath.Join(root, d)
 		if _, err := os.Stat(base); os.IsNotExist(err) {
 			continue
