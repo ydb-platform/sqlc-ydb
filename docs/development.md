@@ -25,12 +25,15 @@ module and execute generated code using mock adapters. Python 3.9 or newer must
 be available as `python3` for the Python generator's execution tests. A normal
 generator build has no dependency on Python.
 
-The authors example is a separate Go module; check generated packages with:
+The authors example keeps its Go module and tests in `go/`, and Python packages,
+requirements and tests in `python/`. Schema, queries and generator configuration
+are shared in the example root. Check generated packages with:
 
 ```sh
-cd examples/authors
+cd examples/authors/go
 go test ./...
-python3 -m compileall -q python_ydb python_dbapi python_sqlalchemy
+cd ..
+python3 -m compileall -q python
 ```
 
 Optional live generator tests use `SQLC_YDB_TEST_DSN` to select an isolated YDB
@@ -62,12 +65,16 @@ without dropping an existing table; successful tests remove the table they made.
 Run these sequentially:
 
 ```sh
-cd examples/authors
+cd examples/authors/go
 SQLC_YDB_TEST_DSN=grpc://localhost:2136/local go test -p 1 -count=1 -timeout=90s -v ./...
-SQLC_YDB_TEST_DSN=grpc://localhost:2136/local python smoke.py
+cd ..
+SQLC_YDB_TEST_DSN=grpc://localhost:2136/local python -m python.smoke
 ```
 
-The example's Python interpreter needs `pip install -r requirements.txt`.
+From `examples/authors`, the Python interpreter needs
+`pip install -r python/requirements.txt`. Run the smoke test as a module from
+this directory so the generated `python/sqlalchemy` package does not shadow
+the installed SQLAlchemy library.
 Integration checks include the maximum Uint64 value, UTF-8 text, optional values,
 single-column projections, list queries, writes and missing rows.
 

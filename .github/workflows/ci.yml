@@ -22,9 +22,9 @@ jobs:
         run: |
           ./bin/sqlc-ydb compile -f examples/authors/sqlc.yaml
           ./bin/sqlc-ydb diff -f examples/authors/sqlc.yaml
-          python3 -m compileall -q examples/authors/python_ydb examples/authors/python_dbapi examples/authors/python_sqlalchemy
+          python3 -m compileall -q examples/authors/python
       - name: Compile generated Go packages
-        working-directory: examples/authors
+        working-directory: examples/authors/go
         run: go test ./...
 
   ydb-acceptance:
@@ -55,7 +55,7 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Install tested Python runtimes
-        run: python3 -m pip install -r examples/authors/requirements.txt
+        run: python3 -m pip install -r examples/authors/python/requirements.txt
       # Keep local-ydb acceptance sequential: concurrent tests/compilers can
       # exhaust the memory budget even when they use only one YDB service.
       - name: Run Go generator runtime tests
@@ -66,6 +66,7 @@ jobs:
         run: |
           go run ./cmd/sqlc-ydb generate -f examples/authors/sqlc.yaml
           git diff --exit-code -- examples/authors
-          cd examples/authors
+          cd examples/authors/go
           go test -p 1 -count=1 -timeout=90s ./... -v
-          python3 smoke.py
+          cd ..
+          python3 -m python.smoke

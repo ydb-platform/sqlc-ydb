@@ -1,5 +1,7 @@
 """Run CLI-generated Python code against a disposable YDB database.
 
+From examples/authors, run: python -m python.smoke
+
 Requires SQLC_YDB_TEST_DSN and no existing authors table. An existing table is
 never dropped if CREATE TABLE fails. Run profiles sequentially with Go smoke.
 """
@@ -13,9 +15,9 @@ import ydb
 import ydb.sqlalchemy  # registers the YDB dialect
 import ydb_dbapi
 
-from python_ydb.queries import Querier as NativeQuerier
-from python_dbapi.queries import Querier as DBAPIQuerier
-from python_sqlalchemy.queries import Querier as SQLAlchemyQuerier
+from .native.queries import Querier as NativeQuerier
+from .dbapi.queries import Querier as DBAPIQuerier
+from .sqlalchemy.queries import Querier as SQLAlchemyQuerier
 
 
 def check(querier):
@@ -40,7 +42,7 @@ def main():
     with ydb.Driver(config) as driver:
         driver.wait(timeout=10, fail_fast=True)
         with ydb.QuerySessionPool(driver) as pool:
-            pool.execute_with_retries(Path(__file__).with_name("schema.sql").read_text())
+            pool.execute_with_retries((Path(__file__).resolve().parent.parent / "schema.sql").read_text())
             try:
                 check(NativeQuerier(pool))
                 print("native YDB: passed", flush=True)

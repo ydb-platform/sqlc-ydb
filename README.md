@@ -22,6 +22,11 @@ The example generates Go using the native YDB SDK and `database/sql`, and Python
 using the native SDK, DB-API, and SQLAlchemy. The generated application needs the
 corresponding runtime library; the generator itself does not.
 
+The example groups generated code and dependencies by language:
+`go/database/sql`, `go/native`, `python/dbapi`, `python/sqlalchemy`, and
+`python/native`. Shared `schema.sql`, `queries.sql`, and `sqlc.yaml` stay in
+`examples/authors`.
+
 ```yaml
 version: "2"
 sql:

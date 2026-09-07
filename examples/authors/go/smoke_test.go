@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	sq "example.com/sqlc-ydb-authors/go_sql"
-	native "example.com/sqlc-ydb-authors/go_ydb"
+	sq "example.com/sqlc-ydb-authors/database/sql"
+	native "example.com/sqlc-ydb-authors/native"
 	"github.com/ydb-platform/ydb-go-sdk/v3"
 )
 
@@ -31,7 +31,7 @@ func TestGeneratedExample(t *testing.T) {
 		defer cancel()
 		_ = db.Close(ctx)
 	}()
-	schema, err := os.ReadFile("schema.sql")
+	schema, err := os.ReadFile("../schema.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
