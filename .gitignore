@@ -1,4 +1,5 @@
 /bin/
+/dist/
 __pycache__/
 *.pyc
 .venv/

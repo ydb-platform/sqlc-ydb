@@ -30,15 +30,6 @@ DELETE FROM authors WHERE id = $author_id;"""
 def _typed(value, typ):
     return (value, typ)
 
-def _row_value(row, name, index):
-    try:
-        return row[name]
-    except (KeyError, IndexError, TypeError):
-        try:
-            return row[index]
-        except (KeyError, IndexError, TypeError):
-            return getattr(row, name)
-
 
 class Querier:
     def __init__(self, connection):
@@ -54,9 +45,9 @@ class Querier:
                 return None
             row = rows[0]
             return models.Author(
-                id=_row_value(row, "id", 0),
-                name=_row_value(row, "name", 1),
-                bio=_row_value(row, "bio", 2),
+                id=row[0],
+                name=row[1],
+                bio=row[2],
             )
         finally:
             cursor.close()
@@ -68,9 +59,9 @@ class Querier:
             cursor.execute(SQL_LIST_AUTHORS, parameters)
             rows = cursor.fetchall()
             return (models.Author(
-                id=_row_value(row, "id", 0),
-                name=_row_value(row, "name", 1),
-                bio=_row_value(row, "bio", 2),
+                id=row[0],
+                name=row[1],
+                bio=row[2],
             ) for row in rows)
         finally:
             cursor.close()
@@ -85,7 +76,7 @@ class Querier:
                 return None
             row = rows[0]
             return models.GetAuthorNameRow(
-                name=_row_value(row, "name", 0),
+                name=row[0],
             )
         finally:
             cursor.close()

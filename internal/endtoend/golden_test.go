@@ -84,10 +84,9 @@ func copyFixture(t *testing.T, src, dst string) {
 		}
 		from, to := filepath.Join(src, e.Name()), filepath.Join(dst, e.Name())
 		if e.IsDir() {
-			if err := os.MkdirAll(to, 0755); err != nil {
+			if err := os.CopyFS(to, os.DirFS(from)); err != nil {
 				t.Fatal(err)
 			}
-			copyFixture(t, from, to)
 			continue
 		}
 		data, err := os.ReadFile(from)
@@ -111,30 +110,9 @@ func updateExpected(t *testing.T, fixture, dir string) {
 		} else if err != nil {
 			t.Fatal(err)
 		}
-		copyTree(t, from, filepath.Join(expected, root))
-	}
-}
-
-func copyTree(t *testing.T, src, dst string) {
-	t.Helper()
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(dst, 0755); err != nil {
-		t.Fatal(err)
-	}
-	for _, e := range entries {
-		from, to := filepath.Join(src, e.Name()), filepath.Join(dst, e.Name())
-		if e.IsDir() {
-			copyTree(t, from, to)
-			continue
-		}
-		data, err := os.ReadFile(from)
-		if err != nil {
+		if err := os.CopyFS(filepath.Join(expected, root), os.DirFS(from)); err != nil {
 			t.Fatal(err)
 		}
-		write(t, to, data)
 	}
 }
 

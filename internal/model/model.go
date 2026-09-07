@@ -25,12 +25,11 @@ func (d Diagnostic) Error() string {
 }
 
 // Type preserves YQL type identity, including nested containers and nullability.
-// Kind is the canonical YQL spelling (e.g. Uint64, Utf8, Optional, List, Struct).
+// Kind is the canonical YQL spelling (e.g. Uint64, Utf8, Optional, List).
 type Type struct {
 	Kind      string
 	Elem      *Type
 	Key       *Type
-	Fields    []Field
 	Items     []Type
 	Precision int
 	Scale     int
@@ -45,10 +44,6 @@ func (t Type) UnwrapOptional() Type {
 	return t
 }
 
-type Field struct {
-	Name string
-	Type Type
-}
 type Column struct {
 	Name  string
 	Type  Type

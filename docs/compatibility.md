@@ -21,6 +21,9 @@ internal data structures and source history are not a dependency.
 ## Implemented workflow
 
 - `generate`, `compile`, `diff`, `init`, `version`, `--help`, `-f` / `--file`.
+- `version` prints one version string; `version --verbose` also prints the
+  commit embedded by release builds. Ordinary source builds report `unknown`
+  unless the commit is supplied through linker flags.
 - `sqlc.yaml`, `sqlc.yml`, and `sqlc.json`; config version 2 and the basic version 1
   Go `packages` format. Paths resolve relative to the configuration.
 - File paths, lists, nonrecursive directories, and ordinary glob patterns.
@@ -36,9 +39,11 @@ internal data structures and source history are not a dependency.
   affected-row count.
 - Go options `package`, `out`, `sql_package`, `emit_json_tags`, `emit_interface`,
   `emit_empty_slices`. The default `sql_package` is `database/sql`, matching sqlc.
-- Python options `package`, `out`, `runtime`, `emit_sync_querier`,
+- Python options `out`, `runtime`, `emit_sync_querier`,
   `emit_async_querier`. Synchronous generation defaults to enabled; requesting
   asynchronous generation currently fails explicitly.
+  The Python package directory is selected by `out`; remove `gen.python.package`
+  from older configurations. That option was ignored and now produces an error.
 - C++ options `namespace`, `out`, `runtime`; C# options `namespace`, `out`;
   Java options `package`, `out`, `runtime`. These are built-in extensions to
   the sqlc configuration shape, not external plugin options.
@@ -50,13 +55,30 @@ internal data structures and source history are not a dependency.
 This development version does not claim complete sqlc compatibility. Type/name
 overrides, the full generator option inventory, sqlc macros, batch commands,
 `vet`, `verify`, cloud/remote workflows and live database-assisted analysis still
-need implementation. They are not successful no-op commands. Generated files no
-longer produced by a query set are not automatically deleted.
+need implementation. They are not successful no-op commands.
 
 Query and type coverage evolves independently of configuration compatibility.
 Unsupported YQL must be diagnosed by the analyzer; a resolved type unsupported by
 a language adapter is a generation error. Each supported behavior needs a
 fixture and, for runtime-sensitive behavior, an execution test.
+
+## Output ownership
+
+Use separate output directories for independently invoked configurations. Several
+generators in one configuration may share a directory if their filenames do not
+collide. Files written by sqlc-ydb carry a generated header and are overwritten
+by `generate`; handwritten files with other names are retained.
+
+If a query file or model is renamed or removed, `generate` and `diff` report
+obsolete files with the sqlc-ydb header in the current output directories and
+exit with status 1. Remove the listed files and rerun. No output is written
+before this check passes. `diff` also reports missing or changed expected files.
+
+This check covers regular files directly in directories the current generation
+writes. It does not follow unrelated symlinks, scan nested packages, or remember
+previously configured output directories. When changing `out` or removing a
+generator entirely, clean up its old directory yourself. `compile` does not
+inspect outputs. Files are never automatically deleted.
 
 ## Current analyzer coverage
 
@@ -66,12 +88,22 @@ projections and `*`, table/column aliases, supported joins and their optional
 sides, `COUNT`, `DECLARE`, direct comparison parameter inference, selected scalar
 local bindings, `INSERT`/`UPSERT ... VALUES`, `UPDATE ... SET`, `DELETE`, and
 `RETURNING`. It validates names outside the projection and conflicting parameter
-constraints. Diagnostics include source file, line and column.
+constraints. Diagnostics include source file, line and column. Table, column,
+alias and parameter names are case-sensitive, as in YQL.
+
+Direct scalar literal projections retain their YQL types, including integer
+width/signedness, `Float` versus `Double`, and `String` versus `Utf8`. Integer
+suffixes and ranges follow the [YQL lexical rules](https://ydb.tech/docs/en/yql/reference/syntax/lexer).
+Non-column projections need an explicit `AS` name. A compound expression such
+as `$value = 1ul` is rejected instead of inheriting the parameter's type.
 
 This is a deliberately limited first semantic implementation. General computed
 projections and casts, CTEs/subqueries,
 multiple result sets, FLATTEN, full function/type inference and the full YQL
-grammar semantics are subsequent work. Accepted syntax is not a claim of full
+grammar semantics are subsequent work. Unary numeric expressions in projections
+or local assignments and backslash escapes in quoted identifiers are also
+explicitly rejected until their YQL semantics are implemented. `EXPLAIN` cannot
+be used as a named data query. Accepted syntax is not a claim of full
 equivalence to the YDB server's type checker.
 
 Current INSERT/UPSERT VALUES and UPDATE SET values must be direct parameters;

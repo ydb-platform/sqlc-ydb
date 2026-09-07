@@ -13,7 +13,6 @@ sql:
         emit_interface: true
         emit_empty_slices: true
       python:
-        package: authors
         out: python/native
         runtime: ydb
       csharp:
@@ -37,7 +36,6 @@ sql:
         out: go/database/sql
         sql_package: database/sql
       python:
-        package: authors
         out: python/dbapi
         runtime: dbapi
       java:
@@ -50,7 +48,6 @@ sql:
     queries: queries.sql
     gen:
       python:
-        package: authors
         out: python/sqlalchemy
         runtime: sqlalchemy
         emit_sync_querier: true

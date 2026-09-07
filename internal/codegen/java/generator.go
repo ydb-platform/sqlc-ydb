@@ -11,22 +11,22 @@ import (
 
 type Options struct{ Package, Runtime string }
 
-type scalar struct{ typ, boxed, sdk, jdbc, sqlType string }
+type scalar struct{ typ, boxed, sdk, jdbc string }
 
 var scalars = map[string]scalar{
-	"Bool":   {"boolean", "Boolean", "Bool", "Boolean", "BOOLEAN"},
-	"Int8":   {"byte", "Byte", "Int8", "Byte", "TINYINT"},
-	"Uint8":  {"int", "Integer", "Uint8", "Int", "INTEGER"},
-	"Int16":  {"short", "Short", "Int16", "Short", "SMALLINT"},
-	"Uint16": {"int", "Integer", "Uint16", "Int", "INTEGER"},
-	"Int32":  {"int", "Integer", "Int32", "Int", "INTEGER"},
-	"Uint32": {"long", "Long", "Uint32", "Long", "BIGINT"},
-	"Int64":  {"long", "Long", "Int64", "Long", "BIGINT"},
-	"Uint64": {"long", "Long", "Uint64", "Long", "BIGINT"},
-	"Float":  {"float", "Float", "Float", "Float", "FLOAT"},
-	"Double": {"double", "Double", "Double", "Double", "DOUBLE"},
-	"Utf8":   {"String", "String", "Text", "String", "VARCHAR"},
-	"String": {"byte[]", "byte[]", "Bytes", "Bytes", "BINARY"},
+	"Bool":   {"boolean", "Boolean", "Bool", "Boolean"},
+	"Int8":   {"byte", "Byte", "Int8", "Byte"},
+	"Uint8":  {"int", "Integer", "Uint8", "Int"},
+	"Int16":  {"short", "Short", "Int16", "Short"},
+	"Uint16": {"int", "Integer", "Uint16", "Int"},
+	"Int32":  {"int", "Integer", "Int32", "Int"},
+	"Uint32": {"long", "Long", "Uint32", "Long"},
+	"Int64":  {"long", "Long", "Int64", "Long"},
+	"Uint64": {"long", "Long", "Uint64", "Long"},
+	"Float":  {"float", "Float", "Float", "Float"},
+	"Double": {"double", "Double", "Double", "Double"},
+	"Utf8":   {"String", "String", "Text", "String"},
+	"String": {"byte[]", "byte[]", "Bytes", "Bytes"},
 }
 
 func typeInfo(t model.Type) (scalar, string, error) {
@@ -227,6 +227,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		methods[method] = true
 		row, _ := name(q.Name, true)
 		row += "Row"
+		constant := method + "Sql"
 		ret := "void"
 		switch q.Command {
 		case model.One, model.Many:
@@ -247,7 +248,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		}
 		params := []string{}
 		paramNames := []string{}
-		seen := map[string]bool{"client": true, "_params": true, "_query": true, "_connection": true, "_statement": true, "_prepared": true, "_rows": true, "_items": true}
+		seen := map[string]bool{"client": true, constant: true, "_params": true, "_query": true, "_connection": true, "_statement": true, "_prepared": true, "_rows": true, "_items": true}
 		for _, p := range q.Parameters {
 			n, err := name(p.Name, false)
 			if err != nil {
@@ -264,7 +265,6 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			params = append(params, typ+" "+n)
 			paramNames = append(paramNames, n)
 		}
-		constant := method + "Sql"
 		fmt.Fprintf(&b, "\n    private static final String %s = %s;\n", constant, sqlLiteral(q.SQL))
 		throws := ""
 		if o.Runtime == "jdbc" {

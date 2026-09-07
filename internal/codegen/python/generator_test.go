@@ -98,6 +98,23 @@ func TestGenerateRejectsUnknownType(t *testing.T) {
 	}
 }
 
+func TestYDBTypeExpressionRejectsUnknownType(t *testing.T) {
+	if _, err := ydbTypeExpr(model.Type{Kind: "Any"}); err == nil || !strings.Contains(err.Error(), "unsupported YQL type") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRejectsParameterNamedSelf(t *testing.T) {
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name:       "delete_author",
+		Command:    model.Exec,
+		Parameters: []model.Parameter{{Name: "self", Type: model.Type{Kind: "Uint64"}}},
+	}}}
+	if _, err := Generate(a, Options{Runtime: "ydb"}); err == nil || !strings.Contains(err.Error(), `parameter name "self" conflicts with the generated method receiver`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestIdenticalTableProjectionsReuseRowModel(t *testing.T) {
 	a := liveAnalysis("authors")
 	if _, err := Generate(a, Options{Runtime: "dbapi"}); err != nil {
@@ -315,7 +332,39 @@ class QuerySessionPool: pass
 `), 0600); err != nil {
 		t.Fatal(err)
 	}
-	script := fmt.Sprintf("import sys; sys.path.insert(0, %q); from db.queries import Querier; import ydb\nclass P:\n def __init__(self): self.calls=[]\n def execute_with_retries(self, sql, parameters):\n  self.calls.append((sql, parameters)); return [ydb.ResultSet([ydb.Row(id=7, display_name=None)])]\np=P(); row=Querier(p).get_author(7); assert row.id == 7 and row.display_name is None; assert p.calls[0][1]['$id'].type == ydb.PrimitiveType.Uint64\n", dir)
+	script := fmt.Sprintf(`import sys
+sys.path.insert(0, %q)
+from db.queries import Querier
+import ydb
+
+class Pool:
+    def __init__(self, results):
+        self.results = results
+        self.calls = []
+    def execute_with_retries(self, sql, parameters):
+        self.calls.append((sql, parameters))
+        return self.results
+
+pool = Pool([ydb.ResultSet([ydb.Row(id=7, display_name=None)])])
+row = Querier(pool).get_author(7)
+assert row.id == 7 and row.display_name is None
+assert pool.calls[0][1]['$id'].type == ydb.PrimitiveType.Uint64
+assert Querier(Pool([ydb.ResultSet([])])).get_author(7) is None
+
+try:
+    Querier(Pool([])).get_author(7)
+except IndexError:
+    pass
+else:
+    raise AssertionError("missing result set was masked as a missing row")
+
+try:
+    Querier(Pool([ydb.ResultSet([{0: 7, 1: None}])])).get_author(7)
+except KeyError:
+    pass
+else:
+    raise AssertionError("missing column names were masked by positional fallback")
+`, dir)
 	cmd := exec.Command("python3", "-c", script)
 	cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -360,14 +409,14 @@ func TestGeneratedSQLAlchemyClosesResultsWithMockAdapter(t *testing.T) {
 	}
 	script := fmt.Sprintf(`import sys
 sys.path.insert(0, %q)
-from db.queries import Querier, _row_value
-assert _row_value((3,), "count", 0) == 3
-assert _row_value((4,), "index", 0) == 4
+from db.queries import Querier
+class Row:
+    def __init__(self, values): self._mapping = values
 class R:
     def __init__(self, fail): self.closed = False; self.fail = fail
     def fetchall(self):
         if self.fail: raise RuntimeError("fetch failure")
-        return [{'id': 7, 'display_name': None}]
+        return [Row({'id': 7, 'display_name': None})]
     def close(self): self.closed = True
 class C:
     def __init__(self): self.calls = []; self.fail = False
@@ -411,7 +460,7 @@ func TestGeneratedDBAPIClosesCursorAndPreservesTransaction(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "ydb.py"), []byte("class PrimitiveType:\n    Uint64 = 'Uint64'\nclass OptionalType:\n    def __init__(self, item): self.item=item\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	script := fmt.Sprintf("import sys; sys.path.insert(0, %q); from db.queries import Querier\nclass Cur:\n rowcount=1\n def execute(self, sql, params): self.params=params\n def fetchall(self): return [{'id': 7, 'display_name': None}]\n def close(self): self.closed=True\nclass C:\n def __init__(self): self.cur=Cur(); self.commits=0\n def cursor(self): return self.cur\nc=C(); row=Querier(c).get_author(7); assert row.id == 7 and c.cur.closed and c.commits == 0 and c.cur.params['$id'][0] == 7\n", dir)
+	script := fmt.Sprintf("import sys; sys.path.insert(0, %q); from db.queries import Querier\nclass Cur:\n rowcount=1\n def execute(self, sql, params): self.params=params\n def fetchall(self): return [(7, None)]\n def close(self): self.closed=True\nclass C:\n def __init__(self): self.cur=Cur(); self.commits=0\n def cursor(self): return self.cur\nc=C(); row=Querier(c).get_author(7); assert row.id == 7 and c.cur.closed and c.commits == 0 and c.cur.params['$id'][0] == 7\n", dir)
 	cmd := exec.Command("python3", "-c", script)
 	cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
 	if out, err := cmd.CombinedOutput(); err != nil {

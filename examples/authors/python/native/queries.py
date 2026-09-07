@@ -27,15 +27,6 @@ DECLARE $author_id AS Uint64;
 DELETE FROM authors WHERE id = $author_id;"""
 
 
-def _row_value(row, name, index):
-    try:
-        return row[name]
-    except (KeyError, IndexError, TypeError):
-        try:
-            return row[index]
-        except (KeyError, IndexError, TypeError):
-            return getattr(row, name)
-
 def _typed(value, typ):
     return ydb.TypedValue(value, typ)
 
@@ -47,35 +38,35 @@ class Querier:
     def get_author(self, author_id: int) -> Optional[models.Author]:
         parameters = {"$author_id": _typed(author_id, ydb.PrimitiveType.Uint64)}
         result_sets = self._pool.execute_with_retries(SQL_GET_AUTHOR, parameters)
-        rows = result_sets[0].rows if result_sets else []
+        rows = result_sets[0].rows
         if not rows:
             return None
         row = rows[0]
         return models.Author(
-            id=_row_value(row, "id", 0),
-            name=_row_value(row, "name", 1),
-            bio=_row_value(row, "bio", 2),
+            id=row["id"],
+            name=row["name"],
+            bio=row["bio"],
         )
 
     def list_authors(self) -> Iterable[models.Author]:
         parameters = {}
         result_sets = self._pool.execute_with_retries(SQL_LIST_AUTHORS, parameters)
-        rows = result_sets[0].rows if result_sets else []
+        rows = result_sets[0].rows
         return (models.Author(
-            id=_row_value(row, "id", 0),
-            name=_row_value(row, "name", 1),
-            bio=_row_value(row, "bio", 2),
+            id=row["id"],
+            name=row["name"],
+            bio=row["bio"],
         ) for row in rows)
 
     def get_author_name(self, author_id: int) -> Optional[models.GetAuthorNameRow]:
         parameters = {"$author_id": _typed(author_id, ydb.PrimitiveType.Uint64)}
         result_sets = self._pool.execute_with_retries(SQL_GET_AUTHOR_NAME, parameters)
-        rows = result_sets[0].rows if result_sets else []
+        rows = result_sets[0].rows
         if not rows:
             return None
         row = rows[0]
         return models.GetAuthorNameRow(
-            name=_row_value(row, "name", 0),
+            name=row["name"],
         )
 
     def upsert_author(self, author_id: int, author_name: str, biography: Optional[str]) -> None:

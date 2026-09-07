@@ -138,7 +138,7 @@ func applyAlterTableAction(catalog model.Catalog, tableIndex int, table *model.T
 			return []model.Diagnostic{diagnosticAt(file, 0, drop, fmt.Sprintf("column %q does not exist in table %q", name, table.Name))}
 		}
 		for _, key := range table.PrimaryKey {
-			if strings.EqualFold(key, name) {
+			if key == name {
 				return []model.Diagnostic{diagnosticAt(file, 0, drop, fmt.Sprintf("cannot drop primary key column %q from table %q", name, table.Name))}
 			}
 		}
@@ -161,7 +161,7 @@ func applyAlterTableAction(catalog model.Catalog, tableIndex int, table *model.T
 
 func catalogTableIndex(catalog model.Catalog, name string) (int, bool) {
 	for i := range catalog.Tables {
-		if strings.EqualFold(catalog.Tables[i].Name, name) {
+		if catalog.Tables[i].Name == name {
 			return i, true
 		}
 	}
@@ -170,7 +170,7 @@ func catalogTableIndex(catalog model.Catalog, name string) (int, bool) {
 
 func catalogColumnIndex(table model.Table, name string) (int, bool) {
 	for i := range table.Columns {
-		if strings.EqualFold(table.Columns[i].Name, name) {
+		if table.Columns[i].Name == name {
 			return i, true
 		}
 	}
@@ -211,7 +211,7 @@ func catalogTable(file string, create parser.ICreate_table_stmtContext) (model.T
 				diagnostics = append(diagnostics, diagnosticAt(file, 0, columnContext, err.Error()))
 				continue
 			}
-			key := strings.ToLower(column.Name)
+			key := column.Name
 			if columnNames[key] {
 				diagnostics = append(diagnostics, diagnosticAt(file, 0, columnContext, fmt.Sprintf("column %q is declared more than once", column.Name)))
 				continue
@@ -228,12 +228,11 @@ func catalogTable(file string, create parser.ICreate_table_stmtContext) (model.T
 			primaryKeyDeclarations++
 			for _, id := range constraint.AllAn_id() {
 				name := identifier(id.GetText())
-				key := strings.ToLower(name)
-				if primaryKeyNames[key] {
+				if primaryKeyNames[name] {
 					diagnostics = append(diagnostics, diagnosticAt(file, 0, id, fmt.Sprintf("primary key column %q is declared more than once", name)))
 					continue
 				}
-				primaryKeyNames[key] = true
+				primaryKeyNames[name] = true
 				table.PrimaryKey = append(table.PrimaryKey, name)
 			}
 			continue
@@ -249,7 +248,7 @@ func catalogTable(file string, create parser.ICreate_table_stmtContext) (model.T
 		diagnostics = append(diagnostics, diagnosticAt(file, 0, create, fmt.Sprintf("table %q declares PRIMARY KEY more than once", table.Name)))
 	}
 	for _, key := range table.PrimaryKey {
-		if !columnNames[strings.ToLower(key)] {
+		if !columnNames[key] {
 			diagnostics = append(diagnostics, diagnosticAt(file, 0, create, fmt.Sprintf("primary key column %q does not exist", key)))
 		}
 	}

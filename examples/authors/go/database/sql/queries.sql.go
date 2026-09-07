@@ -7,21 +7,21 @@ import (
 	"database/sql"
 )
 
-const getAuthor = `-- name: GetAuthor :one
+const queryGetAuthor = `-- name: GetAuthor :one
 DECLARE $author_id AS Uint64;
 SELECT id, name, bio FROM authors WHERE id = $author_id;`
 
-func (q *Queries) GetAuthor(ctx context.Context, author_id uint64) (GetAuthorRow, error) {
+func (q *Queries) GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, error) {
 	var row GetAuthorRow
-	err := q.db.QueryRowContext(ctx, getAuthor, sql.Named("author_id", author_id)).Scan(&row.ID, &row.Name, &row.Bio)
+	err := q.db.QueryRowContext(ctx, queryGetAuthor, sql.Named("author_id", arg)).Scan(&row.ID, &row.Name, &row.Bio)
 	return row, err
 }
 
-const listAuthors = `-- name: ListAuthors :many
+const queryListAuthors = `-- name: ListAuthors :many
 SELECT id, name, bio FROM authors ORDER BY id;`
 
 func (q *Queries) ListAuthors(ctx context.Context) ([]ListAuthorsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAuthors)
+	rows, err := q.db.QueryContext(ctx, queryListAuthors)
 	if err != nil {
 		return []ListAuthorsRow(nil), err
 	}
@@ -37,17 +37,17 @@ func (q *Queries) ListAuthors(ctx context.Context) ([]ListAuthorsRow, error) {
 	return items, rows.Err()
 }
 
-const getAuthorName = `-- name: GetAuthorName :one
+const queryGetAuthorName = `-- name: GetAuthorName :one
 DECLARE $author_id AS Uint64;
 SELECT name FROM authors WHERE id = $author_id;`
 
-func (q *Queries) GetAuthorName(ctx context.Context, author_id uint64) (GetAuthorNameRow, error) {
+func (q *Queries) GetAuthorName(ctx context.Context, arg uint64) (GetAuthorNameRow, error) {
 	var row GetAuthorNameRow
-	err := q.db.QueryRowContext(ctx, getAuthorName, sql.Named("author_id", author_id)).Scan(&row.Name)
+	err := q.db.QueryRowContext(ctx, queryGetAuthorName, sql.Named("author_id", arg)).Scan(&row.Name)
 	return row, err
 }
 
-const upsertAuthor = `-- name: UpsertAuthor :exec
+const queryUpsertAuthor = `-- name: UpsertAuthor :exec
 DECLARE $author_id AS Uint64;
 DECLARE $author_name AS Utf8;
 DECLARE $biography AS Optional<Utf8>;
@@ -55,15 +55,15 @@ UPSERT INTO authors (id, name, bio)
 VALUES ($author_id, $author_name, $biography);`
 
 func (q *Queries) UpsertAuthor(ctx context.Context, arg UpsertAuthorParams) error {
-	_, err := q.db.ExecContext(ctx, upsertAuthor, sql.Named("author_id", arg.AuthorID), sql.Named("author_name", arg.AuthorName), sql.Named("biography", arg.Biography))
+	_, err := q.db.ExecContext(ctx, queryUpsertAuthor, sql.Named("author_id", arg.AuthorID), sql.Named("author_name", arg.AuthorName), sql.Named("biography", arg.Biography))
 	return err
 }
 
-const deleteAuthor = `-- name: DeleteAuthor :exec
+const queryDeleteAuthor = `-- name: DeleteAuthor :exec
 DECLARE $author_id AS Uint64;
 DELETE FROM authors WHERE id = $author_id;`
 
-func (q *Queries) DeleteAuthor(ctx context.Context, author_id uint64) error {
-	_, err := q.db.ExecContext(ctx, deleteAuthor, sql.Named("author_id", author_id))
+func (q *Queries) DeleteAuthor(ctx context.Context, arg uint64) error {
+	_, err := q.db.ExecContext(ctx, queryDeleteAuthor, sql.Named("author_id", arg))
 	return err
 }

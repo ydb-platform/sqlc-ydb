@@ -1,0 +1,241 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly module_path='github.com/ydb-platform/sqlc-engine-ydb'
+declare -a cleanup_paths=()
+
+cleanup() {
+  set +u
+  local path
+  for path in "${cleanup_paths[@]}"; do
+    [[ -n $path ]] && rm -rf -- "$path"
+  done
+}
+trap cleanup EXIT
+
+usage() {
+  cat >&2 <<'EOF'
+usage:
+  scripts/release check <vMAJOR.MINOR.PATCH[-rcN]> [notes-file]
+  scripts/release build <tag> <commit> <goos> <goarch> <dist-dir>
+  scripts/release verify <tag> <dist-dir> <targets-file>
+EOF
+  exit 2
+}
+
+fail() {
+  echo "release: $*" >&2
+  exit 1
+}
+
+version_from_tag() {
+  local tag=${1-}
+  if [[ ! $tag =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc(0|[1-9][0-9]*))?$ ]]; then
+    fail "tag must be a semantic version such as v1.2.3 or v1.2.3-rc0: ${tag:-<empty>}"
+  fi
+  printf '%s\n' "${tag#v}"
+}
+
+archive_name() {
+  local version=$1 goos=$2 goarch=$3
+  local extension=tar.gz
+  if [[ $goos == windows ]]; then
+    extension=zip
+  fi
+  printf 'sqlc-ydb_%s_%s_%s.%s\n' "$version" "$goos" "$goarch" "$extension"
+}
+
+binary_name() {
+  if [[ $1 == windows ]]; then
+    printf 'sqlc-ydb.exe\n'
+  else
+    printf 'sqlc-ydb\n'
+  fi
+}
+
+check_release() {
+  [[ $# -ge 1 && $# -le 2 ]] || usage
+  local tag=$1 notes=${2-} version changelog binary temporary=
+  version=$(version_from_tag "$tag")
+  changelog=${SQLC_YDB_CHANGELOG:-CHANGELOG.md}
+  binary=${SQLC_YDB_RELEASE_BINARY:-}
+  if [[ -z $binary ]]; then
+    temporary=$(mktemp -d)
+    cleanup_paths+=("$temporary")
+    binary="$temporary/sqlc-ydb"
+    local flags=
+    if [[ $version == *-rc* ]]; then
+      flags="-X ${module_path}/internal/cli.Version=${version}"
+    fi
+    CGO_ENABLED=0 go build -trimpath -ldflags "$flags" -o "$binary" ./cmd/sqlc-ydb
+  fi
+  [[ -x $binary ]] || fail "release binary is not executable: $binary"
+  local actual
+  actual=$("$binary" version)
+  [[ $actual == "$version" ]] || fail "tag $tag does not match CLI version $actual"
+  local notes_tmp
+  if [[ -n $notes ]]; then
+    notes_tmp=$notes
+    mkdir -p "$(dirname "$notes_tmp")"
+  else
+    notes_tmp=$(mktemp)
+  fi
+  python3 scripts/release-version.py notes --tag "$tag" --changelog "$changelog" --notes "$notes_tmp"
+  if [[ -z $notes ]]; then
+    rm -f "$notes_tmp"
+  fi
+  if [[ -n $temporary ]]; then
+    rm -rf "$temporary"
+  fi
+}
+
+build_archive() {
+  [[ $# == 5 ]] || usage
+  local tag=$1 commit=$2 goos=$3 goarch=$4 dist=$5
+  local version
+  version=$(version_from_tag "$tag")
+  [[ $commit =~ ^[0-9a-fA-F]{40}$ ]] || fail "commit must be a full 40-character Git object ID"
+  check_release "$tag"
+  case "$goos/$goarch" in
+    linux/amd64|linux/arm64|darwin/amd64|darwin/arm64|windows/amd64|windows/arm64) ;;
+    *) fail "target is outside the release matrix: $goos/$goarch" ;;
+  esac
+
+  mkdir -p "$dist"
+  local temporary base binary archive
+  temporary=$(mktemp -d)
+  cleanup_paths+=("$temporary")
+  base="sqlc-ydb_${version}_${goos}_${goarch}"
+  mkdir -p "$temporary/$base"
+  binary=$(binary_name "$goos")
+  GOOS=$goos GOARCH=$goarch CGO_ENABLED=0 \
+    go build -trimpath -ldflags "-s -w -X ${module_path}/internal/cli.Version=${version} -X ${module_path}/internal/cli.Commit=${commit}" \
+    -o "$temporary/$base/$binary" ./cmd/sqlc-ydb
+  cp LICENSE "$temporary/$base/LICENSE"
+  archive="$dist/$(archive_name "$version" "$goos" "$goarch")"
+  if [[ $goos == windows ]]; then
+    archive=$(cd "$(dirname "$archive")" && pwd)/$(basename "$archive")
+    (cd "$temporary" && zip -q -r "$archive" "$base")
+  else
+    tar -C "$temporary" -czf "$archive" "$base"
+  fi
+  rm -rf "$temporary"
+}
+
+hash_file() {
+  local path=$1
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$path" | awk '{print $1}'
+  else
+    shasum -a 256 "$path" | awk '{print $1}'
+  fi
+}
+
+verify_archive() {
+  local archive=$1 base=$2 binary=$3 goos=$4 goarch=$5 commit=$6 temporary=$7
+  local listing="$temporary/listing-$goos-$goarch"
+  if [[ $archive == *.zip ]]; then
+    unzip -Z1 "$archive" | sed '/\/$/d' | LC_ALL=C sort >"$listing"
+  else
+    tar -tzf "$archive" | sed '/\/$/d' | LC_ALL=C sort >"$listing"
+  fi
+  printf '%s\n%s\n' "$base/LICENSE" "$base/$binary" | LC_ALL=C sort >"$temporary/expected"
+  cmp -s "$temporary/expected" "$listing" || fail "unexpected archive contents: $archive"
+  local inspect="$temporary/inspect-$goos-$goarch"
+  mkdir -p "$inspect"
+  if [[ $archive == *.zip ]]; then
+    unzip -q "$archive" -d "$inspect"
+  else
+    tar -C "$inspect" -xzf "$archive"
+  fi
+  local metadata="$temporary/metadata-$goos-$goarch"
+  go version -m "$inspect/$base/$binary" >"$metadata"
+  grep -Fq $'\tpath\t'"${module_path}/cmd/sqlc-ydb" "$metadata" || fail "wrong Go command in $archive"
+  grep -Fq $'\tbuild\t'"GOOS=$goos" "$metadata" || fail "wrong GOOS metadata in $archive"
+  grep -Fq $'\tbuild\t'"GOARCH=$goarch" "$metadata" || fail "wrong GOARCH metadata in $archive"
+  grep -Fq $'\tbuild\tCGO_ENABLED=0' "$metadata" || fail "CGO is enabled in $archive"
+  grep -Fq $'\tbuild\t'"vcs.revision=$commit" "$metadata" || fail "wrong VCS revision in $archive"
+}
+
+smoke_archive() {
+  local archive=$1 base=$2 binary=$3 version=$4 commit=$5 temporary=$6
+  mkdir -p "$temporary/smoke"
+  if [[ $archive == *.zip ]]; then
+    unzip -q "$archive" -d "$temporary/smoke"
+  else
+    tar -C "$temporary/smoke" -xzf "$archive"
+  fi
+  local executable="$temporary/smoke/$base/$binary"
+  local actual verbose
+  actual=$("$executable" version)
+  [[ $actual == "$version" ]] || fail "host smoke returned version $actual, expected $version"
+  verbose=$("$executable" version --verbose)
+  [[ $verbose == *"$version"* && $verbose == *"$commit"* ]] || \
+    fail "host verbose version does not contain version and commit"
+  "$executable" compile -f examples/authors/sqlc.yaml
+  "$executable" diff -f examples/authors/sqlc.yaml
+}
+
+verify_release() {
+  [[ $# == 3 ]] || usage
+  local tag=$1 dist=$2 targets=$3 version commit_file commit host_os host_arch
+  version=$(version_from_tag "$tag")
+  [[ -d $dist ]] || fail "distribution directory not found: $dist"
+  [[ -f $targets ]] || fail "targets file not found: $targets"
+  commit_file="$dist/COMMIT"
+  [[ -f $commit_file ]] || fail "missing release commit file: $commit_file"
+  commit=$(cat "$commit_file")
+  [[ $commit =~ ^[0-9a-fA-F]{40}$ ]] || fail "COMMIT must contain one full Git object ID"
+  host_os=$(go env GOHOSTOS)
+  host_arch=$(go env GOHOSTARCH)
+  local temporary checksums count=0
+  temporary=$(mktemp -d)
+  cleanup_paths+=("$temporary")
+  checksums="$temporary/SHA256SUMS"
+  : >"$checksums"
+  local goos goarch extra archive base binary hash
+  while read -r goos goarch extra; do
+    [[ -z ${goos:-} || $goos == \#* ]] && continue
+    [[ -z ${extra:-} ]] || fail "invalid targets line: $goos $goarch $extra"
+    case "$goos/$goarch" in
+      linux/amd64|linux/arm64|darwin/amd64|darwin/arm64|windows/amd64|windows/arm64) ;;
+      *) fail "target is outside the release matrix: $goos/$goarch" ;;
+    esac
+    archive="$dist/$(archive_name "$version" "$goos" "$goarch")"
+    [[ -f $archive ]] || fail "missing archive: $(basename "$archive")"
+    base=${archive##*/sqlc-ydb_}
+    base=${base%.tar.gz}
+    base=${base%.zip}
+    base="sqlc-ydb_${base}"
+    binary=$(binary_name "$goos")
+    verify_archive "$archive" "$base" "$binary" "$goos" "$goarch" "$commit" "$temporary"
+    hash=$(hash_file "$archive")
+    printf '%s  %s\n' "$hash" "$(basename "$archive")" >>"$checksums"
+    if [[ $goos == "$host_os" && $goarch == "$host_arch" ]]; then
+      smoke_archive "$archive" "$base" "$binary" "$version" "$commit" "$temporary"
+    fi
+    count=$((count + 1))
+  done <"$targets"
+  [[ $count -gt 0 ]] || fail "targets file is empty"
+  local actual_count
+  actual_count=$(find "$dist" -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' \) | wc -l | tr -d ' ')
+  [[ $actual_count == "$count" ]] || fail "distribution has $actual_count archives, expected $count"
+  local generated_checksums="$temporary/SHA256SUMS.sorted"
+  LC_ALL=C sort -k2 "$checksums" >"$generated_checksums"
+  if [[ -f $dist/SHA256SUMS ]]; then
+    cmp -s "$dist/SHA256SUMS" "$generated_checksums" || fail "SHA256SUMS does not match the release archives"
+  else
+    cp "$generated_checksums" "$dist/SHA256SUMS"
+  fi
+  rm -rf "$temporary"
+}
+
+command=${1-}
+[[ -n $command ]] || usage
+shift
+case $command in
+  check) check_release "$@" ;;
+  build) build_archive "$@" ;;
+  verify) verify_release "$@" ;;
+  *) usage ;;
+esac

@@ -4,7 +4,9 @@ Generate typed Go, Python, C++, C#, and Java query code from YQL for YDB. One ex
 the parser, semantic analyzer, and generators. Generation works offline and does
 not require a running YDB, Python, or any separately installed codegen plugin.
 
-This is the first standalone development version. The previous engine-plugin
+This is the first standalone development version, preparing for release 0.0.1.
+No release is implied by the version number; see the [changelog](CHANGELOG.md)
+and [release plan](docs/release-plan.md). The previous engine-plugin
 implementation is preserved in `archive/engine-plugins-2026-09-07`.
 
 ## Quick start
@@ -56,6 +58,10 @@ Use `sqlc-ydb init` for a starting configuration. Input and output paths are
 relative to the configuration file. `generate` completes analysis and rendering
 before writing any files; `compile` writes nothing; `diff` writes nothing and
 exits with status 1 if generated contents differ.
+Renamed queries or models can leave obsolete generated files: `generate` and
+`diff` report these for manual removal in their current output directories.
+See [output ownership](docs/compatibility.md#output-ownership) when moving outputs
+or sharing directories between configurations.
 
 ## Design and compatibility
 
@@ -75,3 +81,11 @@ See [compatibility](docs/compatibility.md), [targets](docs/targets.md),
 the implemented scope and remaining work. Target-specific configuration and
 examples are described in [C++](docs/cpp.md), [C#](docs/csharp.md), and
 [Java](docs/java.md).
+
+The user guide is planned for the SQLC section of ydb.tech near release. The
+repository currently contains the quick start, technical references and executable
+examples; [the release plan](docs/release-plan.md) tracks site documentation and
+consumer acceptance.
+
+For repository work, start with [AGENTS.md](AGENTS.md) and the
+[project context](.agents/context.md).

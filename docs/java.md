@@ -75,11 +75,6 @@ SQL uses Java 17 text blocks with escaped delimiters, control characters, and
 trailing whitespace. Literal tests compile and execute the emitted Java and
 compare exact UTF-8 bytes with the original SQL.
 
-The native implementation is based on the current SDK source snapshot
-`98aab7828816c9b92cd7583c3383865b834da0af`:
-`GrpcTransport.forConnectionString(url).build()`,
-`QueryClient.newClient(transport).build()`, and
-`SessionRetryContext.create(client).build()`. The JDBC snapshot is
-`a2a43af922ae90b01341a116a6cac81364656b24`; the dialect snapshot is
-`ddd81338501c074f93671914fe914aa1addca3a5`. Exact source paths and published
-version notes are in [java-research.md](java-research.md).
+The inspected SDK sources and framework API references are recorded in
+[source provenance](provenance.md#java-sdk-and-framework-references).
+Dependency versions used by the example are pinned in [its Maven build](../examples/authors/java/pom.xml).

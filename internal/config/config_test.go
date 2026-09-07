@@ -37,6 +37,7 @@ func TestRejectUnsupportedConfiguration(t *testing.T) {
 		{"codegen", base + "  codegen: []\n", "migrate"},
 		{"unknown", base + "  surprise: true\n", "field surprise"},
 		{"option", base + "  gen:\n    go:\n      out: db\n      emit_prepared_queries: true\n", "field emit_prepared_queries"},
+		{"ignored Python package", base + "  gen:\n    python:\n      out: py\n      package: ignored\n", "Python package directory is selected with out"},
 		{"engine", strings.Replace(base, "ydb", "postgresql", 1), "engine must be ydb"},
 		{"documents", base + "---\nversion: '2'\n", "exactly one"},
 		{"empty path", strings.Replace(base, "s.sql", "''", 1), "non-empty path"},

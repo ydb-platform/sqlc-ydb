@@ -44,11 +44,11 @@ type Go struct {
 }
 
 type Python struct {
-	Package          string `yaml:"package"`
-	Out              string `yaml:"out"`
-	Runtime          string `yaml:"runtime"`
-	EmitSyncQuerier  *bool  `yaml:"emit_sync_querier"`
-	EmitAsyncQuerier bool   `yaml:"emit_async_querier"`
+	Package          yaml.Node `yaml:"package"` // Retained only to diagnose the formerly ignored option.
+	Out              string    `yaml:"out"`
+	Runtime          string    `yaml:"runtime"`
+	EmitSyncQuerier  *bool     `yaml:"emit_sync_querier"`
+	EmitAsyncQuerier bool      `yaml:"emit_async_querier"`
 }
 
 type CPP struct {
@@ -205,11 +205,11 @@ func Parse(data []byte) (*Config, error) {
 			}
 		}
 		if p := s.Gen.Python; p != nil {
+			if p.Package.Kind != 0 {
+				return nil, fmt.Errorf("sql[%d].gen.python.package is unsupported; remove it: the Python package directory is selected with out", i)
+			}
 			if p.Out == "" {
 				return nil, fmt.Errorf("sql[%d].gen.python.out is required", i)
-			}
-			if p.Package == "" {
-				p.Package = filepath.Base(filepath.Clean(p.Out))
 			}
 			if p.Runtime == "" {
 				p.Runtime = "ydb"

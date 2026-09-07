@@ -82,6 +82,8 @@ func TestRejectsUnsupportedOrCollidingInput(t *testing.T) {
 		{"execrows", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.ExecRows}}}, Options{}, "unsupported command"},
 		{"field collision", &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "t", Columns: []model.Column{{Name: "a_b", Type: model.Type{Kind: "Utf8"}}, {Name: "a b", Type: model.Type{Kind: "Utf8"}}}}}}}, Options{}, "column name collision"},
 		{"generated type collision", &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "queries"}}}}, Options{}, "model name collision"},
+		{"duplicate query", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Same", Command: model.Exec}, {Name: "Same", Command: model.Exec}}}, Options{}, "SQL constant collision"},
+		{"unrepresentable table name", &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "---"}}}}, Options{}, "invalid model name"},
 		{"namespace", authorsAnalysis(), Options{Namespace: "Bad.class"}, "invalid namespace"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

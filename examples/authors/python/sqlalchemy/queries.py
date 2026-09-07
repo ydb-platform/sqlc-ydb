@@ -5,9 +5,6 @@ from . import models
 import ydb
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
-def _typed(value, typ):
-    return (value, typ)
-
 
 SQL_GET_AUTHOR = """-- name\\: GetAuthor \\:one
 DECLARE $author_id AS Uint64;
@@ -32,14 +29,8 @@ DECLARE $author_id AS Uint64;
 DELETE FROM authors WHERE id = :author_id;"""
 
 
-def _row_value(row, name, index):
-    try:
-        return row[name]
-    except (KeyError, IndexError, TypeError):
-        try:
-            return row[index]
-        except (KeyError, IndexError, TypeError):
-            return getattr(row, name)
+def _typed(value, typ):
+    return (value, typ)
 
 
 class Querier:
@@ -57,9 +48,9 @@ class Querier:
             return None
         row = rows[0]
         return models.Author(
-            id=_row_value(row, "id", 0),
-            name=_row_value(row, "name", 1),
-            bio=_row_value(row, "bio", 2),
+            id=row._mapping["id"],
+            name=row._mapping["name"],
+            bio=row._mapping["bio"],
         )
 
     def list_authors(self) -> Iterable[models.Author]:
@@ -70,9 +61,9 @@ class Querier:
         finally:
             result.close()
         return (models.Author(
-            id=_row_value(row, "id", 0),
-            name=_row_value(row, "name", 1),
-            bio=_row_value(row, "bio", 2),
+            id=row._mapping["id"],
+            name=row._mapping["name"],
+            bio=row._mapping["bio"],
         ) for row in rows)
 
     def get_author_name(self, author_id: int) -> Optional[models.GetAuthorNameRow]:
@@ -86,7 +77,7 @@ class Querier:
             return None
         row = rows[0]
         return models.GetAuthorNameRow(
-            name=_row_value(row, "name", 0),
+            name=row._mapping["name"],
         )
 
     def upsert_author(self, author_id: int, author_name: str, biography: Optional[str]) -> None:

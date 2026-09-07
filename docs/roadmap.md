@@ -1,31 +1,16 @@
 # Compiler roadmap
 
-Keep the familiar sqlc workflow, direct ANTLR YQL parse contexts, a resolved
-semantic model and built-in generators. There is no cross-dialect AST, engine
-registry, external codegen protocol or requirement to merge upstream sources.
+This page describes planned compiler work. Current stages are in
+[architecture](architecture.md); implemented behavior is in
+[compatibility](compatibility.md).
+Release delivery, user documentation and acceptance responsibilities are tracked
+in [the release plan](release-plan.md).
 
 ## 1. Schema evolution: implemented subset
 
-Apply supported YDB DDL to an in-memory catalog in source order, then analyze
-queries against the final catalog. This reads migration files; it does not run
-migrations against a database or manage a migration version table.
-
-- Preserve the source loader's explicit list order and lexical directory/glob
-  order, its supported Up/Down markers and exclusion of `*.down.sql`.
-- Apply YDB `ALTER TABLE` and `DROP TABLE` catalog operations alongside `CREATE
-  TABLE`, with existence guards only where supported by the YQL grammar.
-- Validate missing/duplicate names and primary-key constraints. Apply each
-  multi-action ALTER atomically to the catalog; a failed action must not leave
-  earlier actions partially applied.
-- Keep table/column ordering deterministic and diagnostics tied to the original
-  file, line and column. Unsupported schema semantics must fail explicitly.
-- Verify semantic results with focused tests and the real CLI with a migration
-  directory fixture generating both Go and Python. Reuse the existing golden
-  runner and CI; no database matrix or new container orchestration is needed.
-
-The exact supported DDL subset is recorded in [compatibility](compatibility.md).
-It covers ADD/DROP COLUMN and standalone table RENAME TO. General ALTER COLUMN,
-indexes, views and other schema objects remain future work.
+The implemented migration behavior is recorded in
+[schema migration coverage](compatibility.md#schema-migration-coverage).
+General ALTER COLUMN, indexes, views and other schema objects remain future work.
 Further schema operations should be added with corresponding YDB semantics and
 fixtures, not accepted merely because the parser recognizes them.
 

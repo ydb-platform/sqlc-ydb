@@ -96,6 +96,15 @@ func parseYQL(file, text string, lineOffset int) (parsedYQL, []model.Diagnostic)
 	p.RemoveErrorListeners()
 	p.AddErrorListener(listener)
 	tree := p.Sql_query()
+	tokens.Fill()
+	for _, token := range tokens.GetAllTokens() {
+		if token.GetTokenType() == parser.YQLLexerID_QUOTED && strings.Contains(token.GetText(), `\`) {
+			listener.diagnostics = append(listener.diagnostics, model.Diagnostic{
+				Position: model.Position{File: file, Line: lineOffset + token.GetLine(), Column: token.GetColumn() + 1},
+				Message:  "backslash escapes in quoted identifiers are unsupported",
+			})
+		}
+	}
 	return parsedYQL{tree: tree}, listener.diagnostics
 }
 

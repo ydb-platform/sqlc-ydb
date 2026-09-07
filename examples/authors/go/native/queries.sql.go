@@ -8,12 +8,12 @@ import (
 	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 
-const getAuthor = `-- name: GetAuthor :one
+const queryGetAuthor = `-- name: GetAuthor :one
 DECLARE $author_id AS Uint64;
 SELECT id, name, bio FROM authors WHERE id = $author_id;`
 
-func (q *Queries) GetAuthor(ctx context.Context, author_id uint64) (GetAuthorRow, error) {
-	result, err := q.db.QueryRow(ctx, getAuthor, query.WithParameters(ydb.ParamsBuilder().Param("$author_id").Uint64(author_id).Build()))
+func (q *Queries) GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, error) {
+	result, err := q.db.QueryRow(ctx, queryGetAuthor, query.WithParameters(ydb.ParamsBuilder().Param("$author_id").Uint64(arg).Build()))
 	if err != nil {
 		return GetAuthorRow{}, err
 	}
@@ -24,11 +24,11 @@ func (q *Queries) GetAuthor(ctx context.Context, author_id uint64) (GetAuthorRow
 	return row, nil
 }
 
-const listAuthors = `-- name: ListAuthors :many
+const queryListAuthors = `-- name: ListAuthors :many
 SELECT id, name, bio FROM authors ORDER BY id;`
 
 func (q *Queries) ListAuthors(ctx context.Context) ([]ListAuthorsRow, error) {
-	result, err := q.db.QueryResultSet(ctx, listAuthors)
+	result, err := q.db.QueryResultSet(ctx, queryListAuthors)
 	if err != nil {
 		return make([]ListAuthorsRow, 0), err
 	}
@@ -47,12 +47,12 @@ func (q *Queries) ListAuthors(ctx context.Context) ([]ListAuthorsRow, error) {
 	return items, nil
 }
 
-const getAuthorName = `-- name: GetAuthorName :one
+const queryGetAuthorName = `-- name: GetAuthorName :one
 DECLARE $author_id AS Uint64;
 SELECT name FROM authors WHERE id = $author_id;`
 
-func (q *Queries) GetAuthorName(ctx context.Context, author_id uint64) (GetAuthorNameRow, error) {
-	result, err := q.db.QueryRow(ctx, getAuthorName, query.WithParameters(ydb.ParamsBuilder().Param("$author_id").Uint64(author_id).Build()))
+func (q *Queries) GetAuthorName(ctx context.Context, arg uint64) (GetAuthorNameRow, error) {
+	result, err := q.db.QueryRow(ctx, queryGetAuthorName, query.WithParameters(ydb.ParamsBuilder().Param("$author_id").Uint64(arg).Build()))
 	if err != nil {
 		return GetAuthorNameRow{}, err
 	}
@@ -63,7 +63,7 @@ func (q *Queries) GetAuthorName(ctx context.Context, author_id uint64) (GetAutho
 	return row, nil
 }
 
-const upsertAuthor = `-- name: UpsertAuthor :exec
+const queryUpsertAuthor = `-- name: UpsertAuthor :exec
 DECLARE $author_id AS Uint64;
 DECLARE $author_name AS Utf8;
 DECLARE $biography AS Optional<Utf8>;
@@ -71,13 +71,13 @@ UPSERT INTO authors (id, name, bio)
 VALUES ($author_id, $author_name, $biography);`
 
 func (q *Queries) UpsertAuthor(ctx context.Context, arg UpsertAuthorParams) error {
-	return q.db.Exec(ctx, upsertAuthor, query.WithParameters(ydb.ParamsBuilder().Param("$author_id").Uint64(arg.AuthorID).Param("$author_name").Text(arg.AuthorName).Param("$biography").BeginOptional().Text(arg.Biography).EndOptional().Build()))
+	return q.db.Exec(ctx, queryUpsertAuthor, query.WithParameters(ydb.ParamsBuilder().Param("$author_id").Uint64(arg.AuthorID).Param("$author_name").Text(arg.AuthorName).Param("$biography").BeginOptional().Text(arg.Biography).EndOptional().Build()))
 }
 
-const deleteAuthor = `-- name: DeleteAuthor :exec
+const queryDeleteAuthor = `-- name: DeleteAuthor :exec
 DECLARE $author_id AS Uint64;
 DELETE FROM authors WHERE id = $author_id;`
 
-func (q *Queries) DeleteAuthor(ctx context.Context, author_id uint64) error {
-	return q.db.Exec(ctx, deleteAuthor, query.WithParameters(ydb.ParamsBuilder().Param("$author_id").Uint64(author_id).Build()))
+func (q *Queries) DeleteAuthor(ctx context.Context, arg uint64) error {
+	return q.db.Exec(ctx, queryDeleteAuthor, query.WithParameters(ydb.ParamsBuilder().Param("$author_id").Uint64(arg).Build()))
 }

@@ -22,7 +22,9 @@ import (
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/source"
 )
 
-var Version = "0.1.0-dev"
+// Release builds set Version and Commit through linker flags.
+var Version = "0.0.1"
+var Commit = "unknown"
 
 const help = `sqlc-ydb generates typed code from YQL.
 
@@ -34,7 +36,7 @@ Commands:
   compile    Analyze schema and queries without generating files
   diff       Compare generated code with existing files (exit 1 on differences)
   init       Create a sqlc.yaml configuration (--v1 or --v2)
-  version    Print the version
+  version    Print the version (--verbose includes the build commit)
 
 Options:
   -f, --file <path>  Use an alternate configuration file
@@ -45,6 +47,7 @@ Options:
 type arguments struct {
 	command, file string
 	v1, help      bool
+	verbose       bool
 }
 
 func parseArgs(args []string) (arguments, error) {
@@ -73,6 +76,8 @@ func parseArgs(args []string) (arguments, error) {
 			a.v1 = true
 		case arg == "--v2":
 			v2 = true
+		case arg == "--verbose":
+			a.verbose = true
 		case strings.HasPrefix(arg, "-"):
 			return a, fmt.Errorf("unknown option %q", arg)
 		default:
@@ -87,6 +92,9 @@ func parseArgs(args []string) (arguments, error) {
 	}
 	if (a.v1 || v2) && a.command != "init" {
 		return a, errors.New("--v1 and --v2 are only valid for init")
+	}
+	if a.verbose && a.command != "version" {
+		return a, errors.New("--verbose is only valid for version")
 	}
 	return a, nil
 }
@@ -103,6 +111,9 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 	if a.command == "version" {
 		fmt.Fprintln(stdout, Version)
+		if a.verbose {
+			fmt.Fprintf(stdout, "commit: %s\n", Commit)
+		}
 		return 0
 	}
 	if a.command == "init" {
@@ -130,6 +141,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 	if a.command == "compile" {
 		return 0
+	}
+	if err := checkStaleOutputs(files); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
 	}
 	if a.command == "diff" {
 		changed, err := compare(files, stdout)
@@ -187,13 +202,6 @@ func prepare(c *config.Config, generate bool) ([]output, error) {
 		if err != nil {
 			return nil, err
 		}
-		if len(result.Diagnostics) > 0 {
-			messages := make([]string, 0, len(result.Diagnostics))
-			for _, d := range result.Diagnostics {
-				messages = append(messages, d.Error())
-			}
-			return nil, errors.New(strings.Join(messages, "\n"))
-		}
 		if !generate {
 			continue
 		}
@@ -231,7 +239,7 @@ func prepare(c *config.Config, generate bool) ([]output, error) {
 			}
 		}
 		if p := s.Gen.Python; p != nil {
-			files, err := python.Generate(result, python.Options{Package: p.Package, Runtime: p.Runtime, EmitSyncQuerier: *p.EmitSyncQuerier, EmitAsyncQuerier: p.EmitAsyncQuerier})
+			files, err := python.Generate(result, python.Options{Runtime: p.Runtime, EmitSyncQuerier: *p.EmitSyncQuerier, EmitAsyncQuerier: p.EmitAsyncQuerier})
 			if err != nil {
 				return nil, fmt.Errorf("Python generation: %w", err)
 			}
@@ -342,7 +350,11 @@ func start(s []string) int {
 }
 
 func writeFile(f output) error {
-	if old, err := os.ReadFile(f.path); err == nil && bytes.Equal(old, f.content) {
+	old, err := os.ReadFile(f.path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err == nil && bytes.Equal(old, f.content) {
 		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(f.path), 0755); err != nil {
@@ -372,9 +384,30 @@ func initialize(a arguments, w io.Writer) error {
 	if path == "" {
 		path = "sqlc.yaml"
 	}
-	text := "version: \"2\"\nsql:\n  - engine: ydb\n    schema: schema.sql\n    queries: query.sql\n    gen:\n      go:\n        package: db\n        out: db\n        sql_package: ydb\n      python:\n        package: queries\n        out: queries\n        runtime: ydb\n"
+	text := `version: "2"
+sql:
+  - engine: ydb
+    schema: schema.sql
+    queries: query.sql
+    gen:
+      go:
+        package: db
+        out: db
+        sql_package: ydb
+      python:
+        out: queries
+        runtime: ydb
+`
 	if a.v1 {
-		text = "version: \"1\"\npackages:\n  - name: db\n    engine: ydb\n    path: db\n    schema: schema.sql\n    queries: query.sql\n    sql_package: ydb\n"
+		text = `version: "1"
+packages:
+  - name: db
+    engine: ydb
+    path: db
+    schema: schema.sql
+    queries: query.sql
+    sql_package: ydb
+`
 	}
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 	if errors.Is(err, os.ErrExist) {

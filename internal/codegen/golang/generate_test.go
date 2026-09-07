@@ -39,7 +39,7 @@ func TestGeneratedSQLIsMultilineAndPreservesText(t *testing.T) {
 	} {
 		for _, runtime := range []string{"database/sql", "ydb"} {
 			source := generatedSQLSource(t, runtime, tc.sql)
-			if !strings.Contains(string(source), "const getUser = "+tc.wantLiteral) {
+			if !strings.Contains(string(source), "const queryGetUser = "+tc.wantLiteral) {
 				t.Fatalf("%s SQL is not a readable multiline literal:\n%s", runtime, source)
 			}
 			if strings.Contains(tc.sql, "`id`") && !strings.Contains(string(source), "\"SELECT `id`, `bio` FROM `users`\\n\"") {
@@ -109,7 +109,7 @@ func generatedSQLValue(t *testing.T, source []byte) string {
 	found := false
 	ast.Inspect(file, func(node ast.Node) bool {
 		decl, ok := node.(*ast.ValueSpec)
-		if !ok || len(decl.Names) != 1 || decl.Names[0].Name != "getUser" {
+		if !ok || len(decl.Names) != 1 || decl.Names[0].Name != "queryGetUser" {
 			return true
 		}
 		found = true
@@ -169,7 +169,7 @@ func runLiveGenerated(t *testing.T, dsn, table, runtime string) {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.125.1\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	test := liveTestSource(dsn, table, runtime)
@@ -277,7 +277,7 @@ var lastSQL string
 var fail bool
 type drv struct{}; func (drv) Open(string)(driver.Conn,error){return conn{},nil}
 type conn struct{}; func (conn) Prepare(string)(driver.Stmt,error){return nil,driver.ErrSkip}; func (conn) Close()error{return nil}; func (conn) Begin()(driver.Tx,error){return nil,driver.ErrSkip}
-func (conn) QueryContext(_ context.Context, q string, a []driver.NamedValue)(driver.Rows,error){ calls=a;lastSQL=q;if fail{return nil,errors.New("query failed")}; if q==getUser {return &rows{data:[][]driver.Value{{uint64(7),nil}}},nil}; return &rows{data:[][]driver.Value{{uint64(8),"a"}}},nil }
+func (conn) QueryContext(_ context.Context, q string, a []driver.NamedValue)(driver.Rows,error){ calls=a;lastSQL=q;if fail{return nil,errors.New("query failed")}; if q==queryGetUser {return &rows{data:[][]driver.Value{{uint64(7),nil}}},nil}; return &rows{data:[][]driver.Value{{uint64(8),"a"}}},nil }
 func (conn) ExecContext(_ context.Context, _ string, a []driver.NamedValue)(driver.Result,error){calls=a; return result(3),nil}
 type rows struct{data [][]driver.Value; i int}; func (r *rows) Columns()[]string{return []string{"id","bio"}}; func (r *rows) Close()error{closed=true;return nil}; func (r *rows) Next(dst []driver.Value)error{if r.i==len(r.data){return io.EOF};copy(dst,r.data[r.i]);r.i++;return nil}
 type result int64; func (r result) LastInsertId()(int64,error){return 0,nil};func(r result) RowsAffected()(int64,error){return int64(r),nil}
@@ -302,7 +302,7 @@ func compileInput(t *testing.T, input *model.AnalysisResult, opts Options) {
 	}
 	mod := "module generated\n\ngo 1.26.0\n"
 	if opts.Runtime == "ydb" {
-		mod += "\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.125.1\n"
+		mod += "\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"
 	}
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(mod), 0600); err != nil {
 		t.Fatal(err)
@@ -313,7 +313,7 @@ func compileInput(t *testing.T, input *model.AnalysisResult, opts Options) {
 	if err != nil {
 		t.Fatalf("generated %s code does not compile:\n%s", opts.Runtime, out)
 	}
-	if opts.Runtime == "database/sql" && !strings.Contains(string(files[0].Content), "json:\"id\"") {
+	if opts.Runtime == "database/sql" && opts.EmitJSONTags && !strings.Contains(string(files[0].Content), "json:\"id\"") {
 		t.Fatal("JSON tags were not emitted")
 	}
 }
@@ -337,5 +337,54 @@ func TestRejectsExecRows(t *testing.T) {
 func TestGoNameInitialismID(t *testing.T) {
 	if got := goName("author_id"); got != "AuthorID" {
 		t.Fatalf("author_id => %q", got)
+	}
+}
+
+func TestGeneratedIdentifiersDoNotCollideWithMethodScope(t *testing.T) {
+	u64 := model.Type{Kind: "Uint64"}
+	row := []model.ResultSet{{Columns: []model.Column{{Name: "value", Type: u64}}}}
+	databaseSQL := &model.AnalysisResult{Queries: []model.AnalyzedQuery{
+		{Name: "ByContext", Command: model.Exec, Parameters: []model.Parameter{{Name: "ctx", Type: u64}}},
+		{Name: "ByReceiver", Command: model.Exec, Parameters: []model.Parameter{{Name: "q", Type: u64}}},
+		{Name: "BySQLImport", Command: model.Exec, Parameters: []model.Parameter{{Name: "sql", Type: u64}}},
+		{Name: "ByRowLocal", Command: model.One, Parameters: []model.Parameter{{Name: "row", Type: u64}}, ResultSets: row},
+	}}
+	compileInput(t, databaseSQL, Options{Package: "db", Runtime: "database/sql"})
+
+	ydb := &model.AnalysisResult{Queries: []model.AnalyzedQuery{
+		{Name: "ByYDBImport", Command: model.Exec, Parameters: []model.Parameter{{Name: "ydb", Type: u64}}},
+		{Name: "ByQueryImport", Command: model.Exec, Parameters: []model.Parameter{{Name: "query", Type: u64}}},
+	}}
+	compileInput(t, ydb, Options{Package: "db", Runtime: "ydb"})
+}
+
+func TestNoParameterQueryFilesCompileWithoutUnusedRuntimeImports(t *testing.T) {
+	in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Ping", Command: model.Exec, SQL: "SELECT 1;"}}}
+	for _, runtime := range []string{"database/sql", "ydb"} {
+		t.Run(runtime, func(t *testing.T) {
+			compileInput(t, in, Options{Package: "db", Runtime: runtime})
+		})
+	}
+}
+
+func TestDatabaseSQLRejectsQueryNamedWithTx(t *testing.T) {
+	_, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "WithTx", Command: model.Exec}}}, Options{Package: "db", Runtime: "database/sql"})
+	if err == nil || !strings.Contains(err.Error(), `query name "WithTx" conflicts with generated Queries.WithTx`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestQueryConstantsPreserveCaseDistinctNames(t *testing.T) {
+	in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{
+		{Name: "Foo", Command: model.Exec, SQL: "SELECT 1;"},
+		{Name: "foo", Command: model.Exec, SQL: "SELECT 2;"},
+	}}
+	compileInput(t, in, Options{Package: "db", Runtime: "database/sql"})
+}
+
+func TestRejectsBlankIdentifierPackage(t *testing.T) {
+	_, err := Generate(&model.AnalysisResult{}, Options{Package: "_", Runtime: "database/sql"})
+	if err == nil || !strings.Contains(err.Error(), `invalid Go package "_"`) {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

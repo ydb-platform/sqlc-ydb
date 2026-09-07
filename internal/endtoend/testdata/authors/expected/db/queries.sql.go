@@ -7,12 +7,12 @@ import (
 	"database/sql"
 )
 
-const getAuthor = "-- name: GetAuthor :one\n" +
+const queryGetAuthor = "-- name: GetAuthor :one\n" +
 	"DECLARE $author_id AS Uint64;\n" +
 	"SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;"
 
-func (q *Queries) GetAuthor(ctx context.Context, author_id uint64) (GetAuthorRow, error) {
+func (q *Queries) GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, error) {
 	var row GetAuthorRow
-	err := q.db.QueryRowContext(ctx, getAuthor, sql.Named("author_id", author_id)).Scan(&row.ID, &row.Name, &row.Bio)
+	err := q.db.QueryRowContext(ctx, queryGetAuthor, sql.Named("author_id", arg)).Scan(&row.ID, &row.Name, &row.Bio)
 	return row, err
 }

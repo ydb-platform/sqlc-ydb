@@ -21,6 +21,9 @@ another recursive syntax tree.
 identity, parameters, result sets and source locations. Nullability is an
 `Optional` type, and compound type metadata is retained. A table catalog and a
 query projection are distinct: `SELECT name` does not generate the whole table.
+`AnalyzedQuery.SQL` retains executable YQL and its declarations. Parameter names
+omit the leading `$`; their types and result column types must be resolved.
+`analyzer.Analyze` returns an error whenever its result contains diagnostics.
 
 The language packages in `internal/codegen` produce files from that
 resolved model. They handle naming, runtime-specific parameter binding, result
@@ -32,6 +35,9 @@ semantic query analysis and must preserve strings, comments and identifiers.
 prepared before writes start. Each file is replaced through a temporary sibling;
 this protects individual files from interrupted writes, but does not promise a
 filesystem transaction covering every output.
+Before writing or comparing, the CLI checks current output directories for
+obsolete files with the sqlc-ydb generated header. It reports those files for
+manual removal; see [output ownership](compatibility.md#output-ownership).
 
 ## Where is the compiler?
 

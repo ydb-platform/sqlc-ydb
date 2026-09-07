@@ -8,12 +8,12 @@ import (
 	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 
-const getAuthor = `-- name: GetAuthor :one
+const queryGetAuthor = `-- name: GetAuthor :one
 DECLARE $id AS Uint64;
 SELECT * FROM authors WHERE id = $id;`
 
-func (q *Queries) GetAuthor(ctx context.Context, id uint64) (GetAuthorRow, error) {
-	result, err := q.db.QueryRow(ctx, getAuthor, query.WithParameters(ydb.ParamsBuilder().Param("$id").Uint64(id).Build()))
+func (q *Queries) GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, error) {
+	result, err := q.db.QueryRow(ctx, queryGetAuthor, query.WithParameters(ydb.ParamsBuilder().Param("$id").Uint64(arg).Build()))
 	if err != nil {
 		return GetAuthorRow{}, err
 	}

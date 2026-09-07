@@ -26,9 +26,9 @@ type UpsertAuthorParams struct {
 }
 
 type Querier interface {
-	GetAuthor(ctx context.Context, author_id uint64) (GetAuthorRow, error)
+	GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, error)
 	ListAuthors(ctx context.Context) ([]ListAuthorsRow, error)
-	GetAuthorName(ctx context.Context, author_id uint64) (GetAuthorNameRow, error)
+	GetAuthorName(ctx context.Context, arg uint64) (GetAuthorNameRow, error)
 	UpsertAuthor(ctx context.Context, arg UpsertAuthorParams) error
-	DeleteAuthor(ctx context.Context, author_id uint64) error
+	DeleteAuthor(ctx context.Context, arg uint64) error
 }

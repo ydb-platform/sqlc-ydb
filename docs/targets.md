@@ -51,13 +51,18 @@ both C++ profiles and native Java execute a transaction per method; C#, JDBC,
 Spring, and Hibernate use the caller's connection or transaction. Generated DB-API code closes
 its own cursors and does not commit caller-owned transactions.
 
+Python row decoding follows the selected runtime: native YDB rows are indexed by
+column name, DB-API rows by position, and SQLAlchemy rows through `row._mapping`.
+Custom wrappers must provide that same contract. Missing result sets or columns
+raise errors; they are not converted into empty results or tried as other row shapes.
+
 The verified `ydb-sqlalchemy` 0.1.22 has no asynchronous dialect. Requests for
 `emit_async_querier: true` are explicitly rejected. Async Python adapters,
 Pydantic, custom naming/type overrides and additional framework profiles remain
 subsequent work.
 
-Verified runtime versions: Go SDK 3.125.1; Python SDK 3.29.7, ydb-dbapi 0.1.23,
-ydb-sqlalchemy 0.1.22, SQLAlchemy 2.0.52. Live tests exercised both Go adapters and
+Verified runtime versions: Go SDK 3.151.1; Python SDK 3.29.7, ydb-dbapi 0.1.23,
+ydb-sqlalchemy 0.1.22, SQLAlchemy 2.0.52. Live tests cover both Go adapters and
 all three Python adapters on YDB 26.3.1.8, including high Uint64, binary/text,
 optional values and query cardinalities. Native Go additionally supports a
 List<Uint64> result; database/sql cannot scan this driver value and rejects List

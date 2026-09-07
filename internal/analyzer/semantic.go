@@ -3,7 +3,6 @@ package analyzer
 import (
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -174,21 +173,19 @@ func validateQueryStatements(block queryBlock, tree queryTree) []model.Diagnosti
 	var diagnostics []model.Diagnostic
 	mainStatements := 0
 	for _, statement := range tree.statements {
-		declares, named, data := 0, 0, 0
-		descendants(statement, func(node antlr.Tree) {
-			switch node.(type) {
-			case *parser.Declare_stmtContext:
-				declares++
-			case *parser.Named_nodes_stmtContext:
-				named++
-			case *parser.Select_coreContext, *parser.Into_table_stmtContext, *parser.Update_stmtContext, *parser.Delete_stmtContext:
-				data++
-			}
-		})
+		core := statement.Sql_stmt_core()
+		if statement.EXPLAIN() != nil {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, "EXPLAIN is unsupported in named queries"))
+			continue
+		}
+		if core == nil {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, fmt.Sprintf("unsupported statement in named query: %q", statement.GetText())))
+			continue
+		}
 		switch {
-		case declares == 1 && named == 0 && data == 0:
-		case named == 1 && declares == 0 && data == 0:
-		case named == 0 && declares == 0 && data == 1:
+		case core.Declare_stmt() != nil:
+		case core.Named_nodes_stmt() != nil:
+		case core.Select_stmt() != nil, core.Into_table_stmt() != nil, core.Update_stmt() != nil, core.Delete_stmt() != nil:
 			mainStatements++
 		default:
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, fmt.Sprintf("unsupported statement in named query: %q", statement.GetText())))
@@ -215,12 +212,11 @@ func declarations(block queryBlock, tree queryTree) (map[string]model.Type, map[
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, declaration, err.Error()))
 			continue
 		}
-		key := strings.ToLower(name)
-		if previous, ok := declared[key]; ok && !sameType(previous, typeValue) {
+		if previous, ok := declared[name]; ok && !sameType(previous, typeValue) {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, declaration, fmt.Sprintf("parameter $%s has conflicting DECLARE types %s and %s", name, typeString(previous), typeString(typeValue))))
 			continue
 		}
-		declared[key] = typeValue
+		declared[name] = typeValue
 	}
 	return declared, positions, diagnostics
 }
@@ -239,14 +235,14 @@ func localBindings(block queryBlock, tree queryTree, declared map[string]model.T
 			if bind, ok := node.(*parser.Bind_parameterContext); ok && bind.GetStart() != nil {
 				lhs = append(lhs, bind)
 				positions[bind.GetStart().GetStart()] = true
-				names[strings.ToLower(bindName(bind))] = true
+				names[bindName(bind)] = true
 			}
 		})
 		if len(lhs) != 1 || statement.Expr() == nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, "only single scalar local assignments are supported"))
 			continue
 		}
-		name := strings.ToLower(bindName(lhs[0]))
+		name := bindName(lhs[0])
 		if _, exists := types[name]; exists {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, fmt.Sprintf("local $%s is assigned more than once", name)))
 			continue
@@ -258,7 +254,7 @@ func localBindings(block queryBlock, tree queryTree, declared map[string]model.T
 			}
 		})
 		if len(rhsBinds) == 1 && statement.Expr().GetText() == rhsBinds[0].GetText() {
-			rhsName := strings.ToLower(bindName(rhsBinds[0]))
+			rhsName := bindName(rhsBinds[0])
 			typeValue, ok := types[rhsName]
 			if !ok {
 				typeValue, ok = declared[rhsName]
@@ -271,7 +267,10 @@ func localBindings(block queryBlock, tree queryTree, declared map[string]model.T
 			continue
 		}
 		if len(rhsBinds) == 0 {
-			if typeValue, ok := literalType(statement.Expr().GetText()); ok {
+			if typeValue, ok, err := literalType(statement.Expr()); err != nil {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement.Expr(), err.Error()))
+				continue
+			} else if ok {
 				types[name] = typeValue
 				continue
 			}
@@ -364,7 +363,7 @@ func selectProjection(block queryBlock, selectCore *parser.Select_coreContext, r
 			prefix := strings.TrimSuffix(result.Opt_id_prefix().GetText(), ".")
 			matched := false
 			for _, rel := range relations {
-				if prefix != "" && !strings.EqualFold(prefix, rel.alias) && !strings.EqualFold(prefix, rel.table.Name) {
+				if prefix != "" && prefix != rel.alias && prefix != rel.table.Name {
 					continue
 				}
 				matched = true
@@ -434,8 +433,8 @@ func expressionColumn(expr parser.IExprContext, relations []relation, declared m
 			binds = append(binds, bind)
 		}
 	})
-	if len(refs) == 0 && len(binds) == 1 {
-		typeValue, ok := declared[strings.ToLower(bindName(binds[0]))]
+	if len(refs) == 0 && len(binds) == 1 && expr.GetText() == binds[0].GetText() {
+		typeValue, ok := declared[bindName(binds[0])]
 		if !ok {
 			return model.Column{}, false, fmt.Errorf("cannot resolve type of parameter $%s in result", bindName(binds[0]))
 		}
@@ -444,7 +443,9 @@ func expressionColumn(expr parser.IExprContext, relations []relation, declared m
 	if len(refs) != 0 {
 		return model.Column{}, false, fmt.Errorf("computed result expression %q is not supported", expr.GetText())
 	}
-	if literal, ok := literalType(expr.GetText()); ok {
+	if literal, ok, err := literalType(expr); err != nil {
+		return model.Column{}, false, err
+	} else if ok {
 		return model.Column{Type: literal}, false, nil
 	}
 	return model.Column{}, false, fmt.Errorf("unsupported result expression %q", expr.GetText())
@@ -487,7 +488,7 @@ func isPureColumnExpression(expr parser.IExprContext) bool {
 	if len(refs) != 1 {
 		return false
 	}
-	return strings.EqualFold(strings.ReplaceAll(expr.GetText(), "`", ""), qualifiedName(refs[0]))
+	return expr.GetStart() == refs[0].ctx.GetStart() && expr.GetStop() == refs[0].ctx.GetStop()
 }
 
 func qualifiedName(ref columnRef) string {
@@ -536,11 +537,11 @@ func validateColumnReferences(block queryBlock, root antlr.Tree, relations []rel
 func resolveColumn(relations []relation, ref columnRef) (model.Column, error) {
 	var matches []model.Column
 	for _, rel := range relations {
-		if ref.qualifier != "" && !strings.EqualFold(ref.qualifier, rel.alias) && !strings.EqualFold(ref.qualifier, rel.table.Name) {
+		if ref.qualifier != "" && ref.qualifier != rel.alias && ref.qualifier != rel.table.Name {
 			continue
 		}
 		for _, column := range rel.table.Columns {
-			if strings.EqualFold(column.Name, ref.name) {
+			if column.Name == ref.name {
 				matches = append(matches, joinedColumn(column, rel.optional))
 			}
 		}
@@ -690,10 +691,9 @@ func inferDirectDMLBind(root antlr.Tree, typeValue model.Type, inferred map[stri
 }
 
 func inferParameter(inferred map[string]model.Type, name string, typeValue model.Type) {
-	key := strings.ToLower(name)
-	previous, ok := inferred[key]
+	previous, ok := inferred[name]
 	if !ok || sameType(previous, typeValue) {
-		inferred[key] = typeValue
+		inferred[name] = typeValue
 		return
 	}
 	if previous.Kind == "" {
@@ -701,11 +701,11 @@ func inferParameter(inferred map[string]model.Type, name string, typeValue model
 	}
 	if sameType(previous.UnwrapOptional(), typeValue.UnwrapOptional()) {
 		if previous.IsOptional() && !typeValue.IsOptional() {
-			inferred[key] = typeValue
+			inferred[name] = typeValue
 		}
 		return
 	}
-	inferred[key] = model.Type{}
+	inferred[name] = model.Type{}
 }
 
 func externalParameters(block queryBlock, binds []parser.IBind_parameterContext, declared, inferred map[string]model.Type, declarationPositions, localPositions map[int]bool, localNames map[string]bool) ([]model.Parameter, []model.Diagnostic) {
@@ -718,17 +718,16 @@ func externalParameters(block queryBlock, binds []parser.IBind_parameterContext,
 			continue
 		}
 		name := bindName(bind)
-		key := strings.ToLower(name)
-		if localNames[key] && !declarationPositions[bind.GetStart().GetStart()] {
+		if localNames[name] && !declarationPositions[bind.GetStart().GetStart()] {
 			continue
 		}
-		if seen[key] {
+		if seen[name] {
 			continue
 		}
-		seen[key] = true
-		typeValue, ok := declared[key]
+		seen[name] = true
+		typeValue, ok := declared[name]
 		if !ok {
-			typeValue, ok = inferred[key]
+			typeValue, ok = inferred[name]
 		}
 		if ok && typeValue.Kind == "" {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, bind, fmt.Sprintf("external parameter $%s is constrained by incompatible column types", name)))
@@ -738,7 +737,7 @@ func externalParameters(block queryBlock, binds []parser.IBind_parameterContext,
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, bind, fmt.Sprintf("cannot resolve type of external parameter $%s; add DECLARE", name)))
 			continue
 		}
-		if inferredType, inferredOK := inferred[key]; inferredOK && !compatibleTypes(typeValue, inferredType) {
+		if inferredType, inferredOK := inferred[name]; inferredOK && !compatibleTypes(typeValue, inferredType) {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, bind, fmt.Sprintf("parameter $%s declared as %s but used with %s", name, typeString(typeValue), typeString(inferredType))))
 			continue
 		}
@@ -788,7 +787,7 @@ func simpleTableName(ctx parser.ISimple_table_refContext) string {
 
 func findTable(catalog model.Catalog, name string) *model.Table {
 	for i := range catalog.Tables {
-		if strings.EqualFold(catalog.Tables[i].Name, name) {
+		if catalog.Tables[i].Name == name {
 			return &catalog.Tables[i]
 		}
 	}
@@ -797,7 +796,7 @@ func findTable(catalog model.Catalog, name string) *model.Table {
 
 func tableColumn(table *model.Table, name string) *model.Column {
 	for i := range table.Columns {
-		if strings.EqualFold(table.Columns[i].Name, name) {
+		if table.Columns[i].Name == name {
 			return &table.Columns[i]
 		}
 	}
@@ -829,25 +828,4 @@ func typeString(value model.Type) string {
 		return fmt.Sprintf("Decimal(%d,%d)", value.Precision, value.Scale)
 	}
 	return value.Kind
-}
-
-func literalType(text string) (model.Type, bool) {
-	lower := strings.ToLower(text)
-	if lower == "true" || lower == "false" {
-		return model.Type{Kind: "Bool"}, true
-	}
-	if strings.HasPrefix(text, "'") || strings.HasPrefix(text, "\"") {
-		return model.Type{Kind: "String"}, true
-	}
-	if strings.HasPrefix(text, "@@") {
-		return model.Type{Kind: "String"}, true
-	}
-	trimmed := strings.TrimRight(lower, "ulps")
-	if _, err := strconv.ParseInt(trimmed, 10, 64); err == nil {
-		return model.Type{Kind: "Int64"}, true
-	}
-	if _, err := strconv.ParseFloat(trimmed, 64); err == nil {
-		return model.Type{Kind: "Double"}, true
-	}
-	return model.Type{}, false
 }

@@ -24,6 +24,7 @@ jobs:
           dotnet-version: '8.0.x'
       - name: Build and test standalone generator
         run: |
+          make test-release
           go test -p 1 ./...
           make build
       - name: Compile all generated scalar bindings against published SDKs

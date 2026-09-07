@@ -4,16 +4,14 @@ package db
 
 import (
 	"context"
-	ydb "github.com/ydb-platform/ydb-go-sdk/v3"
-	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 
-const listAuthorBooks = `-- name: ListAuthorBooks :many
+const queryListAuthorBooks = `-- name: ListAuthorBooks :many
 SELECT a.id AS author_id, a.name AS author_name, b.title AS book_title
 FROM authors AS a JOIN books AS b ON a.id = b.author_id;`
 
 func (q *Queries) ListAuthorBooks(ctx context.Context) ([]ListAuthorBooksRow, error) {
-	result, err := q.db.QueryResultSet(ctx, listAuthorBooks)
+	result, err := q.db.QueryResultSet(ctx, queryListAuthorBooks)
 	if err != nil {
 		return []ListAuthorBooksRow(nil), err
 	}

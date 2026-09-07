@@ -1,5 +1,9 @@
 # Development
 
+Release artifact builds and the manual workflow's dry-run mode are described in
+[releasing](releasing.md); product readiness and responsibilities are in
+[the release plan](release-plan.md).
+
 ```sh
 make test
 make build

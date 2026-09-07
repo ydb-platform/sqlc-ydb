@@ -5,23 +5,14 @@ from . import models
 import ydb
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
-def _typed(value, typ):
-    return (value, typ)
-
 
 SQL_LIST_AUTHOR_BOOKS = """-- name\\: ListAuthorBooks \\:many
 SELECT a.id AS author_id, a.name AS author_name, b.title AS book_title
 FROM authors AS a JOIN books AS b ON a.id = b.author_id;"""
 
 
-def _row_value(row, name, index):
-    try:
-        return row[name]
-    except (KeyError, IndexError, TypeError):
-        try:
-            return row[index]
-        except (KeyError, IndexError, TypeError):
-            return getattr(row, name)
+def _typed(value, typ):
+    return (value, typ)
 
 
 class Querier:
@@ -36,7 +27,7 @@ class Querier:
         finally:
             result.close()
         return (models.ListAuthorBooksRow(
-            author_id=_row_value(row, "author_id", 0),
-            author_name=_row_value(row, "author_name", 1),
-            book_title=_row_value(row, "book_title", 2),
+            author_id=row._mapping["author_id"],
+            author_name=row._mapping["author_name"],
+            book_title=row._mapping["book_title"],
         ) for row in rows)

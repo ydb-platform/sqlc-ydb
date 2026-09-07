@@ -45,28 +45,33 @@ func validate(in *model.AnalysisResult) error {
 		modelNames[n] = "framework type"
 	}
 	add := func(dst map[string]string, name, original, what string) error {
-		if old, ok := dst[name]; ok && old != original {
+		if old, ok := dst[name]; ok {
 			return fmt.Errorf("csharp generator: %s collision %q (%q and %q)", what, name, old, original)
 		}
 		dst[name] = original
 		return nil
 	}
 	for _, table := range in.Catalog.Tables {
-		if err := add(modelNames, csName(table.Name), "table:"+table.Name, "model name"); err != nil {
+		modelName := csName(table.Name)
+		if !csIdent(modelName) {
+			return fmt.Errorf("csharp generator: invalid model name for table %q", table.Name)
+		}
+		if err := add(modelNames, modelName, "table:"+table.Name, "model name"); err != nil {
 			return err
 		}
-		if err := fields("table "+table.Name, csName(table.Name), table.Columns); err != nil {
+		if err := fields("table "+table.Name, modelName, table.Columns); err != nil {
 			return err
 		}
 	}
 	for _, q := range in.Queries {
-		if !csIdent(q.Name) {
+		generatedName := csName(q.Name)
+		if !csIdent(q.Name) || !csIdent(generatedName) {
 			return fmt.Errorf("csharp generator: invalid query name %q", q.Name)
 		}
-		if err := add(queryNames, csName(q.Name), q.Name, "SQL constant"); err != nil {
+		if err := add(queryNames, generatedName, q.Name, "SQL constant"); err != nil {
 			return err
 		}
-		if err := add(methodNames, csName(q.Name)+"Async", q.Name, "method name"); err != nil {
+		if err := add(methodNames, generatedName+"Async", q.Name, "method name"); err != nil {
 			return err
 		}
 		switch q.Command {
@@ -153,9 +158,6 @@ func csType(t model.Type) (string, error) {
 		e, err := csType(*t.Elem)
 		if err != nil {
 			return "", err
-		}
-		if e == "string" || e == "byte[]" {
-			return e + "?", nil
 		}
 		return e + "?", nil
 	}
@@ -426,7 +428,7 @@ func csName(s string) string {
 	}
 	n := b.String()
 	if n == "" {
-		return "Value"
+		return ""
 	}
 	if unicode.IsDigit([]rune(n)[0]) {
 		return "Value" + n

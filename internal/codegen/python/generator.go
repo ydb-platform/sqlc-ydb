@@ -12,7 +12,7 @@ import (
 )
 
 type Options struct {
-	Package, Runtime                  string
+	Runtime                           string
 	EmitSyncQuerier, EmitAsyncQuerier bool
 }
 
@@ -28,9 +28,6 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 	}
 	if o.Runtime != "ydb" && o.Runtime != "dbapi" && o.Runtime != "sqlalchemy" {
 		return nil, fmt.Errorf("python generator: unsupported runtime %q", o.Runtime)
-	}
-	if !o.EmitSyncQuerier && !o.EmitAsyncQuerier {
-		o.EmitSyncQuerier = true
 	}
 	if o.EmitAsyncQuerier {
 		return nil, fmt.Errorf("python generator: async querier is unsupported by the installed YDB Python runtimes; use a synchronous querier")
@@ -74,6 +71,9 @@ func validateQuery(q model.AnalyzedQuery) error {
 	seenParams := map[string]bool{}
 	for _, p := range q.Parameters {
 		n := fieldName(p.Name)
+		if n == "self" {
+			return fmt.Errorf("python generator: query %q: parameter name %q conflicts with the generated method receiver", q.Name, n)
+		}
 		if seenParams[n] {
 			return fmt.Errorf("python generator: query %q: parameter name collision at %q", q.Name, n)
 		}
@@ -179,28 +179,6 @@ func writeTypeSignature(b *strings.Builder, t model.Type) {
 		writeTypeSignature(b, *t.Key)
 		b.WriteByte(']')
 	}
-	if len(t.Items) > 0 {
-		b.WriteByte('(')
-		for i := range t.Items {
-			if i > 0 {
-				b.WriteByte(',')
-			}
-			writeTypeSignature(b, t.Items[i])
-		}
-		b.WriteByte(')')
-	}
-	if len(t.Fields) > 0 {
-		b.WriteByte('{')
-		for i, f := range t.Fields {
-			if i > 0 {
-				b.WriteByte(',')
-			}
-			b.WriteString(f.Name)
-			b.WriteByte(':')
-			writeTypeSignature(b, f.Type)
-		}
-		b.WriteByte('}')
-	}
 }
 
 func renderModels(a *model.AnalysisResult) (string, error) {
@@ -264,10 +242,6 @@ func renderQueries(a *model.AnalysisResult, o Options) (string, error) {
 	}
 	if o.Runtime == "sqlalchemy" {
 		b.WriteString("import ydb\nfrom sqlalchemy import text\nfrom sqlalchemy.engine import Connection\n")
-		if o.EmitAsyncQuerier {
-			b.WriteString("from sqlalchemy.ext.asyncio import AsyncConnection\n")
-		}
-		b.WriteString("def _typed(value, typ):\n    return (value, typ)\n\n")
 	}
 	b.WriteString("\n")
 	for _, q := range a.Queries {
@@ -282,32 +256,15 @@ func renderQueries(a *model.AnalysisResult, o Options) (string, error) {
 		b.WriteString(constName(q.Name) + " = " + pySQLString(sql) + "\n\n")
 	}
 	if o.Runtime == "ydb" {
-		b.WriteString(ydbHelpers)
-	} else if o.Runtime == "dbapi" {
-		b.WriteString(dbapiHelpers)
+		b.WriteString(ydbTypedHelper)
 	} else {
-		b.WriteString(sqlalchemyRowHelper)
+		b.WriteString(tupleTypedHelper)
 	}
-	if o.EmitSyncQuerier {
-		renderClass(&b, a, o, false)
-	}
-	if o.EmitAsyncQuerier {
-		renderClass(&b, a, o, true)
+	if err := renderClass(&b, a, o); err != nil {
+		return "", err
 	}
 	return b.String(), nil
 }
-
-const sqlalchemyRowHelper = `
-def _row_value(row, name, index):
-    try:
-        return row[name]
-    except (KeyError, IndexError, TypeError):
-        try:
-            return row[index]
-        except (KeyError, IndexError, TypeError):
-            return getattr(row, name)
-
-`
 
 func sqlalchemySQL(q model.AnalyzedQuery) (string, error) {
 	allowed := map[string]bool{}
@@ -360,41 +317,19 @@ func sqlalchemySQL(q model.AnalyzedQuery) (string, error) {
 	return out.String(), nil
 }
 
-const ydbHelpers = `
-def _row_value(row, name, index):
-    try:
-        return row[name]
-    except (KeyError, IndexError, TypeError):
-        try:
-            return row[index]
-        except (KeyError, IndexError, TypeError):
-            return getattr(row, name)
-
+const ydbTypedHelper = `
 def _typed(value, typ):
     return ydb.TypedValue(value, typ)
 
 `
-const dbapiHelpers = `
+const tupleTypedHelper = `
 def _typed(value, typ):
     return (value, typ)
 
-def _row_value(row, name, index):
-    try:
-        return row[name]
-    except (KeyError, IndexError, TypeError):
-        try:
-            return row[index]
-        except (KeyError, IndexError, TypeError):
-            return getattr(row, name)
-
 `
 
-func renderClass(b *strings.Builder, a *model.AnalysisResult, o Options, async bool) {
-	n := "Querier"
-	if async {
-		n = "AsyncQuerier"
-	}
-	b.WriteString("\nclass " + n + ":\n")
+func renderClass(b *strings.Builder, a *model.AnalysisResult, o Options) error {
+	b.WriteString("\nclass Querier:\n")
 	if o.Runtime == "ydb" {
 		b.WriteString("    def __init__(self, pool: ydb.QuerySessionPool):\n        self._pool = pool\n\n")
 	}
@@ -402,18 +337,25 @@ func renderClass(b *strings.Builder, a *model.AnalysisResult, o Options, async b
 		b.WriteString("    def __init__(self, connection):\n        self._connection = connection\n\n")
 	}
 	if o.Runtime == "sqlalchemy" {
-		typ := "Connection"
-		if async {
-			typ = "AsyncConnection"
-		}
-		b.WriteString("    def __init__(self, connection: " + typ + "):\n        self._connection = connection\n\n")
+		b.WriteString("    def __init__(self, connection: Connection):\n        self._connection = connection\n\n")
 	}
 	for _, q := range a.Queries {
-		renderMethod(b, a, q, o, async)
+		if err := renderMethod(b, a, q, o); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQuery, o Options, async bool) {
+func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQuery, o Options) error {
+	typeExprs := make([]string, len(q.Parameters))
+	for i, parameter := range q.Parameters {
+		var err error
+		typeExprs[i], err = ydbTypeExpr(parameter.Type)
+		if err != nil {
+			return fmt.Errorf("python generator: query %q parameter %q: %w", q.Name, parameter.Name, err)
+		}
+	}
 	p := ""
 	for _, x := range q.Parameters {
 		t, _ := pyType(x.Type)
@@ -427,25 +369,18 @@ func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQ
 	if q.Command == model.Many {
 		ret = "Iterable[models." + row + "]"
 	}
-	if q.Command == model.ExecRows {
-		ret = "int"
-	}
-	kw := ""
-	if async {
-		kw = "async "
-	}
 	indent := "        "
 	if o.Runtime == "dbapi" {
 		indent = "            "
 	}
-	b.WriteString("    " + kw + "def " + methodName(q.Name) + "(self" + p + ") -> " + ret + ":\n")
+	b.WriteString("    def " + methodName(q.Name) + "(self" + p + ") -> " + ret + ":\n")
 	if o.Runtime == "ydb" {
 		b.WriteString("        parameters = {")
 		for i, x := range q.Parameters {
 			if i > 0 {
 				b.WriteString(",")
 			}
-			value := "_typed(" + fieldName(x.Name) + ", " + ydbTypeExpr(x.Type) + ")"
+			value := "_typed(" + fieldName(x.Name) + ", " + typeExprs[i] + ")"
 			b.WriteString(pyString("$"+x.Name) + ": " + value)
 		}
 		b.WriteString("}\n        result_sets = self._pool.execute_with_retries(" + constName(q.Name) + ", parameters)\n")
@@ -456,7 +391,7 @@ func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQ
 			if i > 0 {
 				b.WriteString(",")
 			}
-			b.WriteString(pyString("$"+x.Name) + ": _typed(" + fieldName(x.Name) + ", " + ydbTypeExpr(x.Type) + ")")
+			b.WriteString(pyString("$"+x.Name) + ": _typed(" + fieldName(x.Name) + ", " + typeExprs[i] + ")")
 		}
 		b.WriteString("}\n        cursor = self._connection.cursor()\n        try:\n            cursor.execute(" + constName(q.Name) + ", parameters)\n")
 	}
@@ -466,17 +401,14 @@ func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQ
 			if i > 0 {
 				b.WriteString(",")
 			}
-			b.WriteString(pyString(x.Name) + ": _typed(" + fieldName(x.Name) + ", " + ydbTypeExpr(x.Type) + ")")
+			b.WriteString(pyString(x.Name) + ": _typed(" + fieldName(x.Name) + ", " + typeExprs[i] + ")")
 		}
 		b.WriteString("}\n        result = ")
-		if async {
-			b.WriteString("await ")
-		}
 		b.WriteString("self._connection.execute(text(" + constName(q.Name) + "), parameters)\n")
 	}
 	if q.Command == model.One || q.Command == model.Many {
 		if o.Runtime == "ydb" {
-			b.WriteString(indent + "rows = result_sets[0].rows if result_sets else []\n")
+			b.WriteString(indent + "rows = result_sets[0].rows\n")
 		} else if o.Runtime == "dbapi" {
 			b.WriteString(indent + "rows = cursor.fetchall()\n")
 		} else {
@@ -485,23 +417,15 @@ func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQ
 		if q.Command == model.One {
 			b.WriteString(indent + "if not rows:\n" + indent + "    return None\n" + indent + "row = rows[0]\n" + indent + "return models." + row + "(\n")
 			for i, c := range q.ResultSets[0].Columns {
-				b.WriteString(indent + "    " + fieldName(c.Name) + "=_row_value(row, " + pyString(c.Name) + ", " + strconv.Itoa(i) + "),\n")
+				b.WriteString(indent + "    " + fieldName(c.Name) + "=" + rowValue(o.Runtime, c.Name, i) + ",\n")
 			}
 			b.WriteString(indent + ")\n")
 		} else {
 			b.WriteString(indent + "return (models." + row + "(\n")
 			for i, c := range q.ResultSets[0].Columns {
-				b.WriteString(indent + "    " + fieldName(c.Name) + "=_row_value(row, " + pyString(c.Name) + ", " + strconv.Itoa(i) + "),\n")
+				b.WriteString(indent + "    " + fieldName(c.Name) + "=" + rowValue(o.Runtime, c.Name, i) + ",\n")
 			}
 			b.WriteString(indent + ") for row in rows)\n")
-		}
-	} else if q.Command == model.ExecRows {
-		if o.Runtime == "dbapi" {
-			b.WriteString(indent + "return cursor.rowcount\n")
-		} else if o.Runtime == "sqlalchemy" {
-			b.WriteString("        return result.rowcount\n")
-		} else {
-			b.WriteString("        return 0\n")
 		}
 	} else {
 		if o.Runtime == "dbapi" {
@@ -516,6 +440,18 @@ func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQ
 		b.WriteString("        finally:\n            cursor.close()\n")
 	}
 	b.WriteString("\n")
+	return nil
+}
+
+func rowValue(runtime, name string, index int) string {
+	switch runtime {
+	case "ydb":
+		return "row[" + pyString(name) + "]"
+	case "dbapi":
+		return "row[" + strconv.Itoa(index) + "]"
+	default:
+		return "row._mapping[" + pyString(name) + "]"
+	}
 }
 
 func queryRowClass(a *model.AnalysisResult, q model.AnalyzedQuery) string {
@@ -553,34 +489,18 @@ func resultTypeSignature(t model.Type) string {
 }
 
 func pyType(t model.Type) (string, error) {
-	if t.Kind == "Optional" {
+	if t.IsOptional() {
 		if t.Elem == nil {
 			return "", fmt.Errorf("malformed Optional type")
 		}
 		x, e := pyType(*t.Elem)
 		return "Optional[" + x + "]", e
 	}
-	switch strings.ToLower(t.Kind) {
-	case "bool":
-		return "bool", nil
-	case "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64":
-		return "int", nil
-	case "float", "double":
-		return "float", nil
-	case "utf8":
-		return "str", nil
-	case "string":
-		return "bytes", nil
-	case "date", "date32":
-		return "date", nil
-	case "datetime", "datetime64", "timestamp", "timestamp64":
-		return "datetime", nil
-	case "interval", "interval64":
-		return "timedelta", nil
-	case "uuid":
-		return "UUID", nil
-	case "json", "jsondocument":
-		return "str", nil
+	kind := strings.ToLower(t.Kind)
+	if primitive, ok := pythonPrimitiveTypes[kind]; ok {
+		return primitive.python, nil
+	}
+	switch kind {
 	case "list":
 		if t.Elem == nil {
 			return "", fmt.Errorf("List without element type")
@@ -608,74 +528,81 @@ func pyType(t model.Type) (string, error) {
 	}
 }
 
-func ydbTypeExpr(t model.Type) string {
-	if t.IsOptional() && t.Elem != nil {
-		return "ydb.OptionalType(" + ydbTypeExpr(*t.Elem) + ")"
+func ydbTypeExpr(t model.Type) (string, error) {
+	if t.IsOptional() {
+		if t.Elem == nil {
+			return "", fmt.Errorf("malformed Optional type")
+		}
+		elem, err := ydbTypeExpr(*t.Elem)
+		return "ydb.OptionalType(" + elem + ")", err
 	}
-	if strings.EqualFold(t.Kind, "list") && t.Elem != nil {
-		return "ydb.ListType(" + ydbTypeExpr(*t.Elem) + ")"
+	kind := strings.ToLower(t.Kind)
+	if primitive, ok := pythonPrimitiveTypes[kind]; ok {
+		return "ydb.PrimitiveType." + primitive.ydb, nil
 	}
-	if strings.EqualFold(t.Kind, "set") && t.Elem != nil {
-		return "ydb.SetType(" + ydbTypeExpr(*t.Elem) + ")"
+	if kind == "list" || kind == "set" {
+		if t.Elem == nil {
+			return "", fmt.Errorf("%s without element type", t.Kind)
+		}
+		elem, err := ydbTypeExpr(*t.Elem)
+		if err != nil {
+			return "", err
+		}
+		constructor := "ListType"
+		if kind == "set" {
+			constructor = "SetType"
+		}
+		return "ydb." + constructor + "(" + elem + ")", nil
 	}
-	if strings.EqualFold(t.Kind, "dict") && t.Key != nil && t.Elem != nil {
-		return "ydb.DictType(" + ydbTypeExpr(*t.Key) + ", " + ydbTypeExpr(*t.Elem) + ")"
+	if kind == "dict" {
+		if t.Key == nil || t.Elem == nil {
+			return "", fmt.Errorf("Dict without key/value type")
+		}
+		key, err := ydbTypeExpr(*t.Key)
+		if err != nil {
+			return "", err
+		}
+		elem, err := ydbTypeExpr(*t.Elem)
+		if err != nil {
+			return "", err
+		}
+		return "ydb.DictType(" + key + ", " + elem + ")", nil
 	}
-	var n string
-	switch strings.ToLower(t.Kind) {
-	case "bool":
-		n = "Bool"
-	case "int8":
-		n = "Int8"
-	case "int16":
-		n = "Int16"
-	case "int32":
-		n = "Int32"
-	case "int64":
-		n = "Int64"
-	case "uint8":
-		n = "Uint8"
-	case "uint16":
-		n = "Uint16"
-	case "uint32":
-		n = "Uint32"
-	case "uint64":
-		n = "Uint64"
-	case "float":
-		n = "Float"
-	case "double":
-		n = "Double"
-	case "utf8":
-		n = "Utf8"
-	case "string":
-		n = "String"
-	case "date":
-		n = "Date"
-	case "date32":
-		n = "Date32"
-	case "datetime":
-		n = "Datetime"
-	case "datetime64":
-		n = "Datetime64"
-	case "timestamp":
-		n = "Timestamp"
-	case "timestamp64":
-		n = "Timestamp64"
-	case "interval":
-		n = "Interval"
-	case "interval64":
-		n = "Interval64"
-	case "uuid":
-		n = "UUID"
-	case "json":
-		n = "Json"
-	case "jsondocument":
-		n = "JsonDocument"
-	default:
-		return "ydb.PrimitiveType.Utf8"
-	}
-	return "ydb.PrimitiveType." + n
+	return "", fmt.Errorf("unsupported YQL type %q", t.Kind)
 }
+
+type pythonPrimitiveType struct {
+	python string
+	ydb    string
+}
+
+var pythonPrimitiveTypes = map[string]pythonPrimitiveType{
+	"bool":         {python: "bool", ydb: "Bool"},
+	"int8":         {python: "int", ydb: "Int8"},
+	"int16":        {python: "int", ydb: "Int16"},
+	"int32":        {python: "int", ydb: "Int32"},
+	"int64":        {python: "int", ydb: "Int64"},
+	"uint8":        {python: "int", ydb: "Uint8"},
+	"uint16":       {python: "int", ydb: "Uint16"},
+	"uint32":       {python: "int", ydb: "Uint32"},
+	"uint64":       {python: "int", ydb: "Uint64"},
+	"float":        {python: "float", ydb: "Float"},
+	"double":       {python: "float", ydb: "Double"},
+	"utf8":         {python: "str", ydb: "Utf8"},
+	"string":       {python: "bytes", ydb: "String"},
+	"date":         {python: "date", ydb: "Date"},
+	"date32":       {python: "date", ydb: "Date32"},
+	"datetime":     {python: "datetime", ydb: "Datetime"},
+	"datetime64":   {python: "datetime", ydb: "Datetime64"},
+	"timestamp":    {python: "datetime", ydb: "Timestamp"},
+	"timestamp64":  {python: "datetime", ydb: "Timestamp64"},
+	"interval":     {python: "timedelta", ydb: "Interval"},
+	"interval64":   {python: "timedelta", ydb: "Interval64"},
+	"uuid":         {python: "UUID", ydb: "UUID"},
+	"json":         {python: "str", ydb: "Json"},
+	"jsondocument": {python: "str", ydb: "JsonDocument"},
+}
+
 func pyString(s string) string { return strconv.Quote(s) }
 
 func pySQLString(s string) string {
