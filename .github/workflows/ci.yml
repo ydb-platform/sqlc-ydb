@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  standalone:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build and test standalone generator
+        run: |
+          go test ./...
+          make build
+      - name: Verify generated examples
+        run: |
+          ./bin/sqlc-ydb compile -f examples/authors/sqlc.yaml
+          ./bin/sqlc-ydb diff -f examples/authors/sqlc.yaml
+          python3 -m compileall -q examples/authors/python_ydb examples/authors/python_dbapi examples/authors/python_sqlalchemy
+      - name: Compile generated Go packages
+        working-directory: examples/authors
+        run: go test ./...
+
+  ydb-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      ydb:
+        image: ydbplatform/local-ydb:26.3.1.8
+        ports:
+          - 2136:2136
+        env:
+          GRPC_PORT: 2136
+          YDB_USE_IN_MEMORY_PDISKS: "true"
+          YDB_DEFAULT_LOG_LEVEL: ERROR
+        options: >-
+          --hostname localhost
+          --health-cmd="/health_check"
+          --health-interval=5s
+          --health-timeout=10s
+          --health-retries=30
+    env:
+      SQLC_YDB_TEST_DSN: grpc://localhost:2136/local
+      SQLC_YDB_TEST_PYTHON: python3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install tested Python runtimes
+        run: python3 -m pip install -r examples/authors/requirements.txt
+      # Keep local-ydb acceptance sequential: concurrent tests/compilers can
+      # exhaust the memory budget even when they use only one YDB service.
+      - name: Run Go generator runtime tests
+        run: go test -p 1 -count=1 -timeout=180s ./internal/codegen/golang -run TestLiveYDB -v
+      - name: Run Python generator runtime tests
+        run: go test -p 1 -count=1 -timeout=180s ./internal/codegen/python -run TestLiveYDB -v
+      - name: Generate and execute the complete example
+        run: |
+          go run ./cmd/sqlc-ydb generate -f examples/authors/sqlc.yaml
+          git diff --exit-code -- examples/authors
+          cd examples/authors
+          go test -p 1 -count=1 -timeout=90s ./... -v
+          python3 smoke.py

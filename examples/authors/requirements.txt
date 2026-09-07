@@ -1,0 +1,4 @@
+ydb==3.29.7
+ydb-dbapi==0.1.23
+ydb-sqlalchemy==0.1.22
+SQLAlchemy==2.0.52

@@ -1,0 +1,1 @@
+CREATE TABLE authors (id Uint64 NOT NULL, PRIMARY KEY (id));

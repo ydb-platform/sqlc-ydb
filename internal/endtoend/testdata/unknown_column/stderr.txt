@@ -1,0 +1,1 @@
+<fixture>/queries.sql:2:8: unknown column "missing"

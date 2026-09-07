@@ -1,0 +1,1 @@
+<fixture>/queries.sql:3:1: parameter $value has conflicting DECLARE types Uint64 and Utf8

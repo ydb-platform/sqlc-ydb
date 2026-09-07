@@ -1,0 +1,853 @@
+package analyzer
+
+import (
+	"fmt"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/antlr4-go/antlr/v4"
+	"github.com/ydb-platform/sqlc-engine-ydb/internal/model"
+	parser "github.com/ydb-platform/yql-parsers/go"
+)
+
+type queryTree struct {
+	statements []*parser.Sql_stmtContext
+	declares   []*parser.Declare_stmtContext
+	named      []*parser.Named_nodes_stmtContext
+	selects    []*parser.Select_coreContext
+	insert     []*parser.Into_table_stmtContext
+	updates    []*parser.Update_stmtContext
+	deletes    []*parser.Delete_stmtContext
+	binds      []parser.IBind_parameterContext
+	conds      []*parser.Cond_exprContext
+	eqs        []*parser.Eq_subexprContext
+	xors       []*parser.Xor_subexprContext
+}
+
+func collectQueryTree(tree antlr.Tree) queryTree {
+	var out queryTree
+	descendants(tree, func(node antlr.Tree) {
+		switch ctx := node.(type) {
+		case *parser.Sql_stmtContext:
+			out.statements = append(out.statements, ctx)
+		case *parser.Declare_stmtContext:
+			out.declares = append(out.declares, ctx)
+		case *parser.Named_nodes_stmtContext:
+			out.named = append(out.named, ctx)
+		case *parser.Select_coreContext:
+			out.selects = append(out.selects, ctx)
+		case *parser.Into_table_stmtContext:
+			out.insert = append(out.insert, ctx)
+		case *parser.Update_stmtContext:
+			out.updates = append(out.updates, ctx)
+		case *parser.Delete_stmtContext:
+			out.deletes = append(out.deletes, ctx)
+		case *parser.Bind_parameterContext:
+			out.binds = append(out.binds, ctx)
+		case *parser.Cond_exprContext:
+			out.conds = append(out.conds, ctx)
+		case *parser.Eq_subexprContext:
+			out.eqs = append(out.eqs, ctx)
+		case *parser.Xor_subexprContext:
+			out.xors = append(out.xors, ctx)
+		}
+	})
+	return out
+}
+
+func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery, []model.Diagnostic) {
+	parsed, diagnostics := parseYQL(block.file, block.text, block.line-1)
+	query := model.AnalyzedQuery{
+		Name: block.name, Command: block.command, SQL: block.text,
+		Source: model.Position{File: block.file, Line: block.line, Column: 1},
+	}
+	if len(diagnostics) != 0 {
+		return query, diagnostics
+	}
+	tree := collectQueryTree(parsed.tree)
+	diagnostics = append(diagnostics, validateQueryStatements(block, tree)...)
+	dataStatements := len(tree.selects) + len(tree.insert) + len(tree.updates) + len(tree.deletes)
+	if dataStatements != 1 {
+		return query, []model.Diagnostic{diagnosticAt(block.file, block.line-1, parsed.tree, fmt.Sprintf("query must contain exactly one supported SELECT, INSERT/UPSERT, UPDATE, or DELETE statement; found %d", dataStatements))}
+	}
+
+	declared, declarationPositions, declarationDiagnostics := declarations(block, tree)
+	diagnostics = append(diagnostics, declarationDiagnostics...)
+	localPositions, localNames, localTypes, localDiagnostics := localBindings(block, tree, declared)
+	diagnostics = append(diagnostics, localDiagnostics...)
+
+	var relations []relation
+	var resultColumns []model.Column
+	var target *model.Table
+	switch {
+	case len(tree.selects) == 1:
+		var relationDiagnostics []model.Diagnostic
+		relations, relationDiagnostics = selectRelations(catalog, block, tree.selects[0])
+		diagnostics = append(diagnostics, relationDiagnostics...)
+		if len(relationDiagnostics) == 0 {
+			var projectionDiagnostics []model.Diagnostic
+			resultColumns, projectionDiagnostics = selectProjection(block, tree.selects[0], relations, declared)
+			diagnostics = append(diagnostics, projectionDiagnostics...)
+		}
+	case len(tree.insert) == 1:
+		target, diagnostics = targetTable(catalog, block, intoTableName(tree.insert[0]), tree.insert[0], diagnostics)
+		if target != nil {
+			relations = []relation{{table: target, alias: target.Name}}
+		}
+	case len(tree.updates) == 1:
+		target, diagnostics = targetTable(catalog, block, simpleTableName(tree.updates[0].Simple_table_ref()), tree.updates[0], diagnostics)
+		if target != nil {
+			relations = []relation{{table: target, alias: target.Name}}
+		}
+	case len(tree.deletes) == 1:
+		target, diagnostics = targetTable(catalog, block, simpleTableName(tree.deletes[0].Simple_table_ref()), tree.deletes[0], diagnostics)
+		if target != nil {
+			relations = []relation{{table: target, alias: target.Name}}
+		}
+	}
+
+	if len(relations) != 0 {
+		diagnostics = append(diagnostics, validateColumnReferences(block, parsed.tree, relations)...)
+	}
+
+	inferred := map[string]model.Type{}
+	if len(relations) != 0 {
+		inferFromComparisons(tree, relations, inferred)
+	}
+	if target != nil && len(tree.insert) == 1 {
+		diagnostics = append(diagnostics, inferInsert(block, tree.insert[0], target, inferred)...)
+	}
+	if target != nil && len(tree.updates) == 1 {
+		diagnostics = append(diagnostics, inferUpdate(block, tree.updates[0], target, inferred)...)
+	}
+	for name, localType := range localTypes {
+		if usedType, ok := inferred[name]; ok {
+			message := ""
+			if usedType.Kind == "" {
+				message = fmt.Sprintf("local $%s is constrained by incompatible column types", name)
+			} else if !compatibleTypes(localType, usedType) {
+				message = fmt.Sprintf("local $%s has type %s but is used with %s", name, typeString(localType), typeString(usedType))
+			}
+			if message != "" {
+				diagnostics = append(diagnostics, model.Diagnostic{Position: model.Position{File: block.file, Line: block.line, Column: 1}, Message: message})
+			}
+		}
+	}
+
+	parameters, parameterDiagnostics := externalParameters(block, tree.binds, declared, inferred, declarationPositions, localPositions, localNames)
+	diagnostics = append(diagnostics, parameterDiagnostics...)
+	query.Parameters = parameters
+
+	if target != nil {
+		var returning parser.IReturning_columns_listContext
+		switch {
+		case len(tree.insert) == 1:
+			returning = tree.insert[0].Returning_columns_list()
+		case len(tree.updates) == 1:
+			returning = tree.updates[0].Returning_columns_list()
+		case len(tree.deletes) == 1:
+			returning = tree.deletes[0].Returning_columns_list()
+		}
+		if returning != nil {
+			resultColumns, parameterDiagnostics = returningProjection(block, returning, target)
+			diagnostics = append(diagnostics, parameterDiagnostics...)
+		}
+	}
+
+	returnsRows := len(resultColumns) != 0
+	if len(diagnostics) == 0 {
+		if (block.command == model.One || block.command == model.Many) && !returnsRows {
+			diagnostics = append(diagnostics, model.Diagnostic{Position: query.Source, Message: fmt.Sprintf("command %s requires a result set", block.command)})
+		}
+		if (block.command == model.Exec || block.command == model.ExecRows) && returnsRows {
+			diagnostics = append(diagnostics, model.Diagnostic{Position: query.Source, Message: fmt.Sprintf("command %s cannot be used with a row-returning statement", block.command)})
+		}
+	}
+	if returnsRows {
+		query.ResultSets = []model.ResultSet{{Columns: resultColumns}}
+	}
+	return query, diagnostics
+}
+
+func validateQueryStatements(block queryBlock, tree queryTree) []model.Diagnostic {
+	var diagnostics []model.Diagnostic
+	mainStatements := 0
+	for _, statement := range tree.statements {
+		declares, named, data := 0, 0, 0
+		descendants(statement, func(node antlr.Tree) {
+			switch node.(type) {
+			case *parser.Declare_stmtContext:
+				declares++
+			case *parser.Named_nodes_stmtContext:
+				named++
+			case *parser.Select_coreContext, *parser.Into_table_stmtContext, *parser.Update_stmtContext, *parser.Delete_stmtContext:
+				data++
+			}
+		})
+		switch {
+		case declares == 1 && named == 0 && data == 0:
+		case named == 1 && declares == 0 && data == 0:
+		case named == 0 && declares == 0 && data == 1:
+			mainStatements++
+		default:
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, fmt.Sprintf("unsupported statement in named query: %q", statement.GetText())))
+		}
+	}
+	if mainStatements != 1 {
+		diagnostics = append(diagnostics, model.Diagnostic{Position: model.Position{File: block.file, Line: block.line, Column: 1}, Message: fmt.Sprintf("named query must have exactly one top-level data statement; found %d", mainStatements)})
+	}
+	return diagnostics
+}
+
+func declarations(block queryBlock, tree queryTree) (map[string]model.Type, map[int]bool, []model.Diagnostic) {
+	declared := map[string]model.Type{}
+	positions := map[int]bool{}
+	var diagnostics []model.Diagnostic
+	for _, declaration := range tree.declares {
+		bind := declaration.Bind_parameter()
+		name := bindName(bind)
+		if bind != nil && bind.GetStart() != nil {
+			positions[bind.GetStart().GetStart()] = true
+		}
+		typeValue, err := parseType(declaration.Type_name().GetText())
+		if err != nil {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, declaration, err.Error()))
+			continue
+		}
+		key := strings.ToLower(name)
+		if previous, ok := declared[key]; ok && !sameType(previous, typeValue) {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, declaration, fmt.Sprintf("parameter $%s has conflicting DECLARE types %s and %s", name, typeString(previous), typeString(typeValue))))
+			continue
+		}
+		declared[key] = typeValue
+	}
+	return declared, positions, diagnostics
+}
+
+func localBindings(block queryBlock, tree queryTree, declared map[string]model.Type) (map[int]bool, map[string]bool, map[string]model.Type, []model.Diagnostic) {
+	positions := map[int]bool{}
+	names := map[string]bool{}
+	types := map[string]model.Type{}
+	var diagnostics []model.Diagnostic
+	for _, statement := range tree.named {
+		if statement.Bind_parameter_list() == nil {
+			continue
+		}
+		var lhs []parser.IBind_parameterContext
+		descendants(statement.Bind_parameter_list(), func(node antlr.Tree) {
+			if bind, ok := node.(*parser.Bind_parameterContext); ok && bind.GetStart() != nil {
+				lhs = append(lhs, bind)
+				positions[bind.GetStart().GetStart()] = true
+				names[strings.ToLower(bindName(bind))] = true
+			}
+		})
+		if len(lhs) != 1 || statement.Expr() == nil {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, "only single scalar local assignments are supported"))
+			continue
+		}
+		name := strings.ToLower(bindName(lhs[0]))
+		if _, exists := types[name]; exists {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, fmt.Sprintf("local $%s is assigned more than once", name)))
+			continue
+		}
+		var rhsBinds []parser.IBind_parameterContext
+		descendants(statement.Expr(), func(node antlr.Tree) {
+			if bind, ok := node.(*parser.Bind_parameterContext); ok {
+				rhsBinds = append(rhsBinds, bind)
+			}
+		})
+		if len(rhsBinds) == 1 && statement.Expr().GetText() == rhsBinds[0].GetText() {
+			rhsName := strings.ToLower(bindName(rhsBinds[0]))
+			typeValue, ok := types[rhsName]
+			if !ok {
+				typeValue, ok = declared[rhsName]
+			}
+			if !ok {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement.Expr(), fmt.Sprintf("cannot resolve local $%s from $%s; declare the external parameter first", name, rhsName)))
+				continue
+			}
+			types[name] = typeValue
+			continue
+		}
+		if len(rhsBinds) == 0 {
+			if typeValue, ok := literalType(statement.Expr().GetText()); ok {
+				types[name] = typeValue
+				continue
+			}
+		}
+		diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement.Expr(), fmt.Sprintf("cannot resolve type of local $%s; only literals and declared parameters are supported", name)))
+	}
+	return positions, names, types, diagnostics
+}
+
+type relation struct {
+	table    *model.Table
+	alias    string
+	optional bool
+}
+
+func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser.Select_coreContext) ([]relation, []model.Diagnostic) {
+	var relations []relation
+	var diagnostics []model.Diagnostic
+	for _, join := range selectCore.AllJoin_source() {
+		base := len(relations)
+		for i, source := range join.AllFlatten_source() {
+			if source.FLATTEN() != nil {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, "FLATTEN sources are not yet supported"))
+				continue
+			}
+			named := source.Named_single_source()
+			if named == nil || named.Hinted_single_source() == nil || named.Hinted_single_source().Single_source() == nil || named.Hinted_single_source().Single_source().Table_ref() == nil {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, "only named catalog tables are supported in FROM and JOIN"))
+				continue
+			}
+			tableRef := named.Hinted_single_source().Single_source().Table_ref()
+			if named.Hinted_single_source().Table_hints() != nil || named.Sample_clause() != nil || named.Tablesample_clause() != nil {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, "table hints and sampling are not yet supported"))
+				continue
+			}
+			if tableRef.Table_key() == nil {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, "dynamic table references are unsupported"))
+				continue
+			}
+			name := identifier(tableRef.Table_key().GetText())
+			table := findTable(catalog, name)
+			if table == nil {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, fmt.Sprintf("unknown table %q", name)))
+				continue
+			}
+			alias := table.Name
+			if named.An_id() != nil {
+				alias = identifier(named.An_id().GetText())
+			}
+			if named.An_id_as_compat() != nil {
+				alias = identifier(named.An_id_as_compat().GetText())
+			}
+			relations = append(relations, relation{table: table, alias: alias})
+			if i > 0 {
+				op := strings.ToUpper(join.Join_op(i - 1).GetText())
+				switch {
+				case strings.Contains(op, "LEFT"):
+					relations[len(relations)-1].optional = true
+				case strings.Contains(op, "RIGHT"):
+					for j := base; j < len(relations)-1; j++ {
+						relations[j].optional = true
+					}
+				case strings.Contains(op, "FULL"):
+					for j := base; j < len(relations); j++ {
+						relations[j].optional = true
+					}
+				}
+			}
+		}
+		for _, constraint := range join.AllJoin_constraint() {
+			if constraint.USING() != nil {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, constraint, "JOIN USING is not yet supported; use an explicit ON condition"))
+			}
+		}
+	}
+	if len(relations) == 0 {
+		diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, selectCore, "SELECT without a catalog table is unsupported"))
+	}
+	return relations, diagnostics
+}
+
+func selectProjection(block queryBlock, selectCore *parser.Select_coreContext, relations []relation, declared map[string]model.Type) ([]model.Column, []model.Diagnostic) {
+	var columns []model.Column
+	var diagnostics []model.Diagnostic
+	if selectCore.Without_column_list() != nil {
+		return nil, []model.Diagnostic{diagnosticAt(block.file, block.line-1, selectCore.Without_column_list(), "SELECT WITHOUT is not yet supported")}
+	}
+	for _, result := range selectCore.AllResult_column() {
+		if result.ASTERISK() != nil {
+			prefix := strings.TrimSuffix(result.Opt_id_prefix().GetText(), ".")
+			matched := false
+			for _, rel := range relations {
+				if prefix != "" && !strings.EqualFold(prefix, rel.alias) && !strings.EqualFold(prefix, rel.table.Name) {
+					continue
+				}
+				matched = true
+				for _, column := range rel.table.Columns {
+					columns = append(columns, joinedColumn(column, rel.optional))
+				}
+			}
+			if !matched {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, result, fmt.Sprintf("unknown table or alias %q", prefix)))
+			}
+			continue
+		}
+		expr := result.Expr()
+		column, pure, err := expressionColumn(expr, relations, declared)
+		if err != nil {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, expr, err.Error()))
+			continue
+		}
+		alias := ""
+		if result.An_id_or_type() != nil {
+			alias = identifier(result.An_id_or_type().GetText())
+		}
+		if result.An_id_as_compat() != nil {
+			alias = identifier(result.An_id_as_compat().GetText())
+		}
+		if alias != "" {
+			column.Name = alias
+		}
+		if alias == "" && !pure {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, result, "computed result expressions require an explicit AS alias"))
+			continue
+		}
+		columns = append(columns, column)
+	}
+	return columns, diagnostics
+}
+
+func expressionColumn(expr parser.IExprContext, relations []relation, declared map[string]model.Type) (model.Column, bool, error) {
+	refs := columnRefs(expr)
+	hasCast := false
+	descendants(expr, func(node antlr.Tree) {
+		if _, ok := node.(*parser.Cast_exprContext); ok {
+			hasCast = true
+		}
+	})
+	if hasCast {
+		return model.Column{}, false, fmt.Errorf("CAST result nullability is not yet supported")
+	}
+	if function, ok := topFunction(expr); ok {
+		switch strings.ToLower(function) {
+		case "count":
+			return model.Column{Type: model.Type{Kind: "Uint64"}}, false, nil
+		default:
+			return model.Column{}, false, fmt.Errorf("unsupported result function %q", function)
+		}
+	}
+	if len(refs) == 1 && isPureColumnExpression(expr) {
+		column, err := resolveColumn(relations, refs[0])
+		if err != nil {
+			return model.Column{}, false, err
+		}
+		return column, true, nil
+	}
+	var binds []parser.IBind_parameterContext
+	descendants(expr, func(node antlr.Tree) {
+		if bind, ok := node.(*parser.Bind_parameterContext); ok {
+			binds = append(binds, bind)
+		}
+	})
+	if len(refs) == 0 && len(binds) == 1 {
+		typeValue, ok := declared[strings.ToLower(bindName(binds[0]))]
+		if !ok {
+			return model.Column{}, false, fmt.Errorf("cannot resolve type of parameter $%s in result", bindName(binds[0]))
+		}
+		return model.Column{Type: typeValue}, false, nil
+	}
+	if len(refs) != 0 {
+		return model.Column{}, false, fmt.Errorf("computed result expression %q is not supported", expr.GetText())
+	}
+	if literal, ok := literalType(expr.GetText()); ok {
+		return model.Column{Type: literal}, false, nil
+	}
+	return model.Column{}, false, fmt.Errorf("unsupported result expression %q", expr.GetText())
+}
+
+type columnRef struct {
+	qualifier, name string
+	ctx             antlr.ParserRuleContext
+}
+
+func columnRefs(root antlr.Tree) []columnRef {
+	var refs []columnRef
+	descendants(root, func(node antlr.Tree) {
+		ctx, ok := node.(*parser.Unary_subexprContext)
+		if !ok {
+			return
+		}
+		casual := ctx.Unary_casual_subexpr()
+		if casual == nil || casual.Id_expr() == nil || casual.Unary_subexpr_suffix() == nil {
+			return
+		}
+		suffix := casual.Unary_subexpr_suffix()
+		if len(suffix.AllInvoke_expr()) != 0 {
+			return
+		}
+		base := identifier(casual.Id_expr().GetText())
+		ids := suffix.AllAn_id_or_type()
+		switch len(ids) {
+		case 0:
+			refs = append(refs, columnRef{name: base, ctx: ctx})
+		case 1:
+			refs = append(refs, columnRef{qualifier: base, name: identifier(ids[0].GetText()), ctx: ctx})
+		}
+	})
+	return refs
+}
+
+func isPureColumnExpression(expr parser.IExprContext) bool {
+	refs := columnRefs(expr)
+	if len(refs) != 1 {
+		return false
+	}
+	return strings.EqualFold(strings.ReplaceAll(expr.GetText(), "`", ""), qualifiedName(refs[0]))
+}
+
+func qualifiedName(ref columnRef) string {
+	if ref.qualifier == "" {
+		return ref.name
+	}
+	return ref.qualifier + "." + ref.name
+}
+
+func topFunction(expr parser.IExprContext) (string, bool) {
+	var function string
+	descendants(expr, func(node antlr.Tree) {
+		if function != "" {
+			return
+		}
+		ctx, ok := node.(*parser.Unary_subexprContext)
+		if !ok || ctx.Unary_casual_subexpr() == nil {
+			return
+		}
+		casual := ctx.Unary_casual_subexpr()
+		if casual.Id_expr() != nil && casual.Unary_subexpr_suffix() != nil && len(casual.Unary_subexpr_suffix().AllInvoke_expr()) != 0 {
+			if ctx.GetStart() == expr.GetStart() && ctx.GetStop() == expr.GetStop() {
+				function = identifier(casual.Id_expr().GetText())
+			}
+		}
+	})
+	return function, function != ""
+}
+
+func validateColumnReferences(block queryBlock, root antlr.Tree, relations []relation) []model.Diagnostic {
+	var diagnostics []model.Diagnostic
+	seen := map[int]bool{}
+	for _, ref := range columnRefs(root) {
+		position := ref.ctx.GetStart().GetStart()
+		if seen[position] {
+			continue
+		}
+		seen[position] = true
+		if _, err := resolveColumn(relations, ref); err != nil {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, ref.ctx, err.Error()))
+		}
+	}
+	return diagnostics
+}
+
+func resolveColumn(relations []relation, ref columnRef) (model.Column, error) {
+	var matches []model.Column
+	for _, rel := range relations {
+		if ref.qualifier != "" && !strings.EqualFold(ref.qualifier, rel.alias) && !strings.EqualFold(ref.qualifier, rel.table.Name) {
+			continue
+		}
+		for _, column := range rel.table.Columns {
+			if strings.EqualFold(column.Name, ref.name) {
+				matches = append(matches, joinedColumn(column, rel.optional))
+			}
+		}
+	}
+	if len(matches) == 0 {
+		return model.Column{}, fmt.Errorf("unknown column %q", qualifiedName(ref))
+	}
+	if len(matches) > 1 {
+		return model.Column{}, fmt.Errorf("ambiguous column %q", ref.name)
+	}
+	return matches[0], nil
+}
+
+func joinedColumn(column model.Column, optional bool) model.Column {
+	if optional && !column.Type.IsOptional() {
+		column.Type = model.Optional(column.Type)
+	}
+	return column
+}
+
+func inferFromComparisons(tree queryTree, relations []relation, inferred map[string]model.Type) {
+	for _, root := range comparisonContexts(tree) {
+		refs := columnRefs(root)
+		if len(refs) != 1 {
+			continue
+		}
+		var binds []parser.IBind_parameterContext
+		descendants(root, func(node antlr.Tree) {
+			if bind, ok := node.(*parser.Bind_parameterContext); ok {
+				binds = append(binds, bind)
+			}
+		})
+		if len(binds) != 1 || !isDirectComparison(root, refs[0], binds[0]) {
+			continue
+		}
+		column, err := resolveColumn(relations, refs[0])
+		if err != nil {
+			continue
+		}
+		inferParameter(inferred, bindName(binds[0]), column.Type)
+	}
+}
+
+func isDirectComparison(root antlr.Tree, ref columnRef, bind parser.IBind_parameterContext) bool {
+	left, right := ref.ctx.GetText(), bind.GetText()
+	text := root.(interface{ GetText() string }).GetText()
+	for _, operator := range []string{"=", "==", "!=", "<>", "<", "<=", ">", ">="} {
+		if text == left+operator+right || text == right+operator+left {
+			return true
+		}
+	}
+	return false
+}
+
+func comparisonContexts(tree queryTree) []antlr.Tree {
+	out := make([]antlr.Tree, 0, len(tree.xors)+len(tree.eqs))
+	for _, ctx := range tree.xors {
+		out = append(out, ctx)
+	}
+	for _, ctx := range tree.eqs {
+		out = append(out, ctx)
+	}
+	return out
+}
+
+func inferInsert(block queryBlock, statement *parser.Into_table_stmtContext, table *model.Table, inferred map[string]model.Type) []model.Diagnostic {
+	source := statement.Into_values_source()
+	if source == nil || source.Values_source() == nil || source.Values_source().Values_stmt() == nil || source.Pure_column_list() == nil {
+		return []model.Diagnostic{diagnosticAt(block.file, block.line-1, statement, "INSERT/UPSERT currently requires an explicit column list and VALUES rows")}
+	}
+	ids := source.Pure_column_list().AllAn_id()
+	rows := source.Values_source().Values_stmt().Values_source_row_list().AllValues_source_row()
+	var diagnostics []model.Diagnostic
+	for _, row := range rows {
+		if row.Expr_list() == nil {
+			continue
+		}
+		expressions := directExprs(row.Expr_list())
+		if len(expressions) != len(ids) {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, row, fmt.Sprintf("VALUES has %d expressions for %d target columns", len(expressions), len(ids))))
+			continue
+		}
+		for i, id := range ids {
+			column := tableColumn(table, identifier(id.GetText()))
+			if column == nil {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, id, fmt.Sprintf("unknown column %q", id.GetText())))
+				continue
+			}
+			if !inferDirectDMLBind(expressions[i], column.Type, inferred) {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, expressions[i], "DML values must be direct external parameters; use DECLARE and a $parameter"))
+			}
+		}
+	}
+	return diagnostics
+}
+
+func inferUpdate(block queryBlock, statement *parser.Update_stmtContext, table *model.Table, inferred map[string]model.Type) []model.Diagnostic {
+	var diagnostics []model.Diagnostic
+	if statement.Set_clause_choice() == nil || statement.Set_clause_choice().Set_clause_list() == nil {
+		return []model.Diagnostic{diagnosticAt(block.file, block.line-1, statement, "only individual UPDATE SET assignments are supported")}
+	}
+	var clauses []*parser.Set_clauseContext
+	descendants(statement.Set_clause_choice().Set_clause_list(), func(node antlr.Tree) {
+		if ctx, ok := node.(*parser.Set_clauseContext); ok {
+			clauses = append(clauses, ctx)
+		}
+	})
+	for _, clause := range clauses {
+		if clause.Set_target() == nil || clause.Set_target().Column_name() == nil || clause.Expr() == nil {
+			continue
+		}
+		name := identifier(clause.Set_target().Column_name().An_id().GetText())
+		column := tableColumn(table, name)
+		if column == nil {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, clause, fmt.Sprintf("unknown column %q", name)))
+			continue
+		}
+		if !inferDirectDMLBind(clause.Expr(), column.Type, inferred) {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, clause.Expr(), "DML values must be direct external parameters; use DECLARE and a $parameter"))
+		}
+	}
+	return diagnostics
+}
+
+func directExprs(root antlr.Tree) []parser.IExprContext {
+	var expressions []parser.IExprContext
+	for i := 0; i < root.GetChildCount(); i++ {
+		if expr, ok := root.GetChild(i).(parser.IExprContext); ok {
+			expressions = append(expressions, expr)
+		}
+	}
+	return expressions
+}
+
+func inferDirectDMLBind(root antlr.Tree, typeValue model.Type, inferred map[string]model.Type) bool {
+	var binds []parser.IBind_parameterContext
+	descendants(root, func(node antlr.Tree) {
+		if bind, ok := node.(*parser.Bind_parameterContext); ok {
+			binds = append(binds, bind)
+		}
+	})
+	if len(binds) == 1 && root.(interface{ GetText() string }).GetText() == binds[0].GetText() {
+		inferParameter(inferred, bindName(binds[0]), typeValue)
+		return true
+	}
+	return false
+}
+
+func inferParameter(inferred map[string]model.Type, name string, typeValue model.Type) {
+	key := strings.ToLower(name)
+	previous, ok := inferred[key]
+	if !ok || sameType(previous, typeValue) {
+		inferred[key] = typeValue
+		return
+	}
+	if previous.Kind == "" {
+		return
+	}
+	if sameType(previous.UnwrapOptional(), typeValue.UnwrapOptional()) {
+		if previous.IsOptional() && !typeValue.IsOptional() {
+			inferred[key] = typeValue
+		}
+		return
+	}
+	inferred[key] = model.Type{}
+}
+
+func externalParameters(block queryBlock, binds []parser.IBind_parameterContext, declared, inferred map[string]model.Type, declarationPositions, localPositions map[int]bool, localNames map[string]bool) ([]model.Parameter, []model.Diagnostic) {
+	sort.SliceStable(binds, func(i, j int) bool { return binds[i].GetStart().GetStart() < binds[j].GetStart().GetStart() })
+	seen := map[string]bool{}
+	var parameters []model.Parameter
+	var diagnostics []model.Diagnostic
+	for _, bind := range binds {
+		if bind.GetStart() == nil || localPositions[bind.GetStart().GetStart()] {
+			continue
+		}
+		name := bindName(bind)
+		key := strings.ToLower(name)
+		if localNames[key] && !declarationPositions[bind.GetStart().GetStart()] {
+			continue
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		typeValue, ok := declared[key]
+		if !ok {
+			typeValue, ok = inferred[key]
+		}
+		if ok && typeValue.Kind == "" {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, bind, fmt.Sprintf("external parameter $%s is constrained by incompatible column types", name)))
+			continue
+		}
+		if !ok {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, bind, fmt.Sprintf("cannot resolve type of external parameter $%s; add DECLARE", name)))
+			continue
+		}
+		if inferredType, inferredOK := inferred[key]; inferredOK && !compatibleTypes(typeValue, inferredType) {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, bind, fmt.Sprintf("parameter $%s declared as %s but used with %s", name, typeString(typeValue), typeString(inferredType))))
+			continue
+		}
+		parameters = append(parameters, model.Parameter{Name: name, Type: typeValue})
+	}
+	return parameters, diagnostics
+}
+
+func returningProjection(block queryBlock, returning parser.IReturning_columns_listContext, table *model.Table) ([]model.Column, []model.Diagnostic) {
+	if returning.ASTERISK() != nil {
+		return append([]model.Column(nil), table.Columns...), nil
+	}
+	var columns []model.Column
+	var diagnostics []model.Diagnostic
+	for _, id := range returning.AllAn_id() {
+		column := tableColumn(table, identifier(id.GetText()))
+		if column == nil {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, id, fmt.Sprintf("unknown RETURNING column %q", id.GetText())))
+			continue
+		}
+		columns = append(columns, *column)
+	}
+	return columns, diagnostics
+}
+
+func targetTable(catalog model.Catalog, block queryBlock, name string, ctx antlr.ParserRuleContext, diagnostics []model.Diagnostic) (*model.Table, []model.Diagnostic) {
+	table := findTable(catalog, name)
+	if table == nil {
+		diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, ctx, fmt.Sprintf("unknown table %q", name)))
+	}
+	return table, diagnostics
+}
+
+func intoTableName(ctx parser.IInto_table_stmtContext) string {
+	if ctx == nil || ctx.Into_simple_table_ref() == nil || ctx.Into_simple_table_ref().Simple_table_ref() == nil {
+		return ""
+	}
+	return simpleTableName(ctx.Into_simple_table_ref().Simple_table_ref())
+}
+
+func simpleTableName(ctx parser.ISimple_table_refContext) string {
+	if ctx == nil || ctx.Simple_table_ref_core() == nil {
+		return ""
+	}
+	return identifier(ctx.Simple_table_ref_core().GetText())
+}
+
+func findTable(catalog model.Catalog, name string) *model.Table {
+	for i := range catalog.Tables {
+		if strings.EqualFold(catalog.Tables[i].Name, name) {
+			return &catalog.Tables[i]
+		}
+	}
+	return nil
+}
+
+func tableColumn(table *model.Table, name string) *model.Column {
+	for i := range table.Columns {
+		if strings.EqualFold(table.Columns[i].Name, name) {
+			return &table.Columns[i]
+		}
+	}
+	return nil
+}
+
+func sameType(left, right model.Type) bool { return typeString(left) == typeString(right) }
+func compatibleTypes(left, right model.Type) bool {
+	return sameType(left, right) || right.IsOptional() && sameType(left, right.UnwrapOptional())
+}
+
+func typeString(value model.Type) string {
+	switch value.Kind {
+	case "Optional", "List", "Stream", "Flow", "Set":
+		if value.Elem != nil {
+			return value.Kind + "<" + typeString(*value.Elem) + ">"
+		}
+	case "Dict":
+		if value.Key != nil && value.Elem != nil {
+			return "Dict<" + typeString(*value.Key) + "," + typeString(*value.Elem) + ">"
+		}
+	case "Tuple":
+		items := make([]string, len(value.Items))
+		for i := range value.Items {
+			items[i] = typeString(value.Items[i])
+		}
+		return "Tuple<" + strings.Join(items, ",") + ">"
+	case "Decimal":
+		return fmt.Sprintf("Decimal(%d,%d)", value.Precision, value.Scale)
+	}
+	return value.Kind
+}
+
+func literalType(text string) (model.Type, bool) {
+	lower := strings.ToLower(text)
+	if lower == "true" || lower == "false" {
+		return model.Type{Kind: "Bool"}, true
+	}
+	if strings.HasPrefix(text, "'") || strings.HasPrefix(text, "\"") {
+		return model.Type{Kind: "String"}, true
+	}
+	if strings.HasPrefix(text, "@@") {
+		return model.Type{Kind: "String"}, true
+	}
+	trimmed := strings.TrimRight(lower, "ulps")
+	if _, err := strconv.ParseInt(trimmed, 10, 64); err == nil {
+		return model.Type{Kind: "Int64"}, true
+	}
+	if _, err := strconv.ParseFloat(trimmed, 64); err == nil {
+		return model.Type{Kind: "Double"}, true
+	}
+	return model.Type{}, false
+}
