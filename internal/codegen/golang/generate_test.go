@@ -38,53 +38,94 @@ func TestGeneratedSQLIsMultilineAndPreservesText(t *testing.T) {
 		{"-- name: GetUser :one\nSELECT '\x00' FROM users;", "\"-- name: GetUser :one\\n\" +\n"},
 	} {
 		for _, runtime := range []string{"database/sql", "ydb"} {
-			in := sample()
-			in.Queries = in.Queries[:1]
-			in.Queries[0].SQL = tc.sql
-			files, err := Generate(in, Options{Package: "db", Runtime: runtime})
-			if err != nil {
-				t.Fatal(err)
-			}
-			var source []byte
-			for _, file := range files {
-				if file.Name == "query.sql.go" {
-					source = file.Content
-				}
-			}
+			source := generatedSQLSource(t, runtime, tc.sql)
 			if !strings.Contains(string(source), "const getUser = "+tc.wantLiteral) {
 				t.Fatalf("%s SQL is not a readable multiline literal:\n%s", runtime, source)
 			}
 			if strings.Contains(tc.sql, "`id`") && !strings.Contains(string(source), "\"SELECT `id`, `bio` FROM `users`\\n\"") {
 				t.Fatalf("quoted identifiers split across Go literals:\n%s", source)
 			}
-			fset := token.NewFileSet()
-			file, err := parser.ParseFile(fset, "query.sql.go", source, 0)
-			if err != nil {
-				t.Fatal(err)
-			}
-			found := false
-			ast.Inspect(file, func(node ast.Node) bool {
-				decl, ok := node.(*ast.ValueSpec)
-				if !ok || len(decl.Names) != 1 || decl.Names[0].Name != "getUser" {
-					return true
-				}
-				found = true
-				expr := decl.Values[0]
-				start, end := fset.Position(expr.Pos()).Offset, fset.Position(expr.End()).Offset
-				value, err := types.Eval(fset, nil, token.NoPos, string(source[start:end]))
-				if err != nil {
-					t.Fatal(err)
-				}
-				if got := constant.StringVal(value.Value); got != tc.sql {
-					t.Fatalf("%s SQL changed: got %q, want %q", runtime, got, tc.sql)
-				}
-				return false
-			})
-			if !found {
-				t.Fatal("generated SQL constant missing")
+			if got := generatedSQLValue(t, source); got != tc.sql {
+				t.Fatalf("%s SQL changed: got %q, want %q", runtime, got, tc.sql)
 			}
 		}
 	}
+}
+
+func TestGeneratedSQLSpecialCharacters(t *testing.T) {
+	cases := []struct{ name, sql string }{
+		{"quotes", "SELECT '\"\"\"', '```', '\\\"', '\\\\', '''', `id` FROM `users`;"},
+		{"literal_escapes", `SELECT '\n\r\t\x00\u1234\U0001f680', 'C:\new\test' FROM users;`},
+		{"trailing_backslash", "-- trailing backslash\\"},
+		{"line_endings", "-- mixed\rSELECT id\r\nFROM users\n;\r"},
+		{"indentation", "\n\nSELECT\n\t id,\n    bio\nFROM users;\n\n"},
+		{"unicode", "SELECT 'Автор 中文 🚀 e\u0301 \u200d \u2028 \u2029' FROM users;"},
+		{"bom", "SELECT '\ufeff' FROM users;"},
+		{"invalid_utf8", "SELECT '\xff\xfe' FROM users;"},
+		{"comment_symbols", "-- $id :param /* comment */ 100% \\\nSELECT `id` FROM users; -- \" + dangerous() + \""},
+	}
+	for ch := byte(0); ch < 32; ch++ {
+		cases = append(cases, struct{ name, sql string }{fmt.Sprintf("control_%02x", ch), "SELECT '" + string(ch) + "' FROM users;"})
+	}
+	cases = append(cases, struct{ name, sql string }{"delete", "SELECT '\x7f' FROM users;"})
+	for _, runtime := range []string{"database/sql", "ydb"} {
+		for _, tc := range cases {
+			t.Run(runtime+"/"+tc.name, func(t *testing.T) {
+				got := generatedSQLValue(t, generatedSQLSource(t, runtime, tc.sql))
+				if got != tc.sql {
+					t.Fatalf("SQL changed: got %q, want %q", got, tc.sql)
+				}
+			})
+		}
+	}
+}
+
+func generatedSQLSource(t *testing.T, runtime, sql string) []byte {
+	t.Helper()
+	in := sample()
+	in.Queries = in.Queries[:1]
+	in.Queries[0].SQL = sql
+	files, err := Generate(in, Options{Package: "db", Runtime: runtime})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range files {
+		if file.Name == "query.sql.go" {
+			return file.Content
+		}
+	}
+	t.Fatal("generated query file missing")
+	return nil
+}
+
+func generatedSQLValue(t *testing.T, source []byte) string {
+	t.Helper()
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "query.sql.go", source, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result string
+	found := false
+	ast.Inspect(file, func(node ast.Node) bool {
+		decl, ok := node.(*ast.ValueSpec)
+		if !ok || len(decl.Names) != 1 || decl.Names[0].Name != "getUser" {
+			return true
+		}
+		found = true
+		expr := decl.Values[0]
+		start, end := fset.Position(expr.Pos()).Offset, fset.Position(expr.End()).Offset
+		value, err := types.Eval(fset, nil, token.NoPos, string(source[start:end]))
+		if err != nil {
+			t.Fatal(err)
+		}
+		result = constant.StringVal(value.Value)
+		return false
+	})
+	if !found {
+		t.Fatal("generated SQL constant missing")
+	}
+	return result
 }
 
 // TestLiveYDB is deliberately opt-in: it creates and drops its own table on the

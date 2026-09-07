@@ -331,7 +331,7 @@ func writeQuery(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 }
 
 func sqlLiteral(sql string) string {
-	if !strings.ContainsAny(sql, "`\r\x00") && utf8.ValidString(sql) {
+	if !strings.ContainsAny(sql, "`\r\x00\ufeff") && utf8.ValidString(sql) {
 		return "`" + sql + "`"
 	}
 	// Keep each SQL line intact when raw strings cannot represent its contents.

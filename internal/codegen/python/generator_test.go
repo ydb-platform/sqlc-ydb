@@ -2,6 +2,7 @@ package python
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -172,6 +173,114 @@ func TestGeneratedMultilineSQLConstantIsReadableAndRoundTrips(t *testing.T) {
 	cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("multiline SQL did not round-trip through Python: %v\n%s\n%s", err, out, source)
+	}
+}
+
+func TestGeneratedSQLConstantsRoundTripSpecialCharacters(t *testing.T) {
+	type queryCase struct {
+		name string
+		sql  string
+	}
+	queries := []queryCase{
+		{"ascii_controls", "SELECT '\x00\a\b\f\v\x1b\x7f';"},
+		{"line_endings", "-- LF\n-- CR\r-- CRLF\r\n-- mixed\n\rSELECT 1;"},
+		{"layout", "SELECT\n\tcolumn,\n\n\tother\n\n"},
+		{"literal_escapes", `SELECT '\n\r\t\u1234\U0001F600\x41';`},
+		{"quotes_backticks", "SELECT '\"\\`', `\"$name\\`, \"double\\\"quote\";"},
+		{"unicode", "-- Привет 漢字 😀 e\u0301\u2028sep\u2029end\ufeffbom\nSELECT 1;"},
+		{"comment_dollar_colon", "-- $name :comment @@:tag\nSELECT '$name:literal', `:column`, $name;"},
+	}
+
+	roundTrip := func(t *testing.T, runtime string) {
+		t.Helper()
+		a := &model.AnalysisResult{}
+		expected := map[string]string{}
+		for _, q := range queries {
+			a.Queries = append(a.Queries, model.AnalyzedQuery{Name: q.name, Command: model.Exec, SQL: q.sql})
+			expected["SQL_"+strings.ToUpper(q.name)] = q.sql
+		}
+		files, err := Generate(a, Options{Runtime: runtime, EmitSyncQuerier: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		dir := t.TempDir()
+		pkg := filepath.Join(dir, "db")
+		if err := os.Mkdir(pkg, 0700); err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range files {
+			if err := os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(dir, "ydb.py"), []byte(""), 0600); err != nil {
+			t.Fatal(err)
+		}
+		expectedJSON, err := json.Marshal(expected)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expectedPath := filepath.Join(dir, "expected.json")
+		if err := os.WriteFile(expectedPath, expectedJSON, 0600); err != nil {
+			t.Fatal(err)
+		}
+		script := fmt.Sprintf("import json, sys; sys.path.insert(0, %q); from db import queries\nwith open(%q, encoding='utf-8') as f: expected = json.load(f)\nfor name, want in expected.items():\n    got = getattr(queries, name)\n    assert got == want, (name, repr(got), repr(want))\n", dir, expectedPath)
+		cmd := exec.Command("python3", "-c", script)
+		cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%s SQL constants did not round-trip through Python: %v\n%s", runtime, err, out)
+		}
+	}
+
+	for _, runtime := range []string{"ydb", "dbapi"} {
+		t.Run(runtime, func(t *testing.T) { roundTrip(t, runtime) })
+	}
+}
+
+func TestGeneratedSQLAlchemySQLConstantRoundTripsLexicalRewrite(t *testing.T) {
+	sql := "-- name: Пример :one\n-- comment $author_id :note\nDECLARE $author_id AS Uint64;\n$local = $author_id;\nSELECT ':ghost', @@:ghost $author_id@@, `:column`, $local FROM authors WHERE id = $author_id;"
+	want := "-- name\\: Пример \\:one\n-- comment $author_id \\:note\nDECLARE $author_id AS Uint64;\n$local = :author_id;\nSELECT '\\:ghost', @@\\:ghost $author_id@@, `\\:column`, $local FROM authors WHERE id = :author_id;"
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "find_author", Command: model.Exec, SQL: sql, Parameters: []model.Parameter{{Name: "author_id", Type: model.Type{Kind: "Uint64"}}}}}}
+	files, err := Generate(a, Options{Runtime: "sqlalchemy", EmitSyncQuerier: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	pkg := filepath.Join(dir, "db")
+	if err := os.Mkdir(pkg, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if err := os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for path, content := range map[string]string{
+		"ydb.py":                 "",
+		"sqlalchemy/__init__.py": "def text(s): return s\n",
+		"sqlalchemy/engine.py":   "class Connection: pass\n",
+	} {
+		full := filepath.Join(dir, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	expectedJSON, err := json.Marshal(map[string]string{"SQL_FIND_AUTHOR": want})
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedPath := filepath.Join(dir, "expected.json")
+	if err := os.WriteFile(expectedPath, expectedJSON, 0600); err != nil {
+		t.Fatal(err)
+	}
+	script := fmt.Sprintf("import json, sys; sys.path.insert(0, %q); from db import queries\nwith open(%q, encoding='utf-8') as f: expected = json.load(f)\nassert queries.SQL_FIND_AUTHOR == expected['SQL_FIND_AUTHOR'], (repr(queries.SQL_FIND_AUTHOR), repr(expected['SQL_FIND_AUTHOR']))\n", dir, expectedPath)
+	cmd := exec.Command("python3", "-c", script)
+	cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("SQLAlchemy SQL constant did not round-trip through Python: %v\n%s", err, out)
 	}
 }
 
