@@ -1,4 +1,7 @@
 components_manager:
+    coro_pool:
+        # Docker's default seccomp profile blocks userfaultfd used by this diagnostic.
+        stack_usage_monitor_enabled: false
     task_processors:
         main-task-processor:
             worker_threads: 2

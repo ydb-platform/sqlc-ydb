@@ -95,3 +95,6 @@ The runner sets the working directory, executes native first, starts userver,
 waits for its listener, invokes `/smoke` once, and stops the userver process.
 The compiled binaries stay in the mounted `cpp/build` directory and execute
 inside the same SDK image used to build them.
+The smoke config disables userver's optional coroutine stack usage monitor,
+whose `userfaultfd` call is blocked by Docker's default seccomp profile.
+The example runs with ordinary container permissions.
