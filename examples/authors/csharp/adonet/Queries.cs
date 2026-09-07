@@ -7,6 +7,7 @@ using System.Data.Common;
 using System.Threading;
 using System.Threading.Tasks;
 using Ydb.Sdk.Ado;
+using Ydb.Sdk.Value;
 
 namespace Authors.AdoNet;
 
@@ -103,7 +104,7 @@ public sealed class Queries
         await using var command = new YdbCommand(SqlUpsertAuthor, _connection) { Transaction = _transaction };
         command.Parameters.Add(new YdbParameter("$author_id", DbType.UInt64, args.AuthorID));
         command.Parameters.Add(new YdbParameter("$author_name", DbType.String, args.AuthorName));
-        command.Parameters.Add(new YdbParameter("$biography", DbType.String, (object?)args.Biography ?? DBNull.Value));
+        command.Parameters.Add(new YdbParameter("$biography", YdbValue.MakeOptionalUtf8(args.Biography)));
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 

@@ -37,12 +37,13 @@ The supported scalar types are `Bool`, signed and unsigned integer types,
 `float`, `double`, `string`, `byte[]`, and `Guid`. Unsupported YQL types fail
 generation; there is no `object` or inferred-type fallback.
 
-Parameters are constructed as `YdbParameter` with an explicit standard
-`DbType`, which the YDB provider maps to its concrete YDB type. In particular,
-`Uint64` always binds as `DbType.UInt64`, `Utf8` as `DbType.String`, and
-`String` as `DbType.Binary`. An optional parameter uses the same explicit type
-for a value and for `DBNull.Value`, which lets the provider create a correctly
-typed YDB null.
+Required parameters are constructed as `YdbParameter` with an explicit
+standard `DbType`, which the provider maps to its concrete YDB type. In
+particular, `Uint64` binds as `DbType.UInt64`, `Utf8` as `DbType.String`, and
+`String` as `DbType.Binary`. Optional parameters use the SDK's typed
+`YdbValue.MakeOptional*` factories. This preserves `Optional<T>` for both a
+present value and null: supplying a bare present CLR value would otherwise bind
+as `T`, not `Optional<T>`.
 
 ## SDK evidence and build target
 
@@ -54,9 +55,9 @@ The API choice was checked against `ydb-platform/ydb` main at
 `Ydb.Sdk` the ADO.NET provider and demonstrates `YdbDataSource`,
 `YdbConnection`, and `YdbCommand`; the provider source exposes
 `YdbParameter(string, DbType, object?)` and
-`YdbCommand.ExecuteReaderAsync(CancellationToken)`. `YdbParameter` emits a
-typed null when its `DbType` is explicit, so `IsNullable` is not the
-mechanism used for YQL null typing.
+`YdbCommand.ExecuteReaderAsync(CancellationToken)`. `YdbValue.MakeOptional*`
+serializes the optional wrapper directly; `IsNullable` and `DBNull.Value` do
+not select the YQL optional type.
 
 The authors smoke project targets `net8.0` and pins `Ydb.Sdk` `0.33.3`.
 `Ydb.Sdk` belongs to generated-project dependencies, never to sqlc-ydb's Go

@@ -87,6 +87,7 @@ func TestGenerateRejectsInvalidContracts(t *testing.T) {
 		{"diagnostics", &model.AnalysisResult{Diagnostics: []model.Diagnostic{{Message: "bad"}}}, Options{}, "analysis diagnostics"},
 		{"package_keyword", &model.AnalysisResult{}, Options{Package: "bad.class"}, "invalid Java package"},
 		{"package_empty_segment", &model.AnalysisResult{}, Options{Package: "bad..pkg"}, "invalid Java package"},
+		{"framework_type_collision", &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "illegal_argument_exception"}}}}, Options{}, "type name collision"},
 		{"package_java_namespace", &model.AnalysisResult{}, Options{Package: "java.sqlc"}, "java packages are reserved"},
 		{"runtime", &model.AnalysisResult{}, Options{Runtime: "unknown"}, "unsupported Java runtime"},
 		{"unsupported_parameter", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.Exec, Parameters: []model.Parameter{{Name: "p", Type: model.Type{Kind: "Json"}}}}}}, Options{}, "unsupported Java type"},

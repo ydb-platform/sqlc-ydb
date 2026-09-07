@@ -47,7 +47,7 @@ func TestGenerateUsesConcreteModernYdbAdoSurface(t *testing.T) {
 	for _, want := range []string{
 		"using Ydb.Sdk.Ado;", "private readonly YdbConnection _connection;", "private readonly YdbTransaction? _transaction;", "WithTransaction(YdbTransaction transaction)",
 		"new YdbCommand(SqlGetAuthor, _connection) { Transaction = _transaction }", "new YdbParameter(\"$author_id\", DbType.UInt64, AuthorID)",
-		"new YdbParameter(\"$biography\", DbType.String, (object?)args.Biography ?? DBNull.Value)", "ExecuteReaderAsync(cancellationToken)", "ReadAsync(cancellationToken)", "reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)",
+		"using Ydb.Sdk.Value;", "new YdbParameter(\"$biography\", YdbValue.MakeOptionalUtf8(args.Biography))", "ExecuteReaderAsync(cancellationToken)", "ReadAsync(cancellationToken)", "reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)",
 	} {
 		if !strings.Contains(queries, want) {
 			t.Errorf("Queries.cs missing %q:\n%s", want, queries)
@@ -118,7 +118,7 @@ func TestGeneratedCodeBuildsAgainstPublishedSDK(t *testing.T) {
 	}
 	cmd := exec.Command(dotnet, "build", "--nologo")
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "DOTNET_CLI_HOME="+filepath.Join(dir, ".dotnet"), "NUGET_PACKAGES="+filepath.Join(dir, ".nuget"))
+	cmd.Env = dotnetEnv(dir)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("generated C# does not build against Ydb.Sdk 0.33.3: %v\n%s", err, out)
 	}
@@ -165,14 +165,14 @@ func TestAllSupportedScalarsBuildAgainstPublishedSDK(t *testing.T) {
 	}
 	cmd := exec.Command(dotnet, "build", "--nologo")
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "DOTNET_CLI_HOME="+filepath.Join(dir, ".dotnet"), "NUGET_PACKAGES="+filepath.Join(dir, ".nuget"))
+	cmd.Env = dotnetEnv(dir)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("all generated scalar bindings must compile against Ydb.Sdk 0.33.3: %v\n%s", err, out)
 	}
 }
 
 func TestRejectsModelNamesThatShadowFrameworkTypes(t *testing.T) {
-	for _, table := range []string{"guid", "task", "cancellation_token"} {
+	for _, table := range []string{"guid", "task", "cancellation_token", "db_data_reader", "argument_null_exception", "invalid_operation_exception", "ydb_value"} {
 		t.Run(table, func(t *testing.T) {
 			_, err := Generate(&model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: table}}}}, Options{})
 			if err == nil || !strings.Contains(err.Error(), "model name collision") {
@@ -211,7 +211,7 @@ func TestSQLLiteralRoundTripsThroughCSharpRuntime(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "Program.cs"), []byte(program), 0600); err != nil {
 		t.Fatal(err)
 	}
-	env := append(os.Environ(), "DOTNET_CLI_HOME="+filepath.Join(dir, ".dotnet"), "NUGET_PACKAGES="+filepath.Join(dir, ".nuget"))
+	env := dotnetEnv(dir)
 	build := exec.Command(dotnet, "build", "--nologo")
 	build.Dir, build.Env = dir, env
 	if out, err := build.CombinedOutput(); err != nil {
@@ -221,5 +221,70 @@ func TestSQLLiteralRoundTripsThroughCSharpRuntime(t *testing.T) {
 	run.Dir, run.Env = dir, env
 	if out, err := run.CombinedOutput(); err != nil {
 		t.Fatalf("literal runtime: %v\n%s", err, out)
+	}
+}
+
+func dotnetEnv(dir string) []string {
+	env := append([]string{}, os.Environ()...)
+	env = append(env, "DOTNET_CLI_HOME="+filepath.Join(dir, ".dotnet"))
+	if os.Getenv("NUGET_PACKAGES") == "" {
+		env = append(env, "NUGET_PACKAGES="+filepath.Join(dir, ".nuget"))
+	}
+	return env
+}
+
+// This exercises the public 0.33.3 SDK value serializer, rather than relying
+// on DbType/DBNull behavior. Generated Optional<T> expressions use these
+// values so both a present value and null retain Optional<primitive> on wire.
+func TestOptionalParametersSerializeAsTypedYdbValues(t *testing.T) {
+	dotnet := os.Getenv("SQLC_YDB_CSHARP_DOTNET")
+	if dotnet == "" {
+		t.Skip("set SQLC_YDB_CSHARP_DOTNET to run the published-SDK optional wire-type check")
+	}
+	_, queries := generated(t, authorsAnalysis())
+	if !strings.Contains(queries, "YdbValue.MakeOptionalUtf8(args.Biography)") {
+		t.Fatalf("generated optional parameter did not use YdbValue: %s", queries)
+	}
+	dir := t.TempDir()
+	project := `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup><ItemGroup><PackageReference Include="Ydb.Sdk" Version="0.33.3" /></ItemGroup></Project>`
+	if err := os.WriteFile(filepath.Join(dir, "wire.csproj"), []byte(project), 0600); err != nil {
+		t.Fatal(err)
+	}
+	program := `using System;
+using Ydb.Sdk.Ado;
+using Ydb.Sdk.Value;
+
+internal static class Program
+{
+    private static void Check(YdbValue value, Ydb.Type.Types.PrimitiveTypeId primitive, bool isNull)
+    {
+        var proto = value.GetProto();
+        if (proto.Type.OptionalType?.Item.TypeId != primitive) throw new Exception("optional item type changed");
+        if ((proto.Value.ValueCase == Ydb.Value.ValueOneofCase.NullFlagValue) != isNull) throw new Exception("optional presence changed");
+    }
+
+    private static int Main()
+    {
+        var present = new YdbParameter("$present", YdbValue.MakeOptionalUtf8("present"));
+        var absent = new YdbParameter("$absent", YdbValue.MakeOptionalUtf8(null));
+        var bytes = new YdbParameter("$bytes", YdbValue.MakeOptionalString(new byte[] { 0, 255 }));
+        Check((YdbValue)present.Value!, Ydb.Type.Types.PrimitiveTypeId.Utf8, false);
+        Check((YdbValue)absent.Value!, Ydb.Type.Types.PrimitiveTypeId.Utf8, true);
+        Check((YdbValue)bytes.Value!, Ydb.Type.Types.PrimitiveTypeId.String, false);
+        return 0;
+    }
+}`
+	if err := os.WriteFile(filepath.Join(dir, "Program.cs"), []byte(program), 0600); err != nil {
+		t.Fatal(err)
+	}
+	build := exec.Command(dotnet, "build", "--nologo")
+	build.Dir, build.Env = dir, dotnetEnv(dir)
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("optional wire-type build: %v\n%s", err, out)
+	}
+	run := exec.Command(dotnet, "run", "--no-build", "--nologo")
+	run.Dir, run.Env = dir, dotnetEnv(dir)
+	if out, err := run.CombinedOutput(); err != nil {
+		t.Fatalf("optional wire-type runtime: %v\n%s", err, out)
 	}
 }

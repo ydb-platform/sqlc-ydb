@@ -7,6 +7,7 @@ using System.Data.Common;
 using System.Threading;
 using System.Threading.Tasks;
 using Ydb.Sdk.Ado;
+using Ydb.Sdk.Value;
 
 namespace Authors.AdoNet;
 

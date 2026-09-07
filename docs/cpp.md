@@ -62,11 +62,13 @@ Generate all authors adapters from the repository root:
 go run ./cmd/sqlc-ydb generate -f examples/authors/sqlc.yaml
 ```
 
-The current YDB C++ SDK release is `v3.22.0`, which publishes Ubuntu 24.04 `libydb-cpp-dev` and `yandex-googleapis-api-common-protos` packages. Its CMake package installs below `/usr/share/yandex`. Native links the real `YDB-CPP-SDK::Driver`, `YDB-CPP-SDK::Params`, and `YDB-CPP-SDK::Query` targets; userver links `userver::ydb`. The pinned userver target also links `YDB-CPP-SDK::ydb-cpp-iam`, so the top-level CMake file requests the SDK `Iam` component before loading userver's installed targets.
+The current YDB C++ SDK release is `v3.22.0`, which publishes Ubuntu 24.04 `libydb-cpp-dev` and `yandex-googleapis-api-common-protos` packages. Its CMake package installs below `/usr/share/yandex`. Native links the real `YDB-CPP-SDK::Driver`, `YDB-CPP-SDK::Params`, and `YDB-CPP-SDK::Query` targets; userver links `userver::ydb`. The pinned userver target also links `YDB-CPP-SDK::ydb-cpp-iam`.
 
 The official `ghcr.io/userver-framework/ubuntu-24.04-userver` image is built with `USERVER_FEATURE_YDB=1` and includes the YDB SDK packages. The compile environment is pinned in `examples/authors/cpp/Dockerfile` to `ghcr.io/userver-framework/ubuntu-24.04-userver@sha256:8b71ba0bdc5f79038d2e639cc7d8f669405db7377b851f7581b09c67183151e4`, which contains userver 3.2-rc and YDB C++ SDK 3.21.1.
 
-That image's installed `userver-ydb-config.cmake` asks for the obsolete CMake package name `googleapis`, while its real installed SDK package exports `yandex-googleapis-api-common-protos::api-common-protos` from `yandex-googleapis-api-common-protosConfig.cmake`. The Dockerfile makes the exact dependency-name correction and verifies both the old line and the real package file before changing it. It does not add replacement headers, targets, or libraries. Build the small derived image and compile serially to stay within the 2 GB Docker VM:
+That image's installed `userver-ydb-config.cmake` has two packaging defects. It asks for the obsolete CMake package name `googleapis`, while its real installed SDK package exports `yandex-googleapis-api-common-protos::api-common-protos` from `yandex-googleapis-api-common-protosConfig.cmake`. It also loads the SDK without components even though `userver::ydb` requires the IAM library. The SDK 3.21.1 package is not safe to load twice with different component lists because it recreates component aliases.
+
+The Dockerfile verifies and corrects both dependency lines. Its single SDK load requests `Driver`, `Params`, and `Query` for the native example plus `Iam` for `userver::ydb`. The top-level project therefore loads userver once and uses the real SDK targets that dependency exports. The workaround does not add replacement headers, targets, or libraries. Build the small derived image and compile serially to stay within the 2 GB Docker VM:
 
 ```bash
 docker build \
