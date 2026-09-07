@@ -13,8 +13,8 @@ contents and expected diagnostics. Fixture updates are explicit, never an
 automatic part of tests. Semantic unit tests independently assert resolved
 parameters, result columns and errors.
 
-CI separates this fast offline suite from one Linux acceptance job backed by a
-single pinned YDB service. GitHub Actions waits for the image's health check;
+CI separates this fast offline suite from Linux acceptance jobs. Each acceptance
+host runs a single pinned YDB service and waits for the image's health check;
 there is no multi-database startup framework, engine matrix, plugin subprocess
 runner or optional Postgres/MySQL fallback. See
 [the fixture runner](../internal/endtoend/README.md) for the upstream references

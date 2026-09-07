@@ -111,7 +111,7 @@ jobs:
         run: |
           docker build -t sqlc-ydb-cpp-tests -f examples/authors/cpp/Dockerfile examples/authors/cpp
           docker run --rm -v "$PWD:/workspace" -w /workspace sqlc-ydb-cpp-tests \
-            bash -lc 'cmake -S examples/authors/cpp -B examples/authors/cpp/build -GNinja -DCMAKE_PREFIX_PATH=/usr/share/yandex && cmake --build examples/authors/cpp/build --target authors_native authors_userver -j1'
+            bash -lc 'cmake -S examples/authors/cpp -B examples/authors/cpp/build -GNinja -DCMAKE_PREFIX_PATH=/usr/share/yandex && cmake --build examples/authors/cpp/build --target authors_native authors_userver -j1 -- -k 0'
       - name: Start one disposable YDB service
         run: |
           docker run -d --name sqlc-ydb-cpp-server --hostname localhost \

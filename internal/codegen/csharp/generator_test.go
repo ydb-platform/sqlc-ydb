@@ -182,6 +182,53 @@ func TestRejectsModelNamesThatShadowFrameworkTypes(t *testing.T) {
 	}
 }
 
+func TestRejectsRecordMemberCollisions(t *testing.T) {
+	utf8 := model.Type{Kind: "Utf8"}
+	for _, tc := range []struct {
+		name string
+		in   *model.AnalysisResult
+		want string
+	}{
+		{
+			name: "table member equals record", want: "collides with record name",
+			in: &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{
+				Name: "authors", Columns: []model.Column{{Name: "authors", Type: utf8}},
+			}}}},
+		},
+		{
+			name: "row member equals record", want: "collides with record name",
+			in: &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+				Name: "get_author", Command: model.One, ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "get_author_row", Type: utf8}}}},
+			}}},
+		},
+		{
+			name: "params member equals record", want: "collides with record name",
+			in: &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+				Name: "upsert", Command: model.Exec, Parameters: []model.Parameter{{Name: "upsert_params", Type: utf8}, {Name: "other", Type: utf8}},
+			}}},
+		},
+		{
+			name: "synthesized clone", want: "generated record member",
+			in: &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{
+				Name: "authors", Columns: []model.Column{{Name: "clone", Type: utf8}},
+			}}}},
+		},
+		{
+			name: "synthesized equality contract", want: "generated record member",
+			in: &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{
+				Name: "authors", Columns: []model.Column{{Name: "equality_contract", Type: utf8}},
+			}}}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Generate(tc.in, Options{})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Generate() error = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
 // This is an execution check, not merely a source inspection: C# evaluates the
 // emitted literal and compares its UTF-8 bytes with the original SQL.
 func TestSQLLiteralRoundTripsThroughCSharpRuntime(t *testing.T) {

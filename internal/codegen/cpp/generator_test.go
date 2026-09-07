@@ -89,7 +89,9 @@ func TestGenerateNativeYDBAuthorsAPI(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
+		"#include <ydb-cpp-sdk/client/types/status/status.h>",
 		"client_.RetryQuerySync",
+		"NYdb::NStatusHelpers::ThrowOnError(sqlc_status);",
 		"NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()",
 		".AddParam(\"$author_id\").Uint64(author_id).Build()",
 		".AddParam(\"$author_name\").Utf8(author_name).Build()",

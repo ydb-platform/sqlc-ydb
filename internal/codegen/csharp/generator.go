@@ -55,7 +55,7 @@ func validate(in *model.AnalysisResult) error {
 		if err := add(modelNames, csName(table.Name), "table:"+table.Name, "model name"); err != nil {
 			return err
 		}
-		if err := fields("table "+table.Name, table.Columns); err != nil {
+		if err := fields("table "+table.Name, csName(table.Name), table.Columns); err != nil {
 			return err
 		}
 	}
@@ -95,12 +95,19 @@ func validate(in *model.AnalysisResult) error {
 			if err := add(modelNames, csName(q.Name)+"Params", "params:"+q.Name, "model name"); err != nil {
 				return err
 			}
+			params := make([]model.Column, len(q.Parameters))
+			for i, p := range q.Parameters {
+				params[i] = model.Column{Name: p.Name, Type: p.Type}
+			}
+			if err := fields("query "+q.Name+" parameters", csName(q.Name)+"Params", params); err != nil {
+				return err
+			}
 		}
 		if q.Command == model.One || q.Command == model.Many {
 			if err := add(modelNames, csName(q.Name)+"Row", "row:"+q.Name, "model name"); err != nil {
 				return err
 			}
-			if err := fields("query "+q.Name, q.ResultSets[0].Columns); err != nil {
+			if err := fields("query "+q.Name, csName(q.Name)+"Row", q.ResultSets[0].Columns); err != nil {
 				return err
 			}
 		}
@@ -108,12 +115,24 @@ func validate(in *model.AnalysisResult) error {
 	return nil
 }
 
-func fields(where string, columns []model.Column) error {
+var recordReservedMembers = map[string]bool{
+	"Clone": true, "Deconstruct": true, "EqualityContract": true, "PrintMembers": true,
+	"Equals": true, "GetHashCode": true, "ToString": true,
+	"GetType": true, "MemberwiseClone": true, "Finalize": true, "ReferenceEquals": true,
+}
+
+func fields(where, record string, columns []model.Column) error {
 	seen := map[string]bool{}
 	for _, c := range columns {
 		n := csName(c.Name)
 		if !csIdent(n) || seen[n] {
 			return fmt.Errorf("csharp generator: %s: column name collision at %q", where, c.Name)
+		}
+		if n == record {
+			return fmt.Errorf("csharp generator: %s: record member %q collides with record name", where, c.Name)
+		}
+		if recordReservedMembers[n] {
+			return fmt.Errorf("csharp generator: %s: record member %q collides with generated record member", where, c.Name)
 		}
 		seen[n] = true
 		if _, err := csType(c.Type); err != nil {

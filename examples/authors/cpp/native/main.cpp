@@ -2,6 +2,7 @@
 
 #include <ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb-cpp-sdk/client/types/status/status.h>
 
 #include <cstdint>
 #include <cstdlib>
@@ -49,7 +50,7 @@ void ExecuteStatement(NYdb::NQuery::TQueryClient& client, const std::string& sta
             NYdb::NQuery::TTxControl::NoTx()
         ).GetValueSync();
     });
-    NYdb::ThrowOnError(status);
+    NYdb::NStatusHelpers::ThrowOnError(status);
 }
 
 class CreatedAuthorsTable final {

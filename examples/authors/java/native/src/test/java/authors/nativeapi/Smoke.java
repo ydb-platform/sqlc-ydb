@@ -29,8 +29,6 @@ public final class Smoke {
             try {
                 exercise(queries);
             } finally {
-                queries.deleteAuthor(MAX_UINT64);
-                queries.deleteAuthor(SECOND_ID);
                 dropSchema(retry);
             }
         }
