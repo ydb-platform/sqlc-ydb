@@ -1,0 +1,26 @@
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+    patch:
+      default:
+        target: 80%
+
+# Measure only code executed by sqlc-ydb, including its CLI. Tests contribute
+# coverage of this code; test harnesses, examples and CI tooling are excluded.
+ignore:
+  - "examples/**"
+  - "internal/endtoend/**"
+  - "**/testdata/**"
+  - "**/*_test.go"
+  - ".github/**"
+
+comment:
+  layout: "header, diff, flags, files, footer"
+  behavior: default
+  require_changes: false
+  require_base: false
+  require_head: true
+  hide_project_coverage: false

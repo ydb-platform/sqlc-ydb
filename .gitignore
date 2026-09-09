@@ -1,5 +1,8 @@
 /bin/
 /dist/
+/coverage.out
+/coverage-*.out
+/coverage.html
 __pycache__/
 *.pyc
 .venv/

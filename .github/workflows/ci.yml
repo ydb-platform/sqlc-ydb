@@ -8,6 +8,8 @@ on:
 jobs:
   standalone:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       CARGO_BUILD_JOBS: 1
     steps:
@@ -42,7 +44,13 @@ jobs:
         timeout-minutes: 15
         run: bash .github/scripts/install-php-grpc
       - name: Check standalone generator and generated outputs
-        run: make check
+        run: make test-release coverage check-examples
+      - name: Save generator coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: generator-coverage
+          path: coverage.out
+          if-no-files-found: error
       - name: Compile generated code against published SDKs
         env:
           SQLC_YDB_CSHARP_DOTNET: dotnet
@@ -62,10 +70,21 @@ jobs:
         run: |
           composer install --no-interaction --prefer-dist
           composer check
+      - name: Upload generator coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.out
+          flags: unit
+          disable_search: true
+          fail_ci_if_error: true
+          name: generator
 
   ydb-acceptance:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
     services:
       ydb:
         image: ydbplatform/local-ydb:26.3.1.8
@@ -127,11 +146,11 @@ jobs:
       # Keep local-ydb acceptance sequential: concurrent tests/compilers can
       # exhaust the memory budget even when they use only one YDB service.
       - name: Compare analyzer types and result ordering with YDB
-        run: go test -p 1 -count=1 -timeout=180s ./internal/endtoend -run TestLiveYDBSemanticTypes -v
+        run: go test -p 1 -count=1 -timeout=180s -covermode=atomic -coverpkg=./... -coverprofile=coverage-semantic.out ./internal/endtoend -run TestLiveYDBSemanticTypes -v
       - name: Run Go generator runtime tests
-        run: go test -p 1 -count=1 -timeout=180s ./internal/codegen/golang -run TestLiveYDB -v
+        run: go test -p 1 -count=1 -timeout=180s -covermode=atomic -coverpkg=./... -coverprofile=coverage-go-live.out ./internal/codegen/golang -run TestLiveYDB -v
       - name: Run Python generator runtime tests
-        run: go test -p 1 -count=1 -timeout=180s ./internal/codegen/python -run TestLiveYDB -v
+        run: go test -p 1 -count=1 -timeout=180s -covermode=atomic -coverpkg=./... -coverprofile=coverage-python-live.out ./internal/codegen/python -run TestLiveYDB -v
       - name: Execute all Go examples sequentially
         run: |
           cd examples
@@ -161,6 +180,24 @@ jobs:
       - name: Run all PHP examples sequentially
         working-directory: examples/php
         run: composer smoke
+      - name: Save integration coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: generator-integration-coverage
+          path: |
+            coverage-semantic.out
+            coverage-go-live.out
+            coverage-python-live.out
+          if-no-files-found: error
+      - name: Upload integration coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage-semantic.out,./coverage-go-live.out,./coverage-python-live.out
+          flags: integration
+          disable_search: true
+          fail_ci_if_error: true
+          name: generator-integration
 
   cpp-acceptance:
     runs-on: ubuntu-24.04

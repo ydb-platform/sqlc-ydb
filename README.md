@@ -1,5 +1,11 @@
 # sqlc-ydb
 
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/ydb-platform/sqlc-ydb.svg?style=flat-square)](https://github.com/ydb-platform/sqlc-ydb/releases)
+[![CI](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/ydb-platform/sqlc-ydb/branch/main/graph/badge.svg?precision=2)](https://app.codecov.io/gh/ydb-platform/sqlc-ydb)
+[![View examples](https://img.shields.io/badge/learn-examples-brightgreen.svg)](examples/README.md)
+
 Generate typed query code from YQL for YDB in Go, Python, C++, C#, Java,
 JavaScript, Rust and PHP. One executable contains the parser, semantic analyzer
 and generators. Generation works offline and does not require a running YDB,

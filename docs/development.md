@@ -27,6 +27,56 @@ otherwise changing the runtime SQL text.
 CI separates offline checks from Linux acceptance jobs. Each acceptance host
 uses one pinned YDB service.
 
+## Code coverage
+
+```sh
+make coverage
+go tool cover -html=coverage.out -o coverage.html
+```
+
+`make coverage` runs the root Go module's tests without caching and writes
+`coverage.out` in atomic mode. `-coverpkg=./...` includes calls across package
+boundaries, so CLI and golden tests contribute to analyzer and generator coverage.
+The final `total` from `go tool cover` is the combined statement coverage; the
+per-test-package percentages are not independent package coverage figures.
+The denominator contains only sqlc-ydb runtime code, including the CLI entry
+point even when untested. Unit and end-to-end tests run and contribute coverage
+of that code, but their own source is not measured. Examples, the
+`internal/endtoend` harness, `*_test.go` files, golden outputs, `.github` tooling
+and the external ANTLR parser dependency are outside this scope. Go already
+excludes test source and the separate examples module from the profile;
+`codecov.yml` also explicitly excludes the repository's non-runtime paths.
+This local profile excludes live YDB
+tests unless their environment variables are set, and excludes optional SDK
+checks unless explicitly enabled.
+
+CI saves the profile as the `generator-coverage` artifact and uploads it to
+Codecov with the `unit` flag on pushes to `main` and pull requests. The
+`ydb-acceptance` job also instruments the existing semantic, Go generator and
+Python generator live tests and uploads their three profiles with the
+`integration` flag, saving them as the `generator-integration-coverage` artifact.
+Codecov merges these profiles; generated application runtime coverage and the
+separate optional SDK compilation checks are not measured. The PR comment
+updates as reports arrive, so the first report can show only offline coverage.
+[codecov.yml](../codecov.yml)
+compares project coverage with the base commit (allowing a one percentage point
+drop) and requires 80% patch coverage. It enables one updated PR comment with
+the coverage difference and impacted files, including on the first PR without
+a base report. A successful `main` upload establishes the comparison baseline
+and populates the README badge.
+
+Repository administrators must enable `ydb-platform/sqlc-ydb` in Codecov and
+grant the [Codecov GitHub App](https://github.com/apps/codecov) access so it can
+post PR comments. Set the repository Actions secret `CODECOV_TOKEN` to the
+Codecov upload token, as in ydb-go-sdk. Alternatively, the organization can
+allow tokenless public uploads with **Global Upload Token → Not required** in
+Codecov; the action accepts an empty secret in that mode. Public fork PR uploads
+do not need access to the secret. See [Codecov token authentication](https://docs.codecov.com/docs/codecov-tokens)
+and [PR comments](https://docs.codecov.com/docs/pull-request-comments).
+An upload failure fails the CI job rather than silently leaving stale coverage.
+
+## Test prerequisites
+
 PHP CI builds the pinned gRPC extension with
 [`.github/scripts/install-php-grpc`](../.github/scripts/install-php-grpc).
 It downloads the source archive directly, limits compilation to two processes,

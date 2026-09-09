@@ -1,4 +1,4 @@
-.PHONY: build test test-release generate check check-examples clean
+.PHONY: build test coverage test-release generate check check-examples clean
 
 EXAMPLE_CONFIGS := $(wildcard examples/*/sqlc.yaml)
 
@@ -7,6 +7,10 @@ build:
 
 test:
 	go test -p 1 ./...
+
+coverage:
+	go test -p 1 -count=1 -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
+	go tool cover -func=coverage.out
 
 test-release:
 	python3 -m unittest discover -s .github/scripts/tests -p 'test_*.py'
