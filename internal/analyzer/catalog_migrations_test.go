@@ -93,6 +93,10 @@ func TestCatalogResolvesSerialAliasesAndDMLBindings(t *testing.T) {
 SELECT id FROM entries;
 -- name: InsertGeneratedID :exec
 INSERT INTO entries (value) VALUES ($value);
+-- name: InsertExplicitID :exec
+INSERT INTO entries (id, value) VALUES ($id, $value);
+-- name: UpsertGeneratedID :exec
+UPSERT INTO entries (value) VALUES ($value);
 -- name: UpsertExplicitID :exec
 UPSERT INTO entries (id, value) VALUES ($id, $value);`}},
 			)
@@ -107,10 +111,16 @@ UPSERT INTO entries (id, value) VALUES ($id, $value);`}},
 				t.Fatalf("SELECT result = %#v", result)
 			}
 			if parameters := got.Queries[1].Parameters; !reflect.DeepEqual(parameters, []model.Parameter{{Name: "value", Type: model.Type{Kind: "Utf8"}}}) {
-				t.Fatalf("omitted serial parameters = %#v", parameters)
+				t.Fatalf("omitted INSERT serial parameters = %#v", parameters)
 			}
 			if parameters := got.Queries[2].Parameters; !reflect.DeepEqual(parameters, []model.Parameter{{Name: "id", Type: tt.want}, {Name: "value", Type: model.Type{Kind: "Utf8"}}}) {
-				t.Fatalf("explicit serial parameters = %#v", parameters)
+				t.Fatalf("explicit INSERT serial parameters = %#v", parameters)
+			}
+			if parameters := got.Queries[3].Parameters; !reflect.DeepEqual(parameters, []model.Parameter{{Name: "value", Type: model.Type{Kind: "Utf8"}}}) {
+				t.Fatalf("omitted UPSERT serial parameters = %#v", parameters)
+			}
+			if parameters := got.Queries[4].Parameters; !reflect.DeepEqual(parameters, []model.Parameter{{Name: "id", Type: tt.want}, {Name: "value", Type: model.Type{Kind: "Utf8"}}}) {
+				t.Fatalf("explicit UPSERT serial parameters = %#v", parameters)
 			}
 		})
 	}
