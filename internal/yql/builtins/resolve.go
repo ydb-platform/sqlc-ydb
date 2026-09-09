@@ -47,20 +47,29 @@ func resolveCoalesce(name string, args []model.Type) (model.Type, error) {
 	if len(args) == 0 {
 		return model.Type{}, fmt.Errorf("%s expects at least 1 argument", name)
 	}
-	result, err := CommonType(args...)
-	if err != nil {
-		return model.Type{}, fmt.Errorf("%s: %w", name, err)
-	}
+	var result model.Type
+	nullable := true
 	for _, arg := range args {
-		base, isOptional, baseErr := baseType(arg)
-		if baseErr != nil {
-			return model.Type{}, fmt.Errorf("%s: %w", name, baseErr)
+		base, isOptional, err := baseType(arg)
+		if err != nil {
+			return model.Type{}, fmt.Errorf("%s: %w", name, err)
 		}
-		if base.Kind != "Null" && !isOptional {
-			return result.UnwrapOptional(), nil
+		if base.Kind == "Null" {
+			continue
+		}
+		if result.Kind == "" {
+			result = base
+		} else if !equalType(result, base) {
+			return model.Type{}, fmt.Errorf("%s arguments must have the same non-Null base type; use CAST to convert them to the same YQL type", name)
+		}
+		if !isOptional {
+			nullable = false
 		}
 	}
-	return result, nil
+	if result.Kind == "" {
+		return model.Type{}, fmt.Errorf("%s cannot infer a concrete type from only Null arguments", name)
+	}
+	return withOptional(result, nullable), nil
 }
 
 func resolveIf(args []model.Type) (model.Type, error) {
@@ -97,12 +106,12 @@ func resolveSubstring(name string, args []model.Type) (model.Type, error) {
 	if len(args) != 2 && len(args) != 3 {
 		return model.Type{}, fmt.Errorf("%s expects 2 or 3 arguments, got %d", name, len(args))
 	}
-	source, nullable, err := stringArgument(name, args, 0, true)
-	if err != nil {
-		return model.Type{}, err
+	source, nullable, err := baseType(args[0])
+	if err != nil || source.Kind != "String" {
+		return model.Type{}, fmt.Errorf("%s argument 1 must be String or Optional<String>; use Unicode::Substring for Utf8", name)
 	}
 	for i := 1; i < len(args); i++ {
-		if err := integerOrNullArgument(name, args, i); err != nil {
+		if err := coreStringPositionArgument(name, args, i); err != nil {
 			return model.Type{}, err
 		}
 	}
@@ -128,7 +137,7 @@ func resolveFind(name string, args []model.Type) (model.Type, error) {
 		return model.Type{}, fmt.Errorf("%s arguments 1 and 2 must have the same string type", name)
 	}
 	if len(args) == 3 {
-		if err := integerOrNullArgument(name, args, 2); err != nil {
+		if err := coreStringPositionArgument(name, args, 2); err != nil {
 			return model.Type{}, err
 		}
 	}
@@ -258,10 +267,10 @@ func stringOrNullArgument(name string, args []model.Type, index int) (model.Type
 	return base, nullable || base.Kind == "Null", nil
 }
 
-func integerOrNullArgument(name string, args []model.Type, index int) error {
+func coreStringPositionArgument(name string, args []model.Type, index int) error {
 	base, _, err := baseType(args[index])
-	if err != nil || (base.Kind != "Null" && !isInteger(base.Kind)) {
-		return fmt.Errorf("%s argument %d must be an integer, optional integer, or Null", name, index+1)
+	if err != nil || (base.Kind != "Null" && base.Kind != "Uint8" && base.Kind != "Uint16" && base.Kind != "Uint32") {
+		return fmt.Errorf("%s argument %d must be Null, Uint8, Uint16, Uint32, or an Optional of one of those types; use CAST(... AS Uint32) for other integer types", name, index+1)
 	}
 	return nil
 }

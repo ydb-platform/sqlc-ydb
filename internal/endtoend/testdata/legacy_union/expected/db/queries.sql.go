@@ -28,6 +28,50 @@ func (q *Queries) DistinctLabels(ctx context.Context) ([]DistinctLabelsRow, erro
 	return items, rows.Err()
 }
 
+const queryQualifiedMissing = `-- name: QualifiedMissing :many
+SELECT a.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id
+UNION ALL
+SELECT b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id;`
+
+func (q *Queries) QualifiedMissing(ctx context.Context) ([]QualifiedMissingRow, error) {
+	rows, err := q.db.QueryContext(ctx, queryQualifiedMissing)
+	if err != nil {
+		return []QualifiedMissingRow(nil), err
+	}
+	defer rows.Close()
+	items := []QualifiedMissingRow(nil)
+	for rows.Next() {
+		var row QualifiedMissingRow
+		if err := rows.Scan(&row.AID, &row.BID); err != nil {
+			return nil, err
+		}
+		items = append(items, row)
+	}
+	return items, rows.Err()
+}
+
+const queryQualifiedNames = `-- name: QualifiedNames :many
+SELECT a.id, b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id
+UNION ALL
+SELECT a.id, b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id;`
+
+func (q *Queries) QualifiedNames(ctx context.Context) ([]QualifiedNamesRow, error) {
+	rows, err := q.db.QueryContext(ctx, queryQualifiedNames)
+	if err != nil {
+		return []QualifiedNamesRow(nil), err
+	}
+	defer rows.Close()
+	items := []QualifiedNamesRow(nil)
+	for rows.Next() {
+		var row QualifiedNamesRow
+		if err := rows.Scan(&row.AID, &row.BID); err != nil {
+			return nil, err
+		}
+		items = append(items, row)
+	}
+	return items, rows.Err()
+}
+
 const queryAllLabels = `-- name: AllLabels :many
 SELECT id, label FROM local_labels
 UNION ALL

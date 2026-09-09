@@ -59,6 +59,23 @@ strict `MIN`/`MAX` subset accepts primitive numeric values plus `String` and
 preserves optionality. Non-numeric types must match exactly. Different Decimal
 precision or scale is rejected rather than inventing Decimal arithmetic rules.
 
+`COALESCE` and `NVL` require all non-`Null` arguments to have the same base
+type. YQL also permits some value-dependent implicit conversions, such as
+narrowing an integer literal when its value fits the other argument's type,
+but `model.Type` does not retain the literal value needed to resolve those
+calls correctly. Mixed base types therefore require an explicit `CAST` to the
+same YQL type. `Null` and `Optional` inputs keep their normal result-nullability
+behavior.
+
+Core `SUBSTRING` accepts `String` or `Optional<String>`; use
+`Unicode::Substring` for `Utf8`. Core `SUBSTRING` offsets and lengths and the
+optional third argument of core `FIND`/`RFIND` accept `Null`, `Uint8`, `Uint16`,
+or `Uint32`, including optional forms. Other integer types require an explicit
+`CAST(... AS Uint32)`. This is deliberately stricter than YQL's handling of
+fitting literals because the resolver sees their types but not their values.
+The C++ `String::` and `Unicode::` library position rules are separate and
+continue to use `Uint64` where their signatures require it.
+
 `Cast` supports identity, primitive non-Decimal numeric conversions,
 `String`/`Utf8` parsing to primitive numeric types, primitive numeric conversion
 to `String`, and conversion between `String` and `Utf8`. A conversion that is
@@ -85,7 +102,9 @@ checked against result-set metadata from the pinned
 `internal/endtoend/builtin_live_cases_test.go`. This caught rules not stated
 fully in the prose reference: `AVG(Float)` returns `Double`, Decimal `SUM`
 widens precision to 35, grouped aggregates over non-optional inputs are
-non-optional, and `String::Substring` requires its position argument.
+non-optional, `String::Substring` requires its position argument, core
+`SUBSTRING` is byte-string-only, and core string positions use the bounded
+unsigned types through `Uint32`.
 
 The function inventory was also compared with
 `ydb-platform/sqlc@8eed5d890396eb03953248a3ec4ab7e28dfaed45`, especially

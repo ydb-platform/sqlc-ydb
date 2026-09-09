@@ -23,7 +23,7 @@
         "Line": 7,
         "Column": 8
       },
-      "Message": "computed result expressions require an explicit AS alias"
+      "Message": "Substring argument 2 must be Null, Uint8, Uint16, Uint32, or an Optional of one of those types; use CAST(... AS Uint32) for other integer types"
     },
     {
       "Position": {
@@ -31,7 +31,7 @@
         "Line": 9,
         "Column": 8
       },
-      "Message": "computed result expressions require an explicit AS alias"
+      "Message": "Substring argument 2 must be Null, Uint8, Uint16, Uint32, or an Optional of one of those types; use CAST(... AS Uint32) for other integer types"
     },
     {
       "Position": {
@@ -47,7 +47,7 @@
         "Line": 13,
         "Column": 8
       },
-      "Message": "computed result expressions require an explicit AS alias"
+      "Message": "Find argument 3 must be Null, Uint8, Uint16, Uint32, or an Optional of one of those types; use CAST(... AS Uint32) for other integer types"
     },
     {
       "Position": {

@@ -83,7 +83,7 @@ func TestResolveCoreFunctions(t *testing.T) {
 		{name: "substring", args: []model.Type{model.Optional(scalar("String")), scalar("Uint32"), scalar("Null")}, want: model.Optional(scalar("String"))},
 		{name: "find", args: []model.Type{scalar("Utf8"), scalar("Utf8")}, want: model.Optional(scalar("Uint32"))},
 		{name: "FIND", args: []model.Type{scalar("Null"), scalar("String")}, want: model.Optional(scalar("Uint32"))},
-		{name: "RFIND", args: []model.Type{scalar("String"), scalar("String"), scalar("Uint64")}, want: model.Optional(scalar("Uint32"))},
+		{name: "RFIND", args: []model.Type{scalar("String"), scalar("String"), scalar("Uint32")}, want: model.Optional(scalar("Uint32"))},
 		{name: "startswith", args: []model.Type{scalar("Utf8"), model.Optional(scalar("Utf8"))}, want: model.Optional(scalar("Bool"))},
 		{name: "EndsWith", args: []model.Type{scalar("String"), scalar("String")}, want: scalar("Bool")},
 		{name: "StartsWith", args: []model.Type{scalar("String"), scalar("Null")}, want: model.Optional(scalar("Bool"))},
@@ -102,6 +102,19 @@ func TestResolveCoreFunctions(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestResolveCoreStringFunctionsAcceptNullableUint32Positions(t *testing.T) {
+	assertResolved(t, "SUBSTRING", []model.Type{
+		scalar("String"),
+		model.Optional(scalar("Uint16")),
+		model.Optional(scalar("Uint32")),
+	}, scalar("String"))
+	assertResolved(t, "FIND", []model.Type{
+		scalar("String"),
+		scalar("String"),
+		model.Optional(scalar("Uint8")),
+	}, model.Optional(scalar("Uint32")))
 }
 
 func TestResolveAggregates(t *testing.T) {
@@ -247,8 +260,11 @@ func TestResolveRejectsUnknownOrInvalidCalls(t *testing.T) {
 		{name: "LENGTH", args: nil, error: "expects 1 argument"},
 		{name: "LENGTH", args: []model.Type{scalar("Int32")}, error: "argument 1"},
 		{name: "SUBSTRING", args: []model.Type{scalar("String")}, error: "expects 2 or 3 arguments"},
+		{name: "SUBSTRING", args: []model.Type{scalar("String"), scalar("Uint32"), scalar("Uint32"), scalar("Uint32")}, error: "expects 2 or 3 arguments"},
 		{name: "SUBSTRING", args: []model.Type{scalar("String"), scalar("Utf8")}, error: "argument 2"},
+		{name: "FIND", args: []model.Type{scalar("String")}, error: "expects 2 or 3 arguments"},
 		{name: "FIND", args: []model.Type{scalar("String"), scalar("Utf8")}, error: "same string type"},
+		{name: "RFIND", args: []model.Type{scalar("String"), scalar("String"), scalar("Uint32"), scalar("Uint32")}, error: "expects 2 or 3 arguments"},
 		{name: "IF", args: []model.Type{scalar("Int32"), scalar("Int32"), scalar("Int32")}, error: "condition"},
 		{name: "IF", args: []model.Type{scalar("Bool"), scalar("String"), scalar("Utf8")}, error: "no common type"},
 		{name: "COALESCE", args: nil, error: "at least 1 argument"},
@@ -273,6 +289,63 @@ func TestResolveRejectsUnknownOrInvalidCalls(t *testing.T) {
 			}
 			if got.Kind != "" {
 				t.Fatalf("Resolve(%q) returned a type on error: %#v", tt.name, got)
+			}
+		})
+	}
+}
+
+func TestResolveCoalesceRejectsMixedBaseTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		function string
+		args     []model.Type
+	}{
+		{name: "coalesce non-optional numeric", function: "COALESCE", args: []model.Type{scalar("Int32"), scalar("Int64")}},
+		{name: "coalesce optional numeric", function: "coalesce", args: []model.Type{model.Optional(scalar("Int32")), scalar("Int64")}},
+		{name: "NVL numeric", function: "NVL", args: []model.Type{model.Optional(scalar("Uint16")), scalar("Uint32")}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Resolve(tt.function, tt.args)
+			if err == nil || !strings.Contains(err.Error(), "CAST") || !strings.Contains(err.Error(), "same YQL type") {
+				t.Fatalf("Resolve(%q) = %#v, error %v; want mixed-type CAST error", tt.function, got, err)
+			}
+		})
+	}
+}
+
+func TestResolveCoreStringPositionsRejectUnsupportedTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		function string
+		args     []model.Type
+	}{
+		{name: "SUBSTRING Utf8 source", function: "SUBSTRING", args: []model.Type{scalar("Utf8"), scalar("Uint32")}},
+		{name: "SUBSTRING optional Utf8 source", function: "SUBSTRING", args: []model.Type{model.Optional(scalar("Utf8")), scalar("Uint32")}},
+		{name: "SUBSTRING signed offset", function: "SUBSTRING", args: []model.Type{scalar("String"), scalar("Int8")}},
+		{name: "SUBSTRING signed length", function: "SUBSTRING", args: []model.Type{scalar("String"), scalar("Uint32"), scalar("Int16")}},
+		{name: "SUBSTRING optional signed offset", function: "SUBSTRING", args: []model.Type{scalar("String"), model.Optional(scalar("Int32"))}},
+		{name: "SUBSTRING Int64 offset", function: "SUBSTRING", args: []model.Type{scalar("String"), scalar("Int64")}},
+		{name: "SUBSTRING Uint64 offset", function: "SUBSTRING", args: []model.Type{scalar("String"), scalar("Uint64")}},
+		{name: "FIND signed offset", function: "FIND", args: []model.Type{scalar("String"), scalar("String"), scalar("Int32")}},
+		{name: "RFIND optional Uint64 offset", function: "RFIND", args: []model.Type{scalar("Utf8"), scalar("Utf8"), model.Optional(scalar("Uint64"))}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Resolve(tt.function, tt.args)
+			if err == nil {
+				t.Fatalf("Resolve(%q) = %#v, want error", tt.function, got)
+			}
+			if strings.Contains(tt.name, "Utf8 source") {
+				if !strings.Contains(err.Error(), "Unicode::Substring") {
+					t.Fatalf("Resolve(%q) error = %v; want Unicode::Substring advice", tt.function, err)
+				}
+				return
+			}
+			if !strings.Contains(err.Error(), "CAST") || !strings.Contains(err.Error(), "Uint32") {
+				t.Fatalf("Resolve(%q) error = %v; want CAST AS Uint32 advice", tt.name, err)
 			}
 		})
 	}

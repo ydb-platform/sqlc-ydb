@@ -20,6 +20,16 @@ class DistinctLabelsRow:
     label: Optional[str]
 
 @dataclass
+class QualifiedMissingRow:
+    a_id: Optional[int]
+    b_id: Optional[int]
+
+@dataclass
+class QualifiedNamesRow:
+    a_id: int
+    b_id: int
+
+@dataclass
 class AllLabelsRow:
     id: int
     label: Optional[str]

@@ -1,101 +1,13 @@
 {
-  "status": "accepted",
-  "catalog": {
-    "Tables": [
-      {
-        "Name": "foo",
-        "Columns": [
-          {
-            "Name": "bar",
-            "WireName": "",
-            "Type": {
-              "Kind": "Optional",
-              "Elem": {
-                "Kind": "Utf8",
-                "Elem": null,
-                "Key": null,
-                "Items": null,
-                "Precision": 0,
-                "Scale": 0
-              },
-              "Key": null,
-              "Items": null,
-              "Precision": 0,
-              "Scale": 0
-            },
-            "Table": "foo"
-          },
-          {
-            "Name": "baz",
-            "WireName": "",
-            "Type": {
-              "Kind": "Optional",
-              "Elem": {
-                "Kind": "Int64",
-                "Elem": null,
-                "Key": null,
-                "Items": null,
-                "Precision": 0,
-                "Scale": 0
-              },
-              "Key": null,
-              "Items": null,
-              "Precision": 0,
-              "Scale": 0
-            },
-            "Table": "foo"
-          }
-        ],
-        "PrimaryKey": [
-          "bar"
-        ]
-      }
-    ]
-  },
-  "queries": [
+  "status": "rejected",
+  "diagnostics": [
     {
-      "name": "SumBaz",
-      "command": ":many",
-      "parameters": null,
-      "result_sets": [
-        {
-          "Columns": [
-            {
-              "Name": "bar",
-              "WireName": "",
-              "Type": {
-                "Kind": "Optional",
-                "Elem": {
-                  "Kind": "Utf8",
-                  "Elem": null,
-                  "Key": null,
-                  "Items": null,
-                  "Precision": 0,
-                  "Scale": 0
-                },
-                "Key": null,
-                "Items": null,
-                "Precision": 0,
-                "Scale": 0
-              },
-              "Table": "foo"
-            },
-            {
-              "Name": "quantity",
-              "WireName": "",
-              "Type": {
-                "Kind": "Int64",
-                "Elem": null,
-                "Key": null,
-                "Items": null,
-                "Precision": 0,
-                "Scale": 0
-              },
-              "Table": ""
-            }
-          ]
-        }
-      ]
+      "Position": {
+        "File": "inputs/coalesce_as/ydb/stdlib/query.sql",
+        "Line": 2,
+        "Column": 13
+      },
+      "Message": "cannot resolve CAST input: COALESCE arguments must have the same non-Null base type; use CAST to convert them to the same YQL type"
     }
   ]
 }

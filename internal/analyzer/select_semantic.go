@@ -70,17 +70,20 @@ func reconcileUnionColumns(block queryBlock, statement parser.ISelect_stmtContex
 	var diagnostics []model.Diagnostic
 	var names []string
 	seenNames := map[string]bool{}
+	representatives := map[string]model.Column{}
 	for i, columns := range arms {
 		byArm[i] = make(map[string]model.Column, len(columns))
 		for _, column := range columns {
-			if _, exists := byArm[i][column.Name]; exists {
-				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, fmt.Sprintf("UNION input has duplicate result column %q", column.Name)))
+			resultName := column.ResultName()
+			if _, exists := byArm[i][resultName]; exists {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, fmt.Sprintf("UNION input has duplicate result column %q", resultName)))
 				continue
 			}
-			byArm[i][column.Name] = column
-			if !seenNames[column.Name] {
-				names = append(names, column.Name)
-				seenNames[column.Name] = true
+			byArm[i][resultName] = column
+			if !seenNames[resultName] {
+				names = append(names, resultName)
+				seenNames[resultName] = true
+				representatives[resultName] = column
 			}
 		}
 	}
@@ -88,7 +91,12 @@ func reconcileUnionColumns(block queryBlock, statement parser.ISelect_stmtContex
 		return nil, diagnostics
 	}
 
+	apiNameCounts := make(map[string]int, len(names))
+	for _, resultName := range names {
+		apiNameCounts[representatives[resultName].Name]++
+	}
 	columns := make([]model.Column, 0, len(names))
+	logicalResultNames := make(map[string]string, len(names))
 	for _, name := range names {
 		var types []model.Type
 		missing := false
@@ -108,7 +116,23 @@ func reconcileUnionColumns(block queryBlock, statement parser.ISelect_stmtContex
 		if missing && !typeValue.IsOptional() {
 			typeValue = model.Optional(typeValue)
 		}
-		columns = append(columns, model.Column{Name: name, Type: typeValue})
+		column := representatives[name]
+		column.Type = typeValue
+		column.Table = ""
+		if apiNameCounts[column.Name] > 1 {
+			column.Name = strings.ReplaceAll(name, ".", "_")
+			column.WireName = name
+		} else if column.Name != name {
+			column.WireName = name
+		} else {
+			column.WireName = ""
+		}
+		if previous, exists := logicalResultNames[column.Name]; exists {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, fmt.Sprintf("UNION result columns %q and %q produce duplicate logical name %q; use explicit unique AS aliases", previous, name, column.Name)))
+			continue
+		}
+		logicalResultNames[column.Name] = name
+		columns = append(columns, column)
 	}
 	return columns, diagnostics
 }

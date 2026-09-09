@@ -123,3 +123,85 @@ SELECT 1 AS value;`}}
 		t.Fatalf("result = %#v, want value %#v", result, want)
 	}
 }
+
+func TestAnalyzeUnionReconcilesQualifiedJoinResultKeys(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (
+    id Uint64 NOT NULL,
+    PRIMARY KEY (id)
+);`}}
+	queries := []model.Source{{Name: "query.sql", Text: `-- name: Qualified :many
+SELECT a.id FROM records AS a JOIN records AS b ON a.id = b.id
+UNION ALL
+SELECT b.id FROM records AS a JOIN records AS b ON a.id = b.id;`}}
+
+	got, err := Analyze(schema, queries)
+	if err != nil {
+		t.Fatalf("Analyze() error = %v", err)
+	}
+	want := []model.Column{
+		{Name: "a_id", WireName: "a.id", Type: model.Optional(model.Type{Kind: "Uint64"})},
+		{Name: "b_id", WireName: "b.id", Type: model.Optional(model.Type{Kind: "Uint64"})},
+	}
+	if columns := got.Queries[0].ResultSets[0].Columns; !reflect.DeepEqual(columns, want) {
+		t.Fatalf("columns = %#v, want %#v", columns, want)
+	}
+}
+
+func TestAnalyzeUnionAllowsDistinctQualifiedKeysWithSameColumnName(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (
+    id Uint64 NOT NULL,
+    PRIMARY KEY (id)
+);`}}
+	queries := []model.Source{{Name: "query.sql", Text: `-- name: QualifiedPair :many
+SELECT a.id, b.id FROM records AS a JOIN records AS b ON a.id = b.id
+UNION ALL
+SELECT a.id, b.id FROM records AS a JOIN records AS b ON a.id = b.id;`}}
+
+	got, err := Analyze(schema, queries)
+	if err != nil {
+		t.Fatalf("Analyze() error = %v", err)
+	}
+	want := []model.Column{
+		{Name: "a_id", WireName: "a.id", Type: model.Type{Kind: "Uint64"}},
+		{Name: "b_id", WireName: "b.id", Type: model.Type{Kind: "Uint64"}},
+	}
+	if columns := got.Queries[0].ResultSets[0].Columns; !reflect.DeepEqual(columns, want) {
+		t.Fatalf("columns = %#v, want %#v", columns, want)
+	}
+}
+
+func TestAnalyzeUnionKeepsLogicalNameForOneQualifiedResultKey(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (
+    id Uint64 NOT NULL,
+    PRIMARY KEY (id)
+);`}}
+	queries := []model.Source{{Name: "query.sql", Text: `-- name: Qualified :many
+SELECT a.id FROM records AS a JOIN records AS b ON a.id = b.id
+UNION ALL
+SELECT a.id FROM records AS a JOIN records AS b ON a.id = b.id;`}}
+
+	got, err := Analyze(schema, queries)
+	if err != nil {
+		t.Fatalf("Analyze() error = %v", err)
+	}
+	want := []model.Column{{Name: "id", WireName: "a.id", Type: model.Type{Kind: "Uint64"}}}
+	if columns := got.Queries[0].ResultSets[0].Columns; !reflect.DeepEqual(columns, want) {
+		t.Fatalf("columns = %#v, want %#v", columns, want)
+	}
+}
+
+func TestAnalyzeUnionRejectsLogicalNameCollisionAfterQualifyingResults(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (
+    id Uint64 NOT NULL,
+    PRIMARY KEY (id)
+);`}}
+	queries := []model.Source{{Name: "query.sql", Text: `-- name: Colliding :many
+SELECT a.id, b.id, 1 AS a_id FROM records AS a JOIN records AS b ON a.id = b.id
+UNION ALL
+SELECT a.id, b.id, 2 AS a_id FROM records AS a JOIN records AS b ON a.id = b.id;`}}
+
+	_, err := Analyze(schema, queries)
+	if err == nil || !strings.Contains(err.Error(), `UNION result columns "a.id" and "a_id" produce duplicate logical name "a_id"; use explicit unique AS aliases`) {
+		t.Fatalf("error = %v", err)
+	}
+}

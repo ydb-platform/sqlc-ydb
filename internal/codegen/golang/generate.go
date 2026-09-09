@@ -171,7 +171,7 @@ func validateNativeListParameter(t model.Type) error {
 	}
 	e := *t.Elem
 	if e.IsOptional() {
-		if e.Elem == nil || containsList(*e.Elem) {
+		if e.Elem == nil || e.Elem.IsOptional() || containsList(*e.Elem) {
 			return fmt.Errorf("List element must be a scalar or Optional<scalar>")
 		}
 		if extendedListTemporal(e) {

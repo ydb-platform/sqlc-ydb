@@ -79,8 +79,9 @@ all three Python adapters on YDB 26.3.1.8, including high Uint64, binary/text,
 optional values and query cardinalities. Native Go supports scalar list
 parameters, including optional elements and empty lists with an explicit element
 type. Extended temporal list elements (`Date32`, `Datetime64`, `Timestamp64`,
-`Interval64`) are rejected because the pinned SDK lacks their list-builder methods. `Optional<List>` and nested list parameters
-remain errors. database/sql rejects list parameters and results. Native Go also
+`Interval64`) are rejected because the pinned SDK lacks their list-builder methods.
+`Optional<List>`, nested lists, and list elements with more than one `Optional`
+wrapper remain errors. database/sql rejects list parameters and results. Native Go also
 supports scalar list results; complex container and temporal boundary coverage
 remains incomplete.
 

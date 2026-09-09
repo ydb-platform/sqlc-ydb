@@ -1,13 +1,66 @@
 {
-  "status": "rejected",
-  "diagnostics": [
+  "status": "accepted",
+  "catalog": {
+    "Tables": [
+      {
+        "Name": "foo",
+        "Columns": [
+          {
+            "Name": "id",
+            "WireName": "",
+            "Type": {
+              "Kind": "Utf8",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "foo"
+          }
+        ],
+        "PrimaryKey": [
+          "id"
+        ]
+      }
+    ]
+  },
+  "queries": [
     {
-      "Position": {
-        "File": "inputs/case_text/ydb/query.sql",
-        "Line": 2,
-        "Column": 8
-      },
-      "Message": "cannot resolve CASE condition: cannot resolve comparison operand \"$id\": cannot resolve type of parameter $id"
+      "name": "CaseStatementText",
+      "command": ":many",
+      "parameters": [
+        {
+          "Name": "id",
+          "Type": {
+            "Kind": "Utf8",
+            "Elem": null,
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        }
+      ],
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "is_one",
+              "WireName": "",
+              "Type": {
+                "Kind": "String",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": ""
+            }
+          ]
+        }
+      ]
     }
   ]
 }

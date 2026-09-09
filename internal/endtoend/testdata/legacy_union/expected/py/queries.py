@@ -9,6 +9,16 @@ SELECT id, label FROM local_labels
 UNION
 SELECT id, label FROM imported_labels;"""
 
+SQL_QUALIFIED_MISSING = """-- name: QualifiedMissing :many
+SELECT a.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id
+UNION ALL
+SELECT b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id;"""
+
+SQL_QUALIFIED_NAMES = """-- name: QualifiedNames :many
+SELECT a.id, b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id
+UNION ALL
+SELECT a.id, b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id;"""
+
 SQL_ALL_LABELS = """-- name: AllLabels :many
 SELECT id, label FROM local_labels
 UNION ALL
@@ -30,6 +40,24 @@ class Querier:
         return (_models.DistinctLabelsRow(
             id=row["id"],
             label=row["label"],
+        ) for row in rows)
+
+    def qualified_missing(self) -> Iterable[_models.QualifiedMissingRow]:
+        parameters = {}
+        result_sets = self._pool.execute_with_retries(SQL_QUALIFIED_MISSING, parameters)
+        rows = result_sets[0].rows
+        return (_models.QualifiedMissingRow(
+            a_id=row["a.id"],
+            b_id=row["b.id"],
+        ) for row in rows)
+
+    def qualified_names(self) -> Iterable[_models.QualifiedNamesRow]:
+        parameters = {}
+        result_sets = self._pool.execute_with_retries(SQL_QUALIFIED_NAMES, parameters)
+        rows = result_sets[0].rows
+        return (_models.QualifiedNamesRow(
+            a_id=row["a.id"],
+            b_id=row["b.id"],
         ) for row in rows)
 
     def all_labels(self) -> Iterable[_models.AllLabelsRow]:

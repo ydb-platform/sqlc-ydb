@@ -6,6 +6,16 @@ type DistinctLabelsRow struct {
 	Label *string
 }
 
+type QualifiedMissingRow struct {
+	AID *int64
+	BID *int64
+}
+
+type QualifiedNamesRow struct {
+	AID int64
+	BID int64
+}
+
 type AllLabelsRow struct {
 	ID    int64
 	Label *string

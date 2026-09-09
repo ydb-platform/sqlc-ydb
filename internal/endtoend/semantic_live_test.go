@@ -27,6 +27,11 @@ func TestLiveYDBSemanticTypes(t *testing.T) {
 	queries := []struct{ Name, SQL string }{
 		{"casts", "SELECT CAST(n AS Int64) AS wide, CAST(n AS Uint8) AS narrow, CAST(f AS Int32) AS integer_value FROM $TABLE;"},
 		{"case", "SELECT CASE WHEN flag THEN n ELSE maybe END AS choice, CASE n WHEN 1 THEN 1u ELSE 2 END AS mixed FROM $TABLE;"},
+		{"coalesce_explicit_numeric", "SELECT COALESCE(CAST(n AS Int64), 1l) AS required, COALESCE(CAST(maybe AS Int64), 1l) AS fallback FROM $TABLE;"},
+		{"substring_positions", "SELECT SUBSTRING(\"abc\", CAST(n AS Uint8)) AS small, SUBSTRING(\"abc\", CAST(n AS Uint16)) AS medium, SUBSTRING(\"abc\", CAST(id AS Uint32)) AS wide FROM $TABLE;"},
+		{"find_positions", "SELECT FIND(\"abc\", \"a\", CAST(n AS Uint16)) AS first, RFIND(\"abc\", \"a\", CAST(id AS Uint32)) AS last FROM $TABLE;"},
+		{"union_join_missing", "SELECT a.id FROM $TABLE AS a JOIN $TABLE AS b ON a.id=b.id UNION ALL SELECT b.id FROM $TABLE AS a JOIN $TABLE AS b ON a.id=b.id;"},
+		{"union_join_names", "SELECT a.id, b.id FROM $TABLE AS a JOIN $TABLE AS b ON a.id=b.id UNION ALL SELECT a.id, b.id FROM $TABLE AS a JOIN $TABLE AS b ON a.id=b.id;"},
 		{"coalesce", "SELECT COALESCE(maybe, n) AS value, LENGTH(COALESCE(label, \"fallback\"u)) AS size FROM $TABLE;"},
 		{"aggregate", "SELECT COUNT(*) AS count, SUM(n) AS total, AVG(f) AS mean, MIN(f) AS minimum, MAX(maybe) AS maximum FROM $TABLE;"},
 		{"group", "SELECT id, SUM(n) AS total, AVG(f) AS mean, MIN(f) AS minimum, MAX(maybe) AS maximum FROM $TABLE GROUP BY id HAVING COUNT(*) > 0ul;"},

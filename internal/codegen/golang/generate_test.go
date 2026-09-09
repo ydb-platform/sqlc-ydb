@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ydb-platform/sqlc-engine-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/model"
 )
 
@@ -758,6 +759,21 @@ func TestRejectsUnsupportedListAndDecimalShapes(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestRejectsNestedOptionalNativeListElementFromYQL(t *testing.T) {
+	result, err := analyzer.Analyze(nil, []model.Source{{Name: "query.sql", Text: `-- name: Bind :one
+DECLARE $values AS List<Optional<Optional<Uint64>>>;
+SELECT $values AS values;
+`}})
+	if err != nil {
+		t.Fatalf("Analyze() error = %v", err)
+	}
+
+	_, err = Generate(result, Options{Runtime: "ydb"})
+	if err == nil || !strings.Contains(err.Error(), "List element must be a scalar or Optional<scalar>") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

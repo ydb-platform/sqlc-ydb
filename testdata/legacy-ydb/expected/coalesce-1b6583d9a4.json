@@ -12,6 +12,14 @@
     {
       "Position": {
         "File": "inputs/coalesce/ydb/stdlib/query.sql",
+        "Line": 6,
+        "Column": 8
+      },
+      "Message": "COALESCE arguments must have the same non-Null base type; use CAST to convert them to the same YQL type"
+    },
+    {
+      "Position": {
+        "File": "inputs/coalesce/ydb/stdlib/query.sql",
         "Line": 10,
         "Column": 18
       },

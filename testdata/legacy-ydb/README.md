@@ -48,6 +48,12 @@ inherited PostgreSQL types such as `Serial` with actual YQL types and making
 parameter declarations explicit. Macros, subqueries and other unsupported
 constructs remain explicit errors until implemented with their own tests.
 
+The preserved `coalesce_as` case is rejected by the current strict resolver:
+`COALESCE(SUM(baz), 0)` mixes Int64 with an Int32 literal. The surrounding
+CAST does not make the arguments match. Its rejection records a deliberate
+coverage limit, not invalid YQL; using `0l` or casting the argument to Int64
+enables the supported form covered by the live semantic tests.
+
 Current function typing is in `internal/yql/builtins`; direct ANTLR semantic
 walks are in `internal/analyzer`. See [provenance](../../docs/provenance.md) for
 implementation references and [compatibility](../../docs/compatibility.md) for

@@ -106,16 +106,21 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 			if len(relationDiagnostics) != 0 {
 				continue
 			}
-			columns, projectionDiagnostics := selectProjection(block, core, armRelations, bindings)
-			diagnostics = append(diagnostics, projectionDiagnostics...)
-			diagnostics = append(diagnostics, validateColumnReferences(block, core, armRelations)...)
-			diagnostics = append(diagnostics, validateGrouping(block, core, armRelations, bindings)...)
 			armTree := collectQueryTree(core)
 			inferFromComparisons(armTree, armRelations, inferred)
 			inferFromInLists(armTree.conds, armRelations, inferred)
 			if i < len(partials) {
 				inferLimitOffset(partials[i], inferred)
 			}
+			for name, typeValue := range inferred {
+				if _, exists := bindings[name]; !exists && typeValue.Kind != "" {
+					bindings[name] = typeValue
+				}
+			}
+			columns, projectionDiagnostics := selectProjection(block, core, armRelations, bindings)
+			diagnostics = append(diagnostics, projectionDiagnostics...)
+			diagnostics = append(diagnostics, validateColumnReferences(block, core, armRelations)...)
+			diagnostics = append(diagnostics, validateGrouping(block, core, armRelations, bindings)...)
 			arms = append(arms, columns)
 		}
 		if len(arms) == len(cores) && len(arms) != 0 {

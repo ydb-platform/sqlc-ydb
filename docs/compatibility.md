@@ -115,6 +115,13 @@ comparison predicates; standalone comparison and arithmetic projections remain
 unsupported. NULL can participate
 in typed branches but cannot escape as an unresolved result.
 
+COALESCE/NVL require matching base argument types; use explicit CASTs for
+mixed types. Core SUBSTRING accepts byte strings, while Unicode::Substring
+handles Utf8. Core SUBSTRING/FIND/RFIND positions accept unsigned integers up
+to Uint32, including optional values. Literal-dependent conversions outside
+this subset require an explicit CAST. See the built-in resolver's coverage
+notes for the separate library signatures.
+
 UNION and UNION ALL reconcile columns by YQL result name, preserve server column
 ordering, reconcile supported common types and make missing columns optional.
 Direct-column GROUP BY and HAVING validate grouped references and supported
