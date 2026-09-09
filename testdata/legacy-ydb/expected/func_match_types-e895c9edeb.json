@@ -1,0 +1,133 @@
+{
+  "status": "accepted",
+  "catalog": {
+    "Tables": [
+      {
+        "Name": "books",
+        "Columns": [
+          {
+            "Name": "id",
+            "WireName": "",
+            "Type": {
+              "Kind": "Optional",
+              "Elem": {
+                "Kind": "Int32",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "books"
+          },
+          {
+            "Name": "title",
+            "WireName": "",
+            "Type": {
+              "Kind": "Utf8",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "books"
+          },
+          {
+            "Name": "author",
+            "WireName": "",
+            "Type": {
+              "Kind": "Utf8",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "books"
+          },
+          {
+            "Name": "pages",
+            "WireName": "",
+            "Type": {
+              "Kind": "Int32",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "books"
+          }
+        ],
+        "PrimaryKey": [
+          "id"
+        ]
+      }
+    ]
+  },
+  "queries": [
+    {
+      "name": "AuthorPages",
+      "command": ":many",
+      "parameters": null,
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "author",
+              "WireName": "",
+              "Type": {
+                "Kind": "Utf8",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "books"
+            },
+            {
+              "Name": "num_books",
+              "WireName": "",
+              "Type": {
+                "Kind": "Uint64",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": ""
+            },
+            {
+              "Name": "total_pages",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Int32",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -12,8 +12,12 @@ const queryGetAuthor = `-- name: GetAuthor :one
 DECLARE $author_id AS Uint64;
 SELECT id, name, bio FROM authors WHERE id = $author_id;`
 
-func (q *Queries) GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, error) {
-	result, err := q.db.QueryRow(ctx, queryGetAuthor, query.WithParameters(ydb.ParamsBuilder().Param("$author_id").Uint64(arg).Build()))
+func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$author_id").Uint64(arg)
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+	result, err := q.db.QueryRow(ctx, queryGetAuthor, callOptions...)
 	if err != nil {
 		return GetAuthorRow{}, err
 	}
@@ -27,8 +31,8 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, erro
 const queryListAuthors = `-- name: ListAuthors :many
 SELECT id, name, bio FROM authors ORDER BY name;`
 
-func (q *Queries) ListAuthors(ctx context.Context) ([]ListAuthorsRow, error) {
-	result, err := q.db.QueryResultSet(ctx, queryListAuthors)
+func (q *Queries) ListAuthors(ctx context.Context, opts ...query.ExecuteOption) ([]ListAuthorsRow, error) {
+	result, err := q.db.QueryResultSet(ctx, queryListAuthors, opts...)
 	if err != nil {
 		return make([]ListAuthorsRow, 0), err
 	}
@@ -51,8 +55,12 @@ const queryGetAuthorName = `-- name: GetAuthorName :one
 DECLARE $author_id AS Uint64;
 SELECT name FROM authors WHERE id = $author_id;`
 
-func (q *Queries) GetAuthorName(ctx context.Context, arg uint64) (GetAuthorNameRow, error) {
-	result, err := q.db.QueryRow(ctx, queryGetAuthorName, query.WithParameters(ydb.ParamsBuilder().Param("$author_id").Uint64(arg).Build()))
+func (q *Queries) GetAuthorName(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorNameRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$author_id").Uint64(arg)
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+	result, err := q.db.QueryRow(ctx, queryGetAuthorName, callOptions...)
 	if err != nil {
 		return GetAuthorNameRow{}, err
 	}
@@ -71,8 +79,14 @@ INSERT INTO authors (id, name, bio)
 VALUES ($author_id, $author_name, $biography)
 RETURNING id, name, bio;`
 
-func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (CreateAuthorRow, error) {
-	result, err := q.db.QueryRow(ctx, queryCreateAuthor, query.WithParameters(ydb.ParamsBuilder().Param("$author_id").Uint64(arg.AuthorID).Param("$author_name").Text(arg.AuthorName).Param("$biography").BeginOptional().Text(arg.Biography).EndOptional().Build()))
+func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts ...query.ExecuteOption) (CreateAuthorRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$author_id").Uint64(arg.AuthorID)
+	parameters = parameters.Param("$author_name").Text(arg.AuthorName)
+	parameters = parameters.Param("$biography").BeginOptional().Text(arg.Biography).EndOptional()
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+	result, err := q.db.QueryRow(ctx, queryCreateAuthor, callOptions...)
 	if err != nil {
 		return CreateAuthorRow{}, err
 	}
@@ -90,14 +104,24 @@ DECLARE $biography AS Optional<Utf8>;
 UPSERT INTO authors (id, name, bio)
 VALUES ($author_id, $author_name, $biography);`
 
-func (q *Queries) UpsertAuthor(ctx context.Context, arg UpsertAuthorParams) error {
-	return q.db.Exec(ctx, queryUpsertAuthor, query.WithParameters(ydb.ParamsBuilder().Param("$author_id").Uint64(arg.AuthorID).Param("$author_name").Text(arg.AuthorName).Param("$biography").BeginOptional().Text(arg.Biography).EndOptional().Build()))
+func (q *Queries) UpsertAuthor(ctx context.Context, arg UpsertAuthorParams, opts ...query.ExecuteOption) error {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$author_id").Uint64(arg.AuthorID)
+	parameters = parameters.Param("$author_name").Text(arg.AuthorName)
+	parameters = parameters.Param("$biography").BeginOptional().Text(arg.Biography).EndOptional()
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+	return q.db.Exec(ctx, queryUpsertAuthor, callOptions...)
 }
 
 const queryDeleteAuthor = `-- name: DeleteAuthor :exec
 DECLARE $author_id AS Uint64;
 DELETE FROM authors WHERE id = $author_id;`
 
-func (q *Queries) DeleteAuthor(ctx context.Context, arg uint64) error {
-	return q.db.Exec(ctx, queryDeleteAuthor, query.WithParameters(ydb.ParamsBuilder().Param("$author_id").Uint64(arg).Build()))
+func (q *Queries) DeleteAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$author_id").Uint64(arg)
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+	return q.db.Exec(ctx, queryDeleteAuthor, callOptions...)
 }

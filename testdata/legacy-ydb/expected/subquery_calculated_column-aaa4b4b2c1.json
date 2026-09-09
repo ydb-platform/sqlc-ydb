@@ -1,0 +1,21 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/subquery_calculated_column/ydb/stdlib/query.sql",
+        "Line": 2,
+        "Column": 17
+      },
+      "Message": "only named catalog tables are supported in FROM and JOIN"
+    },
+    {
+      "Position": {
+        "File": "inputs/subquery_calculated_column/ydb/stdlib/query.sql",
+        "Line": 2,
+        "Column": 1
+      },
+      "Message": "SELECT without a catalog table is unsupported"
+    }
+  ]
+}

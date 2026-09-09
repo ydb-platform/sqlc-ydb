@@ -1,0 +1,165 @@
+{
+  "status": "accepted",
+  "catalog": {
+    "Tables": [
+      {
+        "Name": "events",
+        "Columns": [
+          {
+            "Name": "ID",
+            "WireName": "",
+            "Type": {
+              "Kind": "Int32",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "events"
+          }
+        ],
+        "PrimaryKey": [
+          "ID"
+        ]
+      },
+      {
+        "Name": "handled_events",
+        "Columns": [
+          {
+            "Name": "last_handled_id",
+            "WireName": "",
+            "Type": {
+              "Kind": "Optional",
+              "Elem": {
+                "Kind": "Int32",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "handled_events"
+          },
+          {
+            "Name": "handler",
+            "WireName": "",
+            "Type": {
+              "Kind": "Optional",
+              "Elem": {
+                "Kind": "Utf8",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "handled_events"
+          }
+        ],
+        "PrimaryKey": [
+          "last_handled_id",
+          "handler"
+        ]
+      }
+    ]
+  },
+  "queries": [
+    {
+      "name": "SelectAllJoined",
+      "command": ":many",
+      "parameters": [
+        {
+          "Name": "handler",
+          "Type": {
+            "Kind": "Optional",
+            "Elem": {
+              "Kind": "Utf8",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        }
+      ],
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "ID",
+              "WireName": "",
+              "Type": {
+                "Kind": "Int32",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "events"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SelectAllJoinedAlias",
+      "command": ":many",
+      "parameters": [
+        {
+          "Name": "handler",
+          "Type": {
+            "Kind": "Optional",
+            "Elem": {
+              "Kind": "Utf8",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        }
+      ],
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "ID",
+              "WireName": "",
+              "Type": {
+                "Kind": "Int32",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "events"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

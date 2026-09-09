@@ -1,0 +1,13 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/overrides_go_struct_tags/ydb/stdlib/query.sql",
+        "Line": 2,
+        "Column": 8
+      },
+      "Message": "computed result expressions require an explicit AS alias"
+    }
+  ]
+}

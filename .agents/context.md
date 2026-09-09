@@ -16,9 +16,11 @@ or simplifying SDK-specific code.
 | `internal/config` | Strict config parsing, supported options and defaults |
 | `internal/source` | Input ordering and migration Up sections |
 | `internal/analyzer` | Direct YQL parse contexts, catalog evolution, name/type resolution and diagnostics |
+| `internal/yql/builtins` | Strict supported YQL function, cast and common-type rules |
 | `internal/model` | Resolved query/catalog data shared by generators; not an AST |
 | `internal/codegen/{golang,python,cpp,csharp,java,javascript,rust,php}` | Language naming and SDK-specific bindings, decoding and source rendering |
 | `internal/endtoend` | CLI fixtures, expected diagnostics and generated golden files |
+| `testdata/legacy-ydb` | Immutable checksummed fork sources and semantic corpus expectations |
 | `examples` | All upstream example families adapted for YDB; shared language dependencies and sequential live tests |
 | `.github/workflows` | Offline verification and sequential acceptance steps per host |
 

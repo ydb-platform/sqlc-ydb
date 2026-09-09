@@ -1,0 +1,13 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/nested_select/ydb/query.sql",
+        "Line": 6,
+        "Column": 22
+      },
+      "Message": "sqlc macros are unsupported; use DECLARE parameters and explicit result columns instead"
+    }
+  ]
+}

@@ -18,7 +18,9 @@ flowchart LR
 `internal/source` loads files and migration inputs. `internal/analyzer` owns
 parsing, catalog construction, scopes, type checking and diagnostics. Small
 accessors over ANTLR contexts may hide grammar details, but do not construct
-another recursive syntax tree.
+another recursive syntax tree. `internal/yql/builtins` provides strict function,
+cast and common-type rules over resolved types. The analyzer supplies expression
+scope and aggregation context; neither package constructs an intermediate AST.
 
 `internal/model` is the boundary between analysis and generation: YQL type
 identity, parameters, result sets and source locations. Nullability is an

@@ -1,0 +1,93 @@
+{
+  "status": "accepted",
+  "catalog": {
+    "Tables": [
+      {
+        "Name": "foo",
+        "Columns": [
+          {
+            "Name": "bar",
+            "WireName": "",
+            "Type": {
+              "Kind": "Bool",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "foo"
+          },
+          {
+            "Name": "interval",
+            "WireName": "",
+            "Type": {
+              "Kind": "Interval",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "foo"
+          }
+        ],
+        "PrimaryKey": [
+          "bar",
+          "interval"
+        ]
+      }
+    ]
+  },
+  "queries": [
+    {
+      "name": "Get",
+      "command": ":many",
+      "parameters": [
+        {
+          "Name": "limit",
+          "Type": {
+            "Kind": "Uint64",
+            "Elem": null,
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        }
+      ],
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "bar",
+              "WireName": "",
+              "Type": {
+                "Kind": "Bool",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "foo"
+            },
+            {
+              "Name": "interval",
+              "WireName": "",
+              "Type": {
+                "Kind": "Interval",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "foo"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

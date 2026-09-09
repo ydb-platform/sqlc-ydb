@@ -15,8 +15,12 @@ FROM venue
 WHERE city = $city
 ORDER BY name;`
 
-func (q *Queries) ListVenues(ctx context.Context, arg string) ([]ListVenuesRow, error) {
-	result, err := q.db.QueryResultSet(ctx, queryListVenues, query.WithParameters(ydb.ParamsBuilder().Param("$city").Text(arg).Build()))
+func (q *Queries) ListVenues(ctx context.Context, arg string, opts ...query.ExecuteOption) ([]ListVenuesRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$city").Text(arg)
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+	result, err := q.db.QueryResultSet(ctx, queryListVenues, callOptions...)
 	if err != nil {
 		return []ListVenuesRow(nil), err
 	}
@@ -40,8 +44,12 @@ DECLARE $slug AS Utf8;
 DELETE FROM venue
 WHERE slug = $slug AND slug = $slug;`
 
-func (q *Queries) DeleteVenue(ctx context.Context, arg string) error {
-	return q.db.Exec(ctx, queryDeleteVenue, query.WithParameters(ydb.ParamsBuilder().Param("$slug").Text(arg).Build()))
+func (q *Queries) DeleteVenue(ctx context.Context, arg string, opts ...query.ExecuteOption) error {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$slug").Text(arg)
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+	return q.db.Exec(ctx, queryDeleteVenue, callOptions...)
 }
 
 const queryGetVenue = `-- name: GetVenue :one
@@ -51,8 +59,13 @@ SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, ta
 FROM venue
 WHERE slug = $slug AND city = $city;`
 
-func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams) (GetVenueRow, error) {
-	result, err := q.db.QueryRow(ctx, queryGetVenue, query.WithParameters(ydb.ParamsBuilder().Param("$slug").Text(arg.Slug).Param("$city").Text(arg.City).Build()))
+func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams, opts ...query.ExecuteOption) (GetVenueRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$slug").Text(arg.Slug)
+	parameters = parameters.Param("$city").Text(arg.City)
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+	result, err := q.db.QueryRow(ctx, queryGetVenue, callOptions...)
 	if err != nil {
 		return GetVenueRow{}, err
 	}
@@ -95,8 +108,20 @@ INSERT INTO venue (
     $tags
 ) RETURNING id;`
 
-func (q *Queries) CreateVenue(ctx context.Context, arg CreateVenueParams) (CreateVenueRow, error) {
-	result, err := q.db.QueryRow(ctx, queryCreateVenue, query.WithParameters(ydb.ParamsBuilder().Param("$id").Uint64(arg.ID).Param("$slug").Text(arg.Slug).Param("$name").Text(arg.Name).Param("$city").Text(arg.City).Param("$created_at").BeginOptional().Timestamp(arg.CreatedAt).EndOptional().Param("$spotify_playlist").Text(arg.SpotifyPlaylist).Param("$status").Text(arg.Status).Param("$statuses").BeginOptional().JSON(arg.Statuses).EndOptional().Param("$tags").BeginOptional().JSON(arg.Tags).EndOptional().Build()))
+func (q *Queries) CreateVenue(ctx context.Context, arg CreateVenueParams, opts ...query.ExecuteOption) (CreateVenueRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$id").Uint64(arg.ID)
+	parameters = parameters.Param("$slug").Text(arg.Slug)
+	parameters = parameters.Param("$name").Text(arg.Name)
+	parameters = parameters.Param("$city").Text(arg.City)
+	parameters = parameters.Param("$created_at").BeginOptional().Timestamp(arg.CreatedAt).EndOptional()
+	parameters = parameters.Param("$spotify_playlist").Text(arg.SpotifyPlaylist)
+	parameters = parameters.Param("$status").Text(arg.Status)
+	parameters = parameters.Param("$statuses").BeginOptional().JSON(arg.Statuses).EndOptional()
+	parameters = parameters.Param("$tags").BeginOptional().JSON(arg.Tags).EndOptional()
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+	result, err := q.db.QueryRow(ctx, queryCreateVenue, callOptions...)
 	if err != nil {
 		return CreateVenueRow{}, err
 	}
@@ -115,8 +140,13 @@ SET name = $name
 WHERE slug = $slug
 RETURNING id;`
 
-func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams) (UpdateVenueNameRow, error) {
-	result, err := q.db.QueryRow(ctx, queryUpdateVenueName, query.WithParameters(ydb.ParamsBuilder().Param("$name").Text(arg.Name).Param("$slug").Text(arg.Slug).Build()))
+func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams, opts ...query.ExecuteOption) (UpdateVenueNameRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$name").Text(arg.Name)
+	parameters = parameters.Param("$slug").Text(arg.Slug)
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+	result, err := q.db.QueryRow(ctx, queryUpdateVenueName, callOptions...)
 	if err != nil {
 		return UpdateVenueNameRow{}, err
 	}
@@ -135,8 +165,8 @@ FROM venue
 GROUP BY city
 ORDER BY city;`
 
-func (q *Queries) VenueCountByCity(ctx context.Context) ([]VenueCountByCityRow, error) {
-	result, err := q.db.QueryResultSet(ctx, queryVenueCountByCity)
+func (q *Queries) VenueCountByCity(ctx context.Context, opts ...query.ExecuteOption) ([]VenueCountByCityRow, error) {
+	result, err := q.db.QueryResultSet(ctx, queryVenueCountByCity, opts...)
 	if err != nil {
 		return []VenueCountByCityRow(nil), err
 	}

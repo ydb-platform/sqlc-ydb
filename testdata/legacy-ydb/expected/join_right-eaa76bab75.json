@@ -1,0 +1,154 @@
+{
+  "status": "accepted",
+  "catalog": {
+    "Tables": [
+      {
+        "Name": "bar",
+        "Columns": [
+          {
+            "Name": "id",
+            "WireName": "",
+            "Type": {
+              "Kind": "Int32",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "bar"
+          }
+        ],
+        "PrimaryKey": [
+          "id"
+        ]
+      },
+      {
+        "Name": "foo",
+        "Columns": [
+          {
+            "Name": "id",
+            "WireName": "",
+            "Type": {
+              "Kind": "Int32",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "foo"
+          },
+          {
+            "Name": "bar_id",
+            "WireName": "",
+            "Type": {
+              "Kind": "Optional",
+              "Elem": {
+                "Kind": "Int32",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "foo"
+          }
+        ],
+        "PrimaryKey": [
+          "id"
+        ]
+      }
+    ]
+  },
+  "queries": [
+    {
+      "name": "RightJoin",
+      "command": ":many",
+      "parameters": [
+        {
+          "Name": "id",
+          "Type": {
+            "Kind": "Optional",
+            "Elem": {
+              "Kind": "Int32",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        }
+      ],
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "id",
+              "WireName": "f.id",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Int32",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "foo"
+            },
+            {
+              "Name": "bar_id",
+              "WireName": "f.bar_id",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Int32",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "foo"
+            },
+            {
+              "Name": "id",
+              "WireName": "b.id",
+              "Type": {
+                "Kind": "Int32",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "bar"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

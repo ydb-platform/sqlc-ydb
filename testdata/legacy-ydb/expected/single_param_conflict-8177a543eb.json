@@ -1,0 +1,21 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/single_param_conflict/ydb/schema.sql",
+        "Line": 3,
+        "Column": 5
+      },
+      "Message": "unsupported YQL type \"BigSerial\""
+    },
+    {
+      "Position": {
+        "File": "inputs/single_param_conflict/ydb/schema.sql",
+        "Line": 2,
+        "Column": 1
+      },
+      "Message": "primary key column \"id\" does not exist"
+    }
+  ]
+}

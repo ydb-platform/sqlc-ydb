@@ -1,0 +1,13 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/case_stmt_bool/ydb/query.sql",
+        "Line": 2,
+        "Column": 8
+      },
+      "Message": "cannot resolve CASE condition: cannot resolve comparison operand \"$id\": cannot resolve type of parameter $id"
+    }
+  ]
+}

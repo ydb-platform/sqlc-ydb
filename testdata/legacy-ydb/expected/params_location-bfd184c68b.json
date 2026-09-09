@@ -1,0 +1,853 @@
+{
+  "status": "accepted",
+  "catalog": {
+    "Tables": [
+      {
+        "Name": "users",
+        "Columns": [
+          {
+            "Name": "id",
+            "WireName": "",
+            "Type": {
+              "Kind": "Optional",
+              "Elem": {
+                "Kind": "Int64",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "users"
+          },
+          {
+            "Name": "first_name",
+            "WireName": "",
+            "Type": {
+              "Kind": "Optional",
+              "Elem": {
+                "Kind": "Utf8",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "users"
+          },
+          {
+            "Name": "last_name",
+            "WireName": "",
+            "Type": {
+              "Kind": "Optional",
+              "Elem": {
+                "Kind": "Utf8",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "users"
+          },
+          {
+            "Name": "age",
+            "WireName": "",
+            "Type": {
+              "Kind": "Optional",
+              "Elem": {
+                "Kind": "Int64",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "users"
+          },
+          {
+            "Name": "job_status",
+            "WireName": "",
+            "Type": {
+              "Kind": "Optional",
+              "Elem": {
+                "Kind": "Utf8",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "users"
+          }
+        ],
+        "PrimaryKey": [
+          "id"
+        ]
+      },
+      {
+        "Name": "orders",
+        "Columns": [
+          {
+            "Name": "id",
+            "WireName": "",
+            "Type": {
+              "Kind": "Optional",
+              "Elem": {
+                "Kind": "Int64",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "orders"
+          },
+          {
+            "Name": "price",
+            "WireName": "",
+            "Type": {
+              "Kind": "Optional",
+              "Elem": {
+                "Kind": "Decimal",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 13,
+                "Scale": 4
+              },
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "orders"
+          },
+          {
+            "Name": "user_id",
+            "WireName": "",
+            "Type": {
+              "Kind": "Optional",
+              "Elem": {
+                "Kind": "Int64",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "orders"
+          }
+        ],
+        "PrimaryKey": [
+          "id"
+        ]
+      }
+    ]
+  },
+  "queries": [
+    {
+      "name": "ListUsersByID",
+      "command": ":many",
+      "parameters": [
+        {
+          "Name": "id",
+          "Type": {
+            "Kind": "Optional",
+            "Elem": {
+              "Kind": "Int64",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        }
+      ],
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "first_name",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "users"
+            },
+            {
+              "Name": "id",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Int64",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "users"
+            },
+            {
+              "Name": "last_name",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "users"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ListUserOrders",
+      "command": ":many",
+      "parameters": [
+        {
+          "Name": "min_price",
+          "Type": {
+            "Kind": "Optional",
+            "Elem": {
+              "Kind": "Decimal",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 13,
+              "Scale": 4
+            },
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        }
+      ],
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "id",
+              "WireName": "users.id",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Int64",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "users"
+            },
+            {
+              "Name": "first_name",
+              "WireName": "users.first_name",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "users"
+            },
+            {
+              "Name": "price",
+              "WireName": "orders.price",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Decimal",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 13,
+                  "Scale": 4
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "orders"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "GetUserByID",
+      "command": ":one",
+      "parameters": [
+        {
+          "Name": "target_id",
+          "Type": {
+            "Kind": "Optional",
+            "Elem": {
+              "Kind": "Int64",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        }
+      ],
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "first_name",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "users"
+            },
+            {
+              "Name": "id",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Int64",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "users"
+            },
+            {
+              "Name": "last_name",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "users"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ListUsersByFamily",
+      "command": ":many",
+      "parameters": [
+        {
+          "Name": "max_age",
+          "Type": {
+            "Kind": "Optional",
+            "Elem": {
+              "Kind": "Int64",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        },
+        {
+          "Name": "in_family",
+          "Type": {
+            "Kind": "Optional",
+            "Elem": {
+              "Kind": "Utf8",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        }
+      ],
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "first_name",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "users"
+            },
+            {
+              "Name": "last_name",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "users"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ListUsersWithLimit",
+      "command": ":many",
+      "parameters": [
+        {
+          "Name": "limit",
+          "Type": {
+            "Kind": "Uint64",
+            "Elem": null,
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        }
+      ],
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "first_name",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "users"
+            },
+            {
+              "Name": "last_name",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "users"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "LimitSQLCArg",
+      "command": ":many",
+      "parameters": [
+        {
+          "Name": "limit",
+          "Type": {
+            "Kind": "Uint64",
+            "Elem": null,
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        }
+      ],
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "first_name",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "users"
+            },
+            {
+              "Name": "id",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Int64",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "users"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "InsertNewUser",
+      "command": ":exec",
+      "parameters": [
+        {
+          "Name": "first_name",
+          "Type": {
+            "Kind": "Optional",
+            "Elem": {
+              "Kind": "Utf8",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        },
+        {
+          "Name": "last_name",
+          "Type": {
+            "Kind": "Optional",
+            "Elem": {
+              "Kind": "Utf8",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        }
+      ],
+      "result_sets": null
+    },
+    {
+      "name": "ListUserParenExpr",
+      "command": ":many",
+      "parameters": [
+        {
+          "Name": "id",
+          "Type": {
+            "Kind": "Optional",
+            "Elem": {
+              "Kind": "Int64",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        },
+        {
+          "Name": "limit",
+          "Type": {
+            "Kind": "Uint64",
+            "Elem": null,
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        }
+      ],
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "id",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Int64",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "users"
+            },
+            {
+              "Name": "first_name",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "users"
+            },
+            {
+              "Name": "last_name",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "users"
+            },
+            {
+              "Name": "age",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Int64",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "users"
+            },
+            {
+              "Name": "job_status",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "users"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

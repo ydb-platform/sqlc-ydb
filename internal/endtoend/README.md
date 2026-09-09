@@ -18,3 +18,9 @@ sqlc upstream at commit `23e357a414310aa8846e64624da8b8a626b3a610`:
 [CI workflow](https://github.com/sqlc-dev/sqlc/blob/23e357a414310aa8846e64624da8b8a626b3a610/.github/workflows/ci.yml).
 It intentionally omits upstream's multi-engine Docker/native setup, plugins,
 process hooks, and test contexts; sqlc-ydb supports only YDB.
+
+The [preserved legacy corpus](../../testdata/legacy-ydb/README.md) adds semantic
+checks for every distinct historical YDB input and integrity checks for its
+source snapshot. Its separate `-update-legacy` flag makes semantic baseline
+updates explicit. The ordinary `legacy_*` fixtures are adapted positive CLI
+cases; their READMEs identify the immutable original inputs.

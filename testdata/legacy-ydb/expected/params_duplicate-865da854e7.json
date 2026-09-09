@@ -1,0 +1,227 @@
+{
+  "status": "accepted",
+  "catalog": {
+    "Tables": [
+      {
+        "Name": "users",
+        "Columns": [
+          {
+            "Name": "id",
+            "WireName": "",
+            "Type": {
+              "Kind": "Optional",
+              "Elem": {
+                "Kind": "Int64",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "users"
+          },
+          {
+            "Name": "first_name",
+            "WireName": "",
+            "Type": {
+              "Kind": "Optional",
+              "Elem": {
+                "Kind": "Utf8",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "users"
+          },
+          {
+            "Name": "last_name",
+            "WireName": "",
+            "Type": {
+              "Kind": "Optional",
+              "Elem": {
+                "Kind": "Utf8",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "users"
+          }
+        ],
+        "PrimaryKey": [
+          "id"
+        ]
+      }
+    ]
+  },
+  "queries": [
+    {
+      "name": "SelectUserByID",
+      "command": ":many",
+      "parameters": [
+        {
+          "Name": "id",
+          "Type": {
+            "Kind": "Optional",
+            "Elem": {
+              "Kind": "Int64",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        }
+      ],
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "first_name",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "users"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SelectUserByName",
+      "command": ":many",
+      "parameters": [
+        {
+          "Name": "name",
+          "Type": {
+            "Kind": "Optional",
+            "Elem": {
+              "Kind": "Utf8",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        }
+      ],
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "first_name",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "users"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SelectUserQuestion",
+      "command": ":many",
+      "parameters": [
+        {
+          "Name": "question",
+          "Type": {
+            "Kind": "Optional",
+            "Elem": {
+              "Kind": "Int64",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        }
+      ],
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "first_name",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "users"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

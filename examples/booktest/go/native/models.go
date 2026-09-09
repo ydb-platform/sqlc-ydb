@@ -3,6 +3,7 @@ package booktest
 
 import (
 	"context"
+	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 	"time"
 )
 
@@ -101,15 +102,15 @@ type SayHelloRow struct {
 }
 
 type Querier interface {
-	GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, error)
-	GetBook(ctx context.Context, arg uint64) (GetBookRow, error)
-	DeleteBook(ctx context.Context, arg uint64) error
-	BooksByTitleYear(ctx context.Context, arg BooksByTitleYearParams) ([]BooksByTitleYearRow, error)
-	BooksByTags(ctx context.Context, arg string) ([]BooksByTagsRow, error)
-	CreateAuthor(ctx context.Context, arg CreateAuthorParams) (CreateAuthorRow, error)
-	CreateBook(ctx context.Context, arg CreateBookParams) (CreateBookRow, error)
-	UpdateBook(ctx context.Context, arg UpdateBookParams) error
-	UpdateBookISBN(ctx context.Context, arg UpdateBookISBNParams) error
-	DeleteAuthorBeforeYear(ctx context.Context, arg DeleteAuthorBeforeYearParams) error
-	SayHello(ctx context.Context, arg string) (SayHelloRow, error)
+	GetAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorRow, error)
+	GetBook(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetBookRow, error)
+	DeleteBook(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error
+	BooksByTitleYear(ctx context.Context, arg BooksByTitleYearParams, opts ...query.ExecuteOption) ([]BooksByTitleYearRow, error)
+	BooksByTags(ctx context.Context, arg string, opts ...query.ExecuteOption) ([]BooksByTagsRow, error)
+	CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts ...query.ExecuteOption) (CreateAuthorRow, error)
+	CreateBook(ctx context.Context, arg CreateBookParams, opts ...query.ExecuteOption) (CreateBookRow, error)
+	UpdateBook(ctx context.Context, arg UpdateBookParams, opts ...query.ExecuteOption) error
+	UpdateBookISBN(ctx context.Context, arg UpdateBookISBNParams, opts ...query.ExecuteOption) error
+	DeleteAuthorBeforeYear(ctx context.Context, arg DeleteAuthorBeforeYearParams, opts ...query.ExecuteOption) error
+	SayHello(ctx context.Context, arg string, opts ...query.ExecuteOption) (SayHelloRow, error)
 }

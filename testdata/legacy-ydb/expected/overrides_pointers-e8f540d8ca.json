@@ -1,0 +1,128 @@
+{
+  "status": "accepted",
+  "catalog": {
+    "Tables": [
+      {
+        "Name": "foo",
+        "Columns": [
+          {
+            "Name": "other",
+            "WireName": "",
+            "Type": {
+              "Kind": "Utf8",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "foo"
+          },
+          {
+            "Name": "total",
+            "WireName": "",
+            "Type": {
+              "Kind": "Int64",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "foo"
+          },
+          {
+            "Name": "tags",
+            "WireName": "",
+            "Type": {
+              "Kind": "Utf8",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "foo"
+          },
+          {
+            "Name": "byte_seq",
+            "WireName": "",
+            "Type": {
+              "Kind": "String",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "foo"
+          },
+          {
+            "Name": "retyped",
+            "WireName": "",
+            "Type": {
+              "Kind": "Utf8",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "foo"
+          },
+          {
+            "Name": "langs",
+            "WireName": "",
+            "Type": {
+              "Kind": "Optional",
+              "Elem": {
+                "Kind": "Utf8",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "foo"
+          }
+        ],
+        "PrimaryKey": [
+          "other",
+          "total"
+        ]
+      }
+    ]
+  },
+  "queries": [
+    {
+      "name": "test",
+      "command": ":exec",
+      "parameters": [
+        {
+          "Name": "langs",
+          "Type": {
+            "Kind": "Optional",
+            "Elem": {
+              "Kind": "Utf8",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        }
+      ],
+      "result_sets": null
+    }
+  ]
+}

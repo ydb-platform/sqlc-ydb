@@ -1,0 +1,61 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/join_update/ydb/query.sql",
+        "Line": 3,
+        "Column": 8
+      },
+      "Message": "unknown column \"gct.group_id\""
+    },
+    {
+      "Position": {
+        "File": "inputs/join_update/ydb/query.sql",
+        "Line": 3,
+        "Column": 22
+      },
+      "Message": "unknown column \"nem.npn\""
+    },
+    {
+      "Position": {
+        "File": "inputs/join_update/ydb/query.sql",
+        "Line": 5,
+        "Column": 37
+      },
+      "Message": "unknown column \"gct.group_id\""
+    },
+    {
+      "Position": {
+        "File": "inputs/join_update/ydb/query.sql",
+        "Line": 5,
+        "Column": 52
+      },
+      "Message": "unknown column \"ga.group_id\""
+    },
+    {
+      "Position": {
+        "File": "inputs/join_update/ydb/query.sql",
+        "Line": 6,
+        "Column": 30
+      },
+      "Message": "unknown column \"ga.npn_external_map_id\""
+    },
+    {
+      "Position": {
+        "File": "inputs/join_update/ydb/query.sql",
+        "Line": 6,
+        "Column": 55
+      },
+      "Message": "unknown column \"nem.id\""
+    },
+    {
+      "Position": {
+        "File": "inputs/join_update/ydb/query.sql",
+        "Line": 2,
+        "Column": 1
+      },
+      "Message": "only individual UPDATE SET assignments are supported"
+    }
+  ]
+}

@@ -1,0 +1,77 @@
+{
+  "status": "accepted",
+  "catalog": {
+    "Tables": [
+      {
+        "Name": "bar",
+        "Columns": [
+          {
+            "Name": "id",
+            "WireName": "",
+            "Type": {
+              "Kind": "Int32",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "bar"
+          }
+        ],
+        "PrimaryKey": [
+          "id"
+        ]
+      }
+    ]
+  },
+  "queries": [
+    {
+      "name": "In",
+      "command": ":many",
+      "parameters": [
+        {
+          "Name": "p1",
+          "Type": {
+            "Kind": "Int32",
+            "Elem": null,
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        },
+        {
+          "Name": "p2",
+          "Type": {
+            "Kind": "Int32",
+            "Elem": null,
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        }
+      ],
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "id",
+              "WireName": "",
+              "Type": {
+                "Kind": "Int32",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "bar"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

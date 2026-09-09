@@ -1,0 +1,334 @@
+{
+  "status": "accepted",
+  "catalog": {
+    "Tables": [
+      {
+        "Name": "foo",
+        "Columns": [
+          {
+            "Name": "a",
+            "WireName": "",
+            "Type": {
+              "Kind": "Optional",
+              "Elem": {
+                "Kind": "Utf8",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "foo"
+          },
+          {
+            "Name": "b",
+            "WireName": "",
+            "Type": {
+              "Kind": "Optional",
+              "Elem": {
+                "Kind": "Utf8",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "foo"
+          }
+        ],
+        "PrimaryKey": [
+          "a",
+          "b"
+        ]
+      },
+      {
+        "Name": "bar",
+        "Columns": [
+          {
+            "Name": "a",
+            "WireName": "",
+            "Type": {
+              "Kind": "Optional",
+              "Elem": {
+                "Kind": "Utf8",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "bar"
+          },
+          {
+            "Name": "b",
+            "WireName": "",
+            "Type": {
+              "Kind": "Optional",
+              "Elem": {
+                "Kind": "Utf8",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "bar"
+          }
+        ],
+        "PrimaryKey": [
+          "a",
+          "b"
+        ]
+      }
+    ]
+  },
+  "queries": [
+    {
+      "name": "SelectUnion",
+      "command": ":many",
+      "parameters": null,
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "a",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": ""
+            },
+            {
+              "Name": "b",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SelectUnionWithLimit",
+      "command": ":many",
+      "parameters": [
+        {
+          "Name": "limit",
+          "Type": {
+            "Kind": "Uint64",
+            "Elem": null,
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        },
+        {
+          "Name": "offset",
+          "Type": {
+            "Kind": "Uint64",
+            "Elem": null,
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        }
+      ],
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "a",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": ""
+            },
+            {
+              "Name": "b",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SelectUnionOther",
+      "command": ":many",
+      "parameters": null,
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "a",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": ""
+            },
+            {
+              "Name": "b",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SelectUnionAliased",
+      "command": ":many",
+      "parameters": null,
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "a",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": ""
+            },
+            {
+              "Name": "b",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

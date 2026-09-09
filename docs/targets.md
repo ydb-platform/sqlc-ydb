@@ -76,6 +76,23 @@ subsequent work.
 Verified runtime versions: Go SDK 3.151.1; Python SDK 3.29.7, ydb-dbapi 0.1.23,
 ydb-sqlalchemy 0.1.22, SQLAlchemy 2.0.52. Live tests cover both Go adapters and
 all three Python adapters on YDB 26.3.1.8, including high Uint64, binary/text,
-optional values and query cardinalities. Native Go additionally supports a
-List<Uint64> result; database/sql cannot scan this driver value and rejects List
-results. Complex type and temporal boundary coverage remains incomplete.
+optional values and query cardinalities. Native Go supports scalar list
+parameters, including optional elements and empty lists with an explicit element
+type. Extended temporal list elements (`Date32`, `Datetime64`, `Timestamp64`,
+`Interval64`) are rejected because the pinned SDK lacks their list-builder methods. `Optional<List>` and nested list parameters
+remain errors. database/sql rejects list parameters and results. Native Go also
+supports scalar list results; complex container and temporal boundary coverage
+remains incomplete.
+
+Both Go adapters map `Decimal(P,S)` to `types.Decimal` and `Uuid` to
+`uuid.UUID`; optional values use pointers. Decimal carriers must have the
+precision and scale declared in the SQL model. A mismatch returns an error
+before execution, including for Decimal list elements. The generator does not
+reinterpret bytes using a different scale. database/sql uses typed YDB values
+for Decimal/UUID parameters rather than generic driver conversion.
+
+Native Go query methods and generated interfaces accept trailing
+`opts ...query.ExecuteOption`. Options are forwarded without changing the
+caller's slice. Generated typed parameters are applied last, so a caller option
+cannot replace the bindings represented by the method arguments. Existing calls
+without execution options continue to compile.

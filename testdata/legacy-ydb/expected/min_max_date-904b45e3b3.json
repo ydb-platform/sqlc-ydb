@@ -1,0 +1,21 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/min_max_date/ydb/query.sql",
+        "Line": 3,
+        "Column": 9
+      },
+      "Message": "cannot resolve CAST input: MIN argument 1 must be a supported comparable scalar"
+    },
+    {
+      "Position": {
+        "File": "inputs/min_max_date/ydb/query.sql",
+        "Line": 4,
+        "Column": 9
+      },
+      "Message": "cannot resolve CAST input: MAX argument 1 must be a supported comparable scalar"
+    }
+  ]
+}

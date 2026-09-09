@@ -1,0 +1,13 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/ddl_alter_table_add_column/ydb/stdlib/query.sql",
+        "Line": 2,
+        "Column": 8
+      },
+      "Message": "computed result expressions require an explicit AS alias"
+    }
+  ]
+}

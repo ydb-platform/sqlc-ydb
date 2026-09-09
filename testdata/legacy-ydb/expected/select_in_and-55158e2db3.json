@@ -1,0 +1,53 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/select_in_and/ydb/query.sql",
+        "Line": 7,
+        "Column": 7
+      },
+      "Message": "unknown column \"a.name\""
+    },
+    {
+      "Position": {
+        "File": "inputs/select_in_and/ydb/query.sql",
+        "Line": 11,
+        "Column": 7
+      },
+      "Message": "unknown column \"a.age\""
+    },
+    {
+      "Position": {
+        "File": "inputs/select_in_and/ydb/query.sql",
+        "Line": 15,
+        "Column": 7
+      },
+      "Message": "unknown column \"t.name\""
+    },
+    {
+      "Position": {
+        "File": "inputs/select_in_and/ydb/query.sql",
+        "Line": 19,
+        "Column": 7
+      },
+      "Message": "unknown column \"t.age\""
+    },
+    {
+      "Position": {
+        "File": "inputs/select_in_and/ydb/query.sql",
+        "Line": 11,
+        "Column": 16
+      },
+      "Message": "cannot resolve type of external parameter $min_author_age; add DECLARE"
+    },
+    {
+      "Position": {
+        "File": "inputs/select_in_and/ydb/query.sql",
+        "Line": 19,
+        "Column": 16
+      },
+      "Message": "cannot resolve type of external parameter $min_translator_age; add DECLARE"
+    }
+  ]
+}

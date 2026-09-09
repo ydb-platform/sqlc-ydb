@@ -1,0 +1,234 @@
+{
+  "status": "accepted",
+  "catalog": {
+    "Tables": [
+      {
+        "Name": "campus",
+        "Columns": [
+          {
+            "Name": "id",
+            "WireName": "",
+            "Type": {
+              "Kind": "Utf8",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "campus"
+          }
+        ],
+        "PrimaryKey": [
+          "id"
+        ]
+      },
+      {
+        "Name": "students",
+        "Columns": [
+          {
+            "Name": "id",
+            "WireName": "",
+            "Type": {
+              "Kind": "Utf8",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "students"
+          }
+        ],
+        "PrimaryKey": [
+          "id"
+        ]
+      },
+      {
+        "Name": "product_meta",
+        "Columns": [
+          {
+            "Name": "id",
+            "WireName": "",
+            "Type": {
+              "Kind": "Utf8",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "product_meta"
+          }
+        ],
+        "PrimaryKey": [
+          "id"
+        ]
+      },
+      {
+        "Name": "calories",
+        "Columns": [
+          {
+            "Name": "id",
+            "WireName": "",
+            "Type": {
+              "Kind": "Utf8",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "calories"
+          }
+        ],
+        "PrimaryKey": [
+          "id"
+        ]
+      },
+      {
+        "Name": "product_metadata",
+        "Columns": [
+          {
+            "Name": "id",
+            "WireName": "",
+            "Type": {
+              "Kind": "Utf8",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "product_metadata"
+          }
+        ],
+        "PrimaryKey": [
+          "id"
+        ]
+      }
+    ]
+  },
+  "queries": [
+    {
+      "name": "ListCampuses",
+      "command": ":many",
+      "parameters": null,
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "id",
+              "WireName": "",
+              "Type": {
+                "Kind": "Utf8",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "campus"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ListStudents",
+      "command": ":many",
+      "parameters": null,
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "id",
+              "WireName": "",
+              "Type": {
+                "Kind": "Utf8",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "students"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ListMetadata",
+      "command": ":many",
+      "parameters": null,
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "id",
+              "WireName": "",
+              "Type": {
+                "Kind": "Utf8",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "product_meta"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ListCalories",
+      "command": ":many",
+      "parameters": null,
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "id",
+              "WireName": "",
+              "Type": {
+                "Kind": "Utf8",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "calories"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "GetProductMetadata",
+      "command": ":many",
+      "parameters": null,
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "id",
+              "WireName": "",
+              "Type": {
+                "Kind": "Utf8",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "product_metadata"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

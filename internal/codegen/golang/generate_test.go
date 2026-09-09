@@ -137,7 +137,129 @@ func TestLiveYDB(t *testing.T) {
 	}
 	table := fmt.Sprintf("sqlc_codegen_go_%d", time.Now().UnixNano())
 	for _, runtime := range []string{"ydb", "database/sql"} {
-		t.Run(runtime, func(t *testing.T) { runLiveGenerated(t, dsn, table, runtime) })
+		t.Run(runtime, func(t *testing.T) {
+			runLiveGenerated(t, dsn, table, runtime)
+			if runtime == "ydb" {
+				runLiveTypedNative(t, dsn)
+			} else {
+				runLiveTypedDatabaseSQL(t, dsn)
+			}
+		})
+	}
+}
+
+// runLiveTypedDatabaseSQL verifies the typed wrappers used by the database/sql
+// adapter for Decimal and UUID, including nil Optional values.
+func runLiveTypedDatabaseSQL(t *testing.T, dsn string) {
+	t.Helper()
+	decimal := model.Type{Kind: "Decimal", Precision: 22, Scale: 9}
+	uuid := model.Type{Kind: "Uuid"}
+	input := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name: "RoundTripTyped", Command: model.One,
+		SQL: "DECLARE $amount AS Optional<Decimal(22,9)>; DECLARE $id AS Optional<UUID>; SELECT $amount AS amount, $id AS id;",
+		Parameters: []model.Parameter{
+			{Name: "amount", Type: model.Optional(decimal)}, {Name: "id", Type: model.Optional(uuid)},
+		},
+		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "amount", Type: model.Optional(decimal)}, {Name: "id", Type: model.Optional(uuid)}}}},
+	}}}
+	files, err := Generate(input, Options{Package: "db", Runtime: "database/sql"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	for _, f := range files {
+		if err := os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	source := `package db
+import ("context"; "database/sql"; "testing"; "math/big"; "github.com/ydb-platform/ydb-go-sdk/v3/pkg/decimal"; "github.com/google/uuid"; ydb "github.com/ydb-platform/ydb-go-sdk/v3"; "github.com/ydb-platform/ydb-go-sdk/v3/types")
+func TestTyped(t *testing.T) { ctx:=context.Background(); driver,err:=ydb.Open(ctx,` + strconv.Quote(dsn) + `,ydb.WithAnonymousCredentials());if err!=nil{t.Fatal(err)};defer driver.Close(ctx);db:=sql.OpenDB(ydb.MustConnector(driver));defer db.Close();q:=New(db);row,err:=q.RoundTripTyped(ctx,RoundTripTypedParams{Amount:nil,ID:nil});if err!=nil||row.Amount!=nil||row.ID!=nil{t.Fatalf("nil row=%#v err=%v",row,err)};amount:=&types.Decimal{Bytes:decimal.BigIntToByte(big.NewInt(123450000000),22),Precision:22,Scale:9};id:=uuid.MustParse("6e73b41c-4ede-4d08-9cfb-b7462d9e498b");row,err=q.RoundTripTyped(ctx,RoundTripTypedParams{Amount:amount,ID:&id});if err!=nil||row.Amount==nil||row.Amount.Precision!=22||row.Amount.Scale!=9||row.Amount.Bytes!=amount.Bytes||row.ID==nil||*row.ID!=id{t.Fatalf("typed row=%#v err=%v",row,err)} }
+`
+	if err := os.WriteFile(filepath.Join(dir, "typed_test.go"), []byte(source), 0600); err != nil {
+		t.Fatal(err)
+	}
+	commandCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(commandCtx, "go", "test", "-mod=mod", ".")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("typed database/sql adapter failed against %s:\n%s", dsn, out)
+	}
+}
+
+// runLiveTypedNative covers bindings which require typed SDK values. It remains
+// opt-in with TestLiveYDB because it sends queries to the supplied database.
+func runLiveTypedNative(t *testing.T, dsn string) {
+	t.Helper()
+	u64 := model.Type{Kind: "Uint64"}
+	decimal := model.Type{Kind: "Decimal", Precision: 22, Scale: 9}
+	uuid := model.Type{Kind: "Uuid"}
+	input := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name: "RoundTripTyped", Command: model.One,
+		SQL: "DECLARE $ids AS List<Uint64>; DECLARE $nullable_ids AS List<Optional<Uint64>>; DECLARE $amount AS Optional<Decimal(22,9)>; DECLARE $id AS UUID; SELECT $amount AS amount, $id AS id, ListLength($ids) AS size, ListHas($ids, 2ul) AS has_two, ListLength($nullable_ids) AS nullable_size, ListHas($nullable_ids, 1ul) AS has_one;",
+		Parameters: []model.Parameter{
+			{Name: "ids", Type: model.Type{Kind: "List", Elem: &u64}},
+			{Name: "nullable_ids", Type: model.Type{Kind: "List", Elem: ptr(model.Optional(u64))}},
+			{Name: "amount", Type: model.Optional(decimal)}, {Name: "id", Type: uuid},
+		},
+		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "amount", Type: model.Optional(decimal)}, {Name: "id", Type: uuid}, {Name: "size", Type: u64}, {Name: "has_two", Type: model.Type{Kind: "Bool"}}, {Name: "nullable_size", Type: u64}, {Name: "has_one", Type: model.Type{Kind: "Bool"}}}}},
+	}}}
+	input.Queries = append(input.Queries, model.AnalyzedQuery{
+		Name: "RoundTripLists", Command: model.One,
+		SQL: "DECLARE $docs AS List<Yson>; DECLARE $maybe_docs AS List<Optional<Yson>>; DECLARE $days AS List<Optional<Date>>; SELECT ListLength($docs) AS size, ListLength(ListNotNull($maybe_docs)) AS present, ListHead(ListNotNull($days)) AS day;",
+		Parameters: []model.Parameter{
+			{Name: "docs", Type: model.Type{Kind: "List", Elem: ptr(model.Type{Kind: "Yson"})}},
+			{Name: "maybe_docs", Type: model.Type{Kind: "List", Elem: ptr(model.Optional(model.Type{Kind: "Yson"}))}},
+			{Name: "days", Type: model.Type{Kind: "List", Elem: ptr(model.Optional(model.Type{Kind: "Date"}))}},
+		},
+		ResultSets: []model.ResultSet{{Columns: []model.Column{
+			{Name: "size", Type: u64}, {Name: "present", Type: u64}, {Name: "day", Type: model.Optional(model.Type{Kind: "Date"})},
+		}}},
+	})
+	files, err := Generate(input, Options{Package: "db", Runtime: "ydb"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	for _, f := range files {
+		if err := os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	source := `package db
+import ("context"; "testing"; "time"; "math/big"; "github.com/ydb-platform/ydb-go-sdk/v3/pkg/decimal"; "github.com/google/uuid"; ydb "github.com/ydb-platform/ydb-go-sdk/v3"; "github.com/ydb-platform/ydb-go-sdk/v3/types")
+func TestTyped(t *testing.T) { ctx:=context.Background(); driver,err:=ydb.Open(ctx,` + strconv.Quote(dsn) + `,ydb.WithAnonymousCredentials());if err!=nil{t.Fatal(err)};defer driver.Close(ctx);q:=New(driver.Query());id:=uuid.MustParse("6e73b41c-4ede-4d08-9cfb-b7462d9e498b");row,err:=q.RoundTripTyped(ctx,RoundTripTypedParams{Ids:[]uint64{},NullableIds:[]*uint64{nil},Amount:nil,ID:id});if err!=nil||row.Amount!=nil||row.ID!=id||row.Size!=0||row.HasTwo||row.NullableSize!=1||row.HasOne{t.Fatalf("empty/nil row=%#v err=%v",row,err)};amount:=&types.Decimal{Bytes:decimal.BigIntToByte(big.NewInt(123450000000),22),Precision:22,Scale:9};one:=uint64(1);row,err=q.RoundTripTyped(ctx,RoundTripTypedParams{Ids:[]uint64{1,2},NullableIds:[]*uint64{nil,&one},Amount:amount,ID:id});if err!=nil||row.Amount==nil||row.Amount.Precision!=22||row.Amount.Scale!=9||row.Amount.Bytes!=amount.Bytes||row.ID!=id||row.Size!=2||!row.HasTwo||row.NullableSize!=2||!row.HasOne{t.Fatalf("typed row=%#v err=%v",row,err)} }
+
+func TestTypedYsonAndDateLists(t *testing.T) {
+ ctx := context.Background()
+ driver, err := ydb.Open(ctx, ` + strconv.Quote(dsn) + `, ydb.WithAnonymousCredentials())
+ if err != nil { t.Fatal(err) }; defer driver.Close(ctx)
+ q := New(driver.Query())
+ row, err := q.RoundTripLists(ctx, RoundTripListsParams{})
+ if err != nil || row.Size != 0 || row.Present != 0 || row.Day != nil { t.Fatalf("empty lists: %#v %v", row, err) }
+ doc := []byte("{}")
+ day := time.Date(2001, 2, 3, 0, 0, 0, 0, time.UTC)
+ row, err = q.RoundTripLists(ctx, RoundTripListsParams{Docs:[][]byte{doc}, MaybeDocs:[]*[]byte{nil,&doc}, Days:[]*time.Time{nil,&day}})
+ if err != nil || row.Size != 1 || row.Present != 1 || row.Day == nil || !row.Day.Equal(day) { t.Fatalf("typed lists: %#v %v", row, err) }
+}
+
+`
+	if err := os.WriteFile(filepath.Join(dir, "typed_test.go"), []byte(source), 0600); err != nil {
+		t.Fatal(err)
+	}
+	commandCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(commandCtx, "go", "test", "-mod=mod", ".")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("typed native adapter failed against %s:\n%s", dsn, out)
 	}
 }
 
@@ -420,6 +542,227 @@ func TestGenerateCompilesYDBJSONAndTimestampParameters(t *testing.T) {
 	}
 }
 
+func TestGenerateCompilesNativeTypedListsDecimalAndUUID(t *testing.T) {
+	u64 := model.Type{Kind: "Uint64"}
+	decimal := model.Type{Kind: "Decimal", Precision: 22, Scale: 9}
+	uuid := model.Type{Kind: "Uuid"}
+	in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name:    "BindTypedValues",
+		Command: model.One,
+		Parameters: []model.Parameter{
+			{Name: "ids", Type: model.Type{Kind: "List", Elem: &u64}},
+			{Name: "nullable_ids", Type: model.Type{Kind: "List", Elem: ptr(model.Optional(u64))}},
+			{Name: "nullable_amounts", Type: model.Type{Kind: "List", Elem: ptr(model.Optional(decimal))}},
+			{Name: "nullable_uuids", Type: model.Type{Kind: "List", Elem: ptr(model.Optional(uuid))}},
+			{Name: "amount", Type: decimal},
+			{Name: "optional_amount", Type: model.Optional(decimal)},
+			{Name: "id", Type: uuid},
+			{Name: "optional_id", Type: model.Optional(uuid)},
+		},
+		ResultSets: []model.ResultSet{{Columns: []model.Column{
+			{Name: "amount", Type: decimal}, {Name: "optional_amount", Type: model.Optional(decimal)},
+			{Name: "id", Type: uuid}, {Name: "optional_id", Type: model.Optional(uuid)},
+		}}},
+	}}}
+	compileInput(t, in, Options{Package: "db", Runtime: "ydb", EmitInterface: true})
+	files, err := Generate(in, Options{Package: "db", Runtime: "ydb", EmitInterface: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var source string
+	for _, file := range files {
+		if file.Name == "query.sql.go" {
+			source = string(file.Content)
+		}
+	}
+	for _, want := range []string{
+		"func (q *Queries) BindTypedValues(ctx context.Context, arg BindTypedValuesParams, opts ...query.ExecuteOption)",
+		"types.ZeroValue(types.List(types.TypeUint64))",
+		"types.ZeroValue(types.List(types.Optional(types.TypeUint64)))",
+		"list = list.Add().Uint64(listItem0)",
+		"types.NullableUint64Value(listItem1)",
+		"types.NullableDecimalValue(nil, 22, 9)",
+		"types.NullableUUIDTypedValue(listItem3)",
+		".Decimal(arg.Amount.Bytes, 22, 9)",
+		"if arg.OptionalAmount != nil",
+		".Uuid(arg.ID)",
+		".BeginOptional().Uuid(arg.OptionalID).EndOptional()",
+		"callOptions = append(callOptions, query.WithParameters(parameters.Build()))",
+	} {
+		if !strings.Contains(source, want) {
+			t.Fatalf("generated native binding lacks %q:\n%s", want, source)
+		}
+	}
+}
+
+func TestGenerateCompilesDatabaseSQLDecimalAndUUID(t *testing.T) {
+	decimal := model.Type{Kind: "Decimal", Precision: 35, Scale: 12}
+	uuid := model.Type{Kind: "Uuid"}
+	in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name: "BindValues", Command: model.One,
+		Parameters: []model.Parameter{{Name: "amount", Type: decimal}, {Name: "id", Type: model.Optional(uuid)}},
+		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "amount", Type: decimal}, {Name: "id", Type: model.Optional(uuid)}}}},
+	}}}
+	compileInput(t, in, Options{Package: "db", Runtime: "database/sql"})
+	files, err := Generate(in, Options{Package: "db", Runtime: "database/sql"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var source string
+	for _, file := range files {
+		if file.Name == "query.sql.go" {
+			source = string(file.Content)
+		}
+	}
+	for _, want := range []string{
+		"types.DecimalValue(&types.Decimal{Bytes: arg.Amount.Bytes, Precision: 35, Scale: 12})",
+		"types.NullableUUIDTypedValue(arg.ID)",
+	} {
+		if !strings.Contains(source, want) {
+			t.Fatalf("generated database/sql binding lacks %q:\n%s", want, source)
+		}
+	}
+}
+
+func TestSingleTypedExecParametersCompileWithoutUnusedImports(t *testing.T) {
+	decimal := model.Type{Kind: "Decimal", Precision: 22, Scale: 9}
+	uuid := model.Type{Kind: "Uuid"}
+	in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{
+		{Name: "PutAmount", Command: model.Exec, Source: model.Position{File: "amount.sql"}, Parameters: []model.Parameter{{Name: "amount", Type: decimal}}},
+		{Name: "PutID", Command: model.Exec, Source: model.Position{File: "id.sql"}, Parameters: []model.Parameter{{Name: "id", Type: uuid}}},
+	}}
+	for _, runtime := range []string{"database/sql", "ydb"} {
+		t.Run(runtime, func(t *testing.T) {
+			compileInput(t, in, Options{Package: "db", Runtime: runtime})
+		})
+	}
+}
+
+func TestGeneratedDecimalBindingsRejectMismatchedCarrierMetadata(t *testing.T) {
+	decimal := model.Type{Kind: "Decimal", Precision: 22, Scale: 9}
+	in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{
+		{Name: "PutAmount", Command: model.Exec, Parameters: []model.Parameter{{Name: "amount", Type: decimal}}},
+		{Name: "PutOptionalAmount", Command: model.Exec, Parameters: []model.Parameter{{Name: "amount", Type: model.Optional(decimal)}}},
+		{Name: "PutAmounts", Command: model.Exec, Parameters: []model.Parameter{{Name: "amounts", Type: model.Type{Kind: "List", Elem: &decimal}}}},
+		{Name: "PutOptionalAmounts", Command: model.Exec, Parameters: []model.Parameter{{Name: "amounts", Type: model.Type{Kind: "List", Elem: ptr(model.Optional(decimal))}}}},
+	}}
+	for _, runtime := range []string{"database/sql", "ydb"} {
+		t.Run(runtime, func(t *testing.T) {
+			input := in
+			if runtime == "database/sql" {
+				input = &model.AnalysisResult{Queries: in.Queries[:2]}
+			}
+			runGeneratedRuntimeTest(t, input, Options{Package: "db", Runtime: runtime}, decimalMismatchRuntimeTest(runtime))
+		})
+	}
+}
+
+func TestRejectsInvalidDecimalInsideListResult(t *testing.T) {
+	invalid := model.Type{Kind: "Decimal", Precision: 0, Scale: 0}
+	list := model.Type{Kind: "List", Elem: &invalid}
+	_, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name: "ListAmounts", Command: model.Many,
+		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "amounts", Type: list}}}},
+	}}}, Options{Runtime: "ydb"})
+	if err == nil || !strings.Contains(err.Error(), "Decimal requires precision") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func runGeneratedRuntimeTest(t *testing.T, input *model.AnalysisResult, opts Options, source string) {
+	t.Helper()
+	files, err := Generate(input, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	for _, f := range files {
+		if err := os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mod := "module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(mod), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "decimal_test.go"), []byte(source), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("go", "test", "-mod=mod", ".")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("generated %s decimal validation failed:\n%s", opts.Runtime, out)
+	}
+}
+
+func decimalMismatchRuntimeTest(runtime string) string {
+	methods := `if err := q.PutAmount(ctx, wrong); err == nil || !strings.Contains(err.Error(), "Decimal parameter $amount expects Decimal(22,9)") { t.Fatalf("scalar err=%v", err) }
+if err := q.PutOptionalAmount(ctx, &wrong); err == nil || !strings.Contains(err.Error(), "Decimal parameter $amount expects Decimal(22,9)") { t.Fatalf("optional err=%v", err) }`
+	if runtime == "ydb" {
+		methods += `
+if err := q.PutAmounts(ctx, []types.Decimal{wrong}); err == nil || !strings.Contains(err.Error(), "Decimal parameter $amounts expects Decimal(22,9)") { t.Fatalf("list err=%v", err) }
+if err := q.PutOptionalAmounts(ctx, []*types.Decimal{&wrong}); err == nil || !strings.Contains(err.Error(), "Decimal parameter $amounts expects Decimal(22,9)") { t.Fatalf("optional list err=%v", err) }`
+	}
+	return `package db
+import ("context"; "strings"; "testing"; "github.com/ydb-platform/ydb-go-sdk/v3/types")
+func TestDecimalMetadata(t *testing.T) { ctx:=context.Background(); q:=New(nil); wrong:=types.Decimal{Precision:21,Scale:9}; ` + methods + ` }
+`
+}
+
+func TestNativeOptionsAreForwardedAndCannotReplaceTypedArguments(t *testing.T) {
+	u64 := model.Type{Kind: "Uint64"}
+	in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{
+		{Name: "Ping", Command: model.Exec},
+		{Name: "Put", Command: model.Exec, Parameters: []model.Parameter{{Name: "id", Type: u64}}},
+	}}
+	files, err := Generate(in, Options{Package: "db", Runtime: "ydb"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var source string
+	for _, file := range files {
+		if file.Name == "query.sql.go" {
+			source = string(file.Content)
+		}
+	}
+	for _, want := range []string{
+		"func (q *Queries) Ping(ctx context.Context, opts ...query.ExecuteOption) error",
+		"return q.db.Exec(ctx, queryPing, opts...)",
+		"func (q *Queries) Put(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error",
+		"callOptions := append([]query.ExecuteOption(nil), opts...)",
+		"callOptions = append(callOptions, query.WithParameters(parameters.Build()))",
+		"return q.db.Exec(ctx, queryPut, callOptions...)",
+	} {
+		if !strings.Contains(source, want) {
+			t.Fatalf("native option forwarding lacks %q:\n%s", want, source)
+		}
+	}
+}
+
+func TestRejectsUnsupportedListAndDecimalShapes(t *testing.T) {
+	u64 := model.Type{Kind: "Uint64"}
+	cases := []struct {
+		name, runtime, want string
+		type_               model.Type
+	}{
+		{"database list", "database/sql", "List parameters are unsupported", model.Type{Kind: "List", Elem: &u64}},
+		{"optional list", "ydb", "Optional<List> parameters", model.Optional(model.Type{Kind: "List", Elem: &u64})},
+		{"nested list", "ydb", "nested List parameters", model.Type{Kind: "List", Elem: ptr(model.Type{Kind: "List", Elem: &u64})}},
+		{"invalid decimal", "ydb", "Decimal requires precision", model.Type{Kind: "Decimal", Precision: 0, Scale: 0}},
+		{"nested optional decimal", "ydb", "nested Optional<Decimal>", model.Optional(model.Optional(model.Type{Kind: "Decimal", Precision: 22, Scale: 9}))},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.Exec, Parameters: []model.Parameter{{Name: "p", Type: tc.type_}}}}}, Options{Runtime: tc.runtime})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func ptr(t model.Type) *model.Type { return &t }
+
 func TestGenerateCompilesDatabaseSQLJSONOnlyQueryFile(t *testing.T) {
 	jsonType := model.Type{Kind: "Json"}
 	in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
@@ -435,5 +778,80 @@ func TestRejectsBlankIdentifierPackage(t *testing.T) {
 	_, err := Generate(&model.AnalysisResult{}, Options{Package: "_", Runtime: "database/sql"})
 	if err == nil || !strings.Contains(err.Error(), `invalid Go package "_"`) {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCompileTypedParametersAcrossSources(t *testing.T) {
+	for _, runtime := range []string{"ydb", "database/sql"} {
+		for _, kind := range []model.Type{{Kind: "Decimal", Precision: 22, Scale: 9}, model.Optional(model.Type{Kind: "Uuid"})} {
+			t.Run(runtime+"/"+kind.Kind, func(t *testing.T) {
+				in := &model.AnalysisResult{}
+				for i, name := range []string{"First", "Second"} {
+					in.Queries = append(in.Queries, model.AnalyzedQuery{Name: name, Command: model.Exec, SQL: "SELECT $value;", Source: model.Position{File: fmt.Sprintf("query%d.sql", i)}, Parameters: []model.Parameter{{Name: "value", Type: kind}}})
+				}
+				compileInput(t, in, Options{Package: "db", Runtime: runtime})
+			})
+		}
+	}
+}
+
+func TestCompileNativeListParameterMatrix(t *testing.T) {
+	decimal := model.Type{Kind: "Decimal", Precision: 22, Scale: 9}
+	supported := []model.Type{
+		{Kind: "Bool"}, {Kind: "Int8"}, {Kind: "Int16"}, {Kind: "Int32"}, {Kind: "Int64"},
+		{Kind: "Uint8"}, {Kind: "Uint16"}, {Kind: "Uint32"}, {Kind: "Uint64"},
+		{Kind: "Float"}, {Kind: "Double"}, {Kind: "String"}, {Kind: "Utf8"}, {Kind: "Json"}, {Kind: "JsonDocument"}, {Kind: "Yson"},
+		{Kind: "Date"}, {Kind: "Datetime"}, {Kind: "Timestamp"}, {Kind: "Interval"}, decimal, {Kind: "Uuid"},
+	}
+	in := &model.AnalysisResult{}
+	for _, element := range supported {
+		for _, optional := range []bool{false, true} {
+			item := element
+			prefix := "List"
+			if optional {
+				item = model.Optional(item)
+				prefix = "OptionalList"
+			}
+			in.Queries = append(in.Queries, model.AnalyzedQuery{
+				Name: prefix + goName(element.Kind), Command: model.Exec,
+				Parameters: []model.Parameter{{Name: "values", Type: model.Type{Kind: "List", Elem: &item}}},
+			})
+		}
+	}
+	compileInput(t, in, Options{Package: "db", Runtime: "ydb"})
+	files, err := Generate(in, Options{Package: "db", Runtime: "ydb"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var source string
+	for _, file := range files {
+		if file.Name == "query.sql.go" {
+			source = string(file.Content)
+		}
+	}
+	for _, want := range []string{".YSON(listItem", "types.NullableYSONValueFromBytes(listItem"} {
+		if !strings.Contains(source, want) {
+			t.Fatalf("native YSON list binding lacks %q:\n%s", want, source)
+		}
+	}
+}
+
+func TestRejectsExtendedTemporalNativeListParameters(t *testing.T) {
+	for _, kind := range []string{"Date32", "Datetime64", "Timestamp64", "Interval64"} {
+		for _, optional := range []bool{false, true} {
+			t.Run(kind+fmt.Sprintf("/optional=%t", optional), func(t *testing.T) {
+				element := model.Type{Kind: kind}
+				if optional {
+					element = model.Optional(element)
+				}
+				_, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+					Name: "Bind", Command: model.Exec,
+					Parameters: []model.Parameter{{Name: "values", Type: model.Type{Kind: "List", Elem: &element}}},
+				}}}, Options{Runtime: "ydb"})
+				if err == nil || !strings.Contains(err.Error(), "SDK list builder has no "+kind+" method") {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			})
+		}
 	}
 }

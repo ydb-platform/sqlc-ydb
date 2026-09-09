@@ -1,0 +1,177 @@
+{
+  "status": "accepted",
+  "catalog": {
+    "Tables": [
+      {
+        "Name": "foo",
+        "Columns": [
+          {
+            "Name": "description",
+            "WireName": "",
+            "Type": {
+              "Kind": "Optional",
+              "Elem": {
+                "Kind": "Utf8",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "foo"
+          },
+          {
+            "Name": "bar",
+            "WireName": "",
+            "Type": {
+              "Kind": "Optional",
+              "Elem": {
+                "Kind": "Uuid",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "foo"
+          },
+          {
+            "Name": "baz",
+            "WireName": "",
+            "Type": {
+              "Kind": "Uuid",
+              "Elem": null,
+              "Key": null,
+              "Items": null,
+              "Precision": 0,
+              "Scale": 0
+            },
+            "Table": "foo"
+          }
+        ],
+        "PrimaryKey": [
+          "baz"
+        ]
+      }
+    ]
+  },
+  "queries": [
+    {
+      "name": "List",
+      "command": ":many",
+      "parameters": null,
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "description",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Utf8",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "foo"
+            },
+            {
+              "Name": "bar",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Uuid",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "foo"
+            },
+            {
+              "Name": "baz",
+              "WireName": "",
+              "Type": {
+                "Kind": "Uuid",
+                "Elem": null,
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "foo"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Find",
+      "command": ":one",
+      "parameters": [
+        {
+          "Name": "baz",
+          "Type": {
+            "Kind": "Uuid",
+            "Elem": null,
+            "Key": null,
+            "Items": null,
+            "Precision": 0,
+            "Scale": 0
+          }
+        }
+      ],
+      "result_sets": [
+        {
+          "Columns": [
+            {
+              "Name": "bar",
+              "WireName": "",
+              "Type": {
+                "Kind": "Optional",
+                "Elem": {
+                  "Kind": "Uuid",
+                  "Elem": null,
+                  "Key": null,
+                  "Items": null,
+                  "Precision": 0,
+                  "Scale": 0
+                },
+                "Key": null,
+                "Items": null,
+                "Precision": 0,
+                "Scale": 0
+              },
+              "Table": "foo"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

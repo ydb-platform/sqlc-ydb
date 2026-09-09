@@ -1,0 +1,13 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/query_parameter_limit_param_only/ydb/query.sql",
+        "Line": 3,
+        "Column": 12
+      },
+      "Message": "DML values must be direct external parameters; use DECLARE and a $parameter"
+    }
+  ]
+}

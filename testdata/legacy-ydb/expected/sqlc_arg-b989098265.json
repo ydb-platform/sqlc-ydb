@@ -1,0 +1,21 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/sqlc_arg/ydb/stdlib/query.sql",
+        "Line": 2,
+        "Column": 35
+      },
+      "Message": "sqlc macros are unsupported; use DECLARE parameters and explicit result columns instead"
+    },
+    {
+      "Position": {
+        "File": "inputs/sqlc_arg/ydb/stdlib/query.sql",
+        "Line": 5,
+        "Column": 35
+      },
+      "Message": "sqlc macros are unsupported; use DECLARE parameters and explicit result columns instead"
+    }
+  ]
+}

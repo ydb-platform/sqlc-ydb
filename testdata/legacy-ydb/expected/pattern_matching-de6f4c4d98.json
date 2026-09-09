@@ -1,0 +1,13 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/pattern_matching/ydb/query.sql",
+        "Line": 2,
+        "Column": 35
+      },
+      "Message": "cannot resolve type of external parameter $pattern; add DECLARE"
+    }
+  ]
+}

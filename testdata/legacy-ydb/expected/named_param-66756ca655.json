@@ -1,0 +1,69 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/named_param/ydb/query.sql",
+        "Line": 2,
+        "Column": 35
+      },
+      "Message": "sqlc macros are unsupported; use DECLARE parameters and explicit result columns instead"
+    },
+    {
+      "Position": {
+        "File": "inputs/named_param/ydb/query.sql",
+        "Line": 2,
+        "Column": 59
+      },
+      "Message": "sqlc macros are unsupported; use DECLARE parameters and explicit result columns instead"
+    },
+    {
+      "Position": {
+        "File": "inputs/named_param/ydb/query.sql",
+        "Line": 5,
+        "Column": 50
+      },
+      "Message": "cannot resolve type of external parameter $filter; add DECLARE"
+    },
+    {
+      "Position": {
+        "File": "inputs/named_param/ydb/query.sql",
+        "Line": 8,
+        "Column": 36
+      },
+      "Message": "sqlc macros are unsupported; use DECLARE parameters and explicit result columns instead"
+    },
+    {
+      "Position": {
+        "File": "inputs/named_param/ydb/query.sql",
+        "Line": 8,
+        "Column": 52
+      },
+      "Message": "sqlc macros are unsupported; use DECLARE parameters and explicit result columns instead"
+    },
+    {
+      "Position": {
+        "File": "inputs/named_param/ydb/query.sql",
+        "Line": 16,
+        "Column": 10
+      },
+      "Message": "DML values must be direct external parameters; use DECLARE and a $parameter"
+    },
+    {
+      "Position": {
+        "File": "inputs/named_param/ydb/query.sql",
+        "Line": 16,
+        "Column": 25
+      },
+      "Message": "cannot resolve type of external parameter $set_name; add DECLARE"
+    },
+    {
+      "Position": {
+        "File": "inputs/named_param/ydb/query.sql",
+        "Line": 17,
+        "Column": 15
+      },
+      "Message": "cannot resolve type of external parameter $name; add DECLARE"
+    }
+  ]
+}

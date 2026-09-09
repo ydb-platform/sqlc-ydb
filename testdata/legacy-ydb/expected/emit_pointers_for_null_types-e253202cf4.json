@@ -1,0 +1,53 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/emit_pointers_for_null_types/ydb/stdlib/schema.sql",
+        "Line": 14,
+        "Column": 5
+      },
+      "Message": "unsupported YQL type \"SmallSerial\""
+    },
+    {
+      "Position": {
+        "File": "inputs/emit_pointers_for_null_types/ydb/stdlib/schema.sql",
+        "Line": 15,
+        "Column": 5
+      },
+      "Message": "unsupported YQL type \"Serial\""
+    },
+    {
+      "Position": {
+        "File": "inputs/emit_pointers_for_null_types/ydb/stdlib/schema.sql",
+        "Line": 16,
+        "Column": 5
+      },
+      "Message": "unsupported YQL type \"BigSerial\""
+    },
+    {
+      "Position": {
+        "File": "inputs/emit_pointers_for_null_types/ydb/stdlib/schema.sql",
+        "Line": 32,
+        "Column": 5
+      },
+      "Message": "unsupported YQL type \"SmallSerial\""
+    },
+    {
+      "Position": {
+        "File": "inputs/emit_pointers_for_null_types/ydb/stdlib/schema.sql",
+        "Line": 33,
+        "Column": 5
+      },
+      "Message": "unsupported YQL type \"Serial\""
+    },
+    {
+      "Position": {
+        "File": "inputs/emit_pointers_for_null_types/ydb/stdlib/schema.sql",
+        "Line": 34,
+        "Column": 5
+      },
+      "Message": "unsupported YQL type \"BigSerial\""
+    }
+  ]
+}

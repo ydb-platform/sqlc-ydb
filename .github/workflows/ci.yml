@@ -126,6 +126,8 @@ jobs:
         run: python3 -m pip install -r examples/authors/python/requirements.txt
       # Keep local-ydb acceptance sequential: concurrent tests/compilers can
       # exhaust the memory budget even when they use only one YDB service.
+      - name: Compare analyzer types and result ordering with YDB
+        run: go test -p 1 -count=1 -timeout=180s ./internal/endtoend -run TestLiveYDBSemanticTypes -v
       - name: Run Go generator runtime tests
         run: go test -p 1 -count=1 -timeout=180s ./internal/codegen/golang -run TestLiveYDB -v
       - name: Run Python generator runtime tests

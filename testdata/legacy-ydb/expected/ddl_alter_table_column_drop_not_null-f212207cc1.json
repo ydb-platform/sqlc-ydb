@@ -1,0 +1,21 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/ddl_alter_table_column_drop_not_null/ydb/schema.sql",
+        "Line": 7,
+        "Column": 17
+      },
+      "Message": "unsupported ALTER TABLE action \"ALTERCOLUMNbarDROPNOTNULL\"; supported actions are ADD COLUMN, DROP COLUMN, and RENAME TO"
+    },
+    {
+      "Position": {
+        "File": "inputs/ddl_alter_table_column_drop_not_null/ydb/schema.sql",
+        "Line": 8,
+        "Column": 17
+      },
+      "Message": "unsupported ALTER TABLE action \"ALTERCOLUMNbazDROPNOTNULL\"; supported actions are ADD COLUMN, DROP COLUMN, and RENAME TO"
+    }
+  ]
+}

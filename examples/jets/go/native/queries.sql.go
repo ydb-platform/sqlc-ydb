@@ -11,8 +11,8 @@ import (
 const queryCountPilots = `-- name: CountPilots :one
 SELECT COUNT(*) AS pilot_count FROM pilots;`
 
-func (q *Queries) CountPilots(ctx context.Context) (CountPilotsRow, error) {
-	result, err := q.db.QueryRow(ctx, queryCountPilots)
+func (q *Queries) CountPilots(ctx context.Context, opts ...query.ExecuteOption) (CountPilotsRow, error) {
+	result, err := q.db.QueryRow(ctx, queryCountPilots, opts...)
 	if err != nil {
 		return CountPilotsRow{}, err
 	}
@@ -26,8 +26,8 @@ func (q *Queries) CountPilots(ctx context.Context) (CountPilotsRow, error) {
 const queryListPilots = `-- name: ListPilots :many
 SELECT id, name FROM pilots ORDER BY id LIMIT 5;`
 
-func (q *Queries) ListPilots(ctx context.Context) ([]ListPilotsRow, error) {
-	result, err := q.db.QueryResultSet(ctx, queryListPilots)
+func (q *Queries) ListPilots(ctx context.Context, opts ...query.ExecuteOption) ([]ListPilotsRow, error) {
+	result, err := q.db.QueryResultSet(ctx, queryListPilots, opts...)
 	if err != nil {
 		return []ListPilotsRow(nil), err
 	}
@@ -50,6 +50,10 @@ const queryDeletePilot = `-- name: DeletePilot :exec
 DECLARE $pilot_id AS Int32;
 DELETE FROM pilots WHERE id = $pilot_id;`
 
-func (q *Queries) DeletePilot(ctx context.Context, arg int32) error {
-	return q.db.Exec(ctx, queryDeletePilot, query.WithParameters(ydb.ParamsBuilder().Param("$pilot_id").Int32(arg).Build()))
+func (q *Queries) DeletePilot(ctx context.Context, arg int32, opts ...query.ExecuteOption) error {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$pilot_id").Int32(arg)
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+	return q.db.Exec(ctx, queryDeletePilot, callOptions...)
 }

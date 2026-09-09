@@ -1,0 +1,45 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/coalesce/ydb/stdlib/query.sql",
+        "Line": 2,
+        "Column": 8
+      },
+      "Message": "cannot resolve argument of COALESCE: unsupported string literal suffix \"'\""
+    },
+    {
+      "Position": {
+        "File": "inputs/coalesce/ydb/stdlib/query.sql",
+        "Line": 10,
+        "Column": 18
+      },
+      "Message": "computed result expressions require an explicit AS alias"
+    },
+    {
+      "Position": {
+        "File": "inputs/coalesce/ydb/stdlib/query.sql",
+        "Line": 14,
+        "Column": 18
+      },
+      "Message": "computed result expressions require an explicit AS alias"
+    },
+    {
+      "Position": {
+        "File": "inputs/coalesce/ydb/stdlib/query.sql",
+        "Line": 18,
+        "Column": 13
+      },
+      "Message": "computed result expressions require an explicit AS alias"
+    },
+    {
+      "Position": {
+        "File": "inputs/coalesce/ydb/stdlib/query.sql",
+        "Line": 22,
+        "Column": 13
+      },
+      "Message": "computed result expressions require an explicit AS alias"
+    }
+  ]
+}

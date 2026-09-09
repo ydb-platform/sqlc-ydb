@@ -26,20 +26,24 @@ func literalType(expr parser.IExprContext) (model.Type, bool, error) {
 	if expressionText != literalText {
 		return model.Type{}, false, nil
 	}
+	typeValue, err := literalValueType(literal)
+	return typeValue, true, err
+}
+
+func literalValueType(literal parser.ILiteral_valueContext) (model.Type, error) {
 	switch {
+	case literal.NULL() != nil:
+		return model.Type{Kind: "Null"}, nil
 	case literal.Bool_value() != nil:
-		return model.Type{Kind: "Bool"}, true, nil
+		return model.Type{Kind: "Bool"}, nil
 	case literal.STRING_VALUE() != nil:
-		typeValue, err := stringLiteralType(literal.GetText())
-		return typeValue, true, err
+		return stringLiteralType(literal.GetText())
 	case literal.Integer() != nil:
-		typeValue, err := integerLiteralType(expressionText, literal.Integer().INTEGER_VALUE() != nil)
-		return typeValue, true, err
+		return integerLiteralType(literal.GetText(), literal.Integer().INTEGER_VALUE() != nil)
 	case literal.Real_() != nil:
-		typeValue, err := realLiteralType(expressionText)
-		return typeValue, true, err
+		return realLiteralType(literal.GetText())
 	default:
-		return model.Type{}, false, nil
+		return model.Type{}, fmt.Errorf("unsupported literal %q", literal.GetText())
 	}
 }
 

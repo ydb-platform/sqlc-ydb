@@ -13,8 +13,8 @@ SELECT slug, name
 FROM city
 ORDER BY name;`
 
-func (q *Queries) ListCities(ctx context.Context) ([]ListCitiesRow, error) {
-	result, err := q.db.QueryResultSet(ctx, queryListCities)
+func (q *Queries) ListCities(ctx context.Context, opts ...query.ExecuteOption) ([]ListCitiesRow, error) {
+	result, err := q.db.QueryResultSet(ctx, queryListCities, opts...)
 	if err != nil {
 		return []ListCitiesRow(nil), err
 	}
@@ -39,8 +39,12 @@ SELECT slug, name
 FROM city
 WHERE slug = $slug;`
 
-func (q *Queries) GetCity(ctx context.Context, arg string) (GetCityRow, error) {
-	result, err := q.db.QueryRow(ctx, queryGetCity, query.WithParameters(ydb.ParamsBuilder().Param("$slug").Text(arg).Build()))
+func (q *Queries) GetCity(ctx context.Context, arg string, opts ...query.ExecuteOption) (GetCityRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$slug").Text(arg)
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+	result, err := q.db.QueryRow(ctx, queryGetCity, callOptions...)
 	if err != nil {
 		return GetCityRow{}, err
 	}
@@ -62,8 +66,13 @@ INSERT INTO city (
     $slug
 ) RETURNING slug, name;`
 
-func (q *Queries) CreateCity(ctx context.Context, arg CreateCityParams) (CreateCityRow, error) {
-	result, err := q.db.QueryRow(ctx, queryCreateCity, query.WithParameters(ydb.ParamsBuilder().Param("$name").Text(arg.Name).Param("$slug").Text(arg.Slug).Build()))
+func (q *Queries) CreateCity(ctx context.Context, arg CreateCityParams, opts ...query.ExecuteOption) (CreateCityRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$name").Text(arg.Name)
+	parameters = parameters.Param("$slug").Text(arg.Slug)
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+	result, err := q.db.QueryRow(ctx, queryCreateCity, callOptions...)
 	if err != nil {
 		return CreateCityRow{}, err
 	}
@@ -81,6 +90,11 @@ UPDATE city
 SET name = $name
 WHERE slug = $slug;`
 
-func (q *Queries) UpdateCityName(ctx context.Context, arg UpdateCityNameParams) error {
-	return q.db.Exec(ctx, queryUpdateCityName, query.WithParameters(ydb.ParamsBuilder().Param("$name").Text(arg.Name).Param("$slug").Text(arg.Slug).Build()))
+func (q *Queries) UpdateCityName(ctx context.Context, arg UpdateCityNameParams, opts ...query.ExecuteOption) error {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$name").Text(arg.Name)
+	parameters = parameters.Param("$slug").Text(arg.Slug)
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+	return q.db.Exec(ctx, queryUpdateCityName, callOptions...)
 }

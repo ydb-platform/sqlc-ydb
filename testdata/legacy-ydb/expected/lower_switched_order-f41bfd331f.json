@@ -1,0 +1,13 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/lower_switched_order/ydb/query.sql",
+        "Line": 2,
+        "Column": 65
+      },
+      "Message": "cannot resolve type of external parameter $bat_lower; add DECLARE"
+    }
+  ]
+}

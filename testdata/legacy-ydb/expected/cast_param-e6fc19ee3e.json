@@ -1,0 +1,13 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/cast_param/ydb/query.sql",
+        "Line": 4,
+        "Column": 13
+      },
+      "Message": "cannot resolve type of external parameter $allow_invalid; add DECLARE"
+    }
+  ]
+}

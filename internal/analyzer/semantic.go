@@ -14,7 +14,6 @@ type queryTree struct {
 	statements []*parser.Sql_stmtContext
 	declares   []*parser.Declare_stmtContext
 	named      []*parser.Named_nodes_stmtContext
-	selects    []*parser.Select_coreContext
 	insert     []*parser.Into_table_stmtContext
 	updates    []*parser.Update_stmtContext
 	deletes    []*parser.Delete_stmtContext
@@ -34,8 +33,6 @@ func collectQueryTree(tree antlr.Tree) queryTree {
 			out.declares = append(out.declares, ctx)
 		case *parser.Named_nodes_stmtContext:
 			out.named = append(out.named, ctx)
-		case *parser.Select_coreContext:
-			out.selects = append(out.selects, ctx)
 		case *parser.Into_table_stmtContext:
 			out.insert = append(out.insert, ctx)
 		case *parser.Update_stmtContext:
@@ -66,8 +63,15 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	}
 	tree := collectQueryTree(parsed.tree)
 	query.SQLWithoutDeclarations = withoutDeclarations(block.text, parsed.tokens, tree.declares)
+	if diagnostics = unsupportedSQLCMacroDiagnostics(block, parsed.tokens); len(diagnostics) != 0 {
+		return query, diagnostics
+	}
 	diagnostics = append(diagnostics, validateQueryStatements(block, tree)...)
-	dataStatements := len(tree.selects) + len(tree.insert) + len(tree.updates) + len(tree.deletes)
+	selectStatement := topLevelSelect(tree.statements)
+	dataStatements := len(tree.insert) + len(tree.updates) + len(tree.deletes)
+	if selectStatement != nil {
+		dataStatements++
+	}
 	if dataStatements != 1 {
 		return query, []model.Diagnostic{diagnosticAt(block.file, block.line-1, parsed.tree, fmt.Sprintf("query must contain exactly one supported SELECT, INSERT/UPSERT, UPDATE, or DELETE statement; found %d", dataStatements))}
 	}
@@ -77,18 +81,46 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	localPositions, localNames, localTypes, localDiagnostics := localBindings(block, tree, declared)
 	diagnostics = append(diagnostics, localDiagnostics...)
 
+	inferred := map[string]model.Type{}
 	var relations []relation
 	var resultColumns []model.Column
 	var target *model.Table
 	switch {
-	case len(tree.selects) == 1:
-		var relationDiagnostics []model.Diagnostic
-		relations, relationDiagnostics = selectRelations(catalog, block, tree.selects[0])
-		diagnostics = append(diagnostics, relationDiagnostics...)
-		if len(relationDiagnostics) == 0 {
-			var projectionDiagnostics []model.Diagnostic
-			resultColumns, projectionDiagnostics = selectProjection(block, tree.selects[0], relations, declared)
+	case selectStatement != nil:
+		bindings := make(map[string]model.Type, len(declared)+len(localTypes))
+		for name, typeValue := range declared {
+			bindings[name] = typeValue
+		}
+		for name, typeValue := range localTypes {
+			bindings[name] = typeValue
+		}
+		var selectDiagnostics []model.Diagnostic
+		var arms [][]model.Column
+		var partials []parser.ISelect_kind_partialContext
+		var cores []*parser.Select_coreContext
+		cores, partials, selectDiagnostics = selectArms(block, selectStatement)
+		diagnostics = append(diagnostics, selectDiagnostics...)
+		for i, core := range cores {
+			armRelations, relationDiagnostics := selectRelations(catalog, block, core)
+			diagnostics = append(diagnostics, relationDiagnostics...)
+			if len(relationDiagnostics) != 0 {
+				continue
+			}
+			columns, projectionDiagnostics := selectProjection(block, core, armRelations, bindings)
 			diagnostics = append(diagnostics, projectionDiagnostics...)
+			diagnostics = append(diagnostics, validateColumnReferences(block, core, armRelations)...)
+			diagnostics = append(diagnostics, validateGrouping(block, core, armRelations, bindings)...)
+			armTree := collectQueryTree(core)
+			inferFromComparisons(armTree, armRelations, inferred)
+			inferFromInLists(armTree.conds, armRelations, inferred)
+			if i < len(partials) {
+				inferLimitOffset(partials[i], inferred)
+			}
+			arms = append(arms, columns)
+		}
+		if len(arms) == len(cores) && len(arms) != 0 {
+			resultColumns, selectDiagnostics = reconcileUnionColumns(block, selectStatement, arms)
+			diagnostics = append(diagnostics, selectDiagnostics...)
 		}
 	case len(tree.insert) == 1:
 		target, diagnostics = targetTable(catalog, block, intoTableName(tree.insert[0]), tree.insert[0], diagnostics)
@@ -107,12 +139,11 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		}
 	}
 
-	if len(relations) != 0 || len(tree.selects) == 1 {
+	if selectStatement == nil && len(relations) != 0 {
 		diagnostics = append(diagnostics, validateColumnReferences(block, parsed.tree, relations)...)
 	}
 
-	inferred := map[string]model.Type{}
-	if len(relations) != 0 {
+	if selectStatement == nil && len(relations) != 0 {
 		inferFromComparisons(tree, relations, inferred)
 	}
 	if target != nil && len(tree.insert) == 1 {
@@ -155,6 +186,11 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		}
 	}
 
+	for _, column := range resultColumns {
+		if column.Type.Kind == "Null" {
+			diagnostics = append(diagnostics, model.Diagnostic{Position: query.Source, Message: fmt.Sprintf("result column %q has unresolved Null type; cast it or combine it with a concrete compatible type", column.Name)})
+		}
+	}
 	returnsRows := len(resultColumns) != 0
 	if len(diagnostics) == 0 {
 		if (block.command == model.One || block.command == model.Many) && !returnsRows {
@@ -267,16 +303,19 @@ func localBindings(block queryBlock, tree queryTree, declared map[string]model.T
 			types[name] = typeValue
 			continue
 		}
-		if len(rhsBinds) == 0 {
-			if typeValue, ok, err := literalType(statement.Expr()); err != nil {
-				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement.Expr(), err.Error()))
-				continue
-			} else if ok {
-				types[name] = typeValue
-				continue
-			}
+		bindings := make(map[string]model.Type, len(declared)+len(types))
+		for bindingName, typeValue := range declared {
+			bindings[bindingName] = typeValue
 		}
-		diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement.Expr(), fmt.Sprintf("cannot resolve type of local $%s; only literals and declared parameters are supported", name)))
+		for bindingName, typeValue := range types {
+			bindings[bindingName] = typeValue
+		}
+		typeValue, err := resolveExpression(statement.Expr(), expressionScope{bindings: bindings})
+		if err == nil {
+			types[name] = typeValue
+			continue
+		}
+		diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement.Expr(), fmt.Sprintf("cannot resolve type of local $%s: %v", name, err)))
 	}
 	return positions, names, types, diagnostics
 }
@@ -378,7 +417,7 @@ func selectProjection(block queryBlock, selectCore *parser.Select_coreContext, r
 			continue
 		}
 		expr := result.Expr()
-		column, pure, err := expressionColumn(expr, relations, declared)
+		column, pure, err := expressionColumn(expr, relations, declared, selectCore.Group_by_clause() != nil)
 		if err != nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, expr, err.Error()))
 			continue
@@ -409,28 +448,8 @@ func selectProjection(block queryBlock, selectCore *parser.Select_coreContext, r
 	return columns, diagnostics
 }
 
-func expressionColumn(expr parser.IExprContext, relations []relation, declared map[string]model.Type) (model.Column, bool, error) {
+func expressionColumn(expr parser.IExprContext, relations []relation, declared map[string]model.Type, grouped bool) (model.Column, bool, error) {
 	refs := columnRefs(expr)
-	hasCast := false
-	descendants(expr, func(node antlr.Tree) {
-		if _, ok := node.(*parser.Cast_exprContext); ok {
-			hasCast = true
-		}
-	})
-	if hasCast {
-		return model.Column{}, false, fmt.Errorf("CAST result nullability is not yet supported")
-	}
-	if typeValue, ok, err := concatenationType(expr, declared); ok {
-		return model.Column{Type: typeValue}, false, err
-	}
-	if function, ok := topFunction(expr); ok {
-		switch strings.ToLower(function) {
-		case "count":
-			return model.Column{Type: model.Type{Kind: "Uint64"}}, false, nil
-		default:
-			return model.Column{}, false, fmt.Errorf("unsupported result function %q", function)
-		}
-	}
 	if len(refs) == 1 && isPureColumnExpression(expr) {
 		column, err := resolveColumn(relations, refs[0])
 		if err != nil {
@@ -438,28 +457,8 @@ func expressionColumn(expr parser.IExprContext, relations []relation, declared m
 		}
 		return column, true, nil
 	}
-	var binds []parser.IBind_parameterContext
-	descendants(expr, func(node antlr.Tree) {
-		if bind, ok := node.(*parser.Bind_parameterContext); ok {
-			binds = append(binds, bind)
-		}
-	})
-	if len(refs) == 0 && len(binds) == 1 && expr.GetText() == binds[0].GetText() {
-		typeValue, ok := declared[bindName(binds[0])]
-		if !ok {
-			return model.Column{}, false, fmt.Errorf("cannot resolve type of parameter $%s in result", bindName(binds[0]))
-		}
-		return model.Column{Type: typeValue}, false, nil
-	}
-	if len(refs) != 0 {
-		return model.Column{}, false, fmt.Errorf("computed result expression %q is not supported", expr.GetText())
-	}
-	if literal, ok, err := literalType(expr); err != nil {
-		return model.Column{}, false, err
-	} else if ok {
-		return model.Column{Type: literal}, false, nil
-	}
-	return model.Column{}, false, fmt.Errorf("unsupported result expression %q", expr.GetText())
+	typeValue, err := resolveExpression(expr, expressionScope{relations: relations, bindings: declared, grouped: grouped})
+	return model.Column{Type: typeValue}, false, err
 }
 
 func concatenationType(expr parser.IExprContext, declared map[string]model.Type) (model.Type, bool, error) {
@@ -572,26 +571,6 @@ func qualifiedName(ref columnRef) string {
 		return ref.name
 	}
 	return ref.qualifier + "." + ref.name
-}
-
-func topFunction(expr parser.IExprContext) (string, bool) {
-	var function string
-	descendants(expr, func(node antlr.Tree) {
-		if function != "" {
-			return
-		}
-		ctx, ok := node.(*parser.Unary_subexprContext)
-		if !ok || ctx.Unary_casual_subexpr() == nil {
-			return
-		}
-		casual := ctx.Unary_casual_subexpr()
-		if casual.Id_expr() != nil && casual.Unary_subexpr_suffix() != nil && len(casual.Unary_subexpr_suffix().AllInvoke_expr()) != 0 {
-			if ctx.GetStart() == expr.GetStart() && ctx.GetStop() == expr.GetStop() {
-				function = identifier(casual.Id_expr().GetText())
-			}
-		}
-	})
-	return function, function != ""
 }
 
 func validateColumnReferences(block queryBlock, root antlr.Tree, relations []relation) []model.Diagnostic {

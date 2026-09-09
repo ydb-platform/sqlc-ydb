@@ -438,14 +438,18 @@ SELECT ID FROM Authors WHERE ID = $value;`}},
 	}
 }
 
-func TestAnalyzeRejectsCastUntilItsNullabilityCanBeProven(t *testing.T) {
-	_, err := Analyze(
+func TestAnalyzeResolvesVerifiedCastNullability(t *testing.T) {
+	got, err := Analyze(
 		[]model.Source{{Name: "schema.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, PRIMARY KEY (id));`}},
 		[]model.Source{{Name: "query.sql", Text: `-- name: IDs :many
-SELECT CAST(id AS Utf8) AS id_text FROM authors;`}},
+SELECT CAST(id AS String) AS id_text FROM authors;`}},
 	)
-	if err == nil || !strings.Contains(err.Error(), "CAST result nullability is not yet supported") {
-		t.Fatalf("error = %v", err)
+	if err != nil {
+		t.Fatalf("Analyze() error = %v", err)
+	}
+	want := model.Type{Kind: "String"}
+	if result := got.Queries[0].ResultSets[0].Columns[0]; result.Name != "id_text" || !reflect.DeepEqual(result.Type, want) {
+		t.Fatalf("result = %#v, want id_text %#v", result, want)
 	}
 }
 

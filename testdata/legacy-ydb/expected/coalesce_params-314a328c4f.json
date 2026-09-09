@@ -1,0 +1,77 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/coalesce_params/ydb/schema.sql",
+        "Line": 2,
+        "Column": 3
+      },
+      "Message": "unsupported YQL type \"BigSerial\""
+    },
+    {
+      "Position": {
+        "File": "inputs/coalesce_params/ydb/schema.sql",
+        "Line": 3,
+        "Column": 3
+      },
+      "Message": "unsupported YQL type \"BigSerial\""
+    },
+    {
+      "Position": {
+        "File": "inputs/coalesce_params/ydb/schema.sql",
+        "Line": 1,
+        "Column": 1
+      },
+      "Message": "primary key column \"Id\" does not exist"
+    },
+    {
+      "Position": {
+        "File": "inputs/coalesce_params/ydb/schema.sql",
+        "Line": 17,
+        "Column": 3
+      },
+      "Message": "unsupported YQL type \"BigSerial\""
+    },
+    {
+      "Position": {
+        "File": "inputs/coalesce_params/ydb/schema.sql",
+        "Line": 18,
+        "Column": 3
+      },
+      "Message": "unsupported YQL type \"BigSerial\""
+    },
+    {
+      "Position": {
+        "File": "inputs/coalesce_params/ydb/schema.sql",
+        "Line": 19,
+        "Column": 3
+      },
+      "Message": "unsupported YQL type \"BigSerial\""
+    },
+    {
+      "Position": {
+        "File": "inputs/coalesce_params/ydb/schema.sql",
+        "Line": 16,
+        "Column": 1
+      },
+      "Message": "primary key column \"Id\" does not exist"
+    },
+    {
+      "Position": {
+        "File": "inputs/coalesce_params/ydb/schema.sql",
+        "Line": 30,
+        "Column": 3
+      },
+      "Message": "unsupported YQL type \"BigSerial\""
+    },
+    {
+      "Position": {
+        "File": "inputs/coalesce_params/ydb/schema.sql",
+        "Line": 29,
+        "Column": 1
+      },
+      "Message": "primary key column \"id\" does not exist"
+    }
+  ]
+}

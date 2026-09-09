@@ -1,0 +1,629 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 3,
+        "Column": 8
+      },
+      "Message": "computed result expressions require an explicit AS alias"
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 5,
+        "Column": 8
+      },
+      "Message": "computed result expressions require an explicit AS alias"
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 7,
+        "Column": 8
+      },
+      "Message": "computed result expressions require an explicit AS alias"
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 9,
+        "Column": 8
+      },
+      "Message": "computed result expressions require an explicit AS alias"
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 11,
+        "Column": 8
+      },
+      "Message": "computed result expressions require an explicit AS alias"
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 13,
+        "Column": 8
+      },
+      "Message": "computed result expressions require an explicit AS alias"
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 15,
+        "Column": 8
+      },
+      "Message": "computed result expressions require an explicit AS alias"
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 17,
+        "Column": 8
+      },
+      "Message": "computed result expressions require an explicit AS alias"
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 19,
+        "Column": 8
+      },
+      "Message": "computed result expressions require an explicit AS alias"
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 21,
+        "Column": 8
+      },
+      "Message": "computed result expressions require an explicit AS alias"
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 23,
+        "Column": 8
+      },
+      "Message": "computed result expressions require an explicit AS alias"
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 25,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"CurrentUtcDate\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 27,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"CurrentUtcDatetime\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 29,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"CurrentUtcTimestamp\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 31,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Version\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 33,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"ToBytes\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 35,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"ByteAt\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 37,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"TestBit\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 39,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"ClearBit\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 41,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"SetBit\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 43,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"FlipBit\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 47,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Pi\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 49,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::E\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 51,
+        "Column": 8
+      },
+      "Message": "cannot resolve argument of Math::Abs: unsupported result expression \"-5.5\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 53,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Acos\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 55,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Asin\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 57,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Atan\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 59,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Cbrt\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 61,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Ceil\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 63,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Cos\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 65,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Exp\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 67,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Floor\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 69,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Log\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 71,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Log2\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 73,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Log10\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 75,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Round\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 77,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Round\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 79,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Sin\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 81,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Sqrt\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 83,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Tan\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 85,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Trunc\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 87,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Atan2\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 89,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Pow\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 91,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Hypot\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 93,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Fmod\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 95,
+        "Column": 8
+      },
+      "Message": "cannot resolve argument of Math::Isinf: unsupported result expression \"1.0/0.0\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 97,
+        "Column": 8
+      },
+      "Message": "cannot resolve argument of Math::Isnan: unsupported result expression \"0.0/0.0\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 99,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Isfinite\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 101,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Fuzzyequals\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 103,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Mod\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 105,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Math::Rem\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 109,
+        "Column": 8
+      },
+      "Message": "cannot resolve argument of DateTime::Getyear: unsupported YQL function \"CurrentUtcDate\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 111,
+        "Column": 8
+      },
+      "Message": "cannot resolve argument of DateTime::Getmonth: unsupported YQL function \"CurrentUtcDate\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 113,
+        "Column": 8
+      },
+      "Message": "cannot resolve argument of DateTime::Getdayofmonth: unsupported YQL function \"CurrentUtcDate\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 115,
+        "Column": 8
+      },
+      "Message": "cannot resolve argument of DateTime::Gethour: unsupported YQL function \"CurrentUtcDatetime\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 117,
+        "Column": 8
+      },
+      "Message": "cannot resolve argument of DateTime::Getminute: unsupported YQL function \"CurrentUtcDatetime\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 119,
+        "Column": 8
+      },
+      "Message": "cannot resolve argument of DateTime::Getsecond: unsupported YQL function \"CurrentUtcDatetime\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 121,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"DateTime::Fromseconds\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 123,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"DateTime::Frommilliseconds\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 125,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"DateTime::Intervalfromdays\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 129,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Unicode::Isutf\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 131,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Unicode::Getlength\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 133,
+        "Column": 8
+      },
+      "Message": "Unicode::Find argument 1 must be Utf8 or Optional\u003cUtf8\u003e"
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 135,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Unicode::Rfind\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 137,
+        "Column": 8
+      },
+      "Message": "Unicode::Substring argument 1 must be Utf8 or Optional\u003cUtf8\u003e"
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 139,
+        "Column": 8
+      },
+      "Message": "Unicode::Normalize argument 1 must be Utf8 or Optional\u003cUtf8\u003e"
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 141,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Unicode::Tolower\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 143,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Unicode::Toupper\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 145,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Unicode::Reverse\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 147,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Unicode::Isascii\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 149,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Unicode::Isspace\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 151,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Unicode::Isupper\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 153,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Unicode::Islower\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 155,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Unicode::Isalpha\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 157,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Unicode::Isalnum\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 159,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Unicode::Ishex\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 161,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Unicode::Touint64\""
+    },
+    {
+      "Position": {
+        "File": "inputs/builtins/ydb/query.sql",
+        "Line": 163,
+        "Column": 8
+      },
+      "Message": "unsupported YQL function \"Unicode::Levensteindistance\""
+    }
+  ]
+}

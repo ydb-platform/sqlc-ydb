@@ -1,8 +1,9 @@
 # Source provenance
 
-The standalone CLI, model, analyzer and generator renderers were written for
-this implementation. They do not import or embed sqlc's intermediate AST,
-compiler, plugin protocol, or generator implementation.
+The standalone CLI, model, analyzer and generator renderers are maintained
+independently. They do not load sqlc's intermediate AST, compiler or plugin
+protocol. Selected YDB algorithms and fixtures have been adapted as described
+below; historical source is retained separately from compiled code.
 
 Behavior/API references:
 
@@ -108,3 +109,33 @@ The [PHP SDK](https://github.com/ydb-platform/ydb-php-sdk) is pinned to 1.16.1
 at `56a783e39368745a35a7bc3e206d4a8200184805`. The generated bridge uses the
 public `Table` accessors and `RequestTrait` to retain raw protobuf result values;
 [PHP](php.md) explains why the high-level result conversion is unsuitable.
+
+## Salvaged YDB implementation and tests
+
+The [local source snapshot](../testdata/legacy-ydb/README.md) preserves the complete
+YDB contribution at `8eed5d890396eb03953248a3ec4ab7e28dfaed45` from
+`ydb-platform/sqlc`, including its MIT notice, function catalogs, ANTLR converter,
+Go generator and test corpus. Its checksummed patch is relative to upstream
+`2e0435c856c7d42ea58aaa2c24b6c9feda0509e9`; future reading and tests do not depend
+on the fork remaining available. Adapted CLI fixtures record their source paths.
+
+The converter's grammar paths informed direct-context CASE, CAST, UNION and
+grouping analysis. Historical function signatures are an inventory, not a type
+oracle: the [built-in resolver](../internal/yql/builtins/README.md) records the
+current supported subset and primary YQL references. Unsupported library/resource
+functions remain in the historical snapshot without a guessed result type.
+
+Go parameter binding adapts the historical ParamsBuilder idea against SDK
+`v3.151.1`, pinned in [examples/go.mod](../examples/go.mod). Inspected SDK paths:
+
+- `internal/params/parameters.go` and `internal/params/list.go`: scalar, optional,
+  list and Decimal builders. Empty lists use `types.ZeroValue` with an explicit
+  list element type; the SDK's `Any(types.Value)` entry point receives a fully
+  typed value, not an unresolved model type.
+- `internal/value/value.go`, `internal/value/nullable.go` and `pkg/decimal/type.go`:
+  Decimal and UUID carriers, typed constructors, nullable values and scanning.
+- `internal/query/options/execute.go`: variadic execution options and parameter
+  precedence. Generated parameter bindings are applied after caller options.
+- `tests/integration/database_sql_regression_test.go` and
+  `tests/integration/decimal_test.go`: typed database/sql parameter and scanning
+  examples. SDK runtime imports remain outside the generator's own module.

@@ -90,8 +90,8 @@ inspect outputs. Files are never automatically deleted.
 The analyzer supports explicit `CREATE TABLE` catalogs and the schema migration
 operations listed below, table column
 projections and `*`, table/column aliases, supported joins and their optional
-sides, `COUNT`, `DECLARE`, direct comparison parameter inference, selected scalar
-local bindings, `INSERT`/`UPSERT ... VALUES`, `UPDATE ... SET`, `DELETE`, and
+sides, supported scalar/aggregate functions, `DECLARE`, direct comparison
+parameter inference, selected scalar local bindings, `INSERT`/`UPSERT ... VALUES`, `UPDATE ... SET`, `DELETE`, and
 `RETURNING`. It validates names outside the projection and conflicting parameter
 constraints. Diagnostics include source file, line and column. Table, column,
 alias and parameter names are case-sensitive, as in YQL.
@@ -108,8 +108,27 @@ family (`String` or `Utf8`); an optional operand makes the result optional.
 Mixed families, nested expressions and computed operands remain unsupported.
 The [booktest greeting](../examples/booktest/queries.sql) exercises this path.
 
-This is a deliberately limited first semantic implementation. General computed
-projections and casts, CTEs/subqueries,
+CASE expressions with an explicit ELSE branch, the supported CAST matrix and
+nested calls to [supported built-ins](../internal/yql/builtins/README.md) have
+resolved result types. CASE/IF conditions and HAVING support the implemented
+comparison predicates; standalone comparison and arithmetic projections remain
+unsupported. NULL can participate
+in typed branches but cannot escape as an unresolved result.
+
+UNION and UNION ALL reconcile columns by YQL result name, preserve server column
+ordering, reconcile supported common types and make missing columns optional.
+Direct-column GROUP BY and HAVING validate grouped references and supported
+aggregate calls. Aggregate result nullability accounts for empty global input
+versus nonempty groups and nullable arguments. Grouping expressions, windows and
+advanced grouping constructs remain unsupported.
+
+Direct LIMIT/OFFSET parameters infer Uint64. Direct values in a column IN list
+infer the column's type; list parameters used as the IN operand retain their
+explicit List type. These are compiler constraints, independent of a target's
+list binding support.
+
+This remains a deliberately limited semantic implementation. General computed
+projections, the full CAST matrix, CTEs/subqueries,
 multiple result sets, FLATTEN, full function/type inference and the full YQL
 grammar semantics are subsequent work. Unary numeric expressions in projections
 or local assignments and backslash escapes in quoted identifiers are also

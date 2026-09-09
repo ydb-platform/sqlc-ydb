@@ -1,0 +1,21 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/in_union/ydb/query.sql",
+        "Line": 3,
+        "Column": 21
+      },
+      "Message": "unknown column \"author_id\""
+    },
+    {
+      "Position": {
+        "File": "inputs/in_union/ydb/query.sql",
+        "Line": 3,
+        "Column": 55
+      },
+      "Message": "unknown column \"author_id\""
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/ddl_alter_table_alter_type/ydb/stdlib/schema.sql",
+        "Line": 7,
+        "Column": 17
+      },
+      "Message": "cannot drop primary key column \"bar\" from table \"foo\""
+    },
+    {
+      "Position": {
+        "File": "inputs/ddl_alter_table_alter_type/ydb/stdlib/schema.sql",
+        "Line": 8,
+        "Column": 28
+      },
+      "Message": "column \"bar\" already exists in table \"foo\""
+    }
+  ]
+}

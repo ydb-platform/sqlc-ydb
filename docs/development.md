@@ -15,12 +15,16 @@ The fast suite includes a YDB-only golden fixture runner under
 `internal/endtoend`: real CLI generation must match committed output filenames,
 contents and expected diagnostics. Fixture updates are explicit, never an
 automatic part of tests. Semantic unit tests independently assert resolved
-parameters, result columns and errors.
+parameters, result columns and errors. The [legacy YDB corpus](../testdata/legacy-ydb/README.md)
+adds all preserved SQL inputs, explicit accepted/rejected semantic snapshots and
+source-integrity checks. Adapted positive fixtures use the same simple runner.
 
 Review `git diff --cached --check` after staging new files: an unstaged diff
 does not include untracked generated outputs. If significant whitespace inside
 SQL triggers a warning, escape it in the source literal without trimming or
-otherwise changing the runtime SQL text.
+otherwise changing the runtime SQL text. Immutable historical inputs have scoped
+Git attributes so their original significant whitespace is preserved; edit an
+adapted fixture instead of normalizing the source snapshot.
 
 [Git attributes](../.gitattributes) keep text files in LF form on every host.
 Release scripts and generated fixtures must survive a Windows checkout without
@@ -85,6 +89,19 @@ composer --working-dir=examples/php check
 Optional live generator tests use `SQLC_YDB_TEST_DSN` to select an isolated YDB
 database. Use a disposable development database: tests create and drop uniquely
 named tables. No live tests run when the variable is absent.
+
+The semantic metadata suite compares analyzer result types, nullability and column
+order directly with YDB, independently of generated code. Run it sequentially
+with the runtime suites after installing the pinned Python dependencies:
+
+```sh
+SQLC_YDB_TEST_DSN=grpc://localhost:2136/local SQLC_YDB_TEST_PYTHON=python3 \
+  go test -p 1 -count=1 -timeout=180s ./internal/endtoend -run TestLiveYDBSemanticTypes -v
+```
+
+It creates and drops one uniquely named table. Its source and table-driven
+function probes document the executable coverage; a green historical diagnostic
+snapshot is not evidence that the server accepts that SQL.
 
 **Run local-ydb checks sequentially.** Do not run different image versions,
 runtime suites or Docker builds concurrently on one host. Use `go test -p 1`

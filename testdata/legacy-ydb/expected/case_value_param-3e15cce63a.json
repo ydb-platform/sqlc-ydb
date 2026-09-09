@@ -1,0 +1,21 @@
+{
+  "status": "rejected",
+  "diagnostics": [
+    {
+      "Position": {
+        "File": "inputs/case_value_param/ydb/query.sql",
+        "Line": 3,
+        "Column": 13
+      },
+      "Message": "DML values must be direct external parameters; use DECLARE and a $parameter"
+    },
+    {
+      "Position": {
+        "File": "inputs/case_value_param/ydb/query.sql",
+        "Line": 3,
+        "Column": 23
+      },
+      "Message": "cannot resolve type of external parameter $condition; add DECLARE"
+    }
+  ]
+}

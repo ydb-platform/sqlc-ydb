@@ -3,6 +3,7 @@ package batch
 
 import (
 	"context"
+	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 	"time"
 )
 
@@ -68,14 +69,14 @@ type GetBiographyRow struct {
 }
 
 type Querier interface {
-	GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, error)
-	DeleteBookExecResult(ctx context.Context, arg uint64) error
-	DeleteBook(ctx context.Context, arg uint64) error
-	DeleteBookNamedFunc(ctx context.Context, arg uint64) error
-	DeleteBookNamedSign(ctx context.Context, arg uint64) error
-	BooksByYear(ctx context.Context, arg int32) ([]BooksByYearRow, error)
-	CreateAuthor(ctx context.Context, arg CreateAuthorParams) (CreateAuthorRow, error)
-	CreateBook(ctx context.Context, arg CreateBookParams) (CreateBookRow, error)
-	UpdateBook(ctx context.Context, arg UpdateBookParams) error
-	GetBiography(ctx context.Context, arg uint64) (GetBiographyRow, error)
+	GetAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorRow, error)
+	DeleteBookExecResult(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error
+	DeleteBook(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error
+	DeleteBookNamedFunc(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error
+	DeleteBookNamedSign(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error
+	BooksByYear(ctx context.Context, arg int32, opts ...query.ExecuteOption) ([]BooksByYearRow, error)
+	CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts ...query.ExecuteOption) (CreateAuthorRow, error)
+	CreateBook(ctx context.Context, arg CreateBookParams, opts ...query.ExecuteOption) (CreateBookRow, error)
+	UpdateBook(ctx context.Context, arg UpdateBookParams, opts ...query.ExecuteOption) error
+	GetBiography(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetBiographyRow, error)
 }
