@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Ubuntu CI runners provide PHP 8.2 through setup-php and its phpize tool.
-# Download the pinned archive directly: PECL channel updates can stall silently.
-grpc_version=1.78.0
-grpc_build_dir=$(mktemp -d)
-trap 'rm -rf "$grpc_build_dir"' EXIT
+# This binary targets the Ubuntu 24.04 amd64 runners and PHP 8.2 from setup-php.
+# Pin both the package revision and its contents; never fall back to compilation.
+. /etc/os-release
+if [[ "$ID" != ubuntu || "$VERSION_ID" != 24.04 || "$(dpkg --print-architecture)" != amd64 ]]; then
+  echo 'PHP gRPC package requires Ubuntu 24.04 amd64' >&2
+  exit 1
+fi
+grpc_version=1.83.1
+grpc_package="php8.2-grpc_${grpc_version}-1+ubuntu24.04.1+deb.sury.org+1_amd64.deb"
+grpc_sha256=e0386e4dd260ef76c0fc85aedcbe8bb1a48a9ac2079ae425b0ac113baf4e6752
+grpc_download_dir=$(mktemp -d)
+trap 'rm -rf "$grpc_download_dir"' EXIT
 curl --fail --location --connect-timeout 15 --max-time 120 --retry 3 \
-  "https://pecl.php.net/get/grpc-$grpc_version.tgz" -o "$grpc_build_dir/grpc.tgz"
-tar -xzf "$grpc_build_dir/grpc.tgz" -C "$grpc_build_dir"
-cd "$grpc_build_dir/grpc-$grpc_version"
-phpize
-# CI exercises SDK behavior; expensive compiler optimization adds no coverage.
-CFLAGS=-O1 CXXFLAGS=-O1 ./configure --with-php-config="$(command -v php-config)" --enable-grpc
-make -j2
-sudo make install
-echo 'extension=grpc.so' | sudo tee /etc/php/8.2/mods-available/grpc.ini
+  "https://ppa.launchpadcontent.net/ondrej/php/ubuntu/pool/main/p/php-grpc/$grpc_package" \
+  -o "$grpc_download_dir/$grpc_package"
+printf '%s  %s\n' "$grpc_sha256" "$grpc_download_dir/$grpc_package" | sha256sum --check --strict
+sudo apt-get install --yes --no-install-recommends "$grpc_download_dir/$grpc_package"
 sudo phpenmod -v 8.2 grpc
-php -r 'if (phpversion("grpc") !== "1.78.0") { fwrite(STDERR, "Expected gRPC 1.78.0\n"); exit(1); }'
+php -r 'if (phpversion("grpc") !== $argv[1]) { fwrite(STDERR, "Expected gRPC " . $argv[1] . "\n"); exit(1); }' "$grpc_version"

@@ -77,11 +77,13 @@ An upload failure fails the CI job rather than silently leaving stale coverage.
 
 ## Test prerequisites
 
-PHP CI builds the pinned gRPC extension with
+PHP CI installs the pinned gRPC 1.83.1 binary package with
 [`.github/scripts/install-php-grpc`](../.github/scripts/install-php-grpc).
-It downloads the source archive directly, limits compilation to two processes,
-and checks the loaded version. Download and build timeouts keep installation
-failures visible before the SDK tests run.
+It downloads the PHP 8.2 package from the Ondřej Surý Ubuntu PPA, verifies its
+pinned SHA-256, installs it with APT and checks the loaded version. Both PHP jobs
+use Ubuntu 24.04 amd64. Installation has a five-minute timeout and never falls
+back to compilation. Package updates require updating the revision and checksum
+in the script together and running the PHP checks and live smoke tests.
 
 Generator tests compile generated Go against the selected SDK in a temporary
 module and execute generated code using mock adapters. Python 3.9 or newer must
