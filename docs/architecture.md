@@ -10,6 +10,9 @@ flowchart LR
   D --> G[Built-in C++ generator]
   D --> H[Built-in C# generator]
   D --> I[Built-in Java generator]
+  D --> J[Built-in JavaScript generator]
+  D --> K[Built-in Rust generator]
+  D --> L[Built-in PHP generator]
 ```
 
 `internal/source` loads files and migration inputs. `internal/analyzer` owns
@@ -21,7 +24,14 @@ another recursive syntax tree.
 identity, parameters, result sets and source locations. Nullability is an
 `Optional` type, and compound type metadata is retained. A table catalog and a
 query projection are distinct: `SELECT name` does not generate the whole table.
-`AnalyzedQuery.SQL` retains executable YQL and its declarations. Parameter names
+Projection columns retain their API name and, where different, the exact YDB
+result name in `WireName`. For example, an unaliased `b.title` in a join is
+returned as `b.title`; generators that read by name use this analyzed metadata.
+`AnalyzedQuery.SQL` retains executable YQL and its declarations. The analyzer
+also derives `SQLWithoutDeclarations` from ANTLR token spans for SDKs that
+synthesize `DECLARE` from typed parameters, currently JavaScript. This removes
+only declaration syntax; comments, literals and local bindings remain intact.
+Generators do not independently reparse or strip declarations. Parameter names
 omit the leading `$`; their types and result column types must be resolved.
 `analyzer.Analyze` returns an error whenever its result contains diagnostics.
 
@@ -78,8 +88,8 @@ and [generation dispatch](https://github.com/sqlc-dev/sqlc/blob/23e357a414310aa8
   it and cannot serve as the semantic correctness baseline.
 - Do not add an intermediate AST. The typed analysis result is necessary for
   code generation and is not a syntax representation.
-- Built-in generators cover Go, Python, C++, Java, and C#. JS/PHP/Rust follow later. SDK
-  maintainers are already in the product team and can review generated APIs.
+- Built-in generators cover Go, Python, C++, Java, C#, JavaScript, Rust and PHP.
+  SDK maintainers are already in the product team and can review generated APIs.
 - Track upstream product behavior and selectively adapt relevant tests. Record
   source provenance and retain license notices whenever code is copied.
 

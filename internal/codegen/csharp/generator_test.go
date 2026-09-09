@@ -35,6 +35,15 @@ func generated(t *testing.T, a *model.AnalysisResult) (string, string) {
 	return string(files[0].Content), string(files[1].Content)
 }
 
+func generatedRuntime(t *testing.T, a *model.AnalysisResult, runtime string) (string, string) {
+	t.Helper()
+	files, err := Generate(a, Options{Namespace: "Authors." + csName(runtime), Runtime: runtime})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(files[0].Content), string(files[1].Content)
+}
+
 func TestGenerateUsesConcreteModernYdbAdoSurface(t *testing.T) {
 	models, queries := generated(t, authorsAnalysis())
 	for _, want := range []string{
@@ -55,6 +64,61 @@ func TestGenerateUsesConcreteModernYdbAdoSurface(t *testing.T) {
 	}
 	if strings.Contains(queries, "YdbDataSource") || strings.Contains(queries, "TableClient") || strings.Contains(queries, "DbConnection") {
 		t.Fatalf("generator must not own a data source or use legacy/generic surface:\n%s", queries)
+	}
+}
+
+func TestGenerateDapperProfileUsesDapperExecutionAndTypedYdbParameters(t *testing.T) {
+	_, queries := generatedRuntime(t, authorsAnalysis(), "dapper")
+	for _, want := range []string{
+		"using Dapper;", "new CommandDefinition(SqlGetAuthor", "_connection.ExecuteReaderAsync(command)",
+		"_connection.ExecuteAsync(command)", "SqlMapper.IDynamicParameters", "command.Parameters.Add(parameter)",
+		"new YdbParameter(\"$biography\", YdbValue.MakeOptionalUtf8(args.Biography))",
+	} {
+		if !strings.Contains(queries, want) {
+			t.Errorf("Dapper Queries.cs missing %q:\n%s", want, queries)
+		}
+	}
+}
+
+func TestGenerateLinq2DBProfileUsesOfficialYdbDataConnection(t *testing.T) {
+	_, queries := generatedRuntime(t, authorsAnalysis(), "linq2db")
+	for _, want := range []string{
+		"using LinqToDB;", "using LinqToDB.Data;", "private readonly DataConnection _connection;",
+		"_connection.QueryToListAsync(GetAuthorRowFrom, SqlGetAuthor, cancellationToken",
+		"_connection.ExecuteAsync(SqlUpsertAuthor, cancellationToken",
+		"new DataParameter(\"$biography\", YdbValue.MakeOptionalUtf8(args.Biography), DataType.NVarChar)",
+	} {
+		if !strings.Contains(queries, want) {
+			t.Errorf("linq2db Queries.cs missing %q:\n%s", want, queries)
+		}
+	}
+	if strings.Contains(queries, "ITable<") || strings.Contains(queries, "GetTable<") {
+		t.Fatalf("SQL-first profile must not infer linq2db entities:\n%s", queries)
+	}
+}
+
+func TestJsonAndTimestampUseRealSDKTypesInEveryRuntime(t *testing.T) {
+	jsonType := model.Type{Kind: "Json"}
+	timestampType := model.Type{Kind: "Timestamp"}
+	in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name: "Write", Command: model.One, SQL: "SELECT $json, $when;",
+		Parameters: []model.Parameter{{Name: "json", Type: jsonType}, {Name: "when", Type: model.Optional(timestampType)}},
+		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "json", Type: model.Optional(jsonType)}, {Name: "when", Type: timestampType}}}},
+	}}}
+	for _, runtime := range []string{"adonet", "dapper", "linq2db"} {
+		t.Run(runtime, func(t *testing.T) {
+			models, queries := generatedRuntime(t, in, runtime)
+			for _, want := range []string{"string? Json", "DateTime When"} {
+				if !strings.Contains(models, want) {
+					t.Errorf("Models.cs missing %q:\n%s", want, models)
+				}
+			}
+			for _, want := range []string{"YdbValue.MakeJson(args.Json)", "YdbValue.MakeOptionalTimestamp(args.When)"} {
+				if !strings.Contains(queries, want) {
+					t.Errorf("Queries.cs missing %q:\n%s", want, queries)
+				}
+			}
+		})
 	}
 }
 
@@ -85,6 +149,7 @@ func TestRejectsUnsupportedOrCollidingInput(t *testing.T) {
 		{"duplicate query", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Same", Command: model.Exec}, {Name: "Same", Command: model.Exec}}}, Options{}, "SQL constant collision"},
 		{"unrepresentable table name", &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "---"}}}}, Options{}, "invalid model name"},
 		{"namespace", authorsAnalysis(), Options{Namespace: "Bad.class"}, "invalid namespace"},
+		{"runtime", authorsAnalysis(), Options{Runtime: "entity-framework"}, "unsupported runtime"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Generate(tc.in, tc.opts)
@@ -114,7 +179,7 @@ func TestGeneratedCodeBuildsAgainstPublishedSDK(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	project := `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup><ItemGroup><PackageReference Include="Ydb.Sdk" Version="0.33.3" /></ItemGroup></Project>`
+	project := `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup><ItemGroup><PackageReference Include="Ydb.Sdk" Version="0.35.0" /></ItemGroup></Project>`
 	if err := os.WriteFile(filepath.Join(dir, "generated.csproj"), []byte(project), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +187,7 @@ func TestGeneratedCodeBuildsAgainstPublishedSDK(t *testing.T) {
 	cmd.Dir = dir
 	cmd.Env = dotnetEnv(dir)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("generated C# does not build against Ydb.Sdk 0.33.3: %v\n%s", err, out)
+		t.Fatalf("generated C# does not build against Ydb.Sdk 0.35.0: %v\n%s", err, out)
 	}
 }
 
@@ -134,7 +199,7 @@ func TestAllSupportedScalarsBuildAgainstPublishedSDK(t *testing.T) {
 	types := []model.Type{
 		{Kind: "Bool"}, {Kind: "Int8"}, {Kind: "Int16"}, {Kind: "Int32"}, {Kind: "Int64"},
 		{Kind: "Uint8"}, {Kind: "Uint16"}, {Kind: "Uint32"}, {Kind: "Uint64"},
-		{Kind: "Float"}, {Kind: "Double"}, {Kind: "Utf8"}, {Kind: "String"}, {Kind: "Uuid"},
+		{Kind: "Float"}, {Kind: "Double"}, {Kind: "Utf8"}, {Kind: "String"}, {Kind: "Json"}, {Kind: "Timestamp"}, {Kind: "Uuid"},
 	}
 	var parameters []model.Parameter
 	var columns []model.Column
@@ -161,7 +226,7 @@ func TestAllSupportedScalarsBuildAgainstPublishedSDK(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	project := `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup><ItemGroup><PackageReference Include="Ydb.Sdk" Version="0.33.3" /></ItemGroup></Project>`
+	project := `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup><ItemGroup><PackageReference Include="Ydb.Sdk" Version="0.35.0" /></ItemGroup></Project>`
 	if err := os.WriteFile(filepath.Join(dir, "scalars.csproj"), []byte(project), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -169,18 +234,75 @@ func TestAllSupportedScalarsBuildAgainstPublishedSDK(t *testing.T) {
 	cmd.Dir = dir
 	cmd.Env = dotnetEnv(dir)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("all generated scalar bindings must compile against Ydb.Sdk 0.33.3: %v\n%s", err, out)
+		t.Fatalf("all generated scalar bindings must compile against Ydb.Sdk 0.35.0: %v\n%s", err, out)
+	}
+}
+
+func TestGeneratedRuntimeProfilesBuildAgainstPublishedPackages(t *testing.T) {
+	dotnet := os.Getenv("SQLC_YDB_CSHARP_DOTNET")
+	if dotnet == "" {
+		t.Skip("set SQLC_YDB_CSHARP_DOTNET to run the published-package builds")
+	}
+	jsonType := model.Type{Kind: "Json"}
+	timestampType := model.Type{Kind: "Timestamp"}
+	in := authorsAnalysis()
+	in.Queries = append(in.Queries, model.AnalyzedQuery{
+		Name: "CreateEvent", Command: model.One,
+		SQL:        "DECLARE $document AS Json;\nDECLARE $at AS Optional<Timestamp>;\nSELECT $document AS document, $at AS at;\n",
+		Parameters: []model.Parameter{{Name: "document", Type: jsonType}, {Name: "at", Type: model.Optional(timestampType)}},
+		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "document", Type: jsonType}, {Name: "at", Type: model.Optional(timestampType)}}}},
+	})
+	for _, tc := range []struct {
+		runtime   string
+		packages  string
+		namespace string
+	}{
+		{"adonet", "", "Build.AdoNet"},
+		{"dapper", `<PackageReference Include="Dapper" Version="2.1.79" />`, "Build.Dapper"},
+		{"linq2db", `<PackageReference Include="linq2db" Version="6.4.0" />`, "Build.Linq2DB"},
+	} {
+		t.Run(tc.runtime, func(t *testing.T) {
+			files, err := Generate(in, Options{Namespace: tc.namespace, Runtime: tc.runtime})
+			if err != nil {
+				t.Fatal(err)
+			}
+			dir := t.TempDir()
+			for _, file := range files {
+				if err := os.WriteFile(filepath.Join(dir, file.Name), file.Content, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			project := `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup><ItemGroup><PackageReference Include="Ydb.Sdk" Version="0.35.0" />` + tc.packages + `</ItemGroup></Project>`
+			if err := os.WriteFile(filepath.Join(dir, "generated.csproj"), []byte(project), 0600); err != nil {
+				t.Fatal(err)
+			}
+			cmd := exec.Command(dotnet, "build", "--nologo")
+			cmd.Dir, cmd.Env = dir, dotnetEnv(dir)
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("generated %s profile does not build against published packages: %v\n%s", tc.runtime, err, out)
+			}
+		})
 	}
 }
 
 func TestRejectsModelNamesThatShadowFrameworkTypes(t *testing.T) {
-	for _, table := range []string{"guid", "task", "cancellation_token", "db_data_reader", "argument_null_exception", "invalid_operation_exception", "ydb_value"} {
+	for _, table := range []string{"guid", "date_time", "task", "cancellation_token", "db_data_reader", "argument_null_exception", "invalid_operation_exception", "ydb_value"} {
 		t.Run(table, func(t *testing.T) {
 			_, err := Generate(&model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: table}}}}, Options{})
 			if err == nil || !strings.Contains(err.Error(), "model name collision") {
 				t.Fatalf("Generate() error = %v, want framework model-name collision", err)
 			}
 		})
+	}
+}
+
+func TestDapperAllowsModelNamedLikeNestedParameterHelper(t *testing.T) {
+	files, err := Generate(&model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "ydb_parameters"}}}}, Options{Runtime: "dapper"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if models := string(files[0].Content); !strings.Contains(models, "public sealed record YdbParameters(") {
+		t.Fatalf("Models.cs missing YdbParameters record:\n%s", models)
 	}
 }
 
@@ -252,7 +374,7 @@ func TestSQLLiteralRoundTripsThroughCSharpRuntime(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	project := `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup><ItemGroup><PackageReference Include="Ydb.Sdk" Version="0.33.3" /></ItemGroup></Project>`
+	project := `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup><ItemGroup><PackageReference Include="Ydb.Sdk" Version="0.35.0" /></ItemGroup></Project>`
 	if err := os.WriteFile(filepath.Join(dir, "literal.csproj"), []byte(project), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +404,7 @@ func dotnetEnv(dir string) []string {
 	return env
 }
 
-// This exercises the public 0.33.3 SDK value serializer, rather than relying
+// This exercises the public 0.35.0 SDK value serializer, rather than relying
 // on DbType/DBNull behavior. Generated Optional<T> expressions use these
 // values so both a present value and null retain Optional<primitive> on wire.
 func TestOptionalParametersSerializeAsTypedYdbValues(t *testing.T) {
@@ -295,7 +417,7 @@ func TestOptionalParametersSerializeAsTypedYdbValues(t *testing.T) {
 		t.Fatalf("generated optional parameter did not use YdbValue: %s", queries)
 	}
 	dir := t.TempDir()
-	project := `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup><ItemGroup><PackageReference Include="Ydb.Sdk" Version="0.33.3" /></ItemGroup></Project>`
+	project := `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup><ItemGroup><PackageReference Include="Ydb.Sdk" Version="0.35.0" /></ItemGroup></Project>`
 	if err := os.WriteFile(filepath.Join(dir, "wire.csproj"), []byte(project), 0600); err != nil {
 		t.Fatal(err)
 	}

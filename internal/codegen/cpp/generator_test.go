@@ -146,6 +146,57 @@ func TestGenerateUserverAuthorsAPI(t *testing.T) {
 	}
 }
 
+func TestJoinedColumnsUseExactResultKeysWithoutChangingAPIFields(t *testing.T) {
+	uint64Type := model.Type{Kind: "Uint64"}
+	utf8Type := model.Type{Kind: "Utf8"}
+	row := model.ResultSet{Columns: []model.Column{
+		{Name: "id", WireName: "a.id", Type: uint64Type},
+		{Name: "author_name", Type: utf8Type},
+	}}
+	analysis := &model.AnalysisResult{Queries: []model.AnalyzedQuery{
+		{
+			Name: "GetJoinedAuthor", Command: model.One,
+			SQL:        "SELECT a.id, a.name AS author_name FROM authors AS a JOIN books AS b ON a.id = b.author_id;",
+			ResultSets: []model.ResultSet{row},
+		},
+		{
+			Name: "ListJoinedAuthors", Command: model.Many,
+			SQL:        "SELECT a.id, a.name AS author_name FROM authors AS a JOIN books AS b ON a.id = b.author_id;",
+			ResultSets: []model.ResultSet{row},
+		},
+	}}
+
+	tests := []struct {
+		runtime      string
+		aliasField   string
+		qualifiedGet string
+		aliasGet     string
+	}{
+		{"ydb", "std::string author_name;", `sqlc_parser.ColumnParser("a.id").GetUint64()`, `sqlc_parser.ColumnParser("author_name").GetUtf8()`},
+		{"userver", "::userver::ydb::Utf8 author_name;", `sqlc_row.Get<std::uint64_t>("a.id")`, `sqlc_row.Get<::userver::ydb::Utf8>("author_name")`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.runtime, func(t *testing.T) {
+			files, err := Generate(analysis, Options{Runtime: tc.runtime})
+			if err != nil {
+				t.Fatal(err)
+			}
+			models := generatedContent(t, files, "models.hpp")
+			source := generatedContent(t, files, "queries.cpp")
+			for _, field := range []string{"std::uint64_t id;", tc.aliasField} {
+				if count := strings.Count(models, field); count != 2 {
+					t.Errorf("models.hpp contains %q %d times, want once for :one and once for :many:\n%s", field, count, models)
+				}
+			}
+			for _, lookup := range []string{tc.qualifiedGet, tc.aliasGet} {
+				if count := strings.Count(source, lookup); count != 2 {
+					t.Errorf("queries.cpp contains %q %d times, want once for :one and once for :many:\n%s", lookup, count, source)
+				}
+			}
+		})
+	}
+}
+
 func TestGenerateRejectsUnsupportedAndUnsafeInput(t *testing.T) {
 	tests := []struct {
 		name    string

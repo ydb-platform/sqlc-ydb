@@ -5,6 +5,16 @@ sql:
     schema: schema.sql
     queries: queries.sql
     gen:
+      php:
+        out: php/native
+        namespace: Authors\Native
+        runtime: ydb
+      javascript:
+        out: javascript/native
+        runtime: ydb
+      rust:
+        out: rust/native
+        runtime: ydb
       go:
         package: authors
         out: go/native
@@ -73,3 +83,21 @@ sql:
         package: authors.hibernate
         out: java/hibernate/src/main/java/authors/hibernate
         runtime: hibernate
+  - name: dapper
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      csharp:
+        namespace: Authors.Dapper
+        out: csharp/dapper
+        runtime: dapper
+  - name: linq2db
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      csharp:
+        namespace: Authors.Linq2DB
+        out: csharp/linq2db
+        runtime: linq2db

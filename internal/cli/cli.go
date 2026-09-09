@@ -16,7 +16,10 @@ import (
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/codegen/csharp"
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/codegen/golang"
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/codegen/java"
+	"github.com/ydb-platform/sqlc-engine-ydb/internal/codegen/javascript"
+	"github.com/ydb-platform/sqlc-engine-ydb/internal/codegen/php"
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/codegen/python"
+	"github.com/ydb-platform/sqlc-engine-ydb/internal/codegen/rust"
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/config"
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/model"
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/source"
@@ -205,7 +208,8 @@ func prepare(c *config.Config, generate bool) ([]output, error) {
 		if !generate {
 			continue
 		}
-		if s.Gen.Go == nil && s.Gen.Python == nil && s.Gen.CSharp == nil && s.Gen.Java == nil && s.Gen.CPP == nil {
+		if s.Gen.Go == nil && s.Gen.Python == nil && s.Gen.CPP == nil && s.Gen.CSharp == nil &&
+			s.Gen.Java == nil && s.Gen.JavaScript == nil && s.Gen.Rust == nil && s.Gen.PHP == nil {
 			return nil, errors.New("generation requires a built-in generator in gen")
 		}
 		add := func(dir string, files []model.File) error {
@@ -248,7 +252,7 @@ func prepare(c *config.Config, generate bool) ([]output, error) {
 			}
 		}
 		if g := s.Gen.CSharp; g != nil {
-			files, err := csharp.Generate(result, csharp.Options{Namespace: g.Namespace})
+			files, err := csharp.Generate(result, csharp.Options{Namespace: g.Namespace, Runtime: g.Runtime})
 			if err != nil {
 				return nil, fmt.Errorf("C# generation: %w", err)
 			}
@@ -269,6 +273,33 @@ func prepare(c *config.Config, generate bool) ([]output, error) {
 			files, err := cpp.Generate(result, cpp.Options{Namespace: g.Namespace, Runtime: g.Runtime})
 			if err != nil {
 				return nil, fmt.Errorf("C++ generation: %w", err)
+			}
+			if err := add(g.Out, files); err != nil {
+				return nil, err
+			}
+		}
+		if g := s.Gen.JavaScript; g != nil {
+			files, err := javascript.Generate(result, javascript.Options{Runtime: g.Runtime})
+			if err != nil {
+				return nil, fmt.Errorf("JavaScript generation: %w", err)
+			}
+			if err := add(g.Out, files); err != nil {
+				return nil, err
+			}
+		}
+		if g := s.Gen.Rust; g != nil {
+			files, err := rust.Generate(result, rust.Options{Runtime: g.Runtime})
+			if err != nil {
+				return nil, fmt.Errorf("Rust generation: %w", err)
+			}
+			if err := add(g.Out, files); err != nil {
+				return nil, err
+			}
+		}
+		if g := s.Gen.PHP; g != nil {
+			files, err := php.Generate(result, php.Options{Namespace: g.Namespace, Runtime: g.Runtime})
+			if err != nil {
+				return nil, fmt.Errorf("PHP generation: %w", err)
 			}
 			if err := add(g.Out, files); err != nil {
 				return nil, err

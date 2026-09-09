@@ -14,15 +14,17 @@ code grouped by language and runtime.
 | [jets](jets) | Related tables, aggregate counts and limited result sets |
 | [ondeck](ondeck) | Ordered schema migrations, query directories and venue aggregates |
 
-The four additional families generate Go native SDK and `database/sql` APIs,
-matching upstream's Go focus. They share [one Go module](go.mod) and SDK pin;
-`authors` also retains the other language runtimes.
+Every family generates Go native SDK and `database/sql`, C# Dapper and
+linq2db, JavaScript, Rust and PHP APIs. Dependencies and execution harnesses
+are shared by language across the families; `authors` also retains Python,
+C++, C# ADO.NET and Java examples. Runtime commands are in
+[development](../docs/development.md).
 
 From the repository root:
 
 ```sh
 make generate       # regenerate every example
-make check-examples # compile SQL, compare generated output, compile/test Go
+make check-examples # analyze SQL, compare outputs, check generated Go and Python
 ```
 
 Go tests compile without a database and skip live cases unless

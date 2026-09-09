@@ -1,0 +1,314 @@
+package php
+
+import (
+	"encoding/base64"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/ydb-platform/sqlc-engine-ydb/internal/model"
+)
+
+func representativeAnalysis() *model.AnalysisResult {
+	u64 := model.Type{Kind: "Uint64"}
+	i32 := model.Type{Kind: "Int32"}
+	utf8 := model.Type{Kind: "Utf8"}
+	jsonType := model.Type{Kind: "Json"}
+	timestamp := model.Type{Kind: "Timestamp"}
+	return &model.AnalysisResult{
+		Catalog: model.Catalog{Tables: []model.Table{{Name: "authors", Columns: []model.Column{
+			{Name: "author_id", Type: u64},
+			{Name: "name", Type: utf8},
+			{Name: "biography", Type: model.Optional(jsonType)},
+		}}}},
+		Queries: []model.AnalyzedQuery{
+			{
+				Name: "GetAuthor", Command: model.One,
+				SQL:                    "DECLARE $author_id AS Uint64;\nSELECT author_id, name, biography FROM authors WHERE author_id = $author_id;\n",
+				SQLWithoutDeclarations: "\nSELECT author_id, name, biography FROM authors WHERE author_id = $author_id;\n",
+				Parameters:             []model.Parameter{{Name: "author_id", Type: u64}},
+				ResultSets: []model.ResultSet{{Columns: []model.Column{
+					{Name: "author_id", Type: u64},
+					{Name: "name", Type: utf8},
+					{Name: "biography", Type: model.Optional(jsonType)},
+				}}},
+			},
+			{
+				Name: "CreateBook", Command: model.One,
+				SQL:                    "DECLARE $book_id AS Uint64;\nDECLARE $year AS Int32;\nDECLARE $available AS Timestamp;\nDECLARE $tags AS Json;\nINSERT INTO books (book_id, year, available, tags) VALUES ($book_id, $year, $available, $tags) RETURNING book_id, year, available, tags;",
+				SQLWithoutDeclarations: "\n\n\n\nINSERT INTO books (book_id, year, available, tags) VALUES ($book_id, $year, $available, $tags) RETURNING book_id, year, available, tags;",
+				Parameters: []model.Parameter{
+					{Name: "book_id", Type: u64},
+					{Name: "year", Type: i32},
+					{Name: "available", Type: timestamp},
+					{Name: "tags", Type: jsonType},
+				},
+				ResultSets: []model.ResultSet{{Columns: []model.Column{
+					{Name: "book_id", Type: u64},
+					{Name: "year", Type: i32},
+					{Name: "available", Type: timestamp},
+					{Name: "tags", Type: jsonType},
+				}}},
+			},
+			{Name: "DeleteAuthor", Command: model.Exec, SQL: "DELETE FROM authors;", SQLWithoutDeclarations: "DELETE FROM authors;"},
+		},
+	}
+}
+
+func generatedFile(t *testing.T, files []model.File, name string) string {
+	t.Helper()
+	for _, file := range files {
+		if file.Name == name {
+			return string(file.Content)
+		}
+	}
+	t.Fatalf("missing generated file %s", name)
+	return ""
+}
+
+func TestGenerateUsesLosslessOfficialSDKContract(t *testing.T) {
+	files, err := Generate(representativeAnalysis(), Options{Namespace: `Books\Native`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	queries := generatedFile(t, files, "Queries.php")
+	runtime := generatedFile(t, files, "YdbRuntime.php")
+	params := generatedFile(t, files, "CreateBookParams.php")
+	row := generatedFile(t, files, "CreateBookRow.php")
+	for _, want := range []string{
+		"namespace Books\\Native;",
+		"require_once __DIR__ . '/YdbRuntime.php';",
+		"public const GET_AUTHOR_SQL = <<<'SQLC_YDB_YQL'",
+		"public function getAuthor(string $authorId): ?GetAuthorRow",
+		"public function createBook(CreateBookParams $params): ?CreateBookRow",
+		"public function deleteAuthor(): void",
+		"YdbValueCodec::typedUint64($authorId, 'author_id')",
+		"YdbValueCodec::typedTimestamp($params->available, 'available')",
+		"YdbValueCodec::typedJson($params->tags, 'tags')",
+		"$session->newQuery(self::GET_AUTHOR_SQL)",
+		"->beginTx('serializable_read_write')",
+		"return (new YdbRawExecutor($this->table))->execute($session, $query);",
+	} {
+		if !strings.Contains(queries, want) {
+			t.Errorf("Queries.php missing %q:\n%s", want, queries)
+		}
+	}
+	for _, want := range []string{
+		"use YdbPlatform\\Ydb\\Traits\\RequestTrait;",
+		"$data['session_id'] = $session->id();",
+		"$this->doRequest('Table', 'ExecuteDataQuery', $data)",
+		"public static function uint64(Value $value, string $where): string",
+		"bcsub($value, self::UINT64_MODULUS, 0)",
+		"bcadd((string) $raw, '18446744073709551616', 0)",
+		"public static function timestamp(Value $value, string $where): int",
+		"private const TIMESTAMP_MAX_MICROSECONDS = '4291747199999999';",
+		"public static function json(Value $value, string $where): string",
+	} {
+		if !strings.Contains(runtime, want) {
+			t.Errorf("YdbRuntime.php missing %q:\n%s", want, runtime)
+		}
+	}
+	if strings.Contains(queries, "$this->executor") {
+		t.Fatalf("Queries.php retains a raw executor across SDK retry attempts:\n%s", queries)
+	}
+	for _, want := range []string{
+		"public readonly string $bookId",
+		"public readonly int $year",
+		"public readonly int $available",
+		"public readonly string $tags",
+	} {
+		if !strings.Contains(params, want) || !strings.Contains(row, want) {
+			t.Errorf("DTO files missing %q:\n%s\n%s", want, params, row)
+		}
+	}
+	for _, file := range files {
+		if !strings.HasPrefix(string(file.Content), "<?php\n// Code generated by sqlc-ydb. DO NOT EDIT.\n") {
+			t.Errorf("%s has wrong generated header", file.Name)
+		}
+	}
+}
+
+func TestOneManyExecAndOptionalShapes(t *testing.T) {
+	a := representativeAnalysis()
+	a.Queries = append(a.Queries, model.AnalyzedQuery{
+		Name: "ListAuthors", Command: model.Many, SQL: "SELECT author_id, name, biography FROM authors;", SQLWithoutDeclarations: "SELECT author_id, name, biography FROM authors;",
+		ResultSets: []model.ResultSet{{Columns: a.Queries[0].ResultSets[0].Columns}},
+	})
+	files, err := Generate(a, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	queries := generatedFile(t, files, "Queries.php")
+	for _, want := range []string{
+		"namespace Db;",
+		"public function listAuthors(): array",
+		"$rows = $this->decodeRows(",
+		"static fn($items): ListAuthorsRow => new ListAuthorsRow(",
+		"return $rows[0] ?? null;",
+		"YdbValueCodec::optionalJson($items->offsetGet(2), 'GetAuthor.biography')",
+	} {
+		if !strings.Contains(queries, want) {
+			t.Errorf("Queries.php missing %q:\n%s", want, queries)
+		}
+	}
+	modelFile := generatedFile(t, files, "Authors.php")
+	if !strings.Contains(modelFile, "public readonly ?string $biography") {
+		t.Fatalf("Optional<Json> must be a nullable exact JSON string:\n%s", modelFile)
+	}
+}
+
+func TestResultValidationUsesWireNameWithoutChangingDTOProperty(t *testing.T) {
+	a := representativeAnalysis()
+	a.Queries[0].ResultSets[0].Columns[0].WireName = "id"
+	files, err := Generate(a, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	queries := generatedFile(t, files, "Queries.php")
+	if !strings.Contains(queries, "['id', PrimitiveTypeId::UINT64, false]") {
+		t.Fatalf("Queries.php does not validate the server wire name:\n%s", queries)
+	}
+	row := generatedFile(t, files, "GetAuthorRow.php")
+	if !strings.Contains(row, "public readonly string $authorId") {
+		t.Fatalf("wire name changed the public DTO property:\n%s", row)
+	}
+}
+
+func TestSQLLiteralRoundTripsThroughPHP(t *testing.T) {
+	php, err := exec.LookPath("php")
+	if err != nil {
+		t.Skip("php is unavailable")
+	}
+	tests := []struct {
+		name   string
+		value  string
+		nowdoc bool
+	}{
+		{name: "newline", value: "SELECT 1;\nSELECT 2;", nowdoc: true},
+		{name: "trailing LF", value: "SELECT 1;\n", nowdoc: true},
+		{name: "CRLF", value: "SELECT 1;\r\nSELECT 2;\r\n", nowdoc: true},
+		{name: "delimiter collisions", value: "-- SQLC_YDB_YQL\n-- SQLC_YDB_YQL_2\nSELECT 1;", nowdoc: true},
+		{name: "literal punctuation and Unicode", value: "SELECT '$value', `column`, \\\\path, \"雪\"u, '''';", nowdoc: true},
+		{name: "control byte fallback", value: "SELECT '\t';\n\x00\x01", nowdoc: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "literal.php")
+			expression := phpSQLString(tc.value, "    ")
+			if strings.Contains(expression, "<<<'") != tc.nowdoc {
+				t.Fatalf("nowdoc=%t, expression=%s", tc.nowdoc, expression)
+			}
+			expected := base64.StdEncoding.EncodeToString([]byte(tc.value))
+			source := "<?php\n$actual = " + expression + ";\nif (base64_encode($actual) !== " + phpQuote(expected) + ") { throw new Exception(bin2hex($actual)); }\n"
+			if err := os.WriteFile(path, []byte(source), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if out, err := exec.Command(php, path).CombinedOutput(); err != nil {
+				t.Fatalf("generated SQL literal did not round-trip: %v\n%s", err, out)
+			}
+		})
+	}
+}
+
+func TestRejectsUnsupportedInputsAndCollisions(t *testing.T) {
+	tests := []struct {
+		name string
+		a    *model.AnalysisResult
+		o    Options
+		want string
+	}{
+		{name: "nil", a: nil, want: "analysis result is nil"},
+		{name: "runtime", a: &model.AnalysisResult{}, o: Options{Runtime: "pdo"}, want: `unsupported runtime "pdo"`},
+		{name: "namespace", a: &model.AnalysisResult{}, o: Options{Namespace: `Bad\\namespace`}, want: "invalid namespace"},
+		{name: "diagnostics", a: &model.AnalysisResult{Diagnostics: []model.Diagnostic{{Message: "bad"}}}, want: "analysis has diagnostics"},
+		{name: "execrows", a: &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Affected", Command: model.ExecRows}}}, want: ":execrows is unsupported"},
+		{name: "query collision", a: &model.AnalysisResult{Queries: []model.AnalyzedQuery{
+			{Name: "foo_bar", Command: model.Exec, SQL: "SELECT 1;"},
+			{Name: "FooBar", Command: model.Exec, SQL: "SELECT 1;"},
+		}}, want: "method name collision"},
+		{name: "reserved class", a: &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "int"}}}}, want: `invalid generated class name "Int"`},
+		{name: "sdk import class", a: &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "table"}}}}, want: `class name collision "Table"`},
+		{name: "this parameter", a: &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+			Name: "Write", Command: model.Exec, SQL: "SELECT $this;",
+			Parameters: []model.Parameter{{Name: "this", Type: model.Type{Kind: "Utf8"}}},
+		}}}, want: `invalid generated property name "this"`},
+		{name: "this property", a: &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{
+			Name: "objects", Columns: []model.Column{{Name: "this", Type: model.Type{Kind: "Utf8"}}},
+		}}}}, want: `invalid generated property name "this"`},
+		{name: "type", a: &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+			Name: "Bad", Command: model.Exec, SQL: "SELECT $x;", SQLWithoutDeclarations: "SELECT $x;",
+			Parameters: []model.Parameter{{Name: "x", Type: model.Type{Kind: "List"}}},
+		}}}, want: `unsupported YQL type "List"`},
+		{name: "malformed result", a: &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+			Name: "Bad", Command: model.One, SQL: "SELECT 1;",
+		}}}, want: "one non-empty result set"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Generate(tc.a, tc.o)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v, want error containing %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestUnicodeIdentifiersCompile(t *testing.T) {
+	in := &model.AnalysisResult{
+		Catalog: model.Catalog{Tables: []model.Table{{Name: "авторы", Columns: []model.Column{{Name: "имя", Type: model.Type{Kind: "Utf8"}}}}}},
+		Queries: []model.AnalyzedQuery{{Name: "ЗаписатьИмя", Command: model.Exec, SQL: "SELECT 1;", Parameters: []model.Parameter{{Name: "имя", Type: model.Type{Kind: "Utf8"}}}}},
+	}
+	files, err := Generate(in, Options{Namespace: "Пример"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	queries := generatedFile(t, files, "Queries.php")
+	if !strings.Contains(queries, "function записатьИмя(string $имя)") {
+		t.Fatalf("unexpected Unicode method or parameter name:\n%s", queries)
+	}
+	generatedFile(t, files, "Авторы.php")
+	php, err := exec.LookPath("php")
+	if err != nil {
+		t.Skip("php is unavailable")
+	}
+	dir := t.TempDir()
+	for _, file := range files {
+		path := filepath.Join(dir, file.Name)
+		if err := os.WriteFile(path, file.Content, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if out, err := exec.Command(php, "-l", path).CombinedOutput(); err != nil {
+			t.Fatalf("generated %s is invalid PHP: %v\n%s", file.Name, err, out)
+		}
+	}
+}
+
+func TestSupportsAllScalarTypesWithoutFallbacks(t *testing.T) {
+	types := []model.Type{
+		{Kind: "Bool"}, {Kind: "Int8"}, {Kind: "Uint8"}, {Kind: "Int16"}, {Kind: "Uint16"},
+		{Kind: "Int32"}, {Kind: "Uint32"}, {Kind: "Int64"}, {Kind: "Uint64"},
+		{Kind: "Float"}, {Kind: "Double"}, {Kind: "Utf8"}, {Kind: "String"},
+		{Kind: "Json"}, {Kind: "JsonDocument"}, {Kind: "Timestamp"},
+	}
+	params := make([]model.Parameter, 0, len(types)*2)
+	columns := make([]model.Column, 0, len(types)*2)
+	for _, typ := range types {
+		name := strings.ToLower(typ.Kind)
+		params = append(params, model.Parameter{Name: name, Type: typ}, model.Parameter{Name: "optional_" + name, Type: model.Optional(typ)})
+		columns = append(columns, model.Column{Name: name, Type: typ}, model.Column{Name: "optional_" + name, Type: model.Optional(typ)})
+	}
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name: "AllTypes", Command: model.One, SQL: "SELECT 1;", SQLWithoutDeclarations: "SELECT 1;",
+		Parameters: params, ResultSets: []model.ResultSet{{Columns: columns}},
+	}}}
+	if _, err := Generate(a, Options{}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func phpQuote(value string) string {
+	return "'" + strings.ReplaceAll(strings.ReplaceAll(value, `\`, `\\`), `'`, `\'`) + "'"
+}

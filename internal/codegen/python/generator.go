@@ -417,13 +417,13 @@ func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQ
 		if q.Command == model.One {
 			b.WriteString(indent + "if not rows:\n" + indent + "    return None\n" + indent + "row = rows[0]\n" + indent + "return models." + row + "(\n")
 			for i, c := range q.ResultSets[0].Columns {
-				b.WriteString(indent + "    " + fieldName(c.Name) + "=" + rowValue(o.Runtime, c.Name, i) + ",\n")
+				b.WriteString(indent + "    " + fieldName(c.Name) + "=" + rowValue(o.Runtime, c.ResultName(), i) + ",\n")
 			}
 			b.WriteString(indent + ")\n")
 		} else {
 			b.WriteString(indent + "return (models." + row + "(\n")
 			for i, c := range q.ResultSets[0].Columns {
-				b.WriteString(indent + "    " + fieldName(c.Name) + "=" + rowValue(o.Runtime, c.Name, i) + ",\n")
+				b.WriteString(indent + "    " + fieldName(c.Name) + "=" + rowValue(o.Runtime, c.ResultName(), i) + ",\n")
 			}
 			b.WriteString(indent + ") for row in rows)\n")
 		}

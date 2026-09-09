@@ -65,6 +65,7 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		return query, diagnostics
 	}
 	tree := collectQueryTree(parsed.tree)
+	query.SQLWithoutDeclarations = withoutDeclarations(block.text, parsed.tokens, tree.declares)
 	diagnostics = append(diagnostics, validateQueryStatements(block, tree)...)
 	dataStatements := len(tree.selects) + len(tree.insert) + len(tree.updates) + len(tree.deletes)
 	if dataStatements != 1 {
@@ -391,10 +392,17 @@ func selectProjection(block queryBlock, selectCore *parser.Select_coreContext, r
 		}
 		if alias != "" {
 			column.Name = alias
+			column.WireName = ""
 		}
 		if alias == "" && !pure {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, result, "computed result expressions require an explicit AS alias"))
 			continue
+		}
+		if alias == "" && pure && len(relations) > 1 {
+			refs := columnRefs(expr)
+			if len(refs) == 1 && refs[0].qualifier != "" {
+				column.WireName = qualifiedName(refs[0])
+			}
 		}
 		columns = append(columns, column)
 	}

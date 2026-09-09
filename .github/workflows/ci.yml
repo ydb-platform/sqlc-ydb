@@ -8,6 +8,8 @@ on:
 jobs:
   standalone:
     runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_JOBS: 1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -22,19 +24,39 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-      - name: Build and test standalone generator
-        run: |
-          make test-release
-          go test -p 1 ./...
-          make build
-      - name: Compile all generated scalar bindings against published SDKs
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: examples/package-lock.json
+      - uses: dtolnay/rust-toolchain@1.95.0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: bcmath, curl, grpc-1.78.0
+          tools: composer:2.8
+          coverage: none
+      - name: Check standalone generator and generated outputs
+        run: make check
+      - name: Compile generated code against published SDKs
         env:
           SQLC_YDB_CSHARP_DOTNET: dotnet
           SQLC_YDB_TEST_MAVEN: mvn
+          SQLC_YDB_RUST_SDK_CHECK: "1"
           DOTNET_CLI_TELEMETRY_OPTOUT: '1'
-        run: go test -p 1 -count=1 ./internal/codegen/csharp ./internal/codegen/java
-      - name: Verify generated examples
-        run: make check-examples
+        run: go test -p 1 -count=1 ./internal/codegen/csharp ./internal/codegen/java ./internal/codegen/rust
+      - name: Compile all Dapper and linq2db examples
+        run: dotnet build examples/csharp/GeneratedProfiles.csproj
+      - name: Check JavaScript examples against the pinned SDK
+        working-directory: examples
+        run: npm ci --ignore-scripts && npm run check
+      - name: Compile and test Rust examples against the pinned SDK
+        run: cargo test --manifest-path examples/rust/Cargo.toml --locked
+      - name: Check PHP examples against the pinned SDK
+        working-directory: examples/php
+        run: |
+          composer install --no-interaction --prefer-dist
+          composer check
 
   ydb-acceptance:
     runs-on: ubuntu-latest
@@ -57,6 +79,7 @@ jobs:
     env:
       SQLC_YDB_TEST_DSN: grpc://localhost:2136/local
       SQLC_YDB_TEST_PYTHON: python3
+      CARGO_BUILD_JOBS: 1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -71,6 +94,24 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: examples/package-lock.json
+      - uses: dtolnay/rust-toolchain@1.95.0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: bcmath, curl, grpc-1.78.0
+          tools: composer:2.8
+          coverage: none
+      - name: Install and compile new runtime examples
+        run: |
+          dotnet build examples/csharp/GeneratedProfiles.csproj
+          npm ci --prefix examples --ignore-scripts
+          cargo test --manifest-path examples/rust/Cargo.toml --locked --no-run
+          composer install --working-dir=examples/php --no-interaction --prefer-dist
       - name: Install tested Python runtimes
         run: python3 -m pip install -r examples/authors/python/requirements.txt
       # Keep local-ydb acceptance sequential: concurrent tests/compilers can
@@ -79,10 +120,8 @@ jobs:
         run: go test -p 1 -count=1 -timeout=180s ./internal/codegen/golang -run TestLiveYDB -v
       - name: Run Python generator runtime tests
         run: go test -p 1 -count=1 -timeout=180s ./internal/codegen/python -run TestLiveYDB -v
-      - name: Generate and execute all Go examples sequentially
+      - name: Execute all Go examples sequentially
         run: |
-          make generate
-          git diff --exit-code -- examples
           cd examples
           go test -p 1 -count=1 -timeout=180s ./... -v
       - name: Run Python authors example
@@ -96,6 +135,20 @@ jobs:
         run: dotnet run --project csharp/adonet/Authors.AdoNet.csproj
       - name: Run Java native, JDBC, Spring and Hibernate examples sequentially
         run: sh examples/authors/java/run-smoke.sh
+      - name: Run Dapper and linq2db examples sequentially
+        env:
+          SQLC_YDB_TEST_DSN: Host=localhost;Port=2136;Database=/local
+        run: |
+          dotnet run --project examples/csharp/GeneratedProfiles.csproj --no-build -- dapper
+          dotnet run --project examples/csharp/GeneratedProfiles.csproj --no-build -- linq2db
+      - name: Run all JavaScript examples sequentially
+        working-directory: examples
+        run: npm run smoke
+      - name: Run all Rust examples sequentially
+        run: cargo test --manifest-path examples/rust/Cargo.toml --locked --test live_smoke -- --nocapture
+      - name: Run all PHP examples sequentially
+        working-directory: examples/php
+        run: composer smoke
 
   cpp-acceptance:
     runs-on: ubuntu-24.04

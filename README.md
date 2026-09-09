@@ -1,8 +1,9 @@
 # sqlc-ydb
 
-Generate typed Go, Python, C++, C#, and Java query code from YQL for YDB. One executable contains
-the parser, semantic analyzer, and generators. Generation works offline and does
-not require a running YDB, Python, or any separately installed codegen plugin.
+Generate typed query code from YQL for YDB in Go, Python, C++, C#, Java,
+JavaScript, Rust and PHP. One executable contains the parser, semantic analyzer
+and generators. Generation works offline and does not require a running YDB,
+Python, or any separately installed codegen plugin.
 
 This is the first standalone development version, preparing for release 0.0.1.
 No release is implied by the version number; see the [changelog](CHANGELOG.md)
@@ -20,21 +21,16 @@ go build -o bin/sqlc-ydb ./cmd/sqlc-ydb
 ./bin/sqlc-ydb diff -f examples/authors/sqlc.yaml
 ```
 
-The example generates Go using the native YDB SDK and `database/sql`; Python
-using the native SDK, DB-API, and SQLAlchemy; C++ using the native SDK and userver;
-C# using `Ydb.Sdk.Ado`; and Java using the native SDK, JDBC, Spring JDBC, and
-Hibernate. The generated application needs the
-corresponding runtime library; the generator itself does not.
-
-The example groups generated code and dependencies by language:
-`go/database/sql`, `go/native`, `python/dbapi`, `python/sqlalchemy`, and
-`python/native`, `cpp/native`, `cpp/userver`, `csharp/adonet`, and
-`java/{native,jdbc,spring,hibernate}`. Shared `schema.sql`, `queries.sql`, and `sqlc.yaml` stay in
-`examples/authors`.
+The authors example includes every [built-in target](docs/targets.md), with code
+organized by language and runtime, such as `go/native`, `csharp/dapper`,
+`javascript/native`, `rust/native` and `php/native`. Schema, queries and
+configuration stay in `examples/authors`. Only the generated application needs
+the corresponding runtime library.
 
 [All upstream example families](examples/README.md) are also adapted for YDB:
 authors, batch, booktest, jets and ondeck. Run `make generate` to regenerate them
-and `make check-examples` to verify SQL and generated Go code.
+and `make check-examples` to verify analysis, generated outputs, Go builds and
+Python syntax.
 
 ```yaml
 version: "2"
@@ -81,10 +77,10 @@ unresolved types must produce an error rather than an untyped fallback.
 
 See [compatibility](docs/compatibility.md), [targets](docs/targets.md),
 [architecture](docs/architecture.md), [compiler roadmap](docs/roadmap.md), and
-[development](docs/development.md) for
-the implemented scope and remaining work. Target-specific configuration and
-examples are described in [C++](docs/cpp.md), [C#](docs/csharp.md), and
-[Java](docs/java.md).
+[development](docs/development.md) for the implemented scope and remaining work.
+Target-specific configuration and examples are described in [C++](docs/cpp.md),
+[C#](docs/csharp.md), [Java](docs/java.md), [JavaScript](docs/javascript.md),
+[Rust](docs/rust.md), and [PHP](docs/php.md).
 
 The user guide is planned for the SQLC section of ydb.tech near release. The
 repository currently contains the quick start, technical references and executable

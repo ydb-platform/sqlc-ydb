@@ -14,9 +14,9 @@ limits; successful parsing alone does not establish semantic support.
 | `internal/source` | Input ordering and migration Up sections |
 | `internal/analyzer` | Direct YQL parse contexts, catalog evolution, name/type resolution and diagnostics |
 | `internal/model` | Resolved query/catalog data shared by generators; not an AST |
-| `internal/codegen/{golang,python,cpp,csharp,java}` | Language naming and SDK-specific bindings, decoding and source rendering |
+| `internal/codegen/{golang,python,cpp,csharp,java,javascript,rust,php}` | Language naming and SDK-specific bindings, decoding and source rendering |
 | `internal/endtoend` | CLI fixtures, expected diagnostics and generated golden files |
-| `examples` | All upstream example families adapted for YDB; shared Go module and sequential live tests; authors covers every language |
+| `examples` | All upstream example families adapted for YDB; shared language dependencies and sequential live tests |
 | `.github/workflows` | Offline verification and sequential acceptance steps per host |
 
 ## Sources of truth
@@ -26,7 +26,8 @@ limits; successful parsing alone does not establish semantic support.
   migrations, intentional exclusions and output ownership.
 - [Architecture](../docs/architecture.md): current stages and responsibilities.
 - [Targets](../docs/targets.md), [C++](../docs/cpp.md), [C#](../docs/csharp.md),
-  [Java](../docs/java.md): generated API and runtime contracts.
+  [Java](../docs/java.md), [JavaScript](../docs/javascript.md),
+  [Rust](../docs/rust.md), [PHP](../docs/php.md): generated API and runtime contracts.
 - [Development](../docs/development.md): commands and validation requirements.
 - [Roadmap](../docs/roadmap.md): shared macros and deferred database-assisted analysis.
 - [Release plan](../docs/release-plan.md): release gates, ydb.tech documentation,

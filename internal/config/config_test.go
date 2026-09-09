@@ -53,13 +53,28 @@ func TestRejectUnsupportedConfiguration(t *testing.T) {
 
 func TestAdditionalBuiltinTargets(t *testing.T) {
 	base := "version: '2'\nsql:\n- engine: ydb\n  schema: s.sql\n  queries: q.sql\n  gen:\n"
-	c, err := Parse([]byte(base + "    cpp:\n      out: cpp\n    csharp:\n      out: cs\n    java:\n      out: java\n"))
+	c, err := Parse([]byte(base + "    cpp:\n      out: cpp\n    csharp:\n      out: cs\n    java:\n      out: java\n    javascript:\n      out: js\n    rust:\n      out: rust\n    php:\n      out: php\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	g := c.SQL[0].Gen
 	if g.CPP.Namespace != "db" || g.CPP.Runtime != "ydb" || g.CSharp.Namespace != "Db" || g.Java.Package != "db" || g.Java.Runtime != "ydb" {
 		t.Fatalf("unexpected defaults: %+v %+v %+v", g.CPP, g.CSharp, g.Java)
+	}
+	if g.CSharp.Runtime != "adonet" || g.JavaScript.Runtime != "ydb" || g.Rust.Runtime != "ydb" || g.PHP.Runtime != "ydb" || g.PHP.Namespace != "Db" {
+		t.Fatalf("unexpected new target defaults: %+v %+v %+v %+v", g.CSharp, g.JavaScript, g.Rust, g.PHP)
+	}
+	for _, runtime := range []string{"adonet", "dapper", "linq2db"} {
+		if _, err := Parse([]byte(base + "    csharp:\n      out: cs\n      runtime: " + runtime + "\n")); err != nil {
+			t.Fatalf("C# %s: %v", runtime, err)
+		}
+	}
+	for _, target := range []string{"javascript", "rust", "php"} {
+		for _, options := range []string{"{}", "{out: output, runtime: imaginary}"} {
+			if _, err := Parse([]byte(base + "    " + target + ": " + options + "\n")); err == nil {
+				t.Errorf("accepted invalid %s options: %s", target, options)
+			}
+		}
 	}
 	for _, runtime := range []string{"native", "ydb", "jdbc", "spring", "hibernate"} {
 		if _, err := Parse([]byte(base + "    java:\n      out: java\n      runtime: " + runtime + "\n")); err != nil {

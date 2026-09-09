@@ -1,0 +1,210 @@
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/vendor/autoload.php';
+
+use YdbPlatform\Ydb\Session;
+use YdbPlatform\Ydb\Table;
+use YdbPlatform\Ydb\Ydb;
+
+function check(bool $condition, string $message): void
+{
+    if (!$condition) {
+        throw new RuntimeException($message);
+    }
+}
+
+function source(string $relative): string
+{
+    $content = file_get_contents(dirname(__DIR__) . '/' . $relative);
+    if ($content === false) {
+        throw new RuntimeException('Cannot read ' . $relative);
+    }
+    return $content;
+}
+
+function scheme(Table $table, string $sql): void
+{
+    $table->retrySession(static function (Session $session) use ($sql): void {
+        $session->schemeQuery($sql);
+    }, true);
+}
+
+function dropTables(Table $table, array $names): void
+{
+    foreach ($names as $name) {
+        scheme($table, 'DROP TABLE ' . $name . ';');
+    }
+}
+
+/** @return list<string> */
+function createTables(Table $table, string $sql, array $names): array
+{
+    $statements = array_values(array_filter(array_map('trim', explode(';', $sql))));
+    if (count($statements) !== count($names)) {
+        throw new RuntimeException('Schema statement count does not match its table list');
+    }
+
+    $created = [];
+    try {
+        foreach ($statements as $index => $statement) {
+            scheme($table, $statement . ';');
+            $created[] = $names[$index];
+        }
+    } catch (Throwable $error) {
+        dropTables($table, array_reverse($created));
+        throw $error;
+    }
+
+    return array_reverse($created);
+}
+
+function runAuthors(Table $table): void
+{
+    $createdTables = createTables($table, source('authors/schema.sql'), ['authors']);
+    try {
+        $queries = new Authors\Native\Queries($table);
+        $id = '18446744073709551615';
+        check($queries->getAuthor($id) === null, 'authors: missing :one row is not null');
+        $created = $queries->createAuthor(new Authors\Native\CreateAuthorParams($id, 'Ada', null));
+        check($created?->id === $id && $created->name === 'Ada' && $created->bio === null, 'authors: create/decode failed');
+        check($queries->getAuthorName($id)?->name === 'Ada', 'authors: scalar row failed');
+        check($queries->listAuthors()[0]->id === $id, 'authors: :many failed');
+        $queries->upsertAuthor(new Authors\Native\UpsertAuthorParams($id, 'Ada Lovelace', 'programmer'));
+        check($queries->getAuthor($id)?->bio === 'programmer', 'authors: upsert failed');
+        $queries->deleteAuthor($id);
+        check($queries->getAuthor($id) === null, 'authors: delete failed');
+    } finally {
+        dropTables($table, $createdTables);
+    }
+}
+
+function runBatch(Table $table): void
+{
+    $createdTables = createTables($table, source('batch/schema.sql'), ['authors', 'books']);
+    try {
+        $queries = new Batch\Native\Queries($table);
+        $authorId = '18446744073709551615';
+        $bookId = '18446744073709551614';
+        $author = $queries->createAuthor(new Batch\Native\CreateAuthorParams($authorId, 'Octavia', '{"born":1947}'));
+        check($author?->authorId === $authorId && $author->biography === '{"born":1947}', 'batch: author Json failed');
+        $available = 1788957296789123;
+        $book = $queries->createBook(new Batch\Native\CreateBookParams($bookId, $authorId, '978-0', 'novel', 'Kindred', 1979, $available, '["history","science-fiction"]'));
+        check($book?->bookId === $bookId && $book->available === $available && $book->tags === '["history","science-fiction"]', 'batch: Uint64/Timestamp/Json decode failed');
+        check($queries->booksByYear(1979)[0]->authorId === $authorId, 'batch: filtered :many failed');
+        $queries->updateBook(new Batch\Native\UpdateBookParams('Kindred (updated)', '{"shelf":"read"}', $bookId));
+        check($queries->getBiography($authorId)?->biography === '{"born":1947}', 'batch: Optional<Json> decode failed');
+        $queries->deleteBook($bookId);
+        $queries->deleteBookExecResult($bookId);
+        $queries->deleteBookNamedFunc($bookId);
+        $queries->deleteBookNamedSign($bookId);
+        check($queries->getAuthor($authorId)?->authorId === $authorId, 'batch: author read failed');
+    } finally {
+        dropTables($table, $createdTables);
+    }
+}
+
+function runBooktest(Table $table): void
+{
+    $createdTables = createTables($table, source('booktest/schema.sql'), ['authors', 'books']);
+    try {
+        $queries = new Booktest\Native\Queries($table);
+        $authorId = '91';
+        $bookId = '92';
+        $queries->createAuthor(new Booktest\Native\CreateAuthorParams($authorId, 'Ursula'));
+        $available = 1735787045678123;
+        $queries->createBook(new Booktest\Native\CreateBookParams($bookId, $authorId, 'isbn', 'novel', 'Earthsea', 1968, $available, '["fantasy"]'));
+        check($queries->getAuthor($authorId)?->name === 'Ursula', 'booktest: author read failed');
+        check($queries->getBook($bookId)?->available === $available, 'booktest: Timestamp lost microseconds');
+        check($queries->booksByTitleYear(new Booktest\Native\BooksByTitleYearParams('Earthsea', 1968))[0]->bookId === $bookId, 'booktest: compound parameters failed');
+        check($queries->booksByTags('["fantasy"]')[0]->name === 'Ursula', 'booktest: LEFT JOIN/Json failed');
+        check($queries->sayHello('YDB')?->greeting === 'hello YDB', 'booktest: scalar expression failed');
+        $queries->updateBook(new Booktest\Native\UpdateBookParams($bookId, 'A Wizard of Earthsea', '["classic"]'));
+        $queries->updateBookIsbn(new Booktest\Native\UpdateBookIsbnParams($bookId, 'A Wizard of Earthsea', '["classic"]', 'new-isbn'));
+        $queries->deleteAuthorBeforeYear(new Booktest\Native\DeleteAuthorBeforeYearParams($authorId, 1900));
+        $queries->deleteBook($bookId);
+        check($queries->getBook($bookId) === null, 'booktest: delete failed');
+    } finally {
+        dropTables($table, $createdTables);
+    }
+}
+
+function runJets(Table $table): void
+{
+    $createdTables = createTables($table, source('jets/schema.sql'), ['pilots', 'jets', 'languages', 'pilot_languages']);
+    try {
+        $queries = new Jets\Native\Queries($table);
+        check($queries->countPilots()?->pilotCount === '0', 'jets: COUNT must decode as Uint64 decimal text');
+        $table->retrySession(static function (Session $session): void {
+            $session->query('UPSERT INTO pilots (id, name) VALUES (1, "Amelia"u), (2, "Bessie"u);');
+            $session->commit();
+        }, false);
+        $pilots = $queries->listPilots();
+        check(count($pilots) === 2 && $pilots[0]->id === 1 && $pilots[1]->name === 'Bessie', 'jets: list failed');
+        $queries->deletePilot(1);
+        check($queries->countPilots()?->pilotCount === '1', 'jets: delete/count failed');
+    } finally {
+        dropTables($table, $createdTables);
+    }
+}
+
+function runOndeck(Table $table): void
+{
+    $createdTables = [];
+    try {
+        scheme($table, source('ondeck/schema/0001_city.sql'));
+        $createdTables[] = 'city';
+        scheme($table, source('ondeck/schema/0002_venue.sql'));
+        $createdTables[] = 'venues';
+        scheme($table, source('ondeck/schema/0003_rename_venue.sql'));
+        $createdTables[array_key_last($createdTables)] = 'venue';
+        scheme($table, source('ondeck/schema/0004_add_created_at.sql'));
+        scheme($table, source('ondeck/schema/0005_drop_column.sql'));
+
+        $queries = new Ondeck\Native\Queries($table);
+        $city = $queries->createCity(new Ondeck\Native\CreateCityParams('London', 'london'));
+        check($city?->slug === 'london' && $queries->getCity('london')?->name === 'London', 'ondeck: city create/read failed');
+        $queries->updateCityName(new Ondeck\Native\UpdateCityNameParams('Greater London', 'london'));
+        check($queries->listCities()[0]->name === 'Greater London', 'ondeck: city update/list failed');
+        $createdAt = 1788948672345123;
+        $venue = $queries->createVenue(new Ondeck\Native\CreateVenueParams('7', 'roundhouse', 'Roundhouse', 'london', $createdAt, 'spotify:playlist:1', 'open', '["open"]', '{"genre":"rock"}'));
+        check($venue?->id === '7', 'ondeck: venue create failed');
+        $loaded = $queries->getVenue(new Ondeck\Native\GetVenueParams('roundhouse', 'london'));
+        check($loaded?->createdAt === $createdAt && $loaded->statuses === '["open"]' && $loaded->tags === '{"genre":"rock"}', 'ondeck: optional exact values failed');
+        check($queries->listVenues('london')[0]->id === '7', 'ondeck: venue list failed');
+        check($queries->venueCountByCity()[0]->venueCount === '1', 'ondeck: grouped COUNT failed');
+        check($queries->updateVenueName(new Ondeck\Native\UpdateVenueNameParams('The Roundhouse', 'roundhouse'))?->id === '7', 'ondeck: update RETURNING failed');
+        $queries->deleteVenue('roundhouse');
+        check($queries->getVenue(new Ondeck\Native\GetVenueParams('roundhouse', 'london')) === null, 'ondeck: venue delete failed');
+    } finally {
+        dropTables($table, array_reverse($createdTables));
+    }
+}
+
+$dsn = getenv('SQLC_YDB_TEST_DSN');
+if ($dsn === false || $dsn === '') {
+    throw new RuntimeException('SQLC_YDB_TEST_DSN is required, for example grpc://localhost:2136/local');
+}
+$parts = parse_url($dsn);
+if (!is_array($parts) || !isset($parts['host'], $parts['port'], $parts['path'])) {
+    throw new InvalidArgumentException('SQLC_YDB_TEST_DSN must contain scheme, host, port and database path');
+}
+$ydb = new Ydb([
+    'database' => $parts['path'],
+    'endpoint' => $parts['host'] . ':' . $parts['port'],
+    'discovery' => false,
+    'iam_config' => [
+        'anonymous' => true,
+        'insecure' => ($parts['scheme'] ?? 'grpc') === 'grpc',
+    ],
+]);
+$table = $ydb->table();
+
+runAuthors($table);
+runBatch($table);
+runBooktest($table);
+runJets($table);
+runOndeck($table);
+
+echo "All PHP generated-query examples passed.\n";

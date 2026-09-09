@@ -404,7 +404,7 @@ func renderNativeMethod(out *strings.Builder, query model.AnalyzedQuery, options
 func writeNativeRow(out *strings.Builder, resultSet model.ResultSet, runtime, indent string) {
 	for _, column := range resultSet.Columns {
 		info, _ := typeInfo(column.Type, runtime)
-		out.WriteString(indent + "sqlc_parser.ColumnParser(" + strconv.Quote(column.Name) + ")." + info.parser + "(),\n")
+		out.WriteString(indent + "sqlc_parser.ColumnParser(" + strconv.Quote(column.ResultName()) + ")." + info.parser + "(),\n")
 	}
 }
 
@@ -441,7 +441,7 @@ func renderUserverMethod(out *strings.Builder, query model.AnalyzedQuery, option
 func writeUserverRow(out *strings.Builder, resultSet model.ResultSet, runtime, indent string) {
 	for _, column := range resultSet.Columns {
 		info, _ := typeInfo(column.Type, runtime)
-		out.WriteString(indent + "sqlc_row.Get<" + info.cpp + ">(" + strconv.Quote(column.Name) + "),\n")
+		out.WriteString(indent + "sqlc_row.Get<" + info.cpp + ">(" + strconv.Quote(column.ResultName()) + "),\n")
 	}
 }
 

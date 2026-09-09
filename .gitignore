@@ -7,3 +7,5 @@ __pycache__/
 **/obj/
 examples/**/bin/
 examples/**/build/
+examples/node_modules/
+examples/php/vendor/

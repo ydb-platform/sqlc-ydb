@@ -12,10 +12,11 @@ the version and moves these entries into a numbered section at release time.
 - Direct ANTLR YQL parsing, semantic analysis, and supported schema migration
   operations applied to an in-memory catalog.
 - Built-in Go (native SDK, database/sql), Python (native SDK, DB-API, SQLAlchemy),
-  C++ (native SDK, userver), C# (ADO.NET), and Java (native SDK, JDBC, Spring JDBC,
-  Hibernate) generators.
+  C++ (native SDK, userver), C# (ADO.NET, Dapper, linq2db), Java (native SDK,
+  JDBC, Spring JDBC, Hibernate), JavaScript, Rust and PHP generators.
 - YDB adaptations of all upstream example families: authors, batch, booktest,
-  jets and ondeck, with Go native SDK and database/sql execution checks.
+  jets and ondeck, with Go native SDK, database/sql, C# Dapper and linq2db,
+  JavaScript, Rust and PHP generation and execution checks.
 - Shared authors examples for all built-in languages, exact generated-output fixtures, SQL literal
   round-trip tests, SDK compilation checks, and sequential live-YDB acceptance.
 - Release packaging for Linux, macOS, and Windows on amd64 and arm64, with

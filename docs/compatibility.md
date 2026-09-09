@@ -14,8 +14,10 @@ internal data structures and source history are not a dependency.
   `sqlalchemy`. Go adds `sql_package: ydb` alongside `database/sql`.
 - `gen.cpp` selects `runtime: ydb|userver`; `gen.java` selects
   `runtime: ydb|jdbc|spring|hibernate`. `native` is an alias for `ydb` in these
-  two targets. `gen.csharp` uses the modern YDB ADO.NET SDK without a runtime
-  selector: the SDK's native API is already ADO.NET.
+  two targets. `gen.csharp.runtime` selects `adonet` (the default), `dapper`,
+  or `linq2db`; all three use the YDB ADO.NET provider.
+- `gen.javascript`, `gen.rust`, and `gen.php` use `runtime: ydb` (the default).
+  They generate code for the official YDB SDKs.
 - No intermediate AST. ANTLR parse contexts feed semantic analysis directly.
 
 ## Implemented workflow
@@ -44,9 +46,10 @@ internal data structures and source history are not a dependency.
   asynchronous generation currently fails explicitly.
   The Python package directory is selected by `out`; remove `gen.python.package`
   from older configurations. That option was ignored and now produces an error.
-- C++ options `namespace`, `out`, `runtime`; C# options `namespace`, `out`;
-  Java options `package`, `out`, `runtime`. These are built-in extensions to
-  the sqlc configuration shape, not external plugin options.
+- C++ and C# options `namespace`, `out`, `runtime`;
+  Java options `package`, `out`, `runtime`; JavaScript and Rust options
+  `out`, `runtime`; PHP options `namespace`, `out`, `runtime`. These are built-in
+  extensions to the sqlc configuration shape, not external plugin options.
 - Unknown configuration options produce errors. Generation never silently
   discards an option that has not been implemented.
 

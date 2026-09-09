@@ -69,3 +69,41 @@ The [Java guide](java.md) defines the generated API and resource ownership.
   and Hibernate [doReturningWork](https://docs.hibernate.org/orm/6.6/javadocs/org/hibernate/SharedSessionContract.html#doReturningWork(org.hibernate.jdbc.ReturningWork))
   provide the selected SQL execution APIs. The generator does not infer JPA
   entities from query projections or require Spring Data repository support.
+
+## C# framework, JavaScript, Rust and PHP references
+
+Sources inspected for these targets on 2026-09-09:
+
+| Source | Snapshot | Verified dependency |
+| --- | --- | --- |
+| [YDB .NET SDK](https://github.com/ydb-platform/ydb-dotnet-sdk) | `236bfa176940feafbf61f11c1cb9fc000572b237` | `Ydb.Sdk` 0.35.0 |
+| [Dapper](https://github.com/DapperLib/Dapper) | `6d48ef664acc7298c649e2d449d903b3360d5a90` | 2.1.79 |
+| [linq2db](https://github.com/linq2db/linq2db/tree/v6.4.0) | `82fbf0f91399cc8c9cea22d09dcae20e4d7568c6` | 6.4.0 |
+| [YDB Rust SDK](https://github.com/ydb-platform/ydb-rs-sdk) | `fe2d4507781713b634c6584c189e05e58adbc254` | `ydb` 0.18.2 |
+
+Dapper uses `CommandDefinition`, `IDynamicParameters` and reader execution;
+linq2db supplies a YDB provider and `YdbTools` connection/transaction adapters.
+Both accept explicit YDB typed values. See [C#](csharp.md) for ownership and
+mapping choices. Dependency pins are shared across all example families.
+
+Rust's public `From<Option<T>> for Value` implementation requires
+`T: Into<Value> + Default`. Small generated wrappers preserve JSON and temporal
+wire types, including typed nulls, without changing the SDK. `query_result_set`
+provides first-row semantics for `:one`; the SDK's stricter `query_row` would
+reject a result containing several rows.
+
+The [JavaScript SDK](https://github.com/ydb-platform/ydb-js-sdk) was inspected at
+`96793dbf49165581a1d5c21afff47905c720f44d`. Its published modules are
+`@ydbjs/core` 6.3.1, `@ydbjs/query` 6.3.0 and `@ydbjs/value` 6.0.8, pinned in
+[the shared npm lockfile](../examples/package-lock.json).
+The query package reconstructs declarations from `.parameter()` values. The
+analyzer supplies declaration-free SQL using original ANTLR token spans. The
+SDK's public `.raw()` result mode and primitive value constructors preserve
+microsecond timestamps without conversion through JavaScript `Date`.
+
+The [PHP SDK](https://github.com/ydb-platform/ydb-php-sdk) is pinned to 1.16.1
+(`5bce112ff6cc4a5eca83147232813cc94a675a50`) in
+[the shared Composer lockfile](../examples/php/composer.lock). Main was inspected
+at `56a783e39368745a35a7bc3e206d4a8200184805`. The generated bridge uses the
+public `Table` accessors and `RequestTrait` to retain raw protobuf result values;
+[PHP](php.md) explains why the high-level result conversion is unsuitable.

@@ -35,6 +35,7 @@ func liveAnalysis(table string) *model.AnalysisResult {
 	return &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: table, Columns: cols}}}, Queries: []model.AnalyzedQuery{
 		{Name: "insert_author", Command: model.Exec, SQL: decl + "INSERT INTO " + table + " (id,name,blob) VALUES ($id,$name,$blob);", Parameters: []model.Parameter{{Name: "id", Type: id}, {Name: "name", Type: utf8}, {Name: "blob", Type: blob}}},
 		{Name: "get_author", Command: model.One, SQL: "DECLARE $id AS Uint64; SELECT id,name,blob FROM " + table + " WHERE id=$id;", Parameters: []model.Parameter{{Name: "id", Type: id}}, ResultSets: []model.ResultSet{{Columns: cols}}},
+		{Name: "get_joined_author", Command: model.One, SQL: "DECLARE $id AS Uint64; SELECT a.id FROM " + table + " AS a INNER JOIN " + table + " AS b ON a.id=b.id WHERE a.id=$id;", Parameters: []model.Parameter{{Name: "id", Type: id}}, ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", WireName: "a.id", Type: id, Table: table}}}}},
 		{Name: "find_author", Command: model.One, SQL: "DECLARE $name AS Optional<Utf8>; SELECT id,name,blob FROM " + table + " WHERE ($name IS NULL OR name=$name);", Parameters: []model.Parameter{{Name: "name", Type: model.Optional(utf8)}}, ResultSets: []model.ResultSet{{Columns: cols}}},
 		{Name: "list_authors", Command: model.Many, SQL: "SELECT id,name,blob FROM " + table + " ORDER BY id;", ResultSets: []model.ResultSet{{Columns: cols}}},
 		{Name: "delete_author", Command: model.Exec, SQL: "DECLARE $id AS Uint64; DELETE FROM " + table + " WHERE id=$id;", Parameters: []model.Parameter{{Name: "id", Type: id}}},
@@ -303,7 +304,9 @@ func TestGeneratedSQLAlchemySQLConstantRoundTripsLexicalRewrite(t *testing.T) {
 
 func TestGeneratedYDBQuerierWithMockAdapter(t *testing.T) {
 	a := sampleAnalysis()
-	a.Queries = a.Queries[:1]
+	a.Queries = a.Queries[:2]
+	a.Queries[0].ResultSets[0].Columns[0].WireName = "a.id"
+	a.Queries[1].ResultSets[0].Columns[0].WireName = "a.id"
 	files, err := Generate(a, Options{Runtime: "ydb", EmitSyncQuerier: true})
 	if err != nil {
 		t.Fatal(err)
@@ -345,10 +348,13 @@ class Pool:
         self.calls.append((sql, parameters))
         return self.results
 
-pool = Pool([ydb.ResultSet([ydb.Row(id=7, display_name=None)])])
+pool = Pool([ydb.ResultSet([ydb.Row({'a.id': 7, 'display_name': None})])])
 row = Querier(pool).get_author(7)
 assert row.id == 7 and row.display_name is None
 assert pool.calls[0][1]['$id'].type == ydb.PrimitiveType.Uint64
+pool.results = [ydb.ResultSet([ydb.Row({'a.id': 8})])]
+rows = list(Querier(pool).list_authors())
+assert len(rows) == 1 and rows[0].id == 8
 assert Querier(Pool([ydb.ResultSet([])])).get_author(7) is None
 
 try:
@@ -374,7 +380,9 @@ else:
 
 func TestGeneratedSQLAlchemyClosesResultsWithMockAdapter(t *testing.T) {
 	a := sampleAnalysis()
-	a.Queries = a.Queries[:1]
+	a.Queries = a.Queries[:2]
+	a.Queries[0].ResultSets[0].Columns[0].WireName = "a.id"
+	a.Queries[1].ResultSets[0].Columns[0].WireName = "a.id"
 	a.Queries[0].SQL = "-- name: get_author :one\nDECLARE $id AS Uint64; SELECT '$ghost', `x` FROM authors WHERE id = $id;"
 	files, err := Generate(a, Options{Runtime: "sqlalchemy", EmitSyncQuerier: true})
 	if err != nil {
@@ -413,20 +421,23 @@ from db.queries import Querier
 class Row:
     def __init__(self, values): self._mapping = values
 class R:
-    def __init__(self, fail): self.closed = False; self.fail = fail
+    def __init__(self, fail, values): self.closed = False; self.fail = fail; self.values = values
     def fetchall(self):
         if self.fail: raise RuntimeError("fetch failure")
-        return [Row({'id': 7, 'display_name': None})]
+        return [Row(self.values)]
     def close(self): self.closed = True
 class C:
-    def __init__(self): self.calls = []; self.fail = False
+    def __init__(self): self.calls = []; self.fail = False; self.values = {'a.id': 7, 'display_name': None}
     def execute(self, sql, params):
-        self.calls.append((sql, params)); self.result = R(self.fail); return self.result
+        self.calls.append((sql, params)); self.result = R(self.fail, self.values); return self.result
 c = C()
 row = Querier(c).get_author(7)
 assert row.id == 7 and row.display_name is None and c.result.closed
 assert c.calls[0][1]['id'][0] == 7
 assert r'\:one' in c.calls[0][0] and 'id = :id;' in c.calls[0][0], repr(c.calls[0][0])
+c.values = {'a.id': 8}
+rows = list(Querier(c).list_authors())
+assert len(rows) == 1 and rows[0].id == 8 and c.result.closed
 c.fail = True
 try: Querier(c).get_author(7)
 except RuntimeError: pass
@@ -443,6 +454,7 @@ assert c.result.closed
 func TestGeneratedDBAPIClosesCursorAndPreservesTransaction(t *testing.T) {
 	a := sampleAnalysis()
 	a.Queries = a.Queries[:1]
+	a.Queries[0].ResultSets[0].Columns[0].WireName = "a.id"
 	files, err := Generate(a, Options{Runtime: "dbapi", EmitSyncQuerier: true})
 	if err != nil {
 		t.Fatal(err)
@@ -505,19 +517,19 @@ table = %q
 pool.execute_with_retries("CREATE TABLE %%s (id Uint64, name Utf8, blob String, PRIMARY KEY(id));" %% table)
 try:
     y = YQuerier(pool); y.insert_author(1, "one", b"bytes")
-    assert y.get_author(1).blob == b"bytes" and y.get_author(99) is None
+    assert y.get_author(1).blob == b"bytes" and y.get_author(99) is None and y.get_joined_author(1).id == 1
     assert list(y.list_authors())[0].name == "one"; y.find_author(None); y.find_author("one")
     import ydb_dbapi
     host, port = u.hostname, u.port
     c = ydb_dbapi.connect(host=host, port=port, database=database, protocol=u.scheme)
     from dbapi_generated.queries import Querier as DQuerier
-    d = DQuerier(c); d.insert_author(2, "two", b"two"); assert d.get_author(2).blob == b"two"; assert d.get_author(999) is None; c.close()
+    d = DQuerier(c); d.insert_author(2, "two", b"two"); assert d.get_author(2).blob == b"two"; assert d.get_joined_author(2).id == 2; assert d.get_author(999) is None; c.close()
     import sqlalchemy as sa
     import ydb.sqlalchemy
     e = sa.create_engine("yql+ydb://%%s/%%s" %% (u.netloc, database.lstrip("/")))
     with e.begin() as conn:
         from sa_generated.queries import Querier as SQuerier
-        s = SQuerier(conn); s.insert_author(3, "three", b"three"); assert s.get_author(3).name == "three"; assert s.get_author(999) is None
+        s = SQuerier(conn); s.insert_author(3, "three", b"three"); assert s.get_author(3).name == "three"; assert s.get_joined_author(3).id == 3; assert s.get_author(999) is None
     e.dispose()
 finally:
     pool.execute_with_retries("DROP TABLE IF EXISTS %%s;" %% table); driver.stop()

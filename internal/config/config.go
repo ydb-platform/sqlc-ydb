@@ -60,6 +60,7 @@ type CPP struct {
 type CSharp struct {
 	Namespace string `yaml:"namespace"`
 	Out       string `yaml:"out"`
+	Runtime   string `yaml:"runtime"`
 }
 
 type Java struct {
@@ -68,12 +69,31 @@ type Java struct {
 	Runtime string `yaml:"runtime"`
 }
 
+type JavaScript struct {
+	Out     string `yaml:"out"`
+	Runtime string `yaml:"runtime"`
+}
+
+type Rust struct {
+	Out     string `yaml:"out"`
+	Runtime string `yaml:"runtime"`
+}
+
+type PHP struct {
+	Namespace string `yaml:"namespace"`
+	Out       string `yaml:"out"`
+	Runtime   string `yaml:"runtime"`
+}
+
 type Gen struct {
-	Go     *Go     `yaml:"go"`
-	Python *Python `yaml:"python"`
-	CPP    *CPP    `yaml:"cpp"`
-	CSharp *CSharp `yaml:"csharp"`
-	Java   *Java   `yaml:"java"`
+	Go         *Go         `yaml:"go"`
+	Python     *Python     `yaml:"python"`
+	CPP        *CPP        `yaml:"cpp"`
+	CSharp     *CSharp     `yaml:"csharp"`
+	Java       *Java       `yaml:"java"`
+	JavaScript *JavaScript `yaml:"javascript"`
+	Rust       *Rust       `yaml:"rust"`
+	PHP        *PHP        `yaml:"php"`
 }
 
 type SQL struct {
@@ -248,6 +268,14 @@ func Parse(data []byte) (*Config, error) {
 			if g.Namespace == "" {
 				g.Namespace = "Db"
 			}
+			if g.Runtime == "" {
+				g.Runtime = "adonet"
+			}
+			switch g.Runtime {
+			case "adonet", "dapper", "linq2db":
+			default:
+				return nil, fmt.Errorf("sql[%d]: unsupported C# runtime %q", i, g.Runtime)
+			}
 		}
 		if g := s.Gen.Java; g != nil {
 			if g.Out == "" {
@@ -265,10 +293,46 @@ func Parse(data []byte) (*Config, error) {
 				return nil, fmt.Errorf("sql[%d]: unsupported Java runtime %q", i, g.Runtime)
 			}
 		}
+		if g := s.Gen.JavaScript; g != nil {
+			if g.Out == "" {
+				return nil, fmt.Errorf("sql[%d].gen.javascript.out is required", i)
+			}
+			if g.Runtime == "" {
+				g.Runtime = "ydb"
+			}
+			if g.Runtime != "ydb" {
+				return nil, fmt.Errorf("sql[%d]: unsupported JavaScript runtime %q", i, g.Runtime)
+			}
+		}
+		if g := s.Gen.Rust; g != nil {
+			if g.Out == "" {
+				return nil, fmt.Errorf("sql[%d].gen.rust.out is required", i)
+			}
+			if g.Runtime == "" {
+				g.Runtime = "ydb"
+			}
+			if g.Runtime != "ydb" {
+				return nil, fmt.Errorf("sql[%d]: unsupported Rust runtime %q", i, g.Runtime)
+			}
+		}
+		if g := s.Gen.PHP; g != nil {
+			if g.Out == "" {
+				return nil, fmt.Errorf("sql[%d].gen.php.out is required", i)
+			}
+			if g.Namespace == "" {
+				g.Namespace = "Db"
+			}
+			if g.Runtime == "" {
+				g.Runtime = "ydb"
+			}
+			if g.Runtime != "ydb" {
+				return nil, fmt.Errorf("sql[%d]: unsupported PHP runtime %q", i, g.Runtime)
+			}
+		}
 	}
 	return &c, nil
 }
 
 func pluginError() error {
-	return errors.New("external plugins and codegen are not supported: migrate to built-in sql[].gen.go, python, cpp, csharp or java generators")
+	return errors.New("external plugins and codegen are not supported: migrate to built-in sql[].gen generators")
 }

@@ -5,6 +5,16 @@ sql:
     schema: schema.sql
     queries: queries.sql
     gen:
+      php:
+        out: php/native
+        namespace: Booktest\Native
+        runtime: ydb
+      javascript:
+        out: javascript/native
+        runtime: ydb
+      rust:
+        out: rust/native
+        runtime: ydb
       go:
         package: booktest
         out: go/native
@@ -21,3 +31,21 @@ sql:
         package: booktest
         out: go/database/sql
         sql_package: database/sql
+  - name: dapper
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      csharp:
+        namespace: Booktest.Dapper
+        out: csharp/dapper
+        runtime: dapper
+  - name: linq2db
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      csharp:
+        namespace: Booktest.Linq2DB
+        out: csharp/linq2db
+        runtime: linq2db

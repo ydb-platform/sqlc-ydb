@@ -68,7 +68,8 @@ func uniqueDiagnostics(diagnostics []model.Diagnostic) []model.Diagnostic {
 }
 
 type parsedYQL struct {
-	tree parser.ISql_queryContext
+	tree   parser.ISql_queryContext
+	tokens []antlr.Token
 }
 
 type syntaxErrorListener struct {
@@ -105,7 +106,7 @@ func parseYQL(file, text string, lineOffset int) (parsedYQL, []model.Diagnostic)
 			})
 		}
 	}
-	return parsedYQL{tree: tree}, listener.diagnostics
+	return parsedYQL{tree: tree, tokens: tokens.GetAllTokens()}, listener.diagnostics
 }
 
 type queryBlock struct {

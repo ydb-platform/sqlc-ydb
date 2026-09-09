@@ -45,10 +45,19 @@ func (t Type) UnwrapOptional() Type {
 }
 
 type Column struct {
-	Name  string
-	Type  Type
-	Table string
+	Name     string
+	WireName string // exact YDB result-set key when it differs from Name
+	Type     Type
+	Table    string
 }
+
+func (c Column) ResultName() string {
+	if c.WireName != "" {
+		return c.WireName
+	}
+	return c.Name
+}
+
 type Table struct {
 	Name       string
 	Columns    []Column
@@ -71,12 +80,15 @@ const (
 )
 
 type AnalyzedQuery struct {
-	Name       string
-	Command    Command
-	SQL        string
-	Parameters []Parameter // names without the leading dollar sign
-	ResultSets []ResultSet
-	Source     Position
+	Name    string
+	Command Command
+	SQL     string
+	// SQLWithoutDeclarations preserves the source except DECLARE tokens. SDKs that
+	// synthesize declarations from typed parameters execute this form instead.
+	SQLWithoutDeclarations string
+	Parameters             []Parameter // names without the leading dollar sign
+	ResultSets             []ResultSet
+	Source                 Position
 }
 
 type AnalysisResult struct {

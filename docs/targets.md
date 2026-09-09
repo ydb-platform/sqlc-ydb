@@ -9,7 +9,12 @@
 | Python SQLAlchemy | `gen.python.runtime: sqlalchemy` | dataclasses and synchronous `Querier` |
 | C++ native SDK | `gen.cpp.runtime: ydb` | `Queries(TQueryClient&)`, structs, optional/vector results |
 | C++ userver | `gen.cpp.runtime: userver` | `Queries(TableClient&)`, userver YDB bindings |
-| C# ADO.NET | `gen.csharp` | async `Queries(YdbConnection)`, records, cancellation and transactions |
+| C# ADO.NET | `gen.csharp.runtime: adonet` | async `Queries(YdbConnection)`, records, cancellation and transactions |
+| C# Dapper | `gen.csharp.runtime: dapper` | async query methods on a borrowed `YdbConnection` |
+| C# linq2db | `gen.csharp.runtime: linq2db` | SQL query methods on a borrowed `DataConnection` |
+| JavaScript | `gen.javascript.runtime: ydb` | ESM queries and TypeScript declarations |
+| Rust | `gen.rust.runtime: ydb` | async methods on a borrowed `QueryClient` |
+| PHP | `gen.php.runtime: ydb` | typed query methods for the YDB SDK |
 | Java native SDK | `gen.java.runtime: ydb` | `Queries(SessionRetryContext)`, Java 17 records |
 | Java JDBC | `gen.java.runtime: jdbc` | `Queries(Connection)`, named YDB prepared statements |
 | Java Spring JDBC | `gen.java.runtime: spring` | `Queries(JdbcTemplate)`, framework-owned connections |
@@ -39,17 +44,19 @@ represents `Uint64` as the full 64-bit `long` bit pattern; use
 `Long.toUnsignedString` for unsigned decimal formatting. C++ uses `uint64_t`
 and C# uses `ulong`. Binary YQL `String` stays binary in every target.
 
-The C++/C#/Java generators initially cover scalar primitives and their optional
-forms. Unsupported temporal, decimal, or container types fail explicitly; see
-the individual [C++](cpp.md), [C#](csharp.md), and [Java](java.md) target docs.
-Spring and Hibernate integrations generate query projections and methods;
-they do not infer ORM entities from query results.
+Type coverage differs by target. Unsupported temporal, decimal, container or
+other unmapped types fail explicitly; see the individual target docs.
+Spring, Hibernate, Dapper and linq2db integrations generate SQL query
+projections and methods; they do not infer ORM entities or LINQ expressions
+from query results. See the [C#](csharp.md), [JavaScript](javascript.md),
+[Rust](rust.md) and [PHP](php.md) contracts for supported types and API details.
 
 Generated code uses caller-provided clients/connections. The caller controls
 connection lifetime and credentials. Transaction behavior is target-specific:
 both C++ profiles and native Java execute a transaction per method; C#, JDBC,
-Spring, and Hibernate use the caller's connection or transaction. Generated DB-API code closes
-its own cursors and does not commit caller-owned transactions.
+Spring, and Hibernate use the caller's connection or transaction. Generated
+DB-API code closes its own cursors and does not commit caller-owned transactions.
+The language-specific pages document the remaining runtime ownership contracts.
 
 Python row decoding follows the selected runtime: native YDB rows are indexed by
 column name, DB-API rows by position, and SQLAlchemy rows through `row._mapping`.

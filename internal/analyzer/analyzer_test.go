@@ -111,8 +111,8 @@ WHERE a.id = $wanted_id;`}}
 	columns := got.Queries[0].ResultSets[0].Columns
 	want := []model.Column{
 		{Name: "author_id", Type: model.Type{Kind: "Uint64"}, Table: "authors"},
-		{Name: "name", Type: model.Type{Kind: "Utf8"}, Table: "authors"},
-		{Name: "title", Type: model.Optional(model.Type{Kind: "Utf8"}), Table: "books"},
+		{Name: "name", WireName: "a.name", Type: model.Type{Kind: "Utf8"}, Table: "authors"},
+		{Name: "title", WireName: "b.title", Type: model.Optional(model.Type{Kind: "Utf8"}), Table: "books"},
 	}
 	if !reflect.DeepEqual(columns, want) {
 		t.Fatalf("columns = %#v, want %#v", columns, want)
@@ -120,6 +120,43 @@ WHERE a.id = $wanted_id;`}}
 	wantParams := []model.Parameter{{Name: "wanted_id", Type: model.Type{Kind: "Uint64"}}}
 	if !reflect.DeepEqual(got.Queries[0].Parameters, wantParams) {
 		t.Fatalf("parameters = %#v, want %#v", got.Queries[0].Parameters, wantParams)
+	}
+}
+
+func TestAnalyzeYDBResultWireNames(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `
+CREATE TABLE left_table (id Uint64 NOT NULL, PRIMARY KEY (id));
+CREATE TABLE right_table (id Uint64 NOT NULL, PRIMARY KEY (id));`}}
+	queries := []model.Source{{Name: "query.sql", Text: `-- name: SingleQualified :many
+SELECT x.id FROM left_table AS x;
+-- name: SingleQualifiedStar :many
+SELECT x.* FROM left_table AS x;
+-- name: JoinQualified :many
+SELECT x.id FROM left_table AS x JOIN right_table AS y ON x.id = y.id;
+-- name: JoinQualifiedStar :many
+SELECT x.* FROM left_table AS x JOIN right_table AS y ON x.id = y.id;
+-- name: JoinAliased :many
+SELECT x.id AS result FROM left_table AS x JOIN right_table AS y ON x.id = y.id;`}}
+
+	got, err := Analyze(schema, queries)
+	if err != nil {
+		t.Fatalf("Analyze() error = %v", err)
+	}
+	want := []model.Column{
+		{Name: "id", Type: model.Type{Kind: "Uint64"}, Table: "left_table"},
+		{Name: "id", Type: model.Type{Kind: "Uint64"}, Table: "left_table"},
+		{Name: "id", WireName: "x.id", Type: model.Type{Kind: "Uint64"}, Table: "left_table"},
+		{Name: "id", Type: model.Type{Kind: "Uint64"}, Table: "left_table"},
+		{Name: "result", Type: model.Type{Kind: "Uint64"}, Table: "left_table"},
+	}
+	if len(got.Queries) != len(want) {
+		t.Fatalf("got %d queries, want %d", len(got.Queries), len(want))
+	}
+	for i := range want {
+		column := got.Queries[i].ResultSets[0].Columns[0]
+		if !reflect.DeepEqual(column, want[i]) {
+			t.Errorf("query %s column = %#v, want %#v", got.Queries[i].Name, column, want[i])
+		}
 	}
 }
 

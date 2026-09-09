@@ -62,6 +62,16 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: examples/package-lock.json
+      - uses: dtolnay/rust-toolchain@1.95.0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
       - name: Prepare version and changelog locally
         id: prepare
         env:

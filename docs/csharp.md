@@ -1,11 +1,11 @@
 # C# generation
 
-The built-in C# generator targets the current `Ydb.Sdk` ADO.NET provider. It
-generates `Models.cs` and `Queries.cs`; it does not generate a data source,
-open a connection, begin a transaction, or dispose caller-owned resources.
-Construct `Queries` with an already-open `YdbConnection`. Pass a
-caller-owned `YdbTransaction` to the constructor, or use `WithTransaction`.
-Every generated operation is async and accepts a `CancellationToken`.
+The built-in C# generator has `adonet`, `dapper`, and `linq2db` runtime
+profiles. The default is `adonet`, which preserves the original configuration
+and generated API. Every profile generates `Models.cs` and `Queries.cs`, keeps
+the source YQL in readable exact string fragments, and exposes async `:one`,
+`:many`, and `:exec` methods with a `CancellationToken`. `:execrows` is rejected
+because YDB does not return affected-row counts.
 
 ```yaml
 version: "2"
@@ -15,50 +15,81 @@ sql:
     queries: queries.sql
     gen:
       csharp:
-        namespace: Authors.AdoNet
-        out: csharp/adonet
+        namespace: Authors.Dapper
+        out: csharp/dapper
+        runtime: dapper
 ```
 
-The generated methods cover `:one`, `:many`, and `:exec`. `:execrows` is
-rejected because YDB does not return affected-row counts. SQL is emitted as
-portable, escaped C# string fragments so quotes, backslashes, CRLF, and C0
-control characters preserve their exact values without depending on a raw
-literal delimiter.
+SQL is emitted as portable escaped C# string fragments so quotes, backslashes,
+CRLF, Unicode, and C0 control characters preserve their exact text without a
+raw-literal delimiter dependency. Result records and parameter records come
+from resolved SQL shapes. The generator does not infer ORM entities.
 
 `:one` returns the first row and throws `InvalidOperationException` if no row
-exists. `:many` returns `IReadOnlyList<Row>` and `:exec` returns a `Task`.
-There is one C# profile: the modern SDK is already an ADO.NET provider.
+exists. `:many` returns `IReadOnlyList<Row>` and `:exec` returns `Task`.
+
+## Runtime ownership
+
+The `adonet` profile accepts an already-open `YdbConnection` and an optional
+caller-owned `YdbTransaction`. `WithTransaction` returns another lightweight
+`Queries` wrapper. Generated code creates and disposes each `YdbCommand`; it
+does not create a data source, open a connection, begin a transaction, or
+dispose caller-owned resources.
+
+The `dapper` profile has the same connection and transaction contract. It uses
+Dapper `CommandDefinition`, `ExecuteReaderAsync`, and `ExecuteAsync`. Generated
+`SqlMapper.IDynamicParameters` code adds concrete `YdbParameter` instances, so
+YDB-specific and optional wire types do not depend on Dapper's CLR inference.
+Rows are decoded by generated ordinal mappers; this also makes `snake_case`
+columns and nullable `LEFT JOIN` results independent of Dapper naming settings.
+
+The `linq2db` profile accepts a caller-owned `DataConnection`. Configure it
+with the official YDB provider, for example:
+
+```csharp
+using var db = YdbTools.CreateDataConnection(ydbConnection);
+var queries = new Queries(db);
+```
+
+For a transaction, the caller creates the `DataConnection` with
+`YdbTools.CreateDataConnection(ydbTransaction)`. Generated code uses linq2db's
+raw-SQL `QueryToListAsync` and `ExecuteAsync` APIs plus explicit
+`DataParameter` types. It neither creates nor disposes the data connection or
+transaction.
 
 ## Types and parameters
 
 The supported scalar types are `Bool`, signed and unsigned integer types,
-`Float`, `Double`, `Utf8`, `String`, and `Uuid`, plus one level of
-`Optional<T>`. They map to `bool`, the corresponding C# numeric type,
-`float`, `double`, `string`, `byte[]`, and `Guid`. Unsupported YQL types fail
-generation; there is no `object` or inferred-type fallback.
+`Float`, `Double`, `Utf8`, `String`, `Json`, `Timestamp`, and `Uuid`, plus one
+level of `Optional<T>`. They map to `bool`, the corresponding C# numeric type,
+`float`, `double`, `string`, `byte[]`, `string`, `DateTime`, and `Guid`.
+Unsupported YQL types fail generation; there is no `object` fallback.
 
-Required parameters are constructed as `YdbParameter` with an explicit
-standard `DbType`, which the provider maps to its concrete YDB type. In
-particular, `Uint64` binds as `DbType.UInt64`, `Utf8` as `DbType.String`, and
-`String` as `DbType.Binary`. Optional parameters use the SDK's typed
-`YdbValue.MakeOptional*` factories. This preserves `Optional<T>` for both a
-present value and null: supplying a bare present CLR value would otherwise bind
-as `T`, not `Optional<T>`.
+All profiles bind explicit YDB types. Standard primitives use their exact
+`DbType` or linq2db `DataType`. `Json` and `Timestamp` use the SDK's
+`YdbValue.MakeJson` and `YdbValue.MakeTimestamp` builders. Optional parameters
+use the corresponding typed `YdbValue.MakeOptional*` builder for both present
+and null values. A bare present CLR value would otherwise bind as `T`, while a
+declared YQL parameter requires `Optional<T>`.
 
 ## SDK evidence and build target
 
-The API choice was checked against `ydb-platform/ydb` main at
-`204baf30e62446f850fc0271979aa309e2932d63` in
-`ydb/docs/en/core/reference/languages-and-apis/ado-net/basic-usage.md` and
-`type-mapping.md`, and `ydb-platform/ydb-dotnet-sdk` main at
-`e35785a671b88f0f05ab6f4f9e15a260c44600f8`. The SDK README calls
-`Ydb.Sdk` the ADO.NET provider and demonstrates `YdbDataSource`,
-`YdbConnection`, and `YdbCommand`; the provider source exposes
-`YdbParameter(string, DbType, object?)` and
-`YdbCommand.ExecuteReaderAsync(CancellationToken)`. `YdbValue.MakeOptional*`
-serializes the optional wrapper directly; `IsNullable` and `DBNull.Value` do
-not select the YQL optional type.
+The ADO.NET type contract was checked in the current official YDB documentation
+and `ydb-platform/ydb-dotnet-sdk` main at
+`236bfa176940feafbf61f11c1cb9fc000572b237`. The SDK exposes
+`YdbParameter`, `YdbCommand.ExecuteReaderAsync`, `GetFieldValue<T>`, and typed
+`YdbValue` builders for `Json`, `Timestamp`, and their optional forms.
 
-The authors smoke project targets `net8.0` and pins `Ydb.Sdk` `0.33.3`.
-`Ydb.Sdk` belongs to generated-project dependencies, never to sqlc-ydb's Go
-module. Use .NET SDK 8.x to build the smoke project.
+Dapper integration was checked against Dapper main at
+`6d48ef664acc7298c649e2d449d903b3360d5a90`; its public
+`SqlMapper.IDynamicParameters` contract accepts provider-specific parameters,
+and `CommandDefinition` carries the transaction and cancellation token.
+
+linq2db integration targets `6.4.0`, commit
+`82fbf0f91399cc8c9cea22d09dcae20e4d7568c6`. This release promotes its YDB
+provider to supported status and exposes `YdbTools.CreateDataConnection` for a
+connection or transaction. Its own build pins `Ydb.Sdk` `0.35.0`.
+
+The shared example compile project targets `net8.0` and pins `Ydb.Sdk`
+`0.35.0`, Dapper `2.1.79`, and linq2db `6.4.0`. Runtime packages belong to
+generated projects, never to sqlc-ydb's Go module.
