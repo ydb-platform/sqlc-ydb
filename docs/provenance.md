@@ -14,8 +14,9 @@ Behavior/API references:
   `da046efe95d7ec65c13cd1f88a9f55804c322f73`, for YDB SDK integration examples.
 
 The parser is an external dependency from `ydb-platform/yql-parsers`, pinned to
-`2fbaa5e71a0388828bffc5c6a2c2b0e2cf9680dc` (YQL source
-`d9544073fd13d17b30f609fa4fe7b034cd28ba02`). Dependency license notices remain in
+[v0.0.1](https://github.com/ydb-platform/yql-parsers/releases/tag/v0.0.1), commit
+`60491839bf34d68b65f36dc933312de6abe57bf3` (YQL source
+`5d09560f3e988d447a17fdff5b323cb73356bcca`). Dependency license notices remain in
 their modules.
 
 The [examples](../examples/README.md) adapt SQL schemas, queries and scenarios

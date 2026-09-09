@@ -95,6 +95,7 @@ and [generation dispatch](https://github.com/sqlc-dev/sqlc/blob/23e357a414310aa8
 - Track upstream product behavior and selectively adapt relevant tests. Record
   source provenance and retain license notices whenever code is copied.
 
-The parser is pinned in `go.mod` to `ydb-platform/yql-parsers` commit
-`2fbaa5e71a03` (updated from YQL `d9544073fd13`), using its generated ANTLR4 Go parser. No local sibling checkout
-or `replace` directive is needed.
+The parser is pinned in `go.mod` to an official `ydb-platform/yql-parsers` release,
+using its generated ANTLR4 Go parser. See [source provenance](provenance.md) for
+the parser and YQL revisions. No local sibling checkout or `replace` directive
+is needed.
