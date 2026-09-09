@@ -15,24 +15,21 @@ The fast suite includes a YDB-only golden fixture runner under
 `internal/endtoend`: real CLI generation must match committed output filenames,
 contents and expected diagnostics. Fixture updates are explicit, never an
 automatic part of tests. Semantic unit tests independently assert resolved
-parameters, result columns and errors. The [legacy YDB corpus](../testdata/legacy-ydb/README.md)
-adds all preserved SQL inputs, explicit accepted/rejected semantic snapshots and
-source-integrity checks. Adapted positive fixtures use the same simple runner.
+parameters, result columns and errors in their owning analyzer and builtins suites.
+Adapted CLI fixtures use the same runner; source references are recorded in
+[provenance](provenance.md).
 
 Review `git diff --cached --check` after staging new files: an unstaged diff
 does not include untracked generated outputs. If significant whitespace inside
 SQL triggers a warning, escape it in the source literal without trimming or
-otherwise changing the runtime SQL text. Immutable historical inputs have scoped
-Git attributes so their original significant whitespace is preserved; edit an
-adapted fixture instead of normalizing the source snapshot.
+otherwise changing the runtime SQL text.
 
 [Git attributes](../.gitattributes) keep text files in LF form on every host.
 Release scripts and generated fixtures must survive a Windows checkout without
 byte changes; `make test-release` checks this with `core.autocrlf=true`.
 
 CI separates offline checks from Linux acceptance jobs. Each acceptance host
-uses one pinned YDB service. Fixture provenance and update commands are in
-[the fixture runner](../internal/endtoend/README.md).
+uses one pinned YDB service.
 
 PHP CI builds the pinned gRPC extension with
 [`scripts/install-php-grpc`](../scripts/install-php-grpc). It downloads the source
@@ -58,6 +55,28 @@ SQLC_YDB_RUST_SDK_CHECK=1 go test ./internal/codegen/rust
 These compile generated scalar and nullable bindings using the real .NET,
 Java and Rust dependencies. C# also compiles and runs its SQL byte checks.
 No generated runtime imports are added to the generator's Go module.
+
+## Golden fixtures
+
+Each directory in `internal/endtoend/testdata` is a standalone current YDB input.
+Positive fixtures contain `expected/` generated files; negative fixtures contain
+`stderr.txt`. The runner copies inputs into a temporary directory and invokes
+the real CLI, checking output filenames, contents and diagnostics together.
+
+```sh
+go test ./internal/analyzer ./internal/yql/builtins ./internal/endtoend
+# Only after reviewing an intentional output change:
+go test ./internal/endtoend -update
+```
+
+Review updated files alongside the SQL, configuration and implementation changes.
+Do not hand-edit generated files or accept a new baseline just to make a test
+pass. Tests never update goldens by default; update mode fails if a positive
+fixture fails generation. New negative fixtures must explicitly include
+`stderr.txt`. Assert distinct semantic behavior in the owning unit suite; add a
+CLI fixture when configuration, source loading or generated output needs joint
+coverage. Adapt historical scenarios to the current contracts rather than
+restoring bulk snapshots or obsolete options.
 
 ## Generated runtime checks
 
@@ -97,8 +116,8 @@ SQLC_YDB_TEST_DSN=grpc://localhost:2136/local SQLC_YDB_TEST_PYTHON=python3 \
 ```
 
 It creates and drops one uniquely named table. Its source and table-driven
-function probes document the executable coverage; a green historical diagnostic
-snapshot is not evidence that the server accepts that SQL.
+function probes document the executable coverage; offline diagnostic tests do
+not establish that the server accepts the SQL.
 
 **Run local-ydb checks sequentially per host**, including image versions, runtime
 suites and Docker builds. Use `go test -p 1` and no `t.Parallel` in live tests;

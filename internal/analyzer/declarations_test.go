@@ -103,3 +103,32 @@ func TestDeclarationFreeSQLMultipleDeclarations(t *testing.T) {
 		t.Fatalf("unexpected declaration-free SQL: %q", got)
 	}
 }
+
+func TestRejectsUnknownYQLTypesAtAnalysisBoundary(t *testing.T) {
+	for _, typ := range []string{"Mystery", "TzDate32", "TzDatetime64", "TzTimestamp64"} {
+		contexts := []string{"column"}
+		if typ == "Mystery" {
+			contexts = append(contexts, "declaration", "cast")
+		}
+		for _, context := range contexts {
+			t.Run(typ+"/"+context, func(t *testing.T) {
+				var schema, queries []model.Source
+				switch context {
+				case "column":
+					schema = []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, value " + typ + ", PRIMARY KEY (id));"}}
+				case "declaration":
+					queries = []model.Source{{Name: "query.sql", Text: "-- name: Value :one\nDECLARE $value AS " + typ + "; SELECT $value AS value;"}}
+				case "cast":
+					queries = []model.Source{{Name: "query.sql", Text: "-- name: Value :one\nSELECT CAST(1 AS " + typ + ") AS value;"}}
+				}
+				got, err := Analyze(schema, queries)
+				if err == nil || !strings.Contains(err.Error(), "unsupported YQL type") || !strings.Contains(err.Error(), typ) {
+					t.Fatalf("error = %v, want unsupported type %s", err, typ)
+				}
+				if got == nil || len(got.Diagnostics) == 0 || got.Diagnostics[0].Position.Line < 1 {
+					t.Fatalf("missing source diagnostic: %#v", got)
+				}
+			})
+		}
+	}
+}

@@ -1,4 +1,0 @@
-CREATE TABLE bar (id Int32 NOT NULL, PRIMARY KEY (id));
-
-
-

@@ -273,6 +273,8 @@ func TestResolveRejectsUnknownOrInvalidCalls(t *testing.T) {
 		{name: "COUNT", args: []model.Type{scalar("Int32"), scalar("Int32")}, error: "expects 0 or 1 argument"},
 		{name: "MIN", args: []model.Type{scalar("Json")}, error: "supported comparable"},
 		{name: "SUM", args: []model.Type{scalar("String")}, error: "numeric"},
+		{name: "MIN", args: []model.Type{scalar("Timestamp")}, error: "supported comparable"},
+		{name: "MAX", args: []model.Type{scalar("Timestamp")}, error: "supported comparable"},
 		{name: "AVG", args: []model.Type{scalar("Utf8")}, error: "numeric or Interval"},
 		{name: "String::Base64Decode", args: []model.Type{model.Optional(scalar("String"))}, error: "non-optional String"},
 		{name: "String::Substring", args: []model.Type{scalar("String")}, error: "expects 2 or 3 arguments"},
@@ -377,6 +379,7 @@ func TestCast(t *testing.T) {
 		{name: "utf8 to string is total", source: scalar("Utf8"), target: scalar("String"), want: scalar("String")},
 		{name: "string to utf8 may fail validation", source: scalar("String"), target: scalar("Utf8"), want: model.Optional(scalar("Utf8"))},
 		{name: "unsupported composite", source: model.Type{Kind: "List", Elem: typePointer(scalar("Int32"))}, target: model.Type{Kind: "List", Elem: typePointer(scalar("Int64"))}, error: "unsupported CAST"},
+		{name: "boolean to integer", source: scalar("Bool"), target: scalar("Int32"), error: "unsupported CAST"},
 		{name: "invalid target null", source: scalar("Int32"), target: scalar("Null"), error: "target"},
 	}
 

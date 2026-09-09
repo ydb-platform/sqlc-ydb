@@ -18,6 +18,7 @@ func TestAnalyzeRejectsUnsupportedSQLCMacrosInEveryQueryContext(t *testing.T) {
 		command model.Command
 		query   string
 	}{
+		{name: "slice in nested select", command: model.Many, query: "SELECT id FROM (SELECT id FROM foo WHERE id IN sqlc.slice(ids)) nested;"},
 		{name: "embed projection", command: model.Many, query: "SELECT sqlc.embed(foo) FROM foo;"},
 		{name: "narg in where", command: model.Many, query: "SELECT id FROM foo WHERE name = sqlc.narg(name);"},
 		{name: "narg with quoted name", command: model.Many, query: "SELECT id FROM foo WHERE name = sqlc.narg('name');"},

@@ -1,2 +1,0 @@
-CREATE TABLE foo (a Utf8, PRIMARY KEY (a));
-

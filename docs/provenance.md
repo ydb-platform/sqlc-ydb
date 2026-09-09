@@ -3,7 +3,7 @@
 The standalone CLI, model, analyzer and generator renderers are maintained
 independently. They do not load sqlc's intermediate AST, compiler or plugin
 protocol. Selected YDB algorithms and fixtures have been adapted as described
-below; original SQL inputs are retained in the regression corpus.
+below; adapted tests live in their owning current suites.
 
 Behavior/API references:
 
@@ -112,11 +112,28 @@ public `Table` accessors and `RequestTrait` to retain raw protobuf result values
 
 ## Salvaged YDB implementation and tests
 
-The [local SQL corpus](../testdata/legacy-ydb/README.md) contains SQL and
-configuration inputs from the YDB work at
-`8eed5d890396eb03953248a3ec4ab7e28dfaed45` in `ydb-platform/sqlc`.
-Its manifest records source paths and checksums; tests do not depend on the fork
-remaining available. Adapted CLI fixtures record their source inputs.
+Historical test scenarios came from
+[`ydb-platform/sqlc@8eed5d890396eb03953248a3ec4ab7e28dfaed45`](https://github.com/ydb-platform/sqlc/tree/8eed5d890396eb03953248a3ec4ab7e28dfaed45).
+Distinct current behaviors belong to `internal/analyzer` and
+`internal/yql/builtins`; no tests load a historical checkout or snapshot corpus.
+The following CLI fixtures retain adapted integration coverage:
+
+| Current fixture in `internal/endtoend/testdata` | Historical scenarios |
+| --- | --- |
+| `expression_types` | `cast_coalesce`, `case_named_params`, `builtins` |
+| `aggregate_having` | `having` |
+| `union` | `select_union`, `order_by_union` |
+| `native_go_types` | `select_text_array`, `types_uuid`, `datatype` |
+
+These fixtures use current configurations, explicit parameter declarations and
+supported YQL types. Native Go coverage includes List, optional elements,
+Decimal and Uuid. Historical config options and generated outputs are not a
+compatibility contract.
+
+The CLI fixture runner borrows discovery and exact generated-file comparison
+ideas from `sqlc-dev/sqlc@23e357a414310aa8846e64624da8b8a626b3a610`, specifically
+`internal/endtoend/endtoend_test.go` and `internal/endtoend/case_test.go`.
+Contributor commands and review rules are in [development](development.md#golden-fixtures).
 
 The converter's grammar paths informed direct-context CASE, CAST, UNION and
 grouping analysis. Historical function signatures are an inventory, not a type

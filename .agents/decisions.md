@@ -6,6 +6,7 @@ change the architecture.
 
 | Decision | Reason and reference |
 | --- | --- |
+| Historical tests belong to current owning suites | Historical tests came from `ydb-platform/sqlc@8eed5d890396eb03953248a3ec4ab7e28dfaed45`; adapted cases belong to owning test suites, and the bulk snapshot corpus must not be restored. See [provenance](../docs/provenance.md). |
 | Independent YDB-only implementation | Compatibility concerns user workflow, not upstream internal code or Git history. See [compatibility](../docs/compatibility.md). |
 | Keep semantic analysis; no intermediate AST | Direct ANTLR contexts avoid a second syntax representation while resolved types remain necessary for code generation. See [architecture](../docs/architecture.md). |
 | Built-in generators only | New language support belongs in this repository; external engine/codegen/WASM/process plugins are deliberately excluded. See [compatibility](../docs/compatibility.md). |

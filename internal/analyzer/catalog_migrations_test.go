@@ -255,6 +255,8 @@ func TestCatalogRejectsUnsupportedSchemaOperations(t *testing.T) {
 	}{
 		{name: "alter nullability", sql: `CREATE TABLE t (id Uint64 NOT NULL, value Utf8, PRIMARY KEY (id)); ALTER TABLE t ALTER COLUMN value SET NOT NULL;`, want: "unsupported ALTER TABLE action"},
 		{name: "index", sql: `CREATE TABLE t (id Uint64 NOT NULL, PRIMARY KEY (id)); ALTER TABLE t ADD INDEX by_id GLOBAL ON (id);`, want: "unsupported ALTER TABLE action"},
+		{name: "view", sql: `CREATE VIEW records AS SELECT 1 AS id;`, want: "unsupported schema statement"},
+		{name: "drop nullability", sql: `CREATE TABLE t (id Uint64 NOT NULL, value Utf8 NOT NULL, PRIMARY KEY (id)); ALTER TABLE t ALTER COLUMN value DROP NOT NULL;`, want: "unsupported ALTER TABLE action"},
 		{name: "data statement", sql: `CREATE TABLE t (id Uint64 NOT NULL, PRIMARY KEY (id)); UPSERT INTO t (id) VALUES (1);`, want: "unsupported schema statement"},
 	}
 	for _, tt := range tests {
@@ -277,5 +279,43 @@ ALTER TABLE authors ADD COLUMN biography Utf8, DROP COLUMN missing;`}})
 	want := []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}, Table: "authors"}}
 	if !reflect.DeepEqual(catalog.Tables[0].Columns, want) {
 		t.Fatalf("columns after failed ALTER = %#v, want %#v", catalog.Tables[0].Columns, want)
+	}
+}
+
+func TestCatalogTableSettingsPreserveSemanticColumns(t *testing.T) {
+	got, err := Analyze([]model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (
+ id Uint64 NOT NULL, label Utf8, PRIMARY KEY (id)
+) WITH (AUTO_PARTITIONING_BY_SIZE = ENABLED, AUTO_PARTITIONING_PARTITION_SIZE_MB = 512);`}},
+		[]model.Source{{Name: "query.sql", Text: "-- name: Rows :many\nSELECT * FROM records;"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := model.Table{Name: "records", Columns: []model.Column{
+		{Name: "id", Type: model.Type{Kind: "Uint64"}, Table: "records"},
+		{Name: "label", Type: model.Optional(model.Type{Kind: "Utf8"}), Table: "records"},
+	}, PrimaryKey: []string{"id"}}
+	if !reflect.DeepEqual(got.Catalog.Tables, []model.Table{want}) || !reflect.DeepEqual(got.Queries[0].ResultSets[0].Columns, want.Columns) {
+		t.Fatalf("result = %#v, want table %#v", got, want)
+	}
+}
+
+func TestCatalogScalarColumnTypes(t *testing.T) {
+	for _, kind := range []string{
+		"Bool", "Int8", "Int16", "Int32", "Int64", "Uint8", "Uint16", "Uint32", "Uint64",
+		"Float", "Double", "String", "Utf8", "Date", "Date32", "Datetime", "Datetime64",
+		"Timestamp", "Timestamp64", "Interval", "Interval64", "TzDate", "TzDatetime", "TzTimestamp",
+		"Json", "JsonDocument", "Yson", "Uuid",
+	} {
+		t.Run(kind, func(t *testing.T) {
+			got, err := Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, required " + kind + " NOT NULL, nullable " + kind + ", PRIMARY KEY (id));"}},
+				[]model.Source{{Name: "query.sql", Text: "-- name: Rows :many\nSELECT required, nullable FROM records;"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := []model.Column{{Name: "required", Type: model.Type{Kind: kind}, Table: "records"}, {Name: "nullable", Type: model.Optional(model.Type{Kind: kind}), Table: "records"}}
+			if !reflect.DeepEqual(got.Catalog.Tables[0].Columns[1:], want) || !reflect.DeepEqual(got.Queries[0].ResultSets[0].Columns, want) {
+				t.Fatalf("resolved types differ from %#v: %#v", want, got)
+			}
+		})
 	}
 }

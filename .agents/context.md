@@ -19,7 +19,6 @@ or simplifying SDK-specific code.
 | `internal/model` | Resolved query/catalog data, type equality and diagnostic formatting |
 | `internal/codegen/{golang,python,cpp,csharp,java,javascript,rust,php}` | Language naming and SDK-specific bindings, decoding and source rendering |
 | `internal/endtoend` | CLI fixtures, expected diagnostics and generated golden files |
-| `testdata/legacy-ydb` | Checksummed SQL/config inputs and semantic corpus expectations |
 | `examples` | All upstream example families adapted for YDB; shared language dependencies and sequential live tests |
 | `.github/workflows` | Offline verification and sequential acceptance steps per host |
 

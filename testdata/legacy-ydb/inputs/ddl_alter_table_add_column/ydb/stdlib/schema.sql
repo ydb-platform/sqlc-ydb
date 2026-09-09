@@ -1,8 +1,0 @@
-CREATE TABLE foo (
-    bar Text NOT NULL,
-    PRIMARY KEY (bar)
-);
-
-ALTER TABLE foo ADD COLUMN baz Int32;
-ALTER TABLE foo ADD COLUMN bio Int32;
-ALTER TABLE foo ADD COLUMN foobar Text

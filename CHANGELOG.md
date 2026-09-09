@@ -15,8 +15,6 @@ the version and moves these entries into a numbered section at release time.
   direct-column GROUP BY/HAVING checks and contextual list/LIMIT parameter inference.
 - Native Go list parameters, including optional elements and typed empty lists;
   Go Decimal/UUID bindings and native per-query execution options.
-- YDB SQL regression corpus with independent semantic expectations and
-  source-integrity checks.
 - Built-in Go (native SDK, database/sql), Python (native SDK, DB-API, SQLAlchemy),
   C++ (native SDK, userver), C# (ADO.NET, Dapper, linq2db), Java (native SDK,
   JDBC, Spring JDBC, Hibernate), JavaScript, Rust and PHP generators.

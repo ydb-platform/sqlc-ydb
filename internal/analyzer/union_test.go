@@ -205,3 +205,22 @@ SELECT a.id, b.id, 2 AS a_id FROM records AS a JOIN records AS b ON a.id = b.id;
 		t.Fatalf("error = %v", err)
 	}
 }
+
+func TestAnalyzeUnionPaginationParameters(t *testing.T) {
+	got, err := Analyze([]model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY (id));`}},
+		[]model.Source{{Name: "query.sql", Text: `-- name: Page :many
+(SELECT id FROM records)
+UNION ALL
+SELECT id FROM records ORDER BY id LIMIT $limit OFFSET $offset;`}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []model.Parameter{{Name: "limit", Type: model.Type{Kind: "Uint64"}}, {Name: "offset", Type: model.Type{Kind: "Uint64"}}}
+	q := got.Queries[0]
+	if !reflect.DeepEqual(q.Parameters, want) {
+		t.Fatalf("parameters = %#v, want %#v", q.Parameters, want)
+	}
+	if columns := q.ResultSets[0].Columns; len(columns) != 1 || columns[0].Name != "id" || !columns[0].Type.Equal(model.Type{Kind: "Uint64"}) {
+		t.Fatalf("columns = %#v", columns)
+	}
+}

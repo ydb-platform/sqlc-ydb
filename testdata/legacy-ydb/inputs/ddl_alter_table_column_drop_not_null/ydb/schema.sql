@@ -1,8 +1,0 @@
-CREATE TABLE foo (
-    bar Text NOT NULL,
-    baz Text NOT NULL,
-    PRIMARY KEY (bar)
-);
-
-ALTER TABLE foo ALTER COLUMN bar DROP NOT NULL;
-ALTER TABLE foo ALTER COLUMN baz DROP NOT NULL;
