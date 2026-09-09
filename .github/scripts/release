@@ -174,8 +174,10 @@ smoke_archive() {
     fail "host verbose version does not contain version and commit"
   for config in examples/*/sqlc.yaml; do
     "$executable" compile -f "$config"
+    "$executable" generate -f "$config"
     "$executable" diff -f "$config"
   done
+  git diff --exit-code -- examples || fail "packaged generation changed tracked examples"
 }
 
 verify_release() {

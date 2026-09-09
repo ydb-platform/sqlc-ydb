@@ -135,6 +135,8 @@ jobs:
       - name: Install pinned PHP gRPC extension
         timeout-minutes: 5
         run: bash .github/scripts/install-php-grpc
+      - name: Generate runtime examples
+        run: make generate
       - name: Install and compile new runtime examples
         run: |
           dotnet build examples/csharp/GeneratedProfiles.csproj
@@ -204,6 +206,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Generate runtime examples
+        run: make generate
       # Finish SDK compilation before starting YDB on this host.
       - name: Build C++ native and userver examples with the pinned SDK image
         run: |

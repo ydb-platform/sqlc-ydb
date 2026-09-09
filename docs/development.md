@@ -11,6 +11,11 @@ make generate
 make check
 ```
 
+`make test`, `make coverage`, and `make check` generate example outputs locally
+before running tests. Sources, configurations, dependency manifests and handwritten
+harnesses remain in the repository; missing generated example files are recreated
+by `make generate`.
+
 The fast suite includes a YDB-only golden fixture runner under
 `internal/endtoend`: real CLI generation must match committed output filenames,
 contents and expected diagnostics. Fixture updates are explicit, never an
@@ -136,7 +141,10 @@ JavaScript dependencies resolve from `examples/package.json`. The authors
 example retains the Python, Java, C++ and ADO.NET application builds. Schema,
 queries and generator configuration are shared in each example root. `make
 generate` and `make check-examples` cover every example configuration; the
-release smoke test also compiles and diffs all of them.
+release smoke test also compiles, generates and diffs all of them. Both checks
+fail when generation changes tracked files under `examples`, so committed
+generated outputs are still checked for drift. Missing untracked outputs are
+created locally before runtime compilation.
 
 Check all generated example families against their pinned runtime dependencies:
 

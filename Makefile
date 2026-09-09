@@ -5,10 +5,10 @@ EXAMPLE_CONFIGS := $(wildcard examples/*/sqlc.yaml)
 build:
 	go build -trimpath -o bin/sqlc-ydb ./cmd/sqlc-ydb
 
-test:
+test: generate
 	go test -p 1 ./...
 
-coverage:
+coverage: generate
 	go test -p 1 -count=1 -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
 	go tool cover -func=coverage.out
 
@@ -20,15 +20,16 @@ generate: build
 		./bin/sqlc-ydb generate -f "$$config"; \
 	done
 
-check: test-release
+check: test-release generate
 	go test -p 1 ./...
 	$(MAKE) check-examples
 
-check-examples: build
+check-examples: generate
 	@set -e; for config in $(EXAMPLE_CONFIGS); do \
 		./bin/sqlc-ydb compile -f "$$config"; \
 		./bin/sqlc-ydb diff -f "$$config"; \
 	done
+	git diff --exit-code -- examples
 	cd examples && go test -p 1 ./...
 	python3 -m compileall -q examples/authors/python
 
