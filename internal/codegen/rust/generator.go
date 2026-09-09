@@ -50,6 +50,9 @@ func validate(in *model.AnalysisResult) error {
 		if !rustIdent(fn) || rustKeywords[fn] {
 			return fmt.Errorf("rust generator: query %q has invalid generated Rust name %q", q.Name, fn)
 		}
+		if fn == "new" {
+			return fmt.Errorf("rust generator: query %q conflicts with the generated constructor new; rename the query", q.Name)
+		}
 		if previous, ok := queries[fn]; ok {
 			return fmt.Errorf("rust generator: query name collision at %q (%q and %q)", fn, previous, q.Name)
 		}

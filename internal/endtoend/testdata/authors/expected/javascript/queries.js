@@ -10,7 +10,7 @@ SELECT \`id\`, \`name\`, \`bio\` FROM \`authors\` WHERE \`id\` = $author_id;`;
 
 function _uint64(value, name) { if (typeof value !== "bigint" || value < 0n || value > 18446744073709551615n) throw new RangeError(`${name} is outside YQL Uint64 range`); return value; }
 
-function decodeGetAuthorRow(row) {
+function _decodeGetAuthorRow(row) {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("GetAuthor: expected an object row");
   if (!Object.hasOwn(row, "id")) throw new TypeError("GetAuthor: result row is missing column id");
   if (!Object.hasOwn(row, "name")) throw new TypeError("GetAuthor: result row is missing column name");
@@ -32,12 +32,12 @@ export class Queries {
   }
 
   async getAuthor(authorId) {
-    const pending = this.#client(_GET_AUTHOR_SQL_EXEC)
+    const _pending = this.#client(_GET_AUTHOR_SQL_EXEC)
       .parameter("author_id", new Uint64(_uint64(authorId, "author_id")))
     ;
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("GetAuthor: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : decodeGetAuthorRow(rows[0]);
+    const _resultSets = await _pending;
+    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("GetAuthor: expected the first YDB result set to be an array");
+    const _rows = _resultSets[0];
+    return _rows.length === 0 ? null : _decodeGetAuthorRow(_rows[0]);
   }
 }

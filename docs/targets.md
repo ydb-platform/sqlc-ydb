@@ -63,6 +63,11 @@ column name, DB-API rows by position, and SQLAlchemy rows through `row._mapping`
 Custom wrappers must provide that same contract. Missing result sets or columns
 raise errors; they are not converted into empty results or tried as other row shapes.
 
+Python names support Unicode letters. Names that normalize to invalid Python
+identifiers (for example, a leading digit) are rejected, as are model names that
+conflict with Python keywords or the imported `Optional` type. Parameter names
+such as `ydb`, `models`, and `text` do not shadow the generated runtime imports.
+
 The verified `ydb-sqlalchemy` 0.1.22 has no asynchronous dialect. Requests for
 `emit_async_querier: true` are explicitly rejected. Async Python adapters,
 Pydantic, custom naming/type overrides and additional framework profiles remain

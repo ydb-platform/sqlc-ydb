@@ -16,7 +16,7 @@ DELETE FROM pilots WHERE id = $pilot_id;`;
 
 function _int32(value, name) { if (!Number.isInteger(value) || value < -2147483648 || value > 2147483647) throw new RangeError(`${name} is outside YQL Int32 range`); return value; }
 
-function decodeCountPilotsRow(row) {
+function _decodeCountPilotsRow(row) {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("CountPilots: expected an object row");
   if (!Object.hasOwn(row, "pilot_count")) throw new TypeError("CountPilots: result row is missing column pilot_count");
   return {
@@ -24,7 +24,7 @@ function decodeCountPilotsRow(row) {
   };
 }
 
-function decodeListPilotsRow(row) {
+function _decodeListPilotsRow(row) {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("ListPilots: expected an object row");
   if (!Object.hasOwn(row, "id")) throw new TypeError("ListPilots: result row is missing column id");
   if (!Object.hasOwn(row, "name")) throw new TypeError("ListPilots: result row is missing column name");
@@ -44,24 +44,24 @@ export class Queries {
   }
 
   async countPilots() {
-    const resultSets = await this.#client(COUNT_PILOTS_SQL);
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("CountPilots: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : decodeCountPilotsRow(rows[0]);
+    const _resultSets = await this.#client(COUNT_PILOTS_SQL);
+    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("CountPilots: expected the first YDB result set to be an array");
+    const _rows = _resultSets[0];
+    return _rows.length === 0 ? null : _decodeCountPilotsRow(_rows[0]);
   }
 
   async listPilots() {
-    const resultSets = await this.#client(LIST_PILOTS_SQL);
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("ListPilots: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.map(decodeListPilotsRow);
+    const _resultSets = await this.#client(LIST_PILOTS_SQL);
+    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("ListPilots: expected the first YDB result set to be an array");
+    const _rows = _resultSets[0];
+    return _rows.map(_decodeListPilotsRow);
   }
 
   async deletePilot(pilotId) {
-    const pending = this.#client(_DELETE_PILOT_SQL_EXEC)
+    const _pending = this.#client(_DELETE_PILOT_SQL_EXEC)
       .parameter("pilot_id", new Int32(_int32(pilotId, "pilot_id")))
     ;
-    const resultSets = await pending;
+    const _resultSets = await _pending;
     return undefined;
   }
 }

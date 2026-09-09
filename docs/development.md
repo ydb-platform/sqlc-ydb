@@ -33,6 +33,12 @@ runner or optional Postgres/MySQL fallback. See
 [the fixture runner](../internal/endtoend/README.md) for the upstream references
 and baseline update command.
 
+PHP CI builds the pinned gRPC extension with
+[`scripts/install-php-grpc`](../scripts/install-php-grpc). It downloads the source
+archive directly, limits compilation to two processes, and checks the loaded
+version. Download and build timeouts keep installation failures visible before
+the SDK tests run.
+
 Generator tests compile generated Go against the selected SDK in a temporary
 module and execute generated code using mock adapters. Python 3.9 or newer must
 be available as `python3` for the Python generator's execution tests. Java 17+

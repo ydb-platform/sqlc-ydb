@@ -511,6 +511,20 @@ SELECT $id AS id;`}})
 	}
 }
 
+func TestAnalyzeAllowsCommentsBeforeQueries(t *testing.T) {
+	query := "-- name: GetID :one\nSELECT 1 AS id;"
+	result, err := Analyze(nil, []model.Source{
+		{Name: "comments.sql", Text: "-- License header\n/* Комментарий */\n"},
+		{Name: "query.sql", Text: "-- License header\n/* Комментарий */\n\n" + query},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Queries) != 1 || result.Queries[0].Name != "GetID" || result.Queries[0].SQL != query {
+		t.Fatalf("queries = %#v", result.Queries)
+	}
+}
+
 func TestAnalyzeReportsSyntaxPosition(t *testing.T) {
 	result, err := Analyze(nil, []model.Source{{Name: "broken.sql", Text: `-- name: Broken :many
 SELECT FROM;`}})

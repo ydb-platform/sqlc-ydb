@@ -133,7 +133,11 @@ func queryBlocks(source model.Source) ([]queryBlock, []model.Diagnostic) {
 	}
 	var annotations []annotation
 	var diagnostics []model.Diagnostic
+	hasPreambleSQL := false
 	for _, token := range tokens.GetAllTokens() {
+		if len(annotations) == 0 && token.GetChannel() == antlr.TokenDefaultChannel && token.GetTokenType() != antlr.TokenEOF && token.GetTokenType() != parser.YQLLexerCOMMENT {
+			hasPreambleSQL = true
+		}
 		if token.GetTokenType() != parser.YQLLexerCOMMENT || !strings.HasPrefix(strings.TrimSpace(token.GetText()), "--") {
 			continue
 		}
@@ -146,10 +150,10 @@ func queryBlocks(source model.Source) ([]queryBlock, []model.Diagnostic) {
 		}
 	}
 	diagnostics = append(diagnostics, listener.diagnostics...)
-	if len(annotations) == 0 && strings.TrimSpace(source.Text) != "" {
+	if len(annotations) == 0 && hasPreambleSQL {
 		diagnostics = append(diagnostics, model.Diagnostic{Position: model.Position{File: source.Name, Line: 1, Column: 1}, Message: "query file contains SQL before any -- name: annotation"})
 	}
-	if len(annotations) != 0 && strings.TrimSpace(source.Text[:annotations[0].start]) != "" {
+	if len(annotations) != 0 && hasPreambleSQL {
 		diagnostics = append(diagnostics, model.Diagnostic{Position: model.Position{File: source.Name, Line: 1, Column: 1}, Message: "query file preamble before the first -- name: annotation is unsupported; move declarations into each named query"})
 	}
 	blocks := make([]queryBlock, 0, len(annotations))

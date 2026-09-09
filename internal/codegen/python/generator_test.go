@@ -46,6 +46,8 @@ func TestGenerateProfilesCompile(t *testing.T) {
 	for _, runtime := range []string{"ydb", "dbapi", "sqlalchemy"} {
 		a := sampleAnalysis()
 		a.Queries = a.Queries[:3]
+		a.Catalog.Tables = append(a.Catalog.Tables, model.Table{Name: "авторы", Columns: []model.Column{{Name: "имя", Type: model.Type{Kind: "Utf8"}}}})
+		a.Queries[0].Name = "получить_автора"
 		files, err := Generate(a, Options{Runtime: runtime, EmitSyncQuerier: true})
 		if err != nil {
 			t.Fatalf("%s: %v", runtime, err)
@@ -61,6 +63,36 @@ func TestGenerateProfilesCompile(t *testing.T) {
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("%s generated invalid Python: %v\n%s\n%s", runtime, err, out, files[1].Content)
 		}
+	}
+}
+
+func TestRejectsInvalidPythonNames(t *testing.T) {
+	for _, name := range []string{"123authors", "none", "true", "false", "optional"} {
+		t.Run("model_"+name, func(t *testing.T) {
+			a := &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: name}}}}
+			if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), "generated Python name") {
+				t.Fatalf("name %q: %v", name, err)
+			}
+		})
+	}
+	for _, scope := range []string{"query", "parameter", "column", "table column"} {
+		t.Run(scope, func(t *testing.T) {
+			a := sampleAnalysis()
+			a.Queries = a.Queries[:1]
+			switch scope {
+			case "query":
+				a.Queries[0].Name = "123query"
+			case "parameter":
+				a.Queries[0].Parameters[0].Name = "123id"
+			case "column":
+				a.Queries[0].ResultSets[0].Columns[0].Name = "123id"
+			case "table column":
+				a.Catalog.Tables[0].Columns[0].Name = "123id"
+			}
+			if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), "generated Python name") {
+				t.Fatalf("invalid %s: %v", scope, err)
+			}
+		})
 	}
 }
 
@@ -305,6 +337,9 @@ func TestGeneratedSQLAlchemySQLConstantRoundTripsLexicalRewrite(t *testing.T) {
 func TestGeneratedYDBQuerierWithMockAdapter(t *testing.T) {
 	a := sampleAnalysis()
 	a.Queries = a.Queries[:2]
+	for _, name := range []string{"ydb", "models", "text"} {
+		a.Queries[0].Parameters = append(a.Queries[0].Parameters, model.Parameter{Name: name, Type: model.Type{Kind: "Uint64"}})
+	}
 	a.Queries[0].ResultSets[0].Columns[0].WireName = "a.id"
 	a.Queries[1].ResultSets[0].Columns[0].WireName = "a.id"
 	files, err := Generate(a, Options{Runtime: "ydb", EmitSyncQuerier: true})
@@ -349,23 +384,24 @@ class Pool:
         return self.results
 
 pool = Pool([ydb.ResultSet([ydb.Row({'a.id': 7, 'display_name': None})])])
-row = Querier(pool).get_author(7)
+row = Querier(pool).get_author(7, 8, 9, 10)
 assert row.id == 7 and row.display_name is None
 assert pool.calls[0][1]['$id'].type == ydb.PrimitiveType.Uint64
+assert [pool.calls[0][1]['$' + name].value for name in ('ydb', 'models', 'text')] == [8, 9, 10]
 pool.results = [ydb.ResultSet([ydb.Row({'a.id': 8})])]
 rows = list(Querier(pool).list_authors())
 assert len(rows) == 1 and rows[0].id == 8
-assert Querier(Pool([ydb.ResultSet([])])).get_author(7) is None
+assert Querier(Pool([ydb.ResultSet([])])).get_author(7, 8, 9, 10) is None
 
 try:
-    Querier(Pool([])).get_author(7)
+    Querier(Pool([])).get_author(7, 8, 9, 10)
 except IndexError:
     pass
 else:
     raise AssertionError("missing result set was masked as a missing row")
 
 try:
-    Querier(Pool([ydb.ResultSet([{0: 7, 1: None}])])).get_author(7)
+    Querier(Pool([ydb.ResultSet([{0: 7, 1: None}])])).get_author(7, 8, 9, 10)
 except KeyError:
     pass
 else:
@@ -381,6 +417,9 @@ else:
 func TestGeneratedSQLAlchemyClosesResultsWithMockAdapter(t *testing.T) {
 	a := sampleAnalysis()
 	a.Queries = a.Queries[:2]
+	for _, name := range []string{"ydb", "models", "text"} {
+		a.Queries[0].Parameters = append(a.Queries[0].Parameters, model.Parameter{Name: name, Type: model.Type{Kind: "Uint64"}})
+	}
 	a.Queries[0].ResultSets[0].Columns[0].WireName = "a.id"
 	a.Queries[1].ResultSets[0].Columns[0].WireName = "a.id"
 	a.Queries[0].SQL = "-- name: get_author :one\nDECLARE $id AS Uint64; SELECT '$ghost', `x` FROM authors WHERE id = $id;"
@@ -431,15 +470,16 @@ class C:
     def execute(self, sql, params):
         self.calls.append((sql, params)); self.result = R(self.fail, self.values); return self.result
 c = C()
-row = Querier(c).get_author(7)
+row = Querier(c).get_author(7, 8, 9, 10)
 assert row.id == 7 and row.display_name is None and c.result.closed
 assert c.calls[0][1]['id'][0] == 7
+assert [c.calls[0][1][name][0] for name in ('ydb', 'models', 'text')] == [8, 9, 10]
 assert r'\:one' in c.calls[0][0] and 'id = :id;' in c.calls[0][0], repr(c.calls[0][0])
 c.values = {'a.id': 8}
 rows = list(Querier(c).list_authors())
 assert len(rows) == 1 and rows[0].id == 8 and c.result.closed
 c.fail = True
-try: Querier(c).get_author(7)
+try: Querier(c).get_author(7, 8, 9, 10)
 except RuntimeError: pass
 else: raise AssertionError("fetch error swallowed")
 assert c.result.closed
@@ -454,6 +494,9 @@ assert c.result.closed
 func TestGeneratedDBAPIClosesCursorAndPreservesTransaction(t *testing.T) {
 	a := sampleAnalysis()
 	a.Queries = a.Queries[:1]
+	for _, name := range []string{"ydb", "models", "text"} {
+		a.Queries[0].Parameters = append(a.Queries[0].Parameters, model.Parameter{Name: name, Type: model.Type{Kind: "Uint64"}})
+	}
 	a.Queries[0].ResultSets[0].Columns[0].WireName = "a.id"
 	files, err := Generate(a, Options{Runtime: "dbapi", EmitSyncQuerier: true})
 	if err != nil {
@@ -472,7 +515,27 @@ func TestGeneratedDBAPIClosesCursorAndPreservesTransaction(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "ydb.py"), []byte("class PrimitiveType:\n    Uint64 = 'Uint64'\nclass OptionalType:\n    def __init__(self, item): self.item=item\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	script := fmt.Sprintf("import sys; sys.path.insert(0, %q); from db.queries import Querier\nclass Cur:\n rowcount=1\n def execute(self, sql, params): self.params=params\n def fetchall(self): return [(7, None)]\n def close(self): self.closed=True\nclass C:\n def __init__(self): self.cur=Cur(); self.commits=0\n def cursor(self): return self.cur\nc=C(); row=Querier(c).get_author(7); assert row.id == 7 and c.cur.closed and c.commits == 0 and c.cur.params['$id'][0] == 7\n", dir)
+	script := fmt.Sprintf(`import sys
+sys.path.insert(0, %q)
+from db.queries import Querier
+
+class Cursor:
+    def execute(self, sql, params): self.params = params
+    def fetchall(self): return [(7, None)]
+    def close(self): self.closed = True
+
+class Connection:
+    def __init__(self): self.cur = Cursor(); self.commits = 0
+    def cursor(self): return self.cur
+    def commit(self): self.commits += 1
+
+connection = Connection()
+row = Querier(connection).get_author(7, 8, 9, 10)
+assert row.id == 7 and row.display_name is None
+assert connection.cur.closed and connection.commits == 0
+assert connection.cur.params['$id'][0] == 7
+assert [connection.cur.params['$' + name][0] for name in ('ydb', 'models', 'text')] == [8, 9, 10]
+`, dir)
 	cmd := exec.Command("python3", "-c", script)
 	cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
 	if out, err := cmd.CombinedOutput(); err != nil {

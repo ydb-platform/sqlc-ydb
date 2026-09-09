@@ -205,7 +205,7 @@ function _json(value, name) { if (typeof value !== "string") throw new TypeError
 function _rawValue(value, name, expectedCase) { if (value === null || typeof value !== "object" || value.value?.case !== expectedCase) throw new TypeError(`${name} has an unexpected YDB value shape`); return value.value.value; }
 function _rawOptional(value, name, read) { if (value === null || typeof value !== "object") throw new TypeError(`${name} has an unexpected YDB Optional shape`); return value.value?.case === "nullFlagValue" ? null : read(value); }
 
-function decodeGetAuthorRow(row) {
+function _decodeGetAuthorRow(row) {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("GetAuthor: expected an object row");
   if (!Object.hasOwn(row, "author_id")) throw new TypeError("GetAuthor: result row is missing column author_id");
   if (!Object.hasOwn(row, "name")) throw new TypeError("GetAuthor: result row is missing column name");
@@ -215,7 +215,7 @@ function decodeGetAuthorRow(row) {
   };
 }
 
-function decodeGetBookRow(row) {
+function _decodeGetBookRow(row) {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("GetBook: expected an object row");
   if (!Object.hasOwn(row, "book_id")) throw new TypeError("GetBook: result row is missing column book_id");
   if (!Object.hasOwn(row, "author_id")) throw new TypeError("GetBook: result row is missing column author_id");
@@ -237,7 +237,7 @@ function decodeGetBookRow(row) {
   };
 }
 
-function decodeBooksByTitleYearRow(row) {
+function _decodeBooksByTitleYearRow(row) {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("BooksByTitleYear: expected an object row");
   if (!Object.hasOwn(row, "book_id")) throw new TypeError("BooksByTitleYear: result row is missing column book_id");
   if (!Object.hasOwn(row, "author_id")) throw new TypeError("BooksByTitleYear: result row is missing column author_id");
@@ -259,7 +259,7 @@ function decodeBooksByTitleYearRow(row) {
   };
 }
 
-function decodeBooksByTagsRow(row) {
+function _decodeBooksByTagsRow(row) {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("BooksByTags: expected an object row");
   if (!Object.hasOwn(row, "b.book_id")) throw new TypeError("BooksByTags: result row is missing column b.book_id");
   if (!Object.hasOwn(row, "b.title")) throw new TypeError("BooksByTags: result row is missing column b.title");
@@ -275,7 +275,7 @@ function decodeBooksByTagsRow(row) {
   };
 }
 
-function decodeCreateAuthorRow(row) {
+function _decodeCreateAuthorRow(row) {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("CreateAuthor: expected an object row");
   if (!Object.hasOwn(row, "author_id")) throw new TypeError("CreateAuthor: result row is missing column author_id");
   if (!Object.hasOwn(row, "name")) throw new TypeError("CreateAuthor: result row is missing column name");
@@ -285,7 +285,7 @@ function decodeCreateAuthorRow(row) {
   };
 }
 
-function decodeCreateBookRow(row) {
+function _decodeCreateBookRow(row) {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("CreateBook: expected an object row");
   if (!Object.hasOwn(row, "book_id")) throw new TypeError("CreateBook: result row is missing column book_id");
   if (!Object.hasOwn(row, "author_id")) throw new TypeError("CreateBook: result row is missing column author_id");
@@ -307,7 +307,7 @@ function decodeCreateBookRow(row) {
   };
 }
 
-function decodeSayHelloRow(row) {
+function _decodeSayHelloRow(row) {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("SayHello: expected an object row");
   if (!Object.hasOwn(row, "greeting")) throw new TypeError("SayHello: result row is missing column greeting");
   return {
@@ -325,67 +325,67 @@ export class Queries {
   }
 
   async getAuthor(authorId) {
-    const pending = this.#client(_GET_AUTHOR_SQL_EXEC)
+    const _pending = this.#client(_GET_AUTHOR_SQL_EXEC)
       .parameter("author_id", new Uint64(_uint64(authorId, "author_id")))
     ;
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("GetAuthor: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : decodeGetAuthorRow(rows[0]);
+    const _resultSets = await _pending;
+    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("GetAuthor: expected the first YDB result set to be an array");
+    const _rows = _resultSets[0];
+    return _rows.length === 0 ? null : _decodeGetAuthorRow(_rows[0]);
   }
 
   async getBook(bookId) {
-    const pending = this.#client(_GET_BOOK_SQL_EXEC)
+    const _pending = this.#client(_GET_BOOK_SQL_EXEC)
       .parameter("book_id", new Uint64(_uint64(bookId, "book_id")))
     ;
-    const resultSets = await pending.raw();
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("GetBook: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : decodeGetBookRow(rows[0]);
+    const _resultSets = await _pending.raw();
+    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("GetBook: expected the first YDB result set to be an array");
+    const _rows = _resultSets[0];
+    return _rows.length === 0 ? null : _decodeGetBookRow(_rows[0]);
   }
 
   async deleteBook(bookId) {
-    const pending = this.#client(_DELETE_BOOK_SQL_EXEC)
+    const _pending = this.#client(_DELETE_BOOK_SQL_EXEC)
       .parameter("book_id", new Uint64(_uint64(bookId, "book_id")))
     ;
-    const resultSets = await pending;
+    const _resultSets = await _pending;
     return undefined;
   }
 
   async booksByTitleYear(args) {
-    const pending = this.#client(_BOOKS_BY_TITLE_YEAR_SQL_EXEC)
+    const _pending = this.#client(_BOOKS_BY_TITLE_YEAR_SQL_EXEC)
       .parameter("title", new Utf8(_string(args.title, "title")))
       .parameter("publication_year", new Int32(_int32(args.publicationYear, "publication_year")))
     ;
-    const resultSets = await pending.raw();
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("BooksByTitleYear: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.map(decodeBooksByTitleYearRow);
+    const _resultSets = await _pending.raw();
+    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("BooksByTitleYear: expected the first YDB result set to be an array");
+    const _rows = _resultSets[0];
+    return _rows.map(_decodeBooksByTitleYearRow);
   }
 
   async booksByTags(tags) {
-    const pending = this.#client(_BOOKS_BY_TAGS_SQL_EXEC)
+    const _pending = this.#client(_BOOKS_BY_TAGS_SQL_EXEC)
       .parameter("tags", new Json(_json(tags, "tags")))
     ;
-    const resultSets = await pending.raw();
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("BooksByTags: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.map(decodeBooksByTagsRow);
+    const _resultSets = await _pending.raw();
+    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("BooksByTags: expected the first YDB result set to be an array");
+    const _rows = _resultSets[0];
+    return _rows.map(_decodeBooksByTagsRow);
   }
 
   async createAuthor(args) {
-    const pending = this.#client(_CREATE_AUTHOR_SQL_EXEC)
+    const _pending = this.#client(_CREATE_AUTHOR_SQL_EXEC)
       .parameter("author_id", new Uint64(_uint64(args.authorId, "author_id")))
       .parameter("name", new Utf8(_string(args.name, "name")))
     ;
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("CreateAuthor: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : decodeCreateAuthorRow(rows[0]);
+    const _resultSets = await _pending;
+    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("CreateAuthor: expected the first YDB result set to be an array");
+    const _rows = _resultSets[0];
+    return _rows.length === 0 ? null : _decodeCreateAuthorRow(_rows[0]);
   }
 
   async createBook(args) {
-    const pending = this.#client(_CREATE_BOOK_SQL_EXEC)
+    const _pending = this.#client(_CREATE_BOOK_SQL_EXEC)
       .parameter("book_id", new Uint64(_uint64(args.bookId, "book_id")))
       .parameter("author_id", new Uint64(_uint64(args.authorId, "author_id")))
       .parameter("isbn", new Utf8(_string(args.isbn, "isbn")))
@@ -395,49 +395,49 @@ export class Queries {
       .parameter("available", new Primitive({ value: { case: "uint64Value", value: _timestamp(args.available, "available") } }, new TimestampType()))
       .parameter("tags", new Json(_json(args.tags, "tags")))
     ;
-    const resultSets = await pending.raw();
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("CreateBook: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : decodeCreateBookRow(rows[0]);
+    const _resultSets = await _pending.raw();
+    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("CreateBook: expected the first YDB result set to be an array");
+    const _rows = _resultSets[0];
+    return _rows.length === 0 ? null : _decodeCreateBookRow(_rows[0]);
   }
 
   async updateBook(args) {
-    const pending = this.#client(_UPDATE_BOOK_SQL_EXEC)
+    const _pending = this.#client(_UPDATE_BOOK_SQL_EXEC)
       .parameter("book_id", new Uint64(_uint64(args.bookId, "book_id")))
       .parameter("title", new Utf8(_string(args.title, "title")))
       .parameter("tags", new Json(_json(args.tags, "tags")))
     ;
-    const resultSets = await pending;
+    const _resultSets = await _pending;
     return undefined;
   }
 
   async updateBookISBN(args) {
-    const pending = this.#client(_UPDATE_BOOK_ISBN_SQL_EXEC)
+    const _pending = this.#client(_UPDATE_BOOK_ISBN_SQL_EXEC)
       .parameter("book_id", new Uint64(_uint64(args.bookId, "book_id")))
       .parameter("title", new Utf8(_string(args.title, "title")))
       .parameter("tags", new Json(_json(args.tags, "tags")))
       .parameter("isbn", new Utf8(_string(args.isbn, "isbn")))
     ;
-    const resultSets = await pending;
+    const _resultSets = await _pending;
     return undefined;
   }
 
   async deleteAuthorBeforeYear(args) {
-    const pending = this.#client(_DELETE_AUTHOR_BEFORE_YEAR_SQL_EXEC)
+    const _pending = this.#client(_DELETE_AUTHOR_BEFORE_YEAR_SQL_EXEC)
       .parameter("author_id", new Uint64(_uint64(args.authorId, "author_id")))
       .parameter("publication_year", new Int32(_int32(args.publicationYear, "publication_year")))
     ;
-    const resultSets = await pending;
+    const _resultSets = await _pending;
     return undefined;
   }
 
   async sayHello(name) {
-    const pending = this.#client(_SAY_HELLO_SQL_EXEC)
+    const _pending = this.#client(_SAY_HELLO_SQL_EXEC)
       .parameter("name", new Utf8(_string(name, "name")))
     ;
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("SayHello: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : decodeSayHelloRow(rows[0]);
+    const _resultSets = await _pending;
+    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("SayHello: expected the first YDB result set to be an array");
+    const _rows = _resultSets[0];
+    return _rows.length === 0 ? null : _decodeSayHelloRow(_rows[0]);
   }
 }

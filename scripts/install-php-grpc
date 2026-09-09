@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Ubuntu CI runners provide PHP 8.2 through setup-php and its phpize tool.
+# Download the pinned archive directly: PECL channel updates can stall silently.
+grpc_version=1.78.0
+grpc_build_dir=$(mktemp -d)
+trap 'rm -rf "$grpc_build_dir"' EXIT
+curl --fail --location --connect-timeout 15 --max-time 120 --retry 3 \
+  "https://pecl.php.net/get/grpc-$grpc_version.tgz" -o "$grpc_build_dir/grpc.tgz"
+tar -xzf "$grpc_build_dir/grpc.tgz" -C "$grpc_build_dir"
+cd "$grpc_build_dir/grpc-$grpc_version"
+phpize
+# CI exercises SDK behavior; expensive compiler optimization adds no coverage.
+CFLAGS=-O1 CXXFLAGS=-O1 ./configure --with-php-config="$(command -v php-config)" --enable-grpc
+make -j2
+sudo make install
+echo 'extension=grpc.so' | sudo tee /etc/php/8.2/mods-available/grpc.ini
+sudo phpenmod -v 8.2 grpc
+php -r 'if (phpversion("grpc") !== "1.78.0") { fwrite(STDERR, "Expected gRPC 1.78.0\n"); exit(1); }'

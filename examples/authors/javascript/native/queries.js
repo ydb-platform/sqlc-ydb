@@ -58,7 +58,7 @@ function _uint64(value, name) { if (typeof value !== "bigint" || value < 0n || v
 function _string(value, name) { if (typeof value !== "string") throw new TypeError(`${name} must be a string`); return value; }
 function _optional(value, name, itemType, makeValue) { if (value === undefined) throw new TypeError(`${name} must not be undefined; use null for an empty Optional`); return new Optional(value === null ? null : makeValue(value), itemType); }
 
-function decodeGetAuthorRow(row) {
+function _decodeGetAuthorRow(row) {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("GetAuthor: expected an object row");
   if (!Object.hasOwn(row, "id")) throw new TypeError("GetAuthor: result row is missing column id");
   if (!Object.hasOwn(row, "name")) throw new TypeError("GetAuthor: result row is missing column name");
@@ -70,7 +70,7 @@ function decodeGetAuthorRow(row) {
   };
 }
 
-function decodeListAuthorsRow(row) {
+function _decodeListAuthorsRow(row) {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("ListAuthors: expected an object row");
   if (!Object.hasOwn(row, "id")) throw new TypeError("ListAuthors: result row is missing column id");
   if (!Object.hasOwn(row, "name")) throw new TypeError("ListAuthors: result row is missing column name");
@@ -82,7 +82,7 @@ function decodeListAuthorsRow(row) {
   };
 }
 
-function decodeGetAuthorNameRow(row) {
+function _decodeGetAuthorNameRow(row) {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("GetAuthorName: expected an object row");
   if (!Object.hasOwn(row, "name")) throw new TypeError("GetAuthorName: result row is missing column name");
   return {
@@ -90,7 +90,7 @@ function decodeGetAuthorNameRow(row) {
   };
 }
 
-function decodeCreateAuthorRow(row) {
+function _decodeCreateAuthorRow(row) {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("CreateAuthor: expected an object row");
   if (!Object.hasOwn(row, "id")) throw new TypeError("CreateAuthor: result row is missing column id");
   if (!Object.hasOwn(row, "name")) throw new TypeError("CreateAuthor: result row is missing column name");
@@ -112,59 +112,59 @@ export class Queries {
   }
 
   async getAuthor(authorId) {
-    const pending = this.#client(_GET_AUTHOR_SQL_EXEC)
+    const _pending = this.#client(_GET_AUTHOR_SQL_EXEC)
       .parameter("author_id", new Uint64(_uint64(authorId, "author_id")))
     ;
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("GetAuthor: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : decodeGetAuthorRow(rows[0]);
+    const _resultSets = await _pending;
+    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("GetAuthor: expected the first YDB result set to be an array");
+    const _rows = _resultSets[0];
+    return _rows.length === 0 ? null : _decodeGetAuthorRow(_rows[0]);
   }
 
   async listAuthors() {
-    const resultSets = await this.#client(LIST_AUTHORS_SQL);
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("ListAuthors: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.map(decodeListAuthorsRow);
+    const _resultSets = await this.#client(LIST_AUTHORS_SQL);
+    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("ListAuthors: expected the first YDB result set to be an array");
+    const _rows = _resultSets[0];
+    return _rows.map(_decodeListAuthorsRow);
   }
 
   async getAuthorName(authorId) {
-    const pending = this.#client(_GET_AUTHOR_NAME_SQL_EXEC)
+    const _pending = this.#client(_GET_AUTHOR_NAME_SQL_EXEC)
       .parameter("author_id", new Uint64(_uint64(authorId, "author_id")))
     ;
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("GetAuthorName: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : decodeGetAuthorNameRow(rows[0]);
+    const _resultSets = await _pending;
+    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("GetAuthorName: expected the first YDB result set to be an array");
+    const _rows = _resultSets[0];
+    return _rows.length === 0 ? null : _decodeGetAuthorNameRow(_rows[0]);
   }
 
   async createAuthor(args) {
-    const pending = this.#client(_CREATE_AUTHOR_SQL_EXEC)
+    const _pending = this.#client(_CREATE_AUTHOR_SQL_EXEC)
       .parameter("author_id", new Uint64(_uint64(args.authorId, "author_id")))
       .parameter("author_name", new Utf8(_string(args.authorName, "author_name")))
       .parameter("biography", _optional(args.biography, "biography", new Utf8Type(), (item) => new Utf8(_string(item, "biography"))))
     ;
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("CreateAuthor: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : decodeCreateAuthorRow(rows[0]);
+    const _resultSets = await _pending;
+    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("CreateAuthor: expected the first YDB result set to be an array");
+    const _rows = _resultSets[0];
+    return _rows.length === 0 ? null : _decodeCreateAuthorRow(_rows[0]);
   }
 
   async upsertAuthor(args) {
-    const pending = this.#client(_UPSERT_AUTHOR_SQL_EXEC)
+    const _pending = this.#client(_UPSERT_AUTHOR_SQL_EXEC)
       .parameter("author_id", new Uint64(_uint64(args.authorId, "author_id")))
       .parameter("author_name", new Utf8(_string(args.authorName, "author_name")))
       .parameter("biography", _optional(args.biography, "biography", new Utf8Type(), (item) => new Utf8(_string(item, "biography"))))
     ;
-    const resultSets = await pending;
+    const _resultSets = await _pending;
     return undefined;
   }
 
   async deleteAuthor(authorId) {
-    const pending = this.#client(_DELETE_AUTHOR_SQL_EXEC)
+    const _pending = this.#client(_DELETE_AUTHOR_SQL_EXEC)
       .parameter("author_id", new Uint64(_uint64(authorId, "author_id")))
     ;
-    const resultSets = await pending;
+    const _resultSets = await _pending;
     return undefined;
   }
 }

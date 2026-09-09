@@ -182,7 +182,7 @@ function _optional(value, name, itemType, makeValue) { if (value === undefined) 
 function _rawValue(value, name, expectedCase) { if (value === null || typeof value !== "object" || value.value?.case !== expectedCase) throw new TypeError(`${name} has an unexpected YDB value shape`); return value.value.value; }
 function _rawOptional(value, name, read) { if (value === null || typeof value !== "object") throw new TypeError(`${name} has an unexpected YDB Optional shape`); return value.value?.case === "nullFlagValue" ? null : read(value); }
 
-function decodeListCitiesRow(row) {
+function _decodeListCitiesRow(row) {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("ListCities: expected an object row");
   if (!Object.hasOwn(row, "slug")) throw new TypeError("ListCities: result row is missing column slug");
   if (!Object.hasOwn(row, "name")) throw new TypeError("ListCities: result row is missing column name");
@@ -192,7 +192,7 @@ function decodeListCitiesRow(row) {
   };
 }
 
-function decodeGetCityRow(row) {
+function _decodeGetCityRow(row) {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("GetCity: expected an object row");
   if (!Object.hasOwn(row, "slug")) throw new TypeError("GetCity: result row is missing column slug");
   if (!Object.hasOwn(row, "name")) throw new TypeError("GetCity: result row is missing column name");
@@ -202,7 +202,7 @@ function decodeGetCityRow(row) {
   };
 }
 
-function decodeCreateCityRow(row) {
+function _decodeCreateCityRow(row) {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("CreateCity: expected an object row");
   if (!Object.hasOwn(row, "slug")) throw new TypeError("CreateCity: result row is missing column slug");
   if (!Object.hasOwn(row, "name")) throw new TypeError("CreateCity: result row is missing column name");
@@ -212,7 +212,7 @@ function decodeCreateCityRow(row) {
   };
 }
 
-function decodeListVenuesRow(row) {
+function _decodeListVenuesRow(row) {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("ListVenues: expected an object row");
   if (!Object.hasOwn(row, "id")) throw new TypeError("ListVenues: result row is missing column id");
   if (!Object.hasOwn(row, "slug")) throw new TypeError("ListVenues: result row is missing column slug");
@@ -238,7 +238,7 @@ function decodeListVenuesRow(row) {
   };
 }
 
-function decodeGetVenueRow(row) {
+function _decodeGetVenueRow(row) {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("GetVenue: expected an object row");
   if (!Object.hasOwn(row, "id")) throw new TypeError("GetVenue: result row is missing column id");
   if (!Object.hasOwn(row, "slug")) throw new TypeError("GetVenue: result row is missing column slug");
@@ -264,7 +264,7 @@ function decodeGetVenueRow(row) {
   };
 }
 
-function decodeCreateVenueRow(row) {
+function _decodeCreateVenueRow(row) {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("CreateVenue: expected an object row");
   if (!Object.hasOwn(row, "id")) throw new TypeError("CreateVenue: result row is missing column id");
   return {
@@ -272,7 +272,7 @@ function decodeCreateVenueRow(row) {
   };
 }
 
-function decodeUpdateVenueNameRow(row) {
+function _decodeUpdateVenueNameRow(row) {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("UpdateVenueName: expected an object row");
   if (!Object.hasOwn(row, "id")) throw new TypeError("UpdateVenueName: result row is missing column id");
   return {
@@ -280,7 +280,7 @@ function decodeUpdateVenueNameRow(row) {
   };
 }
 
-function decodeVenueCountByCityRow(row) {
+function _decodeVenueCountByCityRow(row) {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("VenueCountByCity: expected an object row");
   if (!Object.hasOwn(row, "city")) throw new TypeError("VenueCountByCity: result row is missing column city");
   if (!Object.hasOwn(row, "venue_count")) throw new TypeError("VenueCountByCity: result row is missing column venue_count");
@@ -300,73 +300,73 @@ export class Queries {
   }
 
   async listCities() {
-    const resultSets = await this.#client(LIST_CITIES_SQL);
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("ListCities: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.map(decodeListCitiesRow);
+    const _resultSets = await this.#client(LIST_CITIES_SQL);
+    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("ListCities: expected the first YDB result set to be an array");
+    const _rows = _resultSets[0];
+    return _rows.map(_decodeListCitiesRow);
   }
 
   async getCity(slug) {
-    const pending = this.#client(_GET_CITY_SQL_EXEC)
+    const _pending = this.#client(_GET_CITY_SQL_EXEC)
       .parameter("slug", new Utf8(_string(slug, "slug")))
     ;
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("GetCity: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : decodeGetCityRow(rows[0]);
+    const _resultSets = await _pending;
+    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("GetCity: expected the first YDB result set to be an array");
+    const _rows = _resultSets[0];
+    return _rows.length === 0 ? null : _decodeGetCityRow(_rows[0]);
   }
 
   async createCity(args) {
-    const pending = this.#client(_CREATE_CITY_SQL_EXEC)
+    const _pending = this.#client(_CREATE_CITY_SQL_EXEC)
       .parameter("name", new Utf8(_string(args.name, "name")))
       .parameter("slug", new Utf8(_string(args.slug, "slug")))
     ;
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("CreateCity: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : decodeCreateCityRow(rows[0]);
+    const _resultSets = await _pending;
+    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("CreateCity: expected the first YDB result set to be an array");
+    const _rows = _resultSets[0];
+    return _rows.length === 0 ? null : _decodeCreateCityRow(_rows[0]);
   }
 
   async updateCityName(args) {
-    const pending = this.#client(_UPDATE_CITY_NAME_SQL_EXEC)
+    const _pending = this.#client(_UPDATE_CITY_NAME_SQL_EXEC)
       .parameter("name", new Utf8(_string(args.name, "name")))
       .parameter("slug", new Utf8(_string(args.slug, "slug")))
     ;
-    const resultSets = await pending;
+    const _resultSets = await _pending;
     return undefined;
   }
 
   async listVenues(city) {
-    const pending = this.#client(_LIST_VENUES_SQL_EXEC)
+    const _pending = this.#client(_LIST_VENUES_SQL_EXEC)
       .parameter("city", new Utf8(_string(city, "city")))
     ;
-    const resultSets = await pending.raw();
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("ListVenues: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.map(decodeListVenuesRow);
+    const _resultSets = await _pending.raw();
+    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("ListVenues: expected the first YDB result set to be an array");
+    const _rows = _resultSets[0];
+    return _rows.map(_decodeListVenuesRow);
   }
 
   async deleteVenue(slug) {
-    const pending = this.#client(_DELETE_VENUE_SQL_EXEC)
+    const _pending = this.#client(_DELETE_VENUE_SQL_EXEC)
       .parameter("slug", new Utf8(_string(slug, "slug")))
     ;
-    const resultSets = await pending;
+    const _resultSets = await _pending;
     return undefined;
   }
 
   async getVenue(args) {
-    const pending = this.#client(_GET_VENUE_SQL_EXEC)
+    const _pending = this.#client(_GET_VENUE_SQL_EXEC)
       .parameter("slug", new Utf8(_string(args.slug, "slug")))
       .parameter("city", new Utf8(_string(args.city, "city")))
     ;
-    const resultSets = await pending.raw();
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("GetVenue: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : decodeGetVenueRow(rows[0]);
+    const _resultSets = await _pending.raw();
+    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("GetVenue: expected the first YDB result set to be an array");
+    const _rows = _resultSets[0];
+    return _rows.length === 0 ? null : _decodeGetVenueRow(_rows[0]);
   }
 
   async createVenue(args) {
-    const pending = this.#client(_CREATE_VENUE_SQL_EXEC)
+    const _pending = this.#client(_CREATE_VENUE_SQL_EXEC)
       .parameter("id", new Uint64(_uint64(args.id, "id")))
       .parameter("slug", new Utf8(_string(args.slug, "slug")))
       .parameter("name", new Utf8(_string(args.name, "name")))
@@ -377,27 +377,27 @@ export class Queries {
       .parameter("statuses", _optional(args.statuses, "statuses", new JsonType(), (item) => new Json(_json(item, "statuses"))))
       .parameter("tags", _optional(args.tags, "tags", new JsonType(), (item) => new Json(_json(item, "tags"))))
     ;
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("CreateVenue: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : decodeCreateVenueRow(rows[0]);
+    const _resultSets = await _pending;
+    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("CreateVenue: expected the first YDB result set to be an array");
+    const _rows = _resultSets[0];
+    return _rows.length === 0 ? null : _decodeCreateVenueRow(_rows[0]);
   }
 
   async updateVenueName(args) {
-    const pending = this.#client(_UPDATE_VENUE_NAME_SQL_EXEC)
+    const _pending = this.#client(_UPDATE_VENUE_NAME_SQL_EXEC)
       .parameter("name", new Utf8(_string(args.name, "name")))
       .parameter("slug", new Utf8(_string(args.slug, "slug")))
     ;
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("UpdateVenueName: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : decodeUpdateVenueNameRow(rows[0]);
+    const _resultSets = await _pending;
+    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("UpdateVenueName: expected the first YDB result set to be an array");
+    const _rows = _resultSets[0];
+    return _rows.length === 0 ? null : _decodeUpdateVenueNameRow(_rows[0]);
   }
 
   async venueCountByCity() {
-    const resultSets = await this.#client(VENUE_COUNT_BY_CITY_SQL);
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("VenueCountByCity: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.map(decodeVenueCountByCityRow);
+    const _resultSets = await this.#client(VENUE_COUNT_BY_CITY_SQL);
+    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("VenueCountByCity: expected the first YDB result set to be an array");
+    const _rows = _resultSets[0];
+    return _rows.map(_decodeVenueCountByCityRow);
   }
 }

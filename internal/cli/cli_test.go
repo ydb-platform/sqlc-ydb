@@ -77,6 +77,22 @@ func TestGenerationErrorLeavesOutputsIntact(t *testing.T) {
 	}
 }
 
+func TestOutputFileCannotBeAnotherOutputDirectory(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "sqlc.yaml")
+	put(t, filepath.Join(dir, "schema.sql"), "CREATE TABLE a (id Uint64 NOT NULL, PRIMARY KEY(id));")
+	put(t, filepath.Join(dir, "queries.sql"), "-- name: GetA :one\nSELECT id FROM a;")
+	put(t, cfg, "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n  gen:\n    go:\n      out: db\n    python:\n      out: db/db.go\n")
+	for _, command := range []string{"diff", "generate"} {
+		if code, _, err := invoke(command, "-f", cfg); code != 1 || !strings.Contains(err, "output path conflict") {
+			t.Errorf("%s: got %d: %s", command, code, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "db")); !os.IsNotExist(err) {
+		t.Fatal("generate wrote files before reporting conflicting paths")
+	}
+}
+
 func TestCLIAndInit(t *testing.T) {
 	for _, args := range [][]string{{"generate", "--bogus"}, {"generate", "-f"}, {"version", "extra"}, {"init", "--v1", "--v2"}, {"push"}, {"generate", "--remote"}} {
 		if code, _, _ := invoke(args...); code == 0 {

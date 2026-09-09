@@ -60,3 +60,5 @@ The shared examples pin `ydb` 0.18.2 and require Rust 1.88 or newer, matching
 the SDK's published minimum supported Rust version. `:execrows`, container
 types, decimal values, UUID values, and other unmapped YQL types produce a
 generation error.
+Query names that normalize to `new` are rejected because `Queries::new` is the
+generated constructor; choose a different query annotation name.

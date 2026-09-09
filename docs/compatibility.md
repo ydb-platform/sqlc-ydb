@@ -71,6 +71,8 @@ Use separate output directories for independently invoked configurations. Severa
 generators in one configuration may share a directory if their filenames do not
 collide. Files written by sqlc-ydb carry a generated header and are overwritten
 by `generate`; handwritten files with other names are retained.
+`generate` and `diff` reject output paths that use the same path as both a file
+and a directory, before writing any files.
 
 If a query file or model is renamed or removed, `generate` and `diff` report
 obsolete files with the sqlc-ydb header in the current output directories and
@@ -119,6 +121,8 @@ Current INSERT/UPSERT VALUES and UPDATE SET values must be direct parameters;
 literal and computed assignments are explicitly rejected. Shared query-file
 declarations must currently be moved into each named query. These are temporary
 coverage limits, separate from the permanent decision to exclude plugins.
+Comments and whitespace may precede the first query annotation; comment-only
+query files are ignored.
 
 ## Schema migration coverage
 

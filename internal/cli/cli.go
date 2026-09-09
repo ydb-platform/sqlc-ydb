@@ -314,6 +314,11 @@ func prepare(c *config.Config, generate bool) ([]output, error) {
 		if inputs[key] {
 			return nil, fmt.Errorf("generated file would overwrite input %s", f.path)
 		}
+		for dir := filepath.Dir(key); dir != filepath.Dir(dir); dir = filepath.Dir(dir) {
+			if seen[dir] {
+				return nil, fmt.Errorf("output path conflict: %s is both a generated file and a directory for %s; use distinct output directories", dir, f.path)
+			}
+		}
 	}
 	sort.Slice(outputs, func(i, j int) bool { return outputs[i].path < outputs[j].path })
 	return outputs, nil

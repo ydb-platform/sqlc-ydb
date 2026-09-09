@@ -33,9 +33,14 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-          extensions: bcmath, curl, grpc-1.78.0
-          tools: composer:2.8
+          extensions: bcmath, curl
+          tools: composer:2.8, phpize, php-config
           coverage: none
+        env:
+          fail-fast: true
+      - name: Build pinned PHP gRPC extension
+        timeout-minutes: 15
+        run: bash scripts/install-php-grpc
       - name: Check standalone generator and generated outputs
         run: make check
       - name: Compile generated code against published SDKs
@@ -103,9 +108,14 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-          extensions: bcmath, curl, grpc-1.78.0
-          tools: composer:2.8
+          extensions: bcmath, curl
+          tools: composer:2.8, phpize, php-config
           coverage: none
+        env:
+          fail-fast: true
+      - name: Build pinned PHP gRPC extension
+        timeout-minutes: 15
+        run: bash scripts/install-php-grpc
       - name: Install and compile new runtime examples
         run: |
           dotnet build examples/csharp/GeneratedProfiles.csproj

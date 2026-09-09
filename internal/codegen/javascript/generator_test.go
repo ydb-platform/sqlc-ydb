@@ -69,8 +69,8 @@ func TestGenerateQueriesAndDeclarations(t *testing.T) {
 		`.parameter("author_id", new Uint64(_uint64(authorId, "author_id")))`,
 		`async upsertAuthor(args)`,
 		`.parameter("name", new Utf8(_string(args.name, "name")))`,
-		`return rows.length === 0 ? null : decodeGetAuthorRow(rows[0]);`,
-		`return rows.map(decodeListAuthorsRow);`,
+		`return _rows.length === 0 ? null : _decodeGetAuthorRow(_rows[0]);`,
+		`return _rows.map(_decodeListAuthorsRow);`,
 	} {
 		if !strings.Contains(js, want) {
 			t.Errorf("queries.js missing %q\n%s", want, js)
@@ -131,7 +131,14 @@ func TestGeneratedModuleBindsAndDecodesWithoutShapeFallbacks(t *testing.T) {
 	if err != nil {
 		t.Skip("node is unavailable")
 	}
-	files, err := Generate(testAnalysis(), Options{})
+	a := testAnalysis()
+	for _, names := range [][2]string{{"pending", "pending"}, {"result_sets", "result_sets"}, {"rows", "rows"}, {"Named", "decode_named_row"}} {
+		q := a.Queries[0]
+		q.Name = names[0]
+		q.Parameters = []model.Parameter{{Name: names[1], Type: model.Type{Kind: "Uint64"}}}
+		a.Queries = append(a.Queries, q)
+	}
+	files, err := Generate(a, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,6 +183,11 @@ const row = await queries.getAuthor(18446744073709551615n);
 if (row.id !== 18446744073709551615n || row.displayName !== 'Ada' || row.bio !== null) throw new Error('decode failed');
 if (calls[0].text.includes('DECLARE') || !GET_AUTHOR_SQL.includes('DECLARE')) throw new Error('wrong SQL variant');
 if (calls[0].params[0][0] !== 'author_id' || calls[0].params[0][1] !== 18446744073709551615n) throw new Error('binding failed');
+for (const [method, name] of [['pending', 'pending'], ['resultSets', 'result_sets'], ['rows', 'rows'], ['named', 'decode_named_row']]) {
+  const row = await queries[method](7n);
+  const params = calls.at(-1).params;
+  if (row.displayName !== 'Ada' || params[0][0] !== name || params[0][1] !== 7n) throw new Error('shadowed parameter: ' + name);
+}
 const bad = new Queries(() => {
   const promise = Promise.resolve([[{ id: 1n, bio: null }]]);
   promise.parameter = () => promise;
@@ -280,7 +292,7 @@ func TestTimestampUsesLosslessMicrosecondsAndRawResultDecoding(t *testing.T) {
 		`import { Primitive, TimestampType } from "@ydbjs/value/primitive";`,
 		`value > 4291747199999999n`,
 		`new Primitive({ value: { case: "uint64Value", value: _timestamp(value, "value") } }, new TimestampType())`,
-		`const resultSets = await pending.raw();`,
+		`const _resultSets = await _pending.raw();`,
 		`value: _rawValue(row["value"], "EchoTimestamp.value", "uint64Value")`,
 	} {
 		if !strings.Contains(js, want) {
@@ -393,7 +405,7 @@ func TestJSONStaysExactText(t *testing.T) {
 		`function _json(value, name)`,
 		`return value;`,
 		`new Json(_json(value, "value"))`,
-		`const resultSets = await pending.raw();`,
+		`const _resultSets = await _pending.raw();`,
 		`value: _rawValue(row["value"], "EchoJSON.value", "textValue")`,
 	} {
 		if !strings.Contains(js, want) {

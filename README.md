@@ -10,6 +10,25 @@ No release is implied by the version number; see the [changelog](CHANGELOG.md)
 and [release plan](docs/release-plan.md). The previous engine-plugin
 implementation is preserved in `archive/engine-plugins-2026-09-07`.
 
+## Supported targets
+
+Each link opens the authors example for the selected SDK or framework:
+
+| Language | SDK / framework examples |
+| --- | --- |
+| Go | [YDB native SDK](examples/authors/go/native), [database/sql](examples/authors/go/database/sql) |
+| Python | [YDB native SDK](examples/authors/python/native), [DB-API](examples/authors/python/dbapi), [SQLAlchemy](examples/authors/python/sqlalchemy) |
+| C++ | [YDB native SDK](examples/authors/cpp/native), [userver](examples/authors/cpp/userver) |
+| C# | [ADO.NET](examples/authors/csharp/adonet), [Dapper](examples/authors/csharp/dapper), [linq2db](examples/authors/csharp/linq2db) |
+| Java | [YDB native SDK](examples/authors/java/native), [JDBC](examples/authors/java/jdbc), [Spring JDBC](examples/authors/java/spring), [Hibernate](examples/authors/java/hibernate) |
+| JavaScript | [YDB native SDK, ESM with TypeScript declarations](examples/authors/javascript/native) |
+| Rust | [YDB native SDK](examples/authors/rust/native) |
+| PHP | [YDB native SDK](examples/authors/php/native) |
+
+All targets are built into the executable. Only the generated application needs
+the selected runtime library. Configuration, generated APIs and type coverage
+are documented in the [target reference](docs/targets.md).
+
 ## Quick start
 
 Build with Go 1.26:
@@ -21,11 +40,9 @@ go build -o bin/sqlc-ydb ./cmd/sqlc-ydb
 ./bin/sqlc-ydb diff -f examples/authors/sqlc.yaml
 ```
 
-The authors example includes every [built-in target](docs/targets.md), with code
-organized by language and runtime, such as `go/native`, `csharp/dapper`,
-`javascript/native`, `rust/native` and `php/native`. Schema, queries and
-configuration stay in `examples/authors`. Only the generated application needs
-the corresponding runtime library.
+The authors example shares one [schema](examples/authors/schema.sql),
+[query file](examples/authors/queries.sql) and
+[configuration](examples/authors/sqlc.yaml) across all targets above.
 
 [All upstream example families](examples/README.md) are also adapted for YDB:
 authors, batch, booktest, jets and ondeck. Run `make generate` to regenerate them

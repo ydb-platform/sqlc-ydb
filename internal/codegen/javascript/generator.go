@@ -278,7 +278,7 @@ func renderValidationHelpers(b *strings.Builder, validators map[string]bool, opt
 }
 
 func renderDecoder(b *strings.Builder, query model.AnalyzedQuery) {
-	decoder := "decode" + exportedName(query.Name) + "Row"
+	decoder := "_decode" + exportedName(query.Name) + "Row"
 	b.WriteString("function " + decoder + "(row) {\n")
 	b.WriteString("  if (row === null || typeof row !== \"object\" || Array.isArray(row)) throw new TypeError(" + strconv.Quote(query.Name+": expected an object row") + ");\n")
 	for _, column := range query.ResultSets[0].Columns {
@@ -313,9 +313,9 @@ func renderMethod(b *strings.Builder, query model.AnalyzedQuery) error {
 		rawSuffix = ".raw()"
 	}
 	if len(query.Parameters) == 0 {
-		b.WriteString("    const resultSets = await this.#client(" + constant + ")" + rawSuffix + ";\n")
+		b.WriteString("    const _resultSets = await this.#client(" + constant + ")" + rawSuffix + ";\n")
 	} else {
-		b.WriteString("    const pending = this.#client(_" + constant + "_EXEC)\n")
+		b.WriteString("    const _pending = this.#client(_" + constant + "_EXEC)\n")
 		for _, parameter := range query.Parameters {
 			field, _ := identifier(parameter.Name, false)
 			value := field
@@ -328,19 +328,19 @@ func renderMethod(b *strings.Builder, query model.AnalyzedQuery) error {
 			}
 			b.WriteString("      .parameter(" + strconv.Quote(parameter.Name) + ", " + expr + ")\n")
 		}
-		b.WriteString("    ;\n    const resultSets = await pending" + rawSuffix + ";\n")
+		b.WriteString("    ;\n    const _resultSets = await _pending" + rawSuffix + ";\n")
 	}
 	if query.Command == model.Exec {
 		b.WriteString("    return undefined;\n  }\n")
 		return nil
 	}
-	b.WriteString("    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError(" + strconv.Quote(query.Name+": expected the first YDB result set to be an array") + ");\n")
-	b.WriteString("    const rows = resultSets[0];\n")
-	decoder := "decode" + exportedName(query.Name) + "Row"
+	b.WriteString("    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError(" + strconv.Quote(query.Name+": expected the first YDB result set to be an array") + ");\n")
+	b.WriteString("    const _rows = _resultSets[0];\n")
+	decoder := "_decode" + exportedName(query.Name) + "Row"
 	if query.Command == model.One {
-		b.WriteString("    return rows.length === 0 ? null : " + decoder + "(rows[0]);\n")
+		b.WriteString("    return _rows.length === 0 ? null : " + decoder + "(_rows[0]);\n")
 	} else {
-		b.WriteString("    return rows.map(" + decoder + ");\n")
+		b.WriteString("    return _rows.map(" + decoder + ");\n")
 	}
 	b.WriteString("  }\n")
 	return nil

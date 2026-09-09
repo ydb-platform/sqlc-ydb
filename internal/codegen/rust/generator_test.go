@@ -190,6 +190,11 @@ func TestGeneratedRawSQLRoundTripsThroughRustCompiler(t *testing.T) {
 }
 
 func TestRejectsUnsupportedRuntimeTypeAndNames(t *testing.T) {
+	aNew := representativeAnalysis()
+	aNew.Queries[0].Name = "New"
+	if _, err := Generate(aNew, Options{}); err == nil || !strings.Contains(err.Error(), "constructor") {
+		t.Fatalf("constructor collision error: %v", err)
+	}
 	if _, err := Generate(representativeAnalysis(), Options{Runtime: "sqlx"}); err == nil || !strings.Contains(err.Error(), `unsupported runtime "sqlx"`) {
 		t.Fatalf("runtime error: %v", err)
 	}
