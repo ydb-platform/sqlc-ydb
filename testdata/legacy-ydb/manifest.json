@@ -1,15 +1,10 @@
 {
   "repository": "https://github.com/ydb-platform/sqlc",
   "revision": "8eed5d890396eb03953248a3ec4ab7e28dfaed45",
-  "upstream_base": "2e0435c856c7d42ea58aaa2c24b6c9feda0509e9",
   "scenario_count": 126,
   "configuration_count": 181,
   "case_count": 131,
   "files": {
-    "LICENSE": {
-      "sha256": "fc69a4525f6f7e79675fba3645351f2cdaf9331978e72d44155634575a4455ea",
-      "source": "LICENSE"
-    },
     "inputs/alias/ydb/stdlib/query.sql": {
       "sha256": "62a8ac42282472ec3ec90881467d6ea0cfb7ecf51b07344a096a13d5b3ecd280",
       "source": "internal/endtoend/testdata/alias/ydb/stdlib/query.sql"
@@ -2201,9 +2196,6 @@
     "inputs/valid_group_by_reference/ydb/ydb-go-sdk/sqlc.json": {
       "sha256": "241f5301da21ef471a167e4763ee263d38a006ef91eb5327e68e21e7daaef989",
       "source": "internal/endtoend/testdata/valid_group_by_reference/ydb/ydb-go-sdk/sqlc.json"
-    },
-    "ydb.patch": {
-      "sha256": "67c7e6eb54098a9ea7288d0e3947e44ea5b11472df4ba796af3a190068cfe3fa"
     }
   },
   "cases": [

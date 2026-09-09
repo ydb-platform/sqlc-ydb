@@ -6,6 +6,3 @@ byte-for-byte historical source material. This fixture replaces the legacy
 `Text` table definition with `Utf8`, adds explicit YQL declarations, and
 combines nullable `CASE`, `CAST`, `COALESCE`, `LENGTH`, and `ABS` into one
 current CLI configuration for Go `database/sql` and Python YDB output.
-
-The source corpus is available under the MIT license in
-[testdata/legacy-ydb/LICENSE](../../../../testdata/legacy-ydb/LICENSE) (Copyright (c) 2024 Riza, Inc.).

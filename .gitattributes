@@ -3,4 +3,3 @@
 
 # Preserve historical SQL byte-for-byte, including deliberate whitespace.
 testdata/legacy-ydb/inputs/** -text -whitespace
-testdata/legacy-ydb/ydb.patch -text -diff

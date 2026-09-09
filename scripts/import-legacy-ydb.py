@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Preserve the pinned YDB fork contribution and its SQL corpus.
+"""Import the pinned YDB SQL regression corpus.
 
 This is an import utility, not a dependency of builds or tests. The destination
 contains everything needed to use the imported material after the fork is gone.
@@ -14,7 +14,6 @@ import subprocess
 
 
 REVISION = "8eed5d890396eb03953248a3ec4ab7e28dfaed45"
-BASE = "2e0435c856c7d42ea58aaa2c24b6c9feda0509e9"
 PREFIX = "internal/endtoend/testdata/"
 
 
@@ -48,11 +47,6 @@ def main():
         if original:
             imported[relative]["source"] = original
 
-    write("LICENSE", source("LICENSE"), "LICENSE")
-    # The complete delta retains function catalogs, converter algorithms,
-    # generated historical output, SDK glue and source context without making
-    # any old AST or plugin implementation part of the new Go module.
-    write("ydb.patch", git("diff", "--binary", "--full-index", "--no-ext-diff", BASE, REVISION))
     cases = {}
     scenarios = set()
     for config_path in configs:
@@ -116,7 +110,6 @@ def main():
     manifest = {
         "repository": "https://github.com/ydb-platform/sqlc",
         "revision": REVISION,
-        "upstream_base": BASE,
         "scenario_count": len(scenarios),
         "configuration_count": len(configs),
         "case_count": len(cases),

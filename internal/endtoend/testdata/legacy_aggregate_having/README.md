@@ -5,6 +5,3 @@ Adapted from [testdata/legacy-ydb/inputs/having/ydb/query.sql](../../../../testd
 `GROUP BY city` and aggregate `HAVING` purpose, while replacing `Text` with
 `Utf8`, renaming the temperature column, and declaring the YQL parameter
 explicitly for the current CLI configuration.
-
-The source corpus is available under the MIT license in
-[testdata/legacy-ydb/LICENSE](../../../../testdata/legacy-ydb/LICENSE) (Copyright (c) 2024 Riza, Inc.).

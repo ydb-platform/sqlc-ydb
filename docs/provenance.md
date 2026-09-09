@@ -3,7 +3,7 @@
 The standalone CLI, model, analyzer and generator renderers are maintained
 independently. They do not load sqlc's intermediate AST, compiler or plugin
 protocol. Selected YDB algorithms and fixtures have been adapted as described
-below; historical source is retained separately from compiled code.
+below; original SQL inputs are retained in the regression corpus.
 
 Behavior/API references:
 
@@ -112,18 +112,17 @@ public `Table` accessors and `RequestTrait` to retain raw protobuf result values
 
 ## Salvaged YDB implementation and tests
 
-The [local source snapshot](../testdata/legacy-ydb/README.md) preserves the complete
-YDB contribution at `8eed5d890396eb03953248a3ec4ab7e28dfaed45` from
-`ydb-platform/sqlc`, including its MIT notice, function catalogs, ANTLR converter,
-Go generator and test corpus. Its checksummed patch is relative to upstream
-`2e0435c856c7d42ea58aaa2c24b6c9feda0509e9`; future reading and tests do not depend
-on the fork remaining available. Adapted CLI fixtures record their source paths.
+The [local SQL corpus](../testdata/legacy-ydb/README.md) contains SQL and
+configuration inputs from the YDB work at
+`8eed5d890396eb03953248a3ec4ab7e28dfaed45` in `ydb-platform/sqlc`.
+Its manifest records source paths and checksums; tests do not depend on the fork
+remaining available. Adapted CLI fixtures record their source inputs.
 
 The converter's grammar paths informed direct-context CASE, CAST, UNION and
 grouping analysis. Historical function signatures are an inventory, not a type
 oracle: the [built-in resolver](../internal/yql/builtins/README.md) records the
 current supported subset and primary YQL references. Unsupported library/resource
-functions remain in the historical snapshot without a guessed result type.
+functions produce errors until their typing rules are implemented.
 
 Go parameter binding adapts the historical ParamsBuilder idea against SDK
 `v3.151.1`, pinned in [examples/go.mod](../examples/go.mod). Inspected SDK paths:

@@ -64,8 +64,8 @@ func readLegacyManifest(t *testing.T) legacyManifest {
 	return manifest
 }
 
-// The fork may be deleted. Verify the local corpus and the complete historical
-// patch against the recorded import, without Git/network access at test time.
+// Verify the local SQL corpus against the recorded import without Git or
+// network access at test time.
 func TestLegacySourceIntegrity(t *testing.T) {
 	manifest := readLegacyManifest(t)
 	if manifest.Revision != "8eed5d890396eb03953248a3ec4ab7e28dfaed45" ||
