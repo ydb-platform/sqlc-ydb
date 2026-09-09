@@ -42,5 +42,4 @@ configuration or every upstream generator option is implemented. See the
 [compatibility contract](../docs/compatibility.md).
 
 SQL/schema scenarios are adapted from upstream commit
-`3c2546a4b47fabbcec3e07df420effb1a464728f`. Its MIT notice is preserved in
-[UPSTREAM_LICENSE](UPSTREAM_LICENSE); generated code comes from sqlc-ydb.
+`3c2546a4b47fabbcec3e07df420effb1a464728f`; generated code comes from sqlc-ydb.

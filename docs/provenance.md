@@ -23,7 +23,6 @@ their modules.
 The [examples](../examples/README.md) adapt SQL schemas, queries and scenarios
 from all five families in `sqlc-dev/sqlc` at commit
 [`3c2546a4b47fabbcec3e07df420effb1a464728f`](https://github.com/sqlc-dev/sqlc/tree/3c2546a4b47fabbcec3e07df420effb1a464728f/examples).
-The upstream MIT notice is preserved in [UPSTREAM_LICENSE](../examples/UPSTREAM_LICENSE).
 PostgreSQL/MySQL/SQLite variants were inspected for distinct scenarios; the
 adaptations use YDB SQL and SDKs. Each example README records material changes.
 Upstream generated Go, pgx batch wrappers and multi-engine test helpers are not

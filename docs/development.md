@@ -24,10 +24,6 @@ does not include untracked generated outputs. If significant whitespace inside
 SQL triggers a warning, escape it in the source literal without trimming or
 otherwise changing the runtime SQL text.
 
-[Git attributes](../.gitattributes) keep text files in LF form on every host.
-Release scripts and generated fixtures must survive a Windows checkout without
-byte changes; `make test-release` checks this with `core.autocrlf=true`.
-
 CI separates offline checks from Linux acceptance jobs. Each acceptance host
 uses one pinned YDB service.
 
@@ -191,7 +187,3 @@ SQLC_YDB_TEST_DSN=grpc://localhost:2136/local composer --working-dir=examples/ph
 
 The [JavaScript](javascript.md), [Rust](rust.md) and [PHP](php.md) pages define
 their value representations, dependencies and runtime ownership.
-
-Build a container with `docker build -t sqlc-ydb:dev .`. The ANTLR-generated Go
-parser is large; the Docker build limits compile concurrency and uses more
-frequent garbage collection to reduce peak memory use.

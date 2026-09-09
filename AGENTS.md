@@ -35,7 +35,7 @@ changes. Repository documentation is in English.
 - Run the affected package tests while editing; run `make check` for the integrated
   change. Commands and prerequisites are in [development](docs/development.md).
 - When output changes intentionally, regenerate examples with `make generate` and
-  update [golden fixtures](internal/endtoend/README.md). Review the generated diff;
+  update [golden fixtures](docs/development.md#golden-fixtures). Review the generated diff;
   do not hand-edit generated files or accept a baseline just to make tests pass.
 - For SDK binding, row decoding or transaction changes, compile generated code
   against the pinned SDK and run the relevant execution test. Rendering tests and

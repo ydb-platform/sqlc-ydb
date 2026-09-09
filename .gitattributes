@@ -1,5 +1,0 @@
-# Keep release scripts and generated fixtures identical across checkout platforms.
-* text=auto eol=lf
-
-# Preserve historical SQL byte-for-byte, including deliberate whitespace.
-testdata/legacy-ydb/inputs/** -text -whitespace
