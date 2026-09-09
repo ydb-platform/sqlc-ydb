@@ -99,6 +99,15 @@ alias and parameter names are case-sensitive, as in YQL.
 Schema and declared `Decimal(P,S)` types require `1 <= P <= 35` and `0 <= S <= P`,
 including inside containers. Invalid values fail during analysis.
 
+YDB serial columns are represented by their public integer value type while the
+catalog retains sequence-generation metadata. `SmallSerial` and `Serial2` map
+to `Int16`; `Serial` and `Serial4` map to `Int32`; `Serial8` and `BigSerial`
+map to `Int64`. A serial column must participate in the table's `PRIMARY KEY`.
+`INSERT` and `UPSERT` may omit it to allocate the next sequence value, or bind
+an explicit integer value without advancing that sequence. Avoid using a serial
+column as the primary key of a high-write table: monotonically increasing keys
+can create hot partitions. See the YDB [serial type documentation](https://ydb.tech/docs/en/yql/reference/types/serial).
+
 Direct scalar literal projections retain their YQL types, including integer
 width/signedness, `Float` versus `Double`, and `String` versus `Utf8`. Integer
 suffixes and ranges follow the [YQL lexical rules](https://ydb.tech/docs/en/yql/reference/syntax/lexer).

@@ -73,6 +73,74 @@ ALTER TABLE ` + "`dir/authors`" + ` RENAME TO ` + "`archive/writers`" + `;`}})
 	}
 }
 
+func TestCatalogResolvesSerialAliasesAndDMLBindings(t *testing.T) {
+	tests := []struct {
+		alias string
+		want  model.Type
+	}{
+		{alias: "SmallSerial", want: model.Type{Kind: "Int16"}},
+		{alias: "Serial2", want: model.Type{Kind: "Int16"}},
+		{alias: "Serial", want: model.Type{Kind: "Int32"}},
+		{alias: "Serial4", want: model.Type{Kind: "Int32"}},
+		{alias: "Serial8", want: model.Type{Kind: "Int64"}},
+		{alias: "BigSerial", want: model.Type{Kind: "Int64"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.alias, func(t *testing.T) {
+			got, err := Analyze(
+				[]model.Source{{Name: "schema.sql", Text: "CREATE TABLE entries (id " + tt.alias + ", value Utf8 NOT NULL, PRIMARY KEY (id));"}},
+				[]model.Source{{Name: "query.sql", Text: `-- name: GetEntry :one
+SELECT id FROM entries;
+-- name: InsertGeneratedID :exec
+INSERT INTO entries (value) VALUES ($value);
+-- name: UpsertExplicitID :exec
+UPSERT INTO entries (id, value) VALUES ($id, $value);`}},
+			)
+			if err != nil {
+				t.Fatalf("Analyze() error = %v", err)
+			}
+			id := got.Catalog.Tables[0].Columns[0]
+			if id.Name != "id" || !id.Type.Equal(tt.want) || !id.SequenceGenerated {
+				t.Fatalf("catalog id = %#v, want generated %s", id, tt.want)
+			}
+			if result := got.Queries[0].ResultSets[0].Columns; len(result) != 1 || !result[0].Type.Equal(tt.want) || !result[0].SequenceGenerated {
+				t.Fatalf("SELECT result = %#v", result)
+			}
+			if parameters := got.Queries[1].Parameters; !reflect.DeepEqual(parameters, []model.Parameter{{Name: "value", Type: model.Type{Kind: "Utf8"}}}) {
+				t.Fatalf("omitted serial parameters = %#v", parameters)
+			}
+			if parameters := got.Queries[2].Parameters; !reflect.DeepEqual(parameters, []model.Parameter{{Name: "id", Type: tt.want}, {Name: "value", Type: model.Type{Kind: "Utf8"}}}) {
+				t.Fatalf("explicit serial parameters = %#v", parameters)
+			}
+		})
+	}
+}
+
+func TestCatalogRejectsSerialOutsidePrimaryKey(t *testing.T) {
+	tests := []struct {
+		name string
+		sql  string
+	}{
+		{name: "create table", sql: `
+CREATE TABLE entries (
+    id Serial,
+    value Utf8 NOT NULL,
+    PRIMARY KEY (value)
+	);`},
+		{name: "add column", sql: `
+CREATE TABLE entries (id Utf8 NOT NULL, PRIMARY KEY (id));
+ALTER TABLE entries ADD COLUMN generated Serial;`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, diagnostics := buildCatalog([]model.Source{{Name: "schema.sql", Text: tt.sql}})
+			if len(diagnostics) != 1 || !strings.Contains(diagnostics[0].Message, `serial column "`) || !strings.Contains(diagnostics[0].Message, `must participate in the PRIMARY KEY`) {
+				t.Fatalf("diagnostics = %#v", diagnostics)
+			}
+		})
+	}
+}
+
 func TestCatalogReportsMigrationFailuresAtActionSource(t *testing.T) {
 	_, diagnostics := buildCatalog([]model.Source{
 		{Name: "001.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, PRIMARY KEY (id));`},

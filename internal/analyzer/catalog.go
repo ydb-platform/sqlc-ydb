@@ -128,6 +128,9 @@ func applyAlterTableAction(catalog model.Catalog, tableIndex int, table *model.T
 		if _, exists := catalogColumnIndex(*table, column.Name); exists {
 			return []model.Diagnostic{diagnosticAt(file, 0, add.Column_schema(), fmt.Sprintf("column %q already exists in table %q", column.Name, table.Name))}
 		}
+		if column.SequenceGenerated {
+			return []model.Diagnostic{diagnosticAt(file, 0, add.Column_schema(), serialPrimaryKeyError(column.Name))}
+		}
 		table.Columns = append(table.Columns, column)
 		return nil
 	}
@@ -249,6 +252,11 @@ func catalogTable(file string, create parser.ICreate_table_stmtContext) (model.T
 			diagnostics = append(diagnostics, diagnosticAt(file, 0, create, fmt.Sprintf("primary key column %q does not exist", key)))
 		}
 	}
+	for _, column := range table.Columns {
+		if column.SequenceGenerated && !primaryKeyNames[column.Name] {
+			diagnostics = append(diagnostics, diagnosticAt(file, 0, create, serialPrimaryKeyError(column.Name)))
+		}
+	}
 	// PARTITION BY and WITH describe physical storage and do not change the
 	// tables, columns, types, or primary keys represented by model.Catalog.
 	return table, diagnostics
@@ -258,9 +266,14 @@ func catalogColumn(table string, ctx parser.IColumn_schemaContext) (model.Column
 	if ctx.An_id_schema() == nil || ctx.Type_name_or_bind() == nil || ctx.Type_name_or_bind().Type_name() == nil {
 		return model.Column{}, fmt.Errorf("column must have a literal name and type")
 	}
-	typeValue, err := parseType(ctx.Type_name_or_bind().Type_name().GetText())
-	if err != nil {
-		return model.Column{}, err
+	typeText := ctx.Type_name_or_bind().Type_name().GetText()
+	typeValue, sequenceGenerated := serialType(typeText)
+	if !sequenceGenerated {
+		var err error
+		typeValue, err = parseType(typeText)
+		if err != nil {
+			return model.Column{}, err
+		}
 	}
 	notNull := false
 	descendants(ctx, func(node antlr.Tree) {
@@ -268,10 +281,21 @@ func catalogColumn(table string, ctx parser.IColumn_schemaContext) (model.Column
 			notNull = true
 		}
 	})
-	if !notNull && !typeValue.IsOptional() {
+	if !sequenceGenerated && !notNull && !typeValue.IsOptional() {
 		typeValue = model.Optional(typeValue)
 	}
-	return model.Column{Name: identifier(ctx.An_id_schema().GetText()), Type: typeValue, Table: table}, nil
+	return model.Column{Name: identifier(ctx.An_id_schema().GetText()), Type: typeValue, Table: table, SequenceGenerated: sequenceGenerated}, nil
+}
+
+func serialType(text string) (model.Type, bool) {
+	if kind, ok := serialTypes[strings.ToLower(text)]; ok {
+		return model.Type{Kind: kind}, true
+	}
+	return model.Type{}, false
+}
+
+func serialPrimaryKeyError(name string) string {
+	return fmt.Sprintf("serial column %q must participate in the PRIMARY KEY", name)
 }
 
 // parseType parses the canonical type text supplied by a Type_name parse-tree
@@ -415,4 +439,10 @@ var simpleTypes = map[string]string{
 	"date": "Date", "datetime": "Datetime", "timestamp": "Timestamp", "interval": "Interval",
 	"date32": "Date32", "datetime64": "Datetime64", "timestamp64": "Timestamp64", "interval64": "Interval64",
 	"tzdate": "TzDate", "tzdatetime": "TzDatetime", "tztimestamp": "TzTimestamp", "void": "Void", "null": "Null",
+}
+
+var serialTypes = map[string]string{
+	"smallserial": "Int16", "serial2": "Int16",
+	"serial": "Int32", "serial4": "Int32",
+	"serial8": "Int64", "bigserial": "Int64",
 }

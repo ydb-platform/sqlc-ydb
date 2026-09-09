@@ -93,10 +93,11 @@ func (t Type) String() string {
 }
 
 type Column struct {
-	Name     string
-	WireName string // exact YDB result-set key when it differs from Name
-	Type     Type
-	Table    string
+	Name              string
+	WireName          string // exact YDB result-set key when it differs from Name
+	Type              Type
+	Table             string
+	SequenceGenerated bool `json:",omitempty"` // YDB allocates omitted values from the column's private sequence.
 }
 
 func (c Column) ResultName() string {
