@@ -4,7 +4,6 @@ package builtins
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/model"
 )
@@ -49,7 +48,7 @@ func CommonType(types ...model.Type) (model.Type, error) {
 }
 
 func commonConcreteType(left, right model.Type) (model.Type, error) {
-	if equalType(left, right) {
+	if left.Equal(right) {
 		return left, nil
 	}
 	if isInteger(left.Kind) && isInteger(right.Kind) {
@@ -63,7 +62,7 @@ func commonConcreteType(left, right model.Type) (model.Type, error) {
 			return model.Type{Kind: "Float"}, nil
 		}
 	}
-	return model.Type{}, fmt.Errorf("types %s and %s have no common type in the supported YQL subset", typeName(left), typeName(right))
+	return model.Type{}, fmt.Errorf("types %s and %s have no common type in the supported YQL subset", left.String(), right.String())
 }
 
 func commonInteger(left, right string) model.Type {
@@ -76,7 +75,6 @@ func commonInteger(left, right string) model.Type {
 		return model.Type{Kind: left}
 	}
 	if !leftSigned {
-		leftSigned, rightSigned = rightSigned, leftSigned
 		leftBits, rightBits = rightBits, leftBits
 	}
 	if leftBits >= rightBits {
@@ -209,47 +207,4 @@ func integerInfo(kind string) (signed bool, bits int) {
 	default:
 		return false, 0
 	}
-}
-
-func equalType(left, right model.Type) bool {
-	if left.Kind != right.Kind || left.Precision != right.Precision || left.Scale != right.Scale {
-		return false
-	}
-	if (left.Elem == nil) != (right.Elem == nil) || (left.Key == nil) != (right.Key == nil) || len(left.Items) != len(right.Items) {
-		return false
-	}
-	if left.Elem != nil && !equalType(*left.Elem, *right.Elem) {
-		return false
-	}
-	if left.Key != nil && !equalType(*left.Key, *right.Key) {
-		return false
-	}
-	for i := range left.Items {
-		if !equalType(left.Items[i], right.Items[i]) {
-			return false
-		}
-	}
-	return true
-}
-
-func typeName(value model.Type) string {
-	switch value.Kind {
-	case "Optional", "List", "Stream", "Flow", "Set":
-		if value.Elem != nil {
-			return value.Kind + "<" + typeName(*value.Elem) + ">"
-		}
-	case "Dict":
-		if value.Key != nil && value.Elem != nil {
-			return "Dict<" + typeName(*value.Key) + "," + typeName(*value.Elem) + ">"
-		}
-	case "Tuple":
-		items := make([]string, len(value.Items))
-		for i := range value.Items {
-			items[i] = typeName(value.Items[i])
-		}
-		return "Tuple<" + strings.Join(items, ",") + ">"
-	case "Decimal":
-		return fmt.Sprintf("Decimal(%d,%d)", value.Precision, value.Scale)
-	}
-	return value.Kind
 }

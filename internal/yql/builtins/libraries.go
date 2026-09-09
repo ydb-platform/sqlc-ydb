@@ -27,9 +27,6 @@ func resolveLibrary(name string, args []model.Type) (model.Type, error) {
 	case "Unicode::Find", "Unicode::RFind":
 		return resolveUnicodeFind(name, args)
 	case "Unicode::Substring":
-		if len(args) != 2 && len(args) != 3 {
-			return model.Type{}, fmt.Errorf("%s expects 2 or 3 arguments, got %d", name, len(args))
-		}
 		return resolveLibrarySubstring(name, args, "Utf8")
 	case "Unicode::ToLower", "Unicode::ToUpper", "Unicode::ToTitle", "Unicode::Normalize",
 		"Unicode::NormalizeNFC", "Unicode::NormalizeNFD", "Unicode::NormalizeNFKC", "Unicode::NormalizeNFKD":

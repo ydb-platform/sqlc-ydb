@@ -96,6 +96,9 @@ parameter inference, selected scalar local bindings, `INSERT`/`UPSERT ... VALUES
 constraints. Diagnostics include source file, line and column. Table, column,
 alias and parameter names are case-sensitive, as in YQL.
 
+Schema and declared `Decimal(P,S)` types require `1 <= P <= 35` and `0 <= S <= P`,
+including inside containers. Invalid values fail during analysis.
+
 Direct scalar literal projections retain their YQL types, including integer
 width/signedness, `Float` versus `Double`, and `String` versus `Utf8`. Integer
 suffixes and ranges follow the [YQL lexical rules](https://ydb.tech/docs/en/yql/reference/syntax/lexer).

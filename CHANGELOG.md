@@ -28,7 +28,8 @@ the version and moves these entries into a numbered section at release time.
 - Release packaging for Linux, macOS, and Windows on amd64 and arm64, with
   SHA256 checksums and version/commit metadata.
 - Diagnostics for unsupported expressions, types and options, generated name
-  collisions, and obsolete generated files in current output directories.
+  collisions, invalid Decimal precision/scale, and obsolete generated files in
+  current output directories.
 
 ### Compatibility
 

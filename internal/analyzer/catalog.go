@@ -193,9 +193,6 @@ func validateCreateTableShape(file string, create parser.ICreate_table_stmtConte
 
 func catalogTable(file string, create parser.ICreate_table_stmtContext) (model.Table, []model.Diagnostic) {
 	var diagnostics []model.Diagnostic
-	if diagnostic := validateCreateTableShape(file, create); diagnostic != nil {
-		return model.Table{}, []model.Diagnostic{*diagnostic}
-	}
 	ref := create.Simple_table_ref()
 	if ref == nil || ref.Simple_table_ref_core() == nil {
 		return model.Table{}, []model.Diagnostic{diagnosticAt(file, 0, create, "CREATE TABLE has no resolvable table name")}
@@ -358,6 +355,9 @@ func (r *typeReader) readType() (model.Type, error) {
 		if !ok || !r.consume(')') {
 			return model.Type{}, fmt.Errorf("unsupported YQL type %q", r.text)
 		}
+		if precision < 1 || precision > 35 || scale > precision {
+			return model.Type{}, fmt.Errorf("invalid Decimal(%d,%d): precision must be 1..35 and scale 0..precision", precision, scale)
+		}
 		out = model.Type{Kind: "Decimal", Precision: precision, Scale: scale}
 	} else if simple {
 		out = model.Type{Kind: canonical}
@@ -386,8 +386,8 @@ func (r *typeReader) readNumber() (int, bool) {
 	if start == r.index {
 		return 0, false
 	}
-	value, _ := strconv.Atoi(r.text[start:r.index])
-	return value, true
+	value, err := strconv.Atoi(r.text[start:r.index])
+	return value, err == nil
 }
 
 func canonicalConstructor(name string) string {

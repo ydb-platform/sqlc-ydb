@@ -53,51 +53,18 @@ Before writing or comparing, the CLI checks current output directories for
 obsolete files with the sqlc-ydb generated header. It reports those files for
 manual removal; see [output ownership](compatibility.md#output-ownership).
 
-## Where is the compiler?
+## Compilation boundary
 
-Compilation is present as a stage, but there is currently no `internal/compiler`
-package or `Compiler` object. Its responsibilities are distributed as follows:
+`analyzer.Analyze(...) -> model.AnalysisResult` is the compilation entry point.
+The CLI invokes it once per `sql` configuration entry and gives the result to
+every selected generator. `compile` stops after analysis. Planned macro
+processing belongs inside this boundary; see [the roadmap](roadmap.md).
+A separate compiler package is unnecessary while the analyzer owns these stages.
 
-| Responsibility | Current owner |
-| --- | --- |
-| Resolve source paths, order migrations, keep Up sections | `internal/source` |
-| Parse YQL, apply schema statements to the catalog, analyze named queries | `internal/analyzer` |
-| Return resolved catalog, parameters, result columns and diagnostics | `model.AnalysisResult` |
-| Invoke analysis once per `sql` configuration entry, then its generators | `internal/cli.prepare` |
-| Render source files for each selected language/runtime | `internal/codegen/*` |
+`model.Type` owns structural equality and diagnostic formatting. The analyzer,
+built-in function resolver and Python model reuse checks share those operations.
+SDK-specific type mapping stays in each generator.
 
-In upstream sqlc, `internal/compiler.Compiler` owns catalog/query compilation,
-parser selection, analysis and SQL rewrites; code generation is dispatched by
-`internal/cmd`. A compiler therefore is not another syntax representation and
-does not imply an intermediate AST or a native-code backend. The comparable
-boundary here is `analyzer.Analyze(...) -> model.AnalysisResult`.
-
-Macro handling and semantic analysis must share one compilation boundary before
-generation. This can remain in `internal/analyzer`; a separate `internal/compiler`
-package is an implementation option, not a requirement. Extract orchestration
-only if the added responsibilities justify it. The CLI retains configuration,
-source/output paths and file IO. No engine registry, plugin interface or second
-AST is needed. See [the compiler roadmap](roadmap.md) for ordering and acceptance
-criteria.
-
-Reference: upstream sqlc
-[`Compiler`](https://github.com/sqlc-dev/sqlc/blob/23e357a414310aa8846e64624da8b8a626b3a610/internal/compiler/engine.go)
-and [generation dispatch](https://github.com/sqlc-dev/sqlc/blob/23e357a414310aa8846e64624da8b8a626b3a610/internal/cmd/generate.go).
-
-## Development decisions
-
-- Develop the independent implementation in the existing repository. Do not
-  maintain a source fork that requires repeated upstream merges.
-- Preserve the analyzer stage. The old external-engine implementation omitted
-  it and cannot serve as the semantic correctness baseline.
-- Do not add an intermediate AST. The typed analysis result is necessary for
-  code generation and is not a syntax representation.
-- Built-in generators cover Go, Python, C++, Java, C#, JavaScript, Rust and PHP.
-  SDK maintainers are already in the product team and can review generated APIs.
-- Track upstream product behavior and selectively adapt relevant tests. Record
-  source provenance and retain license notices whenever code is copied.
-
-The parser is pinned in `go.mod` to an official `ydb-platform/yql-parsers` release,
-using its generated ANTLR4 Go parser. See [source provenance](provenance.md) for
-the parser and YQL revisions. No local sibling checkout or `replace` directive
-is needed.
+The parser is pinned in `go.mod` to an official `ydb-platform/yql-parsers` release.
+See [provenance](provenance.md) for parser revisions and upstream references,
+and [decisions](../.agents/decisions.md) for lasting architectural choices.

@@ -5,10 +5,9 @@ JavaScript, Rust and PHP. One executable contains the parser, semantic analyzer
 and generators. Generation works offline and does not require a running YDB,
 Python, or any separately installed codegen plugin.
 
-This is the first standalone development version, preparing for release 0.0.1.
-No release is implied by the version number; see the [changelog](CHANGELOG.md)
-and [release plan](docs/release-plan.md). The previous engine-plugin
-implementation is preserved in `archive/engine-plugins-2026-09-07`.
+Supported YQL and configuration options are listed in the
+[compatibility contract](docs/compatibility.md). See the
+[changelog](CHANGELOG.md) and [release plan](docs/release-plan.md) for release status.
 
 ## Supported targets
 
@@ -80,29 +79,13 @@ Renamed queries or models can leave obsolete generated files: `generate` and
 See [output ownership](docs/compatibility.md#output-ownership) when moving outputs
 or sharing directories between configurations.
 
-## Design and compatibility
+## References
 
-The familiar sqlc workflow is the compatibility target. This project has its own
-implementation and release cycle. It supports only YDB, with built-in generators;
-external engine/codegen plugins and their protocols are intentionally excluded.
-Plugin configurations require migration to built-in `gen` entries.
+- [Compatibility](docs/compatibility.md): supported SQL, configuration and output ownership.
+- [Targets](docs/targets.md): generated APIs, types and runtime contracts.
+- [Architecture](docs/architecture.md): analysis and generation boundaries.
+- [Development](docs/development.md): contributor commands and tests.
+- [Roadmap](docs/roadmap.md): planned compiler features.
+- [Release plan](docs/release-plan.md): release gates, ydb.tech guide and consumer acceptance.
 
-The analyzer reads the ANTLR YQL parse tree directly. It resolves names and types
-before generators see a query. The shared semantic result describes parameters
-and result columns; it is not an intermediate AST. Unsupported constructs and
-unresolved types must produce an error rather than an untyped fallback.
-
-See [compatibility](docs/compatibility.md), [targets](docs/targets.md),
-[architecture](docs/architecture.md), [compiler roadmap](docs/roadmap.md), and
-[development](docs/development.md) for the implemented scope and remaining work.
-Target-specific configuration and examples are described in [C++](docs/cpp.md),
-[C#](docs/csharp.md), [Java](docs/java.md), [JavaScript](docs/javascript.md),
-[Rust](docs/rust.md), and [PHP](docs/php.md).
-
-The user guide is planned for the SQLC section of ydb.tech near release. The
-repository currently contains the quick start, technical references and executable
-examples; [the release plan](docs/release-plan.md) tracks site documentation and
-consumer acceptance.
-
-For repository work, start with [AGENTS.md](AGENTS.md) and the
-[project context](.agents/context.md).
+For repository work, start with [AGENTS.md](AGENTS.md).

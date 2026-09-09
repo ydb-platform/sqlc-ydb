@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"flag"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -173,7 +172,7 @@ func TestLegacyCorpus(t *testing.T) {
 				t.Fatalf("missing expectation for imported case: %v", readErr)
 			}
 			if string(got) != string(want) {
-				t.Fatal(fmt.Sprintf("legacy semantic result changed; review before updating\nwant: %s\ngot: %s", want, got))
+				t.Fatalf("legacy semantic result changed; review before updating\nwant: %s\ngot: %s", want, got)
 			}
 		})
 	}

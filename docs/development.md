@@ -30,12 +30,9 @@ adapted fixture instead of normalizing the source snapshot.
 Release scripts and generated fixtures must survive a Windows checkout without
 byte changes; `make test-release` checks this with `core.autocrlf=true`.
 
-CI separates this fast offline suite from Linux acceptance jobs. Each acceptance
-host runs a single pinned YDB service and waits for the image's health check;
-there is no multi-database startup framework, engine matrix, plugin subprocess
-runner or optional Postgres/MySQL fallback. See
-[the fixture runner](../internal/endtoend/README.md) for the upstream references
-and baseline update command.
+CI separates offline checks from Linux acceptance jobs. Each acceptance host
+uses one pinned YDB service. Fixture provenance and update commands are in
+[the fixture runner](../internal/endtoend/README.md).
 
 PHP CI builds the pinned gRPC extension with
 [`scripts/install-php-grpc`](../scripts/install-php-grpc). It downloads the source
@@ -103,15 +100,10 @@ It creates and drops one uniquely named table. Its source and table-driven
 function probes document the executable coverage; a green historical diagnostic
 snapshot is not evidence that the server accepts that SQL.
 
-**Run local-ydb checks sequentially.** Do not run different image versions,
-runtime suites or Docker builds concurrently on one host. Use `go test -p 1`
-for live suites and do not add `t.Parallel` to them. CI intentionally runs Go,
-Python, C#, Java, JavaScript, Rust and PHP examples in successive steps. If
-image-version coverage is added later, preserve sequential execution rather than
-introducing concurrent containers; memory limits are a known constraint.
-The `make test` and `make check` targets also serialize Go packages, so setting
-the live-test environment variables does not accidentally run language suites
-in parallel.
+**Run local-ydb checks sequentially per host**, including image versions, runtime
+suites and Docker builds. Use `go test -p 1` and no `t.Parallel` in live tests;
+concurrent runs can exhaust host memory. `make test` and `make check` also
+serialize packages.
 
 Recreate disposable local-ydb containers after stopping them when using
 `YDB_USE_IN_MEMORY_PDISKS=true`. Restarting the same container can retain storage
@@ -184,8 +176,3 @@ their value representations, dependencies and runtime ownership.
 Build a container with `docker build -t sqlc-ydb:dev .`. The ANTLR-generated Go
 parser is large; the Docker build limits compile concurrency and uses more
 frequent garbage collection to reduce peak memory use.
-
-The old plugin implementation remains in the archive branch, including its
-historical module path and sibling `replace` dependency. The standalone `main`
-must not regain either dependency. Runtime SDK versions belong to tests and
-examples, not to the generator's imports.

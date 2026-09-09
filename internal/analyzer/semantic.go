@@ -146,9 +146,6 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 
 	if selectStatement == nil && len(relations) != 0 {
 		diagnostics = append(diagnostics, validateColumnReferences(block, parsed.tree, relations)...)
-	}
-
-	if selectStatement == nil && len(relations) != 0 {
 		inferFromComparisons(tree, relations, inferred)
 	}
 	if target != nil && len(tree.insert) == 1 {
@@ -163,7 +160,7 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 			if usedType.Kind == "" {
 				message = fmt.Sprintf("local $%s is constrained by incompatible column types", name)
 			} else if !compatibleTypes(localType, usedType) {
-				message = fmt.Sprintf("local $%s has type %s but is used with %s", name, typeString(localType), typeString(usedType))
+				message = fmt.Sprintf("local $%s has type %s but is used with %s", name, localType.String(), usedType.String())
 			}
 			if message != "" {
 				diagnostics = append(diagnostics, model.Diagnostic{Position: model.Position{File: block.file, Line: block.line, Column: 1}, Message: message})
@@ -254,8 +251,8 @@ func declarations(block queryBlock, tree queryTree) (map[string]model.Type, map[
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, declaration, err.Error()))
 			continue
 		}
-		if previous, ok := declared[name]; ok && !sameType(previous, typeValue) {
-			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, declaration, fmt.Sprintf("parameter $%s has conflicting DECLARE types %s and %s", name, typeString(previous), typeString(typeValue))))
+		if previous, ok := declared[name]; ok && !previous.Equal(typeValue) {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, declaration, fmt.Sprintf("parameter $%s has conflicting DECLARE types %s and %s", name, previous.String(), typeValue.String())))
 			continue
 		}
 		declared[name] = typeValue
@@ -492,11 +489,11 @@ func concatenationType(expr parser.IExprContext, declared map[string]model.Type)
 		optional = optional || typeValue.IsOptional()
 		base := typeValue.UnwrapOptional()
 		if base.Kind != "String" && base.Kind != "Utf8" {
-			return model.Type{}, true, fmt.Errorf("concatenation operand %s has unsupported type %s", operand.GetText(), typeString(typeValue))
+			return model.Type{}, true, fmt.Errorf("concatenation operand %s has unsupported type %s", operand.GetText(), typeValue.String())
 		}
 		if result.Kind == "" {
 			result = base
-		} else if !sameType(result, base) {
+		} else if !result.Equal(base) {
 			return model.Type{}, true, fmt.Errorf("concatenation operands must both be String or both be Utf8")
 		}
 	}
@@ -736,15 +733,9 @@ func directExprs(root antlr.Tree) []parser.IExprContext {
 	return expressions
 }
 
-func inferDirectDMLBind(root antlr.Tree, typeValue model.Type, inferred map[string]model.Type) bool {
-	var binds []parser.IBind_parameterContext
-	descendants(root, func(node antlr.Tree) {
-		if bind, ok := node.(*parser.Bind_parameterContext); ok {
-			binds = append(binds, bind)
-		}
-	})
-	if len(binds) == 1 && root.(interface{ GetText() string }).GetText() == binds[0].GetText() {
-		inferParameter(inferred, bindName(binds[0]), typeValue)
+func inferDirectDMLBind(root antlr.ParserRuleContext, typeValue model.Type, inferred map[string]model.Type) bool {
+	if bind := directBind(root); bind != nil {
+		inferParameter(inferred, bindName(bind), typeValue)
 		return true
 	}
 	return false
@@ -752,14 +743,14 @@ func inferDirectDMLBind(root antlr.Tree, typeValue model.Type, inferred map[stri
 
 func inferParameter(inferred map[string]model.Type, name string, typeValue model.Type) {
 	previous, ok := inferred[name]
-	if !ok || sameType(previous, typeValue) {
+	if !ok || previous.Equal(typeValue) {
 		inferred[name] = typeValue
 		return
 	}
 	if previous.Kind == "" {
 		return
 	}
-	if sameType(previous.UnwrapOptional(), typeValue.UnwrapOptional()) {
+	if previous.UnwrapOptional().Equal(typeValue.UnwrapOptional()) {
 		if previous.IsOptional() && !typeValue.IsOptional() {
 			inferred[name] = typeValue
 		}
@@ -798,7 +789,7 @@ func externalParameters(block queryBlock, binds []parser.IBind_parameterContext,
 			continue
 		}
 		if inferredType, inferredOK := inferred[name]; inferredOK && !compatibleTypes(typeValue, inferredType) {
-			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, bind, fmt.Sprintf("parameter $%s declared as %s but used with %s", name, typeString(typeValue), typeString(inferredType))))
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, bind, fmt.Sprintf("parameter $%s declared as %s but used with %s", name, typeValue.String(), inferredType.String())))
 			continue
 		}
 		parameters = append(parameters, model.Parameter{Name: name, Type: typeValue})
@@ -846,46 +837,19 @@ func simpleTableName(ctx parser.ISimple_table_refContext) string {
 }
 
 func findTable(catalog model.Catalog, name string) *model.Table {
-	for i := range catalog.Tables {
-		if catalog.Tables[i].Name == name {
-			return &catalog.Tables[i]
-		}
+	if i, ok := catalogTableIndex(catalog, name); ok {
+		return &catalog.Tables[i]
 	}
 	return nil
 }
 
 func tableColumn(table *model.Table, name string) *model.Column {
-	for i := range table.Columns {
-		if table.Columns[i].Name == name {
-			return &table.Columns[i]
-		}
+	if i, ok := catalogColumnIndex(*table, name); ok {
+		return &table.Columns[i]
 	}
 	return nil
 }
 
-func sameType(left, right model.Type) bool { return typeString(left) == typeString(right) }
 func compatibleTypes(left, right model.Type) bool {
-	return sameType(left, right) || right.IsOptional() && sameType(left, right.UnwrapOptional())
-}
-
-func typeString(value model.Type) string {
-	switch value.Kind {
-	case "Optional", "List", "Stream", "Flow", "Set":
-		if value.Elem != nil {
-			return value.Kind + "<" + typeString(*value.Elem) + ">"
-		}
-	case "Dict":
-		if value.Key != nil && value.Elem != nil {
-			return "Dict<" + typeString(*value.Key) + "," + typeString(*value.Elem) + ">"
-		}
-	case "Tuple":
-		items := make([]string, len(value.Items))
-		for i := range value.Items {
-			items[i] = typeString(value.Items[i])
-		}
-		return "Tuple<" + strings.Join(items, ",") + ">"
-	case "Decimal":
-		return fmt.Sprintf("Decimal(%d,%d)", value.Precision, value.Scale)
-	}
-	return value.Kind
+	return left.Equal(right) || right.IsOptional() && left.Equal(right.UnwrapOptional())
 }

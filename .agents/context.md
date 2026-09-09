@@ -2,8 +2,7 @@
 
 sqlc-ydb generates typed application code from YQL for YDB in a standalone Go
 binary. It follows the familiar sqlc workflow while maintaining its own source
-and release cycle. It is a development implementation with explicit coverage
-limits; successful parsing alone does not establish semantic support.
+and release cycle. Coverage limits are in [compatibility](../docs/compatibility.md).
 
 Read [decisions](decisions.md) before changing the analysis/generation boundary
 or simplifying SDK-specific code.
@@ -17,7 +16,7 @@ or simplifying SDK-specific code.
 | `internal/source` | Input ordering and migration Up sections |
 | `internal/analyzer` | Direct YQL parse contexts, catalog evolution, name/type resolution and diagnostics |
 | `internal/yql/builtins` | Strict supported YQL function, cast and common-type rules |
-| `internal/model` | Resolved query/catalog data shared by generators; not an AST |
+| `internal/model` | Resolved query/catalog data, type equality and diagnostic formatting |
 | `internal/codegen/{golang,python,cpp,csharp,java,javascript,rust,php}` | Language naming and SDK-specific bindings, decoding and source rendering |
 | `internal/endtoend` | CLI fixtures, expected diagnostics and generated golden files |
 | `testdata/legacy-ydb` | Checksummed SQL/config inputs and semantic corpus expectations |

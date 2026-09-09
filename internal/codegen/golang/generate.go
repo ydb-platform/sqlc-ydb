@@ -65,10 +65,7 @@ func validateDecimalParameter(name string, value types.Decimal, precision, scale
 	}
 	bySource := map[string][]model.AnalyzedQuery{}
 	for _, q := range in.Queries {
-		n := q.Source.File
-		if n == "" {
-			n = "query.sql"
-		}
+		n := sourceName(q)
 		bySource[n] = append(bySource[n], q)
 	}
 	names := make([]string, 0, len(bySource))
@@ -124,7 +121,7 @@ func validate(in *model.AnalysisResult, o Options) error {
 			if _, err := goType(p.Type); err != nil {
 				return fmt.Errorf("%s parameter %s: %w", q.Name, p.Name, err)
 			}
-			if containsList(p.Type) {
+			if hasKind(p.Type, "list") {
 				if o.Runtime == "database/sql" {
 					return fmt.Errorf("%s parameter %s: List parameters are unsupported by database/sql", q.Name, p.Name)
 				}
@@ -147,7 +144,7 @@ func validate(in *model.AnalysisResult, o Options) error {
 				if _, err := goType(c.Type); err != nil {
 					return fmt.Errorf("%s column %s: %w", q.Name, c.Name, err)
 				}
-				if o.Runtime == "database/sql" && containsList(c.Type) {
+				if o.Runtime == "database/sql" && hasKind(c.Type, "list") {
 					return fmt.Errorf("%s column %s: List results are unsupported by database/sql", q.Name, c.Name)
 				}
 				if optionalList(c.Type) {
@@ -171,7 +168,7 @@ func validateNativeListParameter(t model.Type) error {
 	}
 	e := *t.Elem
 	if e.IsOptional() {
-		if e.Elem == nil || e.Elem.IsOptional() || containsList(*e.Elem) {
+		if e.Elem == nil || e.Elem.IsOptional() || hasKind(*e.Elem, "list") {
 			return fmt.Errorf("List element must be a scalar or Optional<scalar>")
 		}
 		if extendedListTemporal(e) {
@@ -179,7 +176,7 @@ func validateNativeListParameter(t model.Type) error {
 		}
 		return validateDecimal(*e.Elem)
 	}
-	if containsList(e) {
+	if hasKind(e, "list") {
 		return fmt.Errorf("nested List parameters are unsupported by the native Go runtime")
 	}
 	if extendedListTemporal(e) {
@@ -222,18 +219,8 @@ func validateDecimal(t model.Type) error {
 	return nil
 }
 
-func containsList(t model.Type) bool {
-	if strings.EqualFold(t.Kind, "List") {
-		return true
-	}
-	if t.Elem != nil {
-		return containsList(*t.Elem)
-	}
-	return false
-}
-
 func optionalList(t model.Type) bool {
-	return t.IsOptional() && t.Elem != nil && containsList(*t.Elem)
+	return t.IsOptional() && t.Elem != nil && hasKind(*t.Elem, "list")
 }
 
 func sourceName(q model.AnalyzedQuery) string {
@@ -435,7 +422,7 @@ func queryFile(source string, qs []model.AnalyzedQuery, o Options) []byte {
 			needsUUID = needsUUID || (len(q.Parameters) == 1 && hasKind(p.Type, "uuid"))
 			needsTypes = needsTypes ||
 				(o.Runtime == "database/sql" && (kind == "uuid" || kind == "decimal")) ||
-				(o.Runtime == "ydb" && (containsList(p.Type) || (len(q.Parameters) == 1 && hasKind(p.Type, "decimal"))))
+				(o.Runtime == "ydb" && (hasKind(p.Type, "list") || (len(q.Parameters) == 1 && hasKind(p.Type, "decimal"))))
 			needsYDB = needsYDB || o.Runtime == "ydb"
 		}
 	}
@@ -516,11 +503,9 @@ func sqlLiteral(sql string) string {
 
 func methodArgs(q model.AnalyzedQuery, o Options) string {
 	args := ""
-	if len(q.Parameters) == 0 {
-		args = ""
-	} else if len(q.Parameters) > 1 {
+	if len(q.Parameters) > 1 {
 		args = ", arg " + q.Name + "Params"
-	} else {
+	} else if len(q.Parameters) == 1 {
 		t, _ := goType(q.Parameters[0].Type)
 		args = ", arg " + t
 	}
@@ -821,9 +806,6 @@ func goName(s string) string {
 	x := b.String()
 	if x == "" {
 		return "Value"
-	}
-	if x == "Id" {
-		return "ID"
 	}
 	return x
 }

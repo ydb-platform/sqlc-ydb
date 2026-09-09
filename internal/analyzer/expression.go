@@ -271,7 +271,7 @@ func resolveCase(caseExpr *parser.Case_exprContext, scope expressionScope) (mode
 		if selector == nil {
 			base := conditionType.UnwrapOptional()
 			if base.Kind != "Bool" && conditionType.Kind != "Null" {
-				return model.Type{}, fmt.Errorf("CASE WHEN condition has type %s, want Bool", typeString(conditionType))
+				return model.Type{}, fmt.Errorf("CASE WHEN condition has type %s, want Bool", conditionType.String())
 			}
 		} else {
 			selectorType, err := resolveExpression(selector, scope)
@@ -279,7 +279,7 @@ func resolveCase(caseExpr *parser.Case_exprContext, scope expressionScope) (mode
 				return model.Type{}, fmt.Errorf("cannot resolve CASE selector: %w", err)
 			}
 			if _, err := builtins.CommonType(selectorType, conditionType); err != nil {
-				return model.Type{}, fmt.Errorf("CASE selector and WHEN value have incompatible types %s and %s: %w", typeString(selectorType), typeString(conditionType), err)
+				return model.Type{}, fmt.Errorf("CASE selector and WHEN value have incompatible types %s and %s: %w", selectorType.String(), conditionType.String(), err)
 			}
 		}
 		branchType, err := resolveExpression(parts[1], scope)

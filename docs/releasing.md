@@ -31,7 +31,7 @@ inconsistent source/history versions and existing target tags fail preparation.
 ## Publication sequence
 
 1. Complete the release gates, including the applicable SDK and sequential YDB
-   acceptance checks. Resolve the historical module path before the first tag.
+   acceptance checks.
 2. Select the intended branch in the form and enable **Dry run**. A rehearsal
    can use a development branch; publication requires the default branch.
 3. The workflow extracts release notes. For a stable release it updates the CLI

@@ -54,14 +54,13 @@ func Analyze(schema, queries []model.Source) (*model.AnalysisResult, error) {
 }
 
 func uniqueDiagnostics(diagnostics []model.Diagnostic) []model.Diagnostic {
-	seen := map[string]bool{}
+	seen := map[model.Diagnostic]bool{}
 	out := make([]model.Diagnostic, 0, len(diagnostics))
 	for _, diagnostic := range diagnostics {
-		key := fmt.Sprintf("%s\x00%d\x00%d\x00%s", diagnostic.Position.File, diagnostic.Position.Line, diagnostic.Position.Column, diagnostic.Message)
-		if seen[key] {
+		if seen[diagnostic] {
 			continue
 		}
-		seen[key] = true
+		seen[diagnostic] = true
 		out = append(out, diagnostic)
 	}
 	return out

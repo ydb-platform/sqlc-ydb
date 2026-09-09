@@ -199,7 +199,7 @@ func validateGrouping(block queryBlock, core *parser.Select_coreContext, relatio
 		if err != nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, having, fmt.Sprintf("cannot resolve HAVING expression: %v", err)))
 		} else if typeValue.UnwrapOptional().Kind != "Bool" {
-			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, having, fmt.Sprintf("HAVING expression has type %s, want Bool", typeString(typeValue))))
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, having, fmt.Sprintf("HAVING expression has type %s, want Bool", typeValue.String())))
 		}
 	}
 	return diagnostics
@@ -308,11 +308,7 @@ func inferFromInLists(conditions []*parser.Cond_exprContext, relations []relatio
 		if !strings.HasPrefix(text, "(") || !strings.HasSuffix(text, ")") {
 			continue
 		}
-		parent, ok := condition.GetParent().(antlr.Tree)
-		if !ok {
-			continue
-		}
-		refs := columnRefs(parent)
+		refs := columnRefs(condition.GetParent())
 		if len(refs) != 1 {
 			continue
 		}

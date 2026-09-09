@@ -25,7 +25,7 @@ import (
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/source"
 )
 
-// Release builds set Version and Commit through linker flags.
+// Version and Commit are set through linker flags in release builds.
 var Version = "0.0.1"
 var Commit = "unknown"
 
@@ -243,7 +243,7 @@ func prepare(c *config.Config, generate bool) ([]output, error) {
 			}
 		}
 		if p := s.Gen.Python; p != nil {
-			files, err := python.Generate(result, python.Options{Runtime: p.Runtime, EmitSyncQuerier: *p.EmitSyncQuerier, EmitAsyncQuerier: p.EmitAsyncQuerier})
+			files, err := python.Generate(result, python.Options{Runtime: p.Runtime, EmitAsyncQuerier: p.EmitAsyncQuerier})
 			if err != nil {
 				return nil, fmt.Errorf("Python generation: %w", err)
 			}

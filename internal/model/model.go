@@ -2,7 +2,10 @@
 // These types describe resolved queries and YQL types; they are not a syntax tree.
 package model
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type Source struct {
 	Name string
@@ -42,6 +45,51 @@ func (t Type) UnwrapOptional() Type {
 		return *t.Elem
 	}
 	return t
+}
+
+// Equal compares type structure, including container elements and Decimal metadata.
+func (t Type) Equal(other Type) bool {
+	if t.Kind != other.Kind || t.Precision != other.Precision || t.Scale != other.Scale {
+		return false
+	}
+	if (t.Elem == nil) != (other.Elem == nil) || (t.Key == nil) != (other.Key == nil) || len(t.Items) != len(other.Items) {
+		return false
+	}
+	if t.Elem != nil && !t.Elem.Equal(*other.Elem) {
+		return false
+	}
+	if t.Key != nil && !t.Key.Equal(*other.Key) {
+		return false
+	}
+	for i := range t.Items {
+		if !t.Items[i].Equal(other.Items[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// String returns the canonical YQL spelling of a type.
+func (t Type) String() string {
+	switch t.Kind {
+	case "Optional", "List", "Stream", "Flow", "Set":
+		if t.Elem != nil {
+			return t.Kind + "<" + t.Elem.String() + ">"
+		}
+	case "Dict":
+		if t.Key != nil && t.Elem != nil {
+			return "Dict<" + t.Key.String() + "," + t.Elem.String() + ">"
+		}
+	case "Tuple":
+		items := make([]string, len(t.Items))
+		for i := range t.Items {
+			items[i] = t.Items[i].String()
+		}
+		return "Tuple<" + strings.Join(items, ",") + ">"
+	case "Decimal":
+		return fmt.Sprintf("Decimal(%d,%d)", t.Precision, t.Scale)
+	}
+	return t.Kind
 }
 
 type Column struct {

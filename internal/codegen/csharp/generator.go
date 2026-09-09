@@ -222,12 +222,7 @@ func csType(t model.Type) (string, error) {
 func renderModels(in *model.AnalysisResult, o Options) []byte {
 	var b bytes.Buffer
 	b.WriteString(modelsHeader(o) + "\n")
-	emitted := map[string]bool{}
 	write := func(name string, cols []model.Column) {
-		if emitted[name] {
-			return
-		}
-		emitted[name] = true
 		b.WriteString("public sealed record " + name + "(\n")
 		for i, c := range cols {
 			typ, _ := csType(c.Type)
@@ -454,9 +449,6 @@ func writeSQLConstant(b *bytes.Buffer, q model.AnalyzedQuery) {
 	parts := strings.SplitAfter(q.SQL, "\n")
 	if len(parts) > 1 && parts[len(parts)-1] == "" {
 		parts = parts[:len(parts)-1]
-	}
-	if len(parts) == 0 {
-		parts = []string{""}
 	}
 	for i, p := range parts {
 		end := ";"

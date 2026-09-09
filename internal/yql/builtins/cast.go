@@ -27,13 +27,13 @@ func Cast(source, target model.Type) (model.Type, error) {
 
 	mayFail, supported := castRule(sourceBase, targetBase)
 	if !supported {
-		return model.Type{}, fmt.Errorf("unsupported CAST from %s to %s", typeName(source), typeName(target))
+		return model.Type{}, fmt.Errorf("unsupported CAST from %s to %s", source.String(), target.String())
 	}
 	return withOptional(targetBase, sourceOptional || targetOptional || mayFail), nil
 }
 
 func castRule(source, target model.Type) (mayFail, supported bool) {
-	if equalType(source, target) {
+	if source.Equal(target) {
 		return false, true
 	}
 	if isInteger(source.Kind) && isInteger(target.Kind) {

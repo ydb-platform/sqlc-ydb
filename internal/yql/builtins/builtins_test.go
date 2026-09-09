@@ -1,6 +1,7 @@
 package builtins
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -47,7 +48,7 @@ func TestCommonType(t *testing.T) {
 			if err != nil {
 				t.Fatalf("CommonType() unexpected error: %v", err)
 			}
-			if !sameType(got, tt.want) {
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("CommonType() = %#v, want %#v", got, tt.want)
 			}
 		})
@@ -97,7 +98,7 @@ func TestResolveCoreFunctions(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Resolve(%q) unexpected error: %v", tt.name, err)
 			}
-			if !sameType(got, tt.want) {
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("Resolve(%q) = %#v, want %#v", tt.name, got, tt.want)
 			}
 		})
@@ -144,7 +145,7 @@ func TestResolveAggregates(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Resolve(%q) unexpected error: %v", tt.name, err)
 			}
-			if !sameType(got, tt.want) {
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("Resolve(%q) = %#v, want %#v", tt.name, got, tt.want)
 			}
 		})
@@ -183,7 +184,7 @@ func TestResolveLibraryFunctions(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Resolve(%q) unexpected error: %v", tt.name, err)
 			}
-			if !sameType(got, tt.want) {
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("Resolve(%q) = %#v, want %#v", tt.name, got, tt.want)
 			}
 		})
@@ -244,7 +245,7 @@ func assertResolved(t *testing.T, name string, args []model.Type, want model.Typ
 		t.Errorf("Resolve(%q) unexpected error: %v", name, err)
 		return
 	}
-	if !sameType(got, want) {
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Resolve(%q) = %#v, want %#v", name, got, want)
 	}
 }
@@ -391,32 +392,11 @@ func TestCast(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Cast() unexpected error: %v", err)
 			}
-			if !sameType(got, tt.want) {
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("Cast() = %#v, want %#v", got, tt.want)
 			}
 		})
 	}
-}
-
-func sameType(left, right model.Type) bool {
-	if left.Kind != right.Kind || left.Precision != right.Precision || left.Scale != right.Scale {
-		return false
-	}
-	if (left.Elem == nil) != (right.Elem == nil) || (left.Key == nil) != (right.Key == nil) || len(left.Items) != len(right.Items) {
-		return false
-	}
-	if left.Elem != nil && !sameType(*left.Elem, *right.Elem) {
-		return false
-	}
-	if left.Key != nil && !sameType(*left.Key, *right.Key) {
-		return false
-	}
-	for i := range left.Items {
-		if !sameType(left.Items[i], right.Items[i]) {
-			return false
-		}
-	}
-	return true
 }
 
 func typeList(types []model.Type) string {

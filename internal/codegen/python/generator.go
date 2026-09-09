@@ -1,3 +1,4 @@
+// Package python generates typed query methods for YDB, DB-API and SQLAlchemy.
 package python
 
 import (
@@ -13,8 +14,8 @@ import (
 )
 
 type Options struct {
-	Runtime                           string
-	EmitSyncQuerier, EmitAsyncQuerier bool
+	Runtime          string
+	EmitAsyncQuerier bool
 }
 
 func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
@@ -177,27 +178,10 @@ func resultSignature(q model.AnalyzedQuery) string {
 	for _, c := range q.ResultSets[0].Columns {
 		b.WriteString(c.Name)
 		b.WriteByte(':')
-		writeTypeSignature(&b, c.Type)
+		b.WriteString(c.Type.String())
 		b.WriteByte(';')
 	}
 	return b.String()
-}
-
-func writeTypeSignature(b *strings.Builder, t model.Type) {
-	b.WriteString(t.Kind)
-	if t.Precision != 0 || t.Scale != 0 {
-		fmt.Fprintf(b, "(%d,%d)", t.Precision, t.Scale)
-	}
-	if t.Elem != nil {
-		b.WriteByte('<')
-		writeTypeSignature(b, *t.Elem)
-		b.WriteByte('>')
-	}
-	if t.Key != nil {
-		b.WriteByte('[')
-		writeTypeSignature(b, *t.Key)
-		b.WriteByte(']')
-	}
 }
 
 func renderModels(a *model.AnalysisResult) (string, error) {
@@ -487,7 +471,7 @@ func queryMatchesTable(a *model.AnalysisResult, q model.AnalyzedQuery, table str
 			return false
 		}
 		for i, c := range cols {
-			if c.Name != t.Columns[i].Name || resultTypeSignature(c.Type) != resultTypeSignature(t.Columns[i].Type) {
+			if c.Name != t.Columns[i].Name || !c.Type.Equal(t.Columns[i].Type) {
 				return false
 			}
 		}
@@ -495,12 +479,6 @@ func queryMatchesTable(a *model.AnalysisResult, q model.AnalyzedQuery, table str
 	}
 	return false
 }
-func resultTypeSignature(t model.Type) string {
-	var b strings.Builder
-	writeTypeSignature(&b, t)
-	return b.String()
-}
-
 func pyType(t model.Type) (string, error) {
 	if t.IsOptional() {
 		if t.Elem == nil {

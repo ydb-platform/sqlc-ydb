@@ -48,7 +48,7 @@ func TestGenerateProfilesCompile(t *testing.T) {
 		a.Queries = a.Queries[:3]
 		a.Catalog.Tables = append(a.Catalog.Tables, model.Table{Name: "авторы", Columns: []model.Column{{Name: "имя", Type: model.Type{Kind: "Utf8"}}}})
 		a.Queries[0].Name = "получить_автора"
-		files, err := Generate(a, Options{Runtime: runtime, EmitSyncQuerier: true})
+		files, err := Generate(a, Options{Runtime: runtime})
 		if err != nil {
 			t.Fatalf("%s: %v", runtime, err)
 		}
@@ -158,7 +158,7 @@ func TestIdenticalTableProjectionsReuseRowModel(t *testing.T) {
 func TestSQLAlchemyParameterScannerPreservesLiterals(t *testing.T) {
 	a := sampleAnalysis()
 	a.Queries = a.Queries[:3]
-	files, err := Generate(a, Options{Runtime: "sqlalchemy", EmitSyncQuerier: true})
+	files, err := Generate(a, Options{Runtime: "sqlalchemy"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +183,7 @@ func TestGeneratedMultilineSQLConstantIsReadableAndRoundTrips(t *testing.T) {
 	for _, q := range queries {
 		a.Queries = append(a.Queries, model.AnalyzedQuery{Name: q.name, Command: model.Exec, SQL: q.sql})
 	}
-	files, err := Generate(a, Options{Runtime: "dbapi", EmitSyncQuerier: true})
+	files, err := Generate(a, Options{Runtime: "dbapi"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -249,7 +249,7 @@ func TestGeneratedSQLConstantsRoundTripSpecialCharacters(t *testing.T) {
 			a.Queries = append(a.Queries, model.AnalyzedQuery{Name: q.name, Command: model.Exec, SQL: q.sql})
 			expected["SQL_"+strings.ToUpper(q.name)] = q.sql
 		}
-		files, err := Generate(a, Options{Runtime: runtime, EmitSyncQuerier: true})
+		files, err := Generate(a, Options{Runtime: runtime})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -291,7 +291,7 @@ func TestGeneratedSQLAlchemySQLConstantRoundTripsLexicalRewrite(t *testing.T) {
 	sql := "-- name: Пример :one\n-- comment $author_id :note\nDECLARE $author_id AS Uint64;\n$local = $author_id;\nSELECT ':ghost', @@:ghost $author_id@@, `:column`, $local FROM authors WHERE id = $author_id;"
 	want := "-- name\\: Пример \\:one\n-- comment $author_id \\:note\nDECLARE $author_id AS Uint64;\n$local = :author_id;\nSELECT '\\:ghost', @@\\:ghost $author_id@@, `\\:column`, $local FROM authors WHERE id = :author_id;"
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "find_author", Command: model.Exec, SQL: sql, Parameters: []model.Parameter{{Name: "author_id", Type: model.Type{Kind: "Uint64"}}}}}}
-	files, err := Generate(a, Options{Runtime: "sqlalchemy", EmitSyncQuerier: true})
+	files, err := Generate(a, Options{Runtime: "sqlalchemy"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -342,7 +342,7 @@ func TestGeneratedYDBQuerierWithMockAdapter(t *testing.T) {
 	}
 	a.Queries[0].ResultSets[0].Columns[0].WireName = "a.id"
 	a.Queries[1].ResultSets[0].Columns[0].WireName = "a.id"
-	files, err := Generate(a, Options{Runtime: "ydb", EmitSyncQuerier: true})
+	files, err := Generate(a, Options{Runtime: "ydb"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -423,7 +423,7 @@ func TestGeneratedSQLAlchemyClosesResultsWithMockAdapter(t *testing.T) {
 	a.Queries[0].ResultSets[0].Columns[0].WireName = "a.id"
 	a.Queries[1].ResultSets[0].Columns[0].WireName = "a.id"
 	a.Queries[0].SQL = "-- name: get_author :one\nDECLARE $id AS Uint64; SELECT '$ghost', `x` FROM authors WHERE id = $id;"
-	files, err := Generate(a, Options{Runtime: "sqlalchemy", EmitSyncQuerier: true})
+	files, err := Generate(a, Options{Runtime: "sqlalchemy"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -498,7 +498,7 @@ func TestGeneratedDBAPIClosesCursorAndPreservesTransaction(t *testing.T) {
 		a.Queries[0].Parameters = append(a.Queries[0].Parameters, model.Parameter{Name: name, Type: model.Type{Kind: "Uint64"}})
 	}
 	a.Queries[0].ResultSets[0].Columns[0].WireName = "a.id"
-	files, err := Generate(a, Options{Runtime: "dbapi", EmitSyncQuerier: true})
+	files, err := Generate(a, Options{Runtime: "dbapi"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -557,7 +557,7 @@ func TestLiveYDBGeneratedRuntimes(t *testing.T) {
 		if err := os.Mkdir(dir, 0700); err != nil {
 			t.Fatal(err)
 		}
-		files, err := Generate(a, Options{Runtime: runtime, EmitSyncQuerier: true})
+		files, err := Generate(a, Options{Runtime: runtime})
 		if err != nil {
 			t.Fatal(err)
 		}

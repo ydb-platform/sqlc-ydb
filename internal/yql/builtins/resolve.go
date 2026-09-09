@@ -59,7 +59,7 @@ func resolveCoalesce(name string, args []model.Type) (model.Type, error) {
 		}
 		if result.Kind == "" {
 			result = base
-		} else if !equalType(result, base) {
+		} else if !result.Equal(base) {
 			return model.Type{}, fmt.Errorf("%s arguments must have the same non-Null base type; use CAST to convert them to the same YQL type", name)
 		}
 		if !isOptional {
@@ -95,9 +95,9 @@ func resolveLength(name string, args []model.Type) (model.Type, error) {
 	if err := arity(name, args, 1); err != nil {
 		return model.Type{}, err
 	}
-	_, nullable, err := stringArgument(name, args, 0, true)
-	if err != nil {
-		return model.Type{}, err
+	base, nullable, err := baseType(args[0])
+	if err != nil || (base.Kind != "String" && base.Kind != "Utf8") {
+		return model.Type{}, fmt.Errorf("%s argument 1 must be String or Utf8", name)
 	}
 	return withOptional(model.Type{Kind: "Uint32"}, nullable), nil
 }
@@ -245,18 +245,6 @@ func plural(count int) string {
 		return ""
 	}
 	return "s"
-}
-
-func stringArgument(name string, args []model.Type, index int, optionalAllowed bool) (model.Type, bool, error) {
-	base, nullable, err := baseType(args[index])
-	if err != nil || (base.Kind != "String" && base.Kind != "Utf8") || (!optionalAllowed && nullable) {
-		qualifier := "String or Utf8"
-		if !optionalAllowed {
-			qualifier = "non-optional String or Utf8"
-		}
-		return model.Type{}, false, fmt.Errorf("%s argument %d must be %s", name, index+1, qualifier)
-	}
-	return base, nullable, nil
 }
 
 func stringOrNullArgument(name string, args []model.Type, index int) (model.Type, bool, error) {

@@ -1,97 +1,44 @@
 # Compiler roadmap
 
-This page describes planned compiler work. Current stages are in
-[architecture](architecture.md); implemented behavior is in
-[compatibility](compatibility.md).
-Release delivery, user documentation and acceptance responsibilities are tracked
-in [the release plan](release-plan.md).
+Current behavior is in [compatibility](compatibility.md), stage ownership in
+[architecture](architecture.md), and release gates in [the release plan](release-plan.md).
 
-## 1. Schema evolution: implemented subset
+## Shared macros
 
-The implemented migration behavior is recorded in
-[schema migration coverage](compatibility.md#schema-migration-coverage).
-General ALTER COLUMN, indexes, views and other schema objects remain future work.
-Further schema operations should be added with corresponding YDB semantics and
-fixtures, not accepted merely because the parser recognizes them.
+Macro processing must run once per `sql` entry through `analyzer.Analyze`, before
+any generator. Keep executable SQL, resolved metadata and original diagnostic
+positions together. Use tokens and parse contexts so rewrites preserve strings,
+comments, quoted identifiers and local bindings.
 
-## 2. Shared compiler and macros: planned
+Implement in this order:
 
-Keep one compilation entry point per `sql` configuration entry. It consumes
-loaded schema/query sources and returns the semantic compilation result. Every
-selected generator receives that same completed result. `compile`, `generate`
-and `diff` use the same entry point; `compile` stops before generation.
+1. `sqlc.arg` and `sqlc.narg`: lower to YDB parameters, infer types, preserve
+   `narg` nullability, and diagnose conflicts with declarations or local bindings.
+   Cover repeated uses and preserve existing public parameter names.
+2. `sqlc.embed`: expand projections against the catalog and retain result grouping.
+3. `sqlc.slice`: define YDB `List<T>` semantics and verify each runtime's binding.
 
-The existing `analyzer.Analyze` entry point can own this coordination. A separate
-`internal/compiler` package is optional: extract it only if macro processing or
-other responsibilities make that boundary useful. Keep the existing
-`model.AnalysisResult`; avoid an empty wrapper or a package added for naming
-consistency alone. A stateful `Compiler` object is only needed if later caching
-or server resources justify its lifecycle.
+Resolve each rewrite against the catalog and validate the final YQL. Record
+external parameter occurrences and update their ranges after rewrites. Driver
+placeholder rendering, such as SQLAlchemy's `:name`, then uses those ranges
+without rediscovering parameters.
 
-Macro processing belongs inside this compilation boundary. It happens once per
-compilation unit, independent of the number or language of its generators. This
-does not mean all macros can be resolved in one pass before analysis:
+Acceptance requires matching diagnostics from `compile`, `generate` and `diff`;
+independent SQL/metadata assertions; and at least two language outputs from one
+macro fixture. Cover Unicode, CRLF, escaped identifiers, comments, macro-like
+string contents and local bindings. Existing SQL byte round-trip tests must pass.
+Runtime placeholder tests must assert the final SQL seen by YDB.
 
-1. Recognize supported sqlc macro syntax using tokens, preserving strings,
-   comments, quoted identifiers and source positions. Lower syntax that YQL
-   cannot parse into YQL parameters while recording macro metadata.
-2. Build the catalog and analyze the YQL parse contexts. Resolve macro-dependent
-   names, types, optional parameters, result grouping and list element types.
-3. Finalize executable YQL and semantic metadata once. If a rewrite changes
-   syntax, validate the rewritten query before passing it to generators.
+Reference: [upstream sqlc macros](https://docs.sqlc.dev/en/latest/reference/macros.html).
 
-Implement `sqlc.arg` and `sqlc.narg` first: map names to YDB parameters, preserve
-`narg` nullability, reconcile explicit `DECLARE` statements, infer required
-types and diagnose conflicts. Cover repeated uses and collisions with existing
-parameters/local bindings. Do not silently rename existing public parameters.
+## Database-assisted analysis
 
-Then address `sqlc.embed`: projection expansion depends on the catalog and must
-retain grouping metadata for generated models. It is not only string
-replacement. Plan `sqlc.slice` after defining its YDB `List<T>` parameter
-semantics and each runtime's list binding. Unsupported combinations must fail;
-there is no need to copy another database's placeholder expansion strategy.
+Deferred until a concrete query or feature needs server metadata. First establish
+which YDB APIs expose schema, parameter and result types without executing user
+queries. Then define explicit opt-in configuration, schema-drift handling,
+timeouts, cache invalidation and reconciliation with local analysis.
 
-Upstream macro behavior is the reference:
-[sqlc macros](https://docs.sqlc.dev/en/latest/reference/macros.html).
-
-Runtime placeholder rendering is a separate last step: SQLAlchemy's `:name` is
-different from executable YQL's `$name`. During shared macro implementation, record
-resolved external parameter occurrences and their roles/ranges alongside the
-SQL, so adapters can render their syntax without re-lexing or rediscovering
-parameters. Update ranges after shared rewrites. Declarations and local bindings
-must not be mistaken for external parameter occurrences. These ranges and
-macro/result metadata are not a recursive AST.
-
-Acceptance criteria:
-
-- One compilation result feeds several generators; adding another generator
-  never repeats macro resolution or semantic analysis.
-- `compile` reports the same macro errors as `generate` and `diff`.
-- Diagnostics refer to original SQL even after expansion; tests cover Unicode,
-  CRLF, escaped identifiers, comments and macro-like text inside strings.
-- Compiler tests assert rewritten SQL and semantic metadata independently of
-  any generator. End-to-end tests verify at least two language outputs from the
-  same macro fixture, and existing exact SQL-literal round-trip tests remain.
-- Runtime-specific placeholder tests assert the SQL ultimately seen by YDB,
-  including parameter-like text in strings/comments and YQL local bindings.
-
-## 3. Database-assisted analysis: deferred
-
-Implement when a concrete feature request or a query the local analyzer cannot
-resolve justifies it. Local generation remains the default, with no implicit
-connection to a configured or developer database.
-
-First investigate the current YDB APIs for schema description and query type
-metadata without executing user queries. Record which parameter/result types
-they actually expose, what schema state they require and their limitations.
-Do not assume server EXPLAIN/prepare can replace the local analyzer.
-
-Then define explicit opt-in configuration, schema-drift behavior, type metadata
-reconciliation, diagnostics, timeouts and cache invalidation. If an isolated
-database needs schema preparation, treat that as an explicit separate mode;
-compilation must not apply migrations to an arbitrary application database.
-All generators consume the same enriched semantic result.
-
-Acceptance includes reproducible offline behavior, clear errors when requested
-server metadata is unavailable, and sequential live-YDB integration tests.
-Different local-ydb images and runtime suites stay sequential on each host.
+Offline generation remains the default. Compilation must not apply migrations
+to an application database. All generators consume the same enriched result;
+unavailable requested metadata produces an error. Validate with sequential
+live-YDB tests as described in [development](development.md).
