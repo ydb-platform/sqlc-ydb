@@ -17,6 +17,11 @@ contents and expected diagnostics. Fixture updates are explicit, never an
 automatic part of tests. Semantic unit tests independently assert resolved
 parameters, result columns and errors.
 
+Review `git diff --cached --check` after staging new files: an unstaged diff
+does not include untracked generated outputs. If significant whitespace inside
+SQL triggers a warning, escape it in the source literal without trimming or
+otherwise changing the runtime SQL text.
+
 [Git attributes](../.gitattributes) keep text files in LF form on every host.
 Release scripts and generated fixtures must survive a Windows checkout without
 byte changes; `make test-release` checks this with `core.autocrlf=true`.
@@ -84,6 +89,10 @@ introducing concurrent containers; memory limits are a known constraint.
 The `make test` and `make check` targets also serialize Go packages, so setting
 the live-test environment variables does not accidentally run language suites
 in parallel.
+
+Recreate disposable local-ydb containers after stopping them when using
+`YDB_USE_IN_MEMORY_PDISKS=true`. Restarting the same container can retain storage
+metadata without the in-memory disk contents and fail schema operations.
 
 C# and the four Java profiles run in successive acceptance steps too. C++ uses
 the pinned userver/SDK development image to compile both executables before

@@ -26,7 +26,9 @@ identity, parameters, result sets and source locations. Nullability is an
 query projection are distinct: `SELECT name` does not generate the whole table.
 Projection columns retain their API name and, where different, the exact YDB
 result name in `WireName`. For example, an unaliased `b.title` in a join is
-returned as `b.title`; generators that read by name use this analyzed metadata.
+returned as `b.title`. Name-based decoders use `Column.ResultName()`, which
+selects `WireName` when present and otherwise `Name`; positional decoders retain
+the analyzed projection order. Generated API fields continue to use `Name`.
 `AnalyzedQuery.SQL` retains executable YQL and its declarations. The analyzer
 also derives `SQLWithoutDeclarations` from ANTLR token spans for SDKs that
 synthesize `DECLARE` from typed parameters, currently JavaScript. This removes

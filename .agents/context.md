@@ -5,6 +5,9 @@ binary. It follows the familiar sqlc workflow while maintaining its own source
 and release cycle. It is a development implementation with explicit coverage
 limits; successful parsing alone does not establish semantic support.
 
+Read [decisions](decisions.md) before changing the analysis/generation boundary
+or simplifying SDK-specific code.
+
 ## Code map
 
 | Area | Responsibility |
