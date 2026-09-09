@@ -9,7 +9,7 @@ test:
 	go test -p 1 ./...
 
 test-release:
-	python3 -m unittest discover -s scripts -p 'test_*.py'
+	python3 -m unittest discover -s .github/scripts/tests -p 'test_*.py'
 
 generate: build
 	@set -e; for config in $(EXAMPLE_CONFIGS); do \

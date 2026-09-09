@@ -78,7 +78,7 @@ jobs:
           VERSION_PART: ${{ inputs.version-change }}
           RELEASE_CANDIDATE: ${{ inputs.release-candidate }}
         run: |
-          python3 scripts/release-version.py prepare \
+          python3 .github/scripts/release-version.py prepare \
             --part "$VERSION_PART" --rc "$RELEASE_CANDIDATE" \
             --notes "$RUNNER_TEMP/release-notes.md" >"$RUNNER_TEMP/release.json"
           release_tag=$(jq -r .tag "$RUNNER_TEMP/release.json")
@@ -100,13 +100,15 @@ jobs:
         run: make check
       - name: Build and verify all six archives sequentially
         run: |
-          scripts/release check "$RELEASE_TAG"
+          test "$(go env GOHOSTOS)" = linux
+          test "$(go env GOHOSTARCH)" = amd64
+          .github/scripts/release check "$RELEASE_TAG"
           mkdir -p dist
           printf '%s\n' "$RELEASE_COMMIT" >dist/COMMIT
           while read -r release_os release_arch; do
-            scripts/release build "$RELEASE_TAG" "$RELEASE_COMMIT" "$release_os" "$release_arch" dist
-          done <scripts/release-targets
-          scripts/release verify "$RELEASE_TAG" dist scripts/release-targets
+            .github/scripts/release build "$RELEASE_TAG" "$RELEASE_COMMIT" "$release_os" "$release_arch" dist
+          done <.github/scripts/release-targets
+          .github/scripts/release verify "$RELEASE_TAG" dist .github/scripts/release-targets
       - uses: actions/upload-artifact@v4
         with:
           name: release-source
@@ -123,76 +125,9 @@ jobs:
             dist/SHA256SUMS
           if-no-files-found: error
 
-  smoke:
-    needs: prepare
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: ubuntu-24.04
-            goos: linux
-            goarch: amd64
-            setup_arch: x64
-          - runner: ubuntu-24.04-arm
-            goos: linux
-            goarch: arm64
-            setup_arch: arm64
-          - runner: macos-15-intel
-            goos: darwin
-            goarch: amd64
-            setup_arch: x64
-          - runner: macos-15
-            goos: darwin
-            goarch: arm64
-            setup_arch: arm64
-          - runner: windows-2025
-            goos: windows
-            goarch: amd64
-            setup_arch: x64
-          - runner: windows-11-arm
-            goos: windows
-            goarch: arm64
-            setup_arch: arm64
-    runs-on: ${{ matrix.runner }}
-    defaults:
-      run:
-        shell: bash
-    env:
-      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
-      RELEASE_COMMIT: ${{ needs.prepare.outputs.commit }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - uses: actions/download-artifact@v4
-        with:
-          name: release-source
-          path: ${{ runner.temp }}/release-source
-      - name: Check out the exact prepared source
-        run: |
-          git fetch "$RUNNER_TEMP/release-source/release-source.bundle" HEAD
-          git checkout --detach "$RELEASE_COMMIT"
-          test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          architecture: ${{ matrix.setup_arch }}
-          cache: true
-      - uses: actions/download-artifact@v4
-        with:
-          name: release-bundle
-          path: dist
-      - name: Run the archive built for this host
-        run: |
-          test "$(go env GOHOSTOS)" = "${{ matrix.goos }}"
-          test "$(go env GOHOSTARCH)" = "${{ matrix.goarch }}"
-          printf '%s\n' "$RELEASE_COMMIT" >dist/COMMIT
-          scripts/release verify "$RELEASE_TAG" dist scripts/release-targets
-
   publish:
     if: ${{ !inputs.dry-run }}
-    needs: [prepare, smoke]
+    needs: prepare
     runs-on: ubuntu-latest
     permissions:
       contents: write

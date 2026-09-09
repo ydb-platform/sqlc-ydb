@@ -40,7 +40,7 @@ jobs:
           fail-fast: true
       - name: Build pinned PHP gRPC extension
         timeout-minutes: 15
-        run: bash scripts/install-php-grpc
+        run: bash .github/scripts/install-php-grpc
       - name: Check standalone generator and generated outputs
         run: make check
       - name: Compile generated code against published SDKs
@@ -115,7 +115,7 @@ jobs:
           fail-fast: true
       - name: Build pinned PHP gRPC extension
         timeout-minutes: 15
-        run: bash scripts/install-php-grpc
+        run: bash .github/scripts/install-php-grpc
       - name: Install and compile new runtime examples
         run: |
           dotnet build examples/csharp/GeneratedProfiles.csproj

@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 
-SCRIPT = Path(__file__).with_name("release-version.py").resolve()
+SCRIPT = Path(__file__).resolve().parent.parent / "release-version.py"
 PENDING = "### Added\n\n- New release behavior."
 OLD_SECTION = "## v1.2.3\n\n### Fixed\n\n- Previous fix.\n"
 

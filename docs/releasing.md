@@ -38,9 +38,9 @@ inconsistent source/history versions and existing target tags fail preparation.
    version, moves pending notes under `## vVERSION`, leaves an empty Unreleased
    section, and creates a local release commit. RCs use the selected source commit.
 4. It runs `make check`, builds the six archives sequentially, verifies their
-   contents and checksums, and runs each packaged executable on its native
-   OS/architecture runner. A Git bundle carries the exact prepared commit to
-   those jobs, including the stable version and changelog changes.
+   contents, Go build metadata and checksums on Linux, and executes the packaged
+   Linux/amd64 binary. A Git bundle carries the exact prepared commit to the
+   publication job, including the stable version and changelog changes.
 5. Inspect the rehearsal, then start **publish** from the default branch with
    **Dry run** disabled. Releasing a stable version also requires clearing
    **Release candidate**. This run repeats the checks before publication.
@@ -88,16 +88,16 @@ or `shasum`. From a clean repository checkout, preview the next RC locally:
 
 ```sh
 release_work=$(mktemp -d)
-python3 scripts/release-version.py prepare --part PATCH --rc true \
+python3 .github/scripts/release-version.py prepare --part PATCH --rc true \
   --notes "$release_work/notes.md" >"$release_work/plan.json"
 release_tag=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tag"])' "$release_work/plan.json")
 release_commit=$(git rev-parse HEAD)
 mkdir -p "$release_work/dist"
 printf '%s\n' "$release_commit" >"$release_work/dist/COMMIT"
 while read -r release_os release_arch; do
-  scripts/release build "$release_tag" "$release_commit" "$release_os" "$release_arch" "$release_work/dist"
-done <scripts/release-targets
-scripts/release verify "$release_tag" "$release_work/dist" scripts/release-targets
+  .github/scripts/release build "$release_tag" "$release_commit" "$release_os" "$release_arch" "$release_work/dist"
+done <.github/scripts/release-targets
+.github/scripts/release verify "$release_tag" "$release_work/dist" .github/scripts/release-targets
 ```
 
 This creates no Git commit, tag or release and leaves Unreleased intact. Using
@@ -105,10 +105,11 @@ This creates no Git commit, tag or release and leaves Unreleased intact. Using
 disposable checkout for stable-release rehearsals. The workflow commits those
 edits before building, so artifact metadata points to that prepared commit.
 
-The local verifier executes only the host's archive. Cross-compilation and
-metadata checks for other targets do not replace their native workflow tests.
+The verifier executes only the host's archive: Linux/amd64 in the workflow.
+Other targets are cross-compiled and checked for archive contents, Go command,
+GOOS, GOARCH, disabled CGO and source revision; they are not executed in CI.
 For a single-host probe, use a one-line targets file and a separate output
-directory; publication always uses the complete [target list](../scripts/release-targets).
+directory; publication always uses the complete [target list](../.github/scripts/release-targets).
 
 ## Reference
 

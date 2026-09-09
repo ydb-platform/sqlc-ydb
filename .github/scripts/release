@@ -16,9 +16,9 @@ trap cleanup EXIT
 usage() {
   cat >&2 <<'EOF'
 usage:
-  scripts/release check <vMAJOR.MINOR.PATCH[-rcN]> [notes-file]
-  scripts/release build <tag> <commit> <goos> <goarch> <dist-dir>
-  scripts/release verify <tag> <dist-dir> <targets-file>
+  .github/scripts/release check <vMAJOR.MINOR.PATCH[-rcN]> [notes-file]
+  .github/scripts/release build <tag> <commit> <goos> <goarch> <dist-dir>
+  .github/scripts/release verify <tag> <dist-dir> <targets-file>
 EOF
   exit 2
 }
@@ -80,7 +80,7 @@ check_release() {
   else
     notes_tmp=$(mktemp)
   fi
-  python3 scripts/release-version.py notes --tag "$tag" --changelog "$changelog" --notes "$notes_tmp"
+  python3 .github/scripts/release-version.py notes --tag "$tag" --changelog "$changelog" --notes "$notes_tmp"
   if [[ -z $notes ]]; then
     rm -f "$notes_tmp"
   fi

@@ -28,10 +28,10 @@ CI separates offline checks from Linux acceptance jobs. Each acceptance host
 uses one pinned YDB service.
 
 PHP CI builds the pinned gRPC extension with
-[`scripts/install-php-grpc`](../scripts/install-php-grpc). It downloads the source
-archive directly, limits compilation to two processes, and checks the loaded
-version. Download and build timeouts keep installation failures visible before
-the SDK tests run.
+[`.github/scripts/install-php-grpc`](../.github/scripts/install-php-grpc).
+It downloads the source archive directly, limits compilation to two processes,
+and checks the loaded version. Download and build timeouts keep installation
+failures visible before the SDK tests run.
 
 Generator tests compile generated Go against the selected SDK in a temporary
 module and execute generated code using mock adapters. Python 3.9 or newer must
