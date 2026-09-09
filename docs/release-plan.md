@@ -12,7 +12,7 @@ are in [releasing](releasing.md).
 | Analysis and generation | Maintainers | Semantic regressions, generated-output checks and documented unsupported cases. |
 | SDK compatibility | Maintainers | Resolve and pin the latest stable Go SDK; compile and test native and `database/sql` outputs. Run every selected profile's compilation and sequential runtime checks against its pinned SDK. |
 | SDK review | User | Collect findings from SDK maintainers and agree which profiles are ready; maintainers fix confirmed defects. |
-| Reproducible artifacts | Maintainers | A successful publish dry run checks six archives, checksums, version/commit metadata and packaged executables on native runners. |
+| Reproducible artifacts | Maintainers | A successful publish dry run verifies all six archives, Go build metadata and checksums on Linux, and executes only the packaged Linux/amd64 binary. |
 | Repository/module name | Maintainers | Confirm the published name; if renamed, update `go.mod`, imports, scripts and documentation together. |
 | User documentation | Maintainers | Review the ydb.tech SQLC guide and run its examples with release-candidate artifacts. |
 | Publication | User | Start the manual workflow after the gates pass. Preparing code or notes does not authorize publication. |
