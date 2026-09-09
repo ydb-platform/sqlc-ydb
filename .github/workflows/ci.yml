@@ -40,9 +40,6 @@ jobs:
           coverage: none
         env:
           fail-fast: true
-      - name: Build pinned PHP gRPC extension
-        timeout-minutes: 15
-        run: bash .github/scripts/install-php-grpc
       - name: Check standalone generator and generated outputs
         run: make test-release coverage check-examples
       - name: Save generator coverage report
@@ -51,6 +48,18 @@ jobs:
           name: generator-coverage
           path: coverage.out
           if-no-files-found: error
+      - name: Upload generator coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.out
+          flags: unit
+          disable_search: true
+          fail_ci_if_error: true
+          name: generator
+      - name: Build pinned PHP gRPC extension
+        timeout-minutes: 15
+        run: bash .github/scripts/install-php-grpc
       - name: Compile generated code against published SDKs
         env:
           SQLC_YDB_CSHARP_DOTNET: dotnet
@@ -70,15 +79,6 @@ jobs:
         run: |
           composer install --no-interaction --prefer-dist
           composer check
-      - name: Upload generator coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage.out
-          flags: unit
-          disable_search: true
-          fail_ci_if_error: true
-          name: generator
 
   ydb-acceptance:
     runs-on: ubuntu-latest
