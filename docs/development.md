@@ -85,7 +85,9 @@ An upload failure fails the CI job rather than silently leaving stale coverage.
 PHP CI installs the pinned gRPC 1.83.1 binary package with
 [`.github/scripts/install-php-grpc`](../.github/scripts/install-php-grpc).
 It downloads the PHP 8.2 package from the Ondřej Surý Ubuntu PPA, verifies its
-pinned SHA-256, installs it with APT and checks the loaded version. Both PHP jobs
+pinned SHA-256 and extracts `grpc.so` without requiring PHP packages in APT.
+It verifies the binary loads in PHP before installing it into PHP's extension
+directory, then enables it and checks the loaded version. Both PHP jobs
 use Ubuntu 24.04 amd64. Installation has a five-minute timeout and never falls
 back to compilation. Package updates require updating the revision and checksum
 in the script together and running the PHP checks and live smoke tests.

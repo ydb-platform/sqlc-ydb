@@ -17,6 +17,14 @@ curl --fail --location --connect-timeout 15 --max-time 120 --retry 3 \
   "https://ppa.launchpadcontent.net/ondrej/php/ubuntu/pool/main/p/php-grpc/$grpc_package" \
   -o "$grpc_download_dir/$grpc_package"
 printf '%s  %s\n' "$grpc_sha256" "$grpc_download_dir/$grpc_package" | sha256sum --check --strict
-sudo apt-get install --yes --no-install-recommends "$grpc_download_dir/$grpc_package"
+# setup-php can provide PHP without registering its packages with APT.
+# Extract the extension and validate its ABI and shared libraries with PHP itself.
+dpkg-deb --extract "$grpc_download_dir/$grpc_package" "$grpc_download_dir/extracted"
+grpc_library="$grpc_download_dir/extracted/usr/lib/php/20220829/grpc.so"
+check_version='if (phpversion("grpc") !== $argv[1]) { fwrite(STDERR, "Expected gRPC " . $argv[1] . "\n"); exit(1); }'
+php -n -d "extension=$grpc_library" -r "$check_version" "$grpc_version"
+grpc_extension_dir=$(php -r 'echo ini_get("extension_dir");')
+sudo install -m644 "$grpc_library" "$grpc_extension_dir/grpc.so"
+echo 'extension=grpc.so' | sudo tee /etc/php/8.2/mods-available/grpc.ini
 sudo phpenmod -v 8.2 grpc
-php -r 'if (phpversion("grpc") !== $argv[1]) { fwrite(STDERR, "Expected gRPC " . $argv[1] . "\n"); exit(1); }' "$grpc_version"
+php -r "$check_version" "$grpc_version"
