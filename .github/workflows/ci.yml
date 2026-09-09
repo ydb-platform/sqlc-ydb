@@ -34,7 +34,7 @@ jobs:
         with:
           php-version: '8.2'
           extensions: bcmath, curl
-          tools: composer:2.8, phpize, php-config
+          tools: composer:2.10.3, phpize, php-config
           coverage: none
         env:
           fail-fast: true
@@ -109,7 +109,7 @@ jobs:
         with:
           php-version: '8.2'
           extensions: bcmath, curl
-          tools: composer:2.8, phpize, php-config
+          tools: composer:2.10.3, phpize, php-config
           coverage: none
         env:
           fail-fast: true
