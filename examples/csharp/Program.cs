@@ -121,7 +121,16 @@ internal static class Program
         var words = statement.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         if (words.Length >= 3 && words[0].Equals("CREATE", StringComparison.OrdinalIgnoreCase) && words[1].Equals("TABLE", StringComparison.OrdinalIgnoreCase))
         {
-            ownedTables.Add(words[2]);
+            var tableNameIndex = 2;
+            if (words[2].Equals("IF", StringComparison.OrdinalIgnoreCase))
+            {
+                if (words.Length < 6 ||
+                    !words[3].Equals("NOT", StringComparison.OrdinalIgnoreCase) ||
+                    !words[4].Equals("EXISTS", StringComparison.OrdinalIgnoreCase))
+                    return;
+                tableNameIndex = 5;
+            }
+            ownedTables.Add(words[tableNameIndex]);
             return;
         }
         if (words.Length >= 6 && words[0].Equals("ALTER", StringComparison.OrdinalIgnoreCase) && words[1].Equals("TABLE", StringComparison.OrdinalIgnoreCase) && words[3].Equals("RENAME", StringComparison.OrdinalIgnoreCase) && words[4].Equals("TO", StringComparison.OrdinalIgnoreCase))
