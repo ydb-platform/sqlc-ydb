@@ -8,8 +8,8 @@ import (
 )
 
 type DBTX interface {
-	Do(context.Context, query.Operation, ...query.DoOption) error
 	Exec(context.Context, string, ...query.ExecuteOption) error
+	Query(context.Context, string, ...query.ExecuteOption) (query.Result, error)
 	QueryRow(context.Context, string, ...query.ExecuteOption) (query.Row, error)
 }
 type Queries struct{ db DBTX }

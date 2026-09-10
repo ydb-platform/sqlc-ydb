@@ -35,52 +35,45 @@ const queryListPilots = `-- name: ListPilots :many
 SELECT id, name FROM pilots ORDER BY id LIMIT 5;`
 
 func (q *Queries) ListPilots(ctx context.Context, opts ...query.ExecuteOption) ([]ListPilotsRow, error) {
+	result, err := q.db.Query(ctx, queryListPilots, opts...)
+	if err != nil {
+		return []ListPilotsRow(nil), err
+	}
+	defer result.Close(ctx)
+
+	resultSet, err := result.NextResultSet(ctx)
+	if errors.Is(err, io.EOF) {
+		return []ListPilotsRow(nil), xerrors.WithStackTrace(query.ErrNoResultSets)
+	}
+	if err != nil {
+		return []ListPilotsRow(nil), xerrors.WithStackTrace(err)
+	}
+
 	items := []ListPilotsRow(nil)
-
-	err := q.db.Do(ctx, func(ctx context.Context, s query.Session) error {
-		result, err := s.Query(ctx, queryListPilots, opts...)
+	for r, err := range resultSet.Rows(ctx) {
 		if err != nil {
-			return xerrors.WithStackTrace(err)
+			return []ListPilotsRow(nil), xerrors.WithStackTrace(err)
 		}
-		defer result.Close(ctx)
-
-		resultSet, err := result.NextResultSet(ctx)
-		if errors.Is(err, io.EOF) {
-			return xerrors.WithStackTrace(query.ErrNoResultSets)
+		var row ListPilotsRow
+		if err := r.ScanNamed(
+			query.Named("id", &row.ID),
+			query.Named("name", &row.Name),
+		); err != nil {
+			return []ListPilotsRow(nil), xerrors.WithStackTrace(err)
 		}
-		if err != nil {
-			return xerrors.WithStackTrace(err)
-		}
+		items = append(items, row)
+	}
 
-		attemptItems := []ListPilotsRow(nil)
-		for r, err := range resultSet.Rows(ctx) {
-			if err != nil {
-				return xerrors.WithStackTrace(err)
-			}
-			var row ListPilotsRow
-			if err := r.ScanNamed(
-				query.Named("id", &row.ID),
-				query.Named("name", &row.Name),
-			); err != nil {
-				return xerrors.WithStackTrace(err)
-			}
-			attemptItems = append(attemptItems, row)
-		}
+	_, err = result.NextResultSet(ctx)
+	switch {
+	case err == nil:
+		return []ListPilotsRow(nil), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+	case errors.Is(err, io.EOF):
+	case err != nil:
+		return []ListPilotsRow(nil), xerrors.WithStackTrace(err)
+	}
 
-		_, err = result.NextResultSet(ctx)
-		switch {
-		case err == nil:
-			return xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
-		case errors.Is(err, io.EOF):
-		case err != nil:
-			return xerrors.WithStackTrace(err)
-		}
-
-		items = attemptItems
-		return nil
-	})
-
-	return items, err
+	return items, nil
 }
 
 const queryDeletePilot = `-- name: DeletePilot :exec

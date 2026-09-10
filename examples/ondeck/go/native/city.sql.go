@@ -18,52 +18,45 @@ FROM city
 ORDER BY name;`
 
 func (q *Queries) ListCities(ctx context.Context, opts ...query.ExecuteOption) ([]ListCitiesRow, error) {
+	result, err := q.db.Query(ctx, queryListCities, opts...)
+	if err != nil {
+		return []ListCitiesRow(nil), err
+	}
+	defer result.Close(ctx)
+
+	resultSet, err := result.NextResultSet(ctx)
+	if errors.Is(err, io.EOF) {
+		return []ListCitiesRow(nil), xerrors.WithStackTrace(query.ErrNoResultSets)
+	}
+	if err != nil {
+		return []ListCitiesRow(nil), xerrors.WithStackTrace(err)
+	}
+
 	items := []ListCitiesRow(nil)
-
-	err := q.db.Do(ctx, func(ctx context.Context, s query.Session) error {
-		result, err := s.Query(ctx, queryListCities, opts...)
+	for r, err := range resultSet.Rows(ctx) {
 		if err != nil {
-			return xerrors.WithStackTrace(err)
+			return []ListCitiesRow(nil), xerrors.WithStackTrace(err)
 		}
-		defer result.Close(ctx)
-
-		resultSet, err := result.NextResultSet(ctx)
-		if errors.Is(err, io.EOF) {
-			return xerrors.WithStackTrace(query.ErrNoResultSets)
+		var row ListCitiesRow
+		if err := r.ScanNamed(
+			query.Named("slug", &row.Slug),
+			query.Named("name", &row.Name),
+		); err != nil {
+			return []ListCitiesRow(nil), xerrors.WithStackTrace(err)
 		}
-		if err != nil {
-			return xerrors.WithStackTrace(err)
-		}
+		items = append(items, row)
+	}
 
-		attemptItems := []ListCitiesRow(nil)
-		for r, err := range resultSet.Rows(ctx) {
-			if err != nil {
-				return xerrors.WithStackTrace(err)
-			}
-			var row ListCitiesRow
-			if err := r.ScanNamed(
-				query.Named("slug", &row.Slug),
-				query.Named("name", &row.Name),
-			); err != nil {
-				return xerrors.WithStackTrace(err)
-			}
-			attemptItems = append(attemptItems, row)
-		}
+	_, err = result.NextResultSet(ctx)
+	switch {
+	case err == nil:
+		return []ListCitiesRow(nil), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+	case errors.Is(err, io.EOF):
+	case err != nil:
+		return []ListCitiesRow(nil), xerrors.WithStackTrace(err)
+	}
 
-		_, err = result.NextResultSet(ctx)
-		switch {
-		case err == nil:
-			return xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
-		case errors.Is(err, io.EOF):
-		case err != nil:
-			return xerrors.WithStackTrace(err)
-		}
-
-		items = attemptItems
-		return nil
-	})
-
-	return items, err
+	return items, nil
 }
 
 const queryGetCity = `-- name: GetCity :one

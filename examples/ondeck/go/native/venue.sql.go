@@ -25,60 +25,53 @@ func (q *Queries) ListVenues(ctx context.Context, arg string, opts ...query.Exec
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
+	result, err := q.db.Query(ctx, queryListVenues, callOptions...)
+	if err != nil {
+		return []ListVenuesRow(nil), err
+	}
+	defer result.Close(ctx)
+
+	resultSet, err := result.NextResultSet(ctx)
+	if errors.Is(err, io.EOF) {
+		return []ListVenuesRow(nil), xerrors.WithStackTrace(query.ErrNoResultSets)
+	}
+	if err != nil {
+		return []ListVenuesRow(nil), xerrors.WithStackTrace(err)
+	}
+
 	items := []ListVenuesRow(nil)
-
-	err := q.db.Do(ctx, func(ctx context.Context, s query.Session) error {
-		result, err := s.Query(ctx, queryListVenues, callOptions...)
+	for r, err := range resultSet.Rows(ctx) {
 		if err != nil {
-			return xerrors.WithStackTrace(err)
+			return []ListVenuesRow(nil), xerrors.WithStackTrace(err)
 		}
-		defer result.Close(ctx)
-
-		resultSet, err := result.NextResultSet(ctx)
-		if errors.Is(err, io.EOF) {
-			return xerrors.WithStackTrace(query.ErrNoResultSets)
+		var row ListVenuesRow
+		if err := r.ScanNamed(
+			query.Named("id", &row.ID),
+			query.Named("slug", &row.Slug),
+			query.Named("name", &row.Name),
+			query.Named("city", &row.City),
+			query.Named("status", &row.Status),
+			query.Named("statuses", &row.Statuses),
+			query.Named("spotify_playlist", &row.SpotifyPlaylist),
+			query.Named("songkick_id", &row.SongkickID),
+			query.Named("tags", &row.Tags),
+			query.Named("created_at", &row.CreatedAt),
+		); err != nil {
+			return []ListVenuesRow(nil), xerrors.WithStackTrace(err)
 		}
-		if err != nil {
-			return xerrors.WithStackTrace(err)
-		}
+		items = append(items, row)
+	}
 
-		attemptItems := []ListVenuesRow(nil)
-		for r, err := range resultSet.Rows(ctx) {
-			if err != nil {
-				return xerrors.WithStackTrace(err)
-			}
-			var row ListVenuesRow
-			if err := r.ScanNamed(
-				query.Named("id", &row.ID),
-				query.Named("slug", &row.Slug),
-				query.Named("name", &row.Name),
-				query.Named("city", &row.City),
-				query.Named("status", &row.Status),
-				query.Named("statuses", &row.Statuses),
-				query.Named("spotify_playlist", &row.SpotifyPlaylist),
-				query.Named("songkick_id", &row.SongkickID),
-				query.Named("tags", &row.Tags),
-				query.Named("created_at", &row.CreatedAt),
-			); err != nil {
-				return xerrors.WithStackTrace(err)
-			}
-			attemptItems = append(attemptItems, row)
-		}
+	_, err = result.NextResultSet(ctx)
+	switch {
+	case err == nil:
+		return []ListVenuesRow(nil), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+	case errors.Is(err, io.EOF):
+	case err != nil:
+		return []ListVenuesRow(nil), xerrors.WithStackTrace(err)
+	}
 
-		_, err = result.NextResultSet(ctx)
-		switch {
-		case err == nil:
-			return xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
-		case errors.Is(err, io.EOF):
-		case err != nil:
-			return xerrors.WithStackTrace(err)
-		}
-
-		items = attemptItems
-		return nil
-	})
-
-	return items, err
+	return items, nil
 }
 
 const queryDeleteVenue = `-- name: DeleteVenue :exec
@@ -223,50 +216,43 @@ GROUP BY city
 ORDER BY city;`
 
 func (q *Queries) VenueCountByCity(ctx context.Context, opts ...query.ExecuteOption) ([]VenueCountByCityRow, error) {
+	result, err := q.db.Query(ctx, queryVenueCountByCity, opts...)
+	if err != nil {
+		return []VenueCountByCityRow(nil), err
+	}
+	defer result.Close(ctx)
+
+	resultSet, err := result.NextResultSet(ctx)
+	if errors.Is(err, io.EOF) {
+		return []VenueCountByCityRow(nil), xerrors.WithStackTrace(query.ErrNoResultSets)
+	}
+	if err != nil {
+		return []VenueCountByCityRow(nil), xerrors.WithStackTrace(err)
+	}
+
 	items := []VenueCountByCityRow(nil)
-
-	err := q.db.Do(ctx, func(ctx context.Context, s query.Session) error {
-		result, err := s.Query(ctx, queryVenueCountByCity, opts...)
+	for r, err := range resultSet.Rows(ctx) {
 		if err != nil {
-			return xerrors.WithStackTrace(err)
+			return []VenueCountByCityRow(nil), xerrors.WithStackTrace(err)
 		}
-		defer result.Close(ctx)
-
-		resultSet, err := result.NextResultSet(ctx)
-		if errors.Is(err, io.EOF) {
-			return xerrors.WithStackTrace(query.ErrNoResultSets)
+		var row VenueCountByCityRow
+		if err := r.ScanNamed(
+			query.Named("city", &row.City),
+			query.Named("venue_count", &row.VenueCount),
+		); err != nil {
+			return []VenueCountByCityRow(nil), xerrors.WithStackTrace(err)
 		}
-		if err != nil {
-			return xerrors.WithStackTrace(err)
-		}
+		items = append(items, row)
+	}
 
-		attemptItems := []VenueCountByCityRow(nil)
-		for r, err := range resultSet.Rows(ctx) {
-			if err != nil {
-				return xerrors.WithStackTrace(err)
-			}
-			var row VenueCountByCityRow
-			if err := r.ScanNamed(
-				query.Named("city", &row.City),
-				query.Named("venue_count", &row.VenueCount),
-			); err != nil {
-				return xerrors.WithStackTrace(err)
-			}
-			attemptItems = append(attemptItems, row)
-		}
+	_, err = result.NextResultSet(ctx)
+	switch {
+	case err == nil:
+		return []VenueCountByCityRow(nil), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+	case errors.Is(err, io.EOF):
+	case err != nil:
+		return []VenueCountByCityRow(nil), xerrors.WithStackTrace(err)
+	}
 
-		_, err = result.NextResultSet(ctx)
-		switch {
-		case err == nil:
-			return xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
-		case errors.Is(err, io.EOF):
-		case err != nil:
-			return xerrors.WithStackTrace(err)
-		}
-
-		items = attemptItems
-		return nil
-	})
-
-	return items, err
+	return items, nil
 }

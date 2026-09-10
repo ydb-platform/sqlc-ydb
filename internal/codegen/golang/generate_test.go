@@ -118,67 +118,65 @@ func TestGeneratedYDBManyUsesNamedColumnScans(t *testing.T) {
 
 	source := generatedSQLSourceForAnalysis(t, "ydb", in)
 	want := `if err := r.ScanNamed(
-				query.Named("id", &row.ID),
-				query.Named("name", &row.Name),
-			); err != nil {`
+			query.Named("id", &row.ID),
+			query.Named("name", &row.Name),
+		); err != nil {`
 	if !strings.Contains(string(source), want) {
 		t.Fatalf("native :many rows were not scanned by column name:\n%s", source)
 	}
 }
 
-func TestGeneratedYDBManyStreamsOneResultSetPerRetryAttempt(t *testing.T) {
+func TestGeneratedYDBManyValidatesOneResultSet(t *testing.T) {
 	in := sample()
 	in.Queries = in.Queries[1:2]
 
 	source := string(generatedSQLSourceForAnalysis(t, "ydb", in))
-	want := `items := []ListUsersRow(nil)
+	want := `result, err := q.db.Query(ctx, queryListUsers, opts...)
+	if err != nil {
+		return []ListUsersRow(nil), err
+	}
+	defer result.Close(ctx)
 
-	err := q.db.Do(ctx, func(ctx context.Context, s query.Session) error {
-		result, err := s.Query(ctx, queryListUsers, opts...)
+	resultSet, err := result.NextResultSet(ctx)
+	if errors.Is(err, io.EOF) {
+		return []ListUsersRow(nil), xerrors.WithStackTrace(query.ErrNoResultSets)
+	}
+	if err != nil {
+		return []ListUsersRow(nil), xerrors.WithStackTrace(err)
+	}
+
+	items := []ListUsersRow(nil)
+	for r, err := range resultSet.Rows(ctx) {
 		if err != nil {
-			return xerrors.WithStackTrace(err)
+			return []ListUsersRow(nil), xerrors.WithStackTrace(err)
 		}
-		defer result.Close(ctx)
-
-		resultSet, err := result.NextResultSet(ctx)
-		if errors.Is(err, io.EOF) {
-			return xerrors.WithStackTrace(query.ErrNoResultSets)
+		var row ListUsersRow
+		if err := r.ScanNamed(
+			query.Named("id", &row.ID),
+			query.Named("name", &row.Name),
+		); err != nil {
+			return []ListUsersRow(nil), xerrors.WithStackTrace(err)
 		}
-		if err != nil {
-			return xerrors.WithStackTrace(err)
-		}
+		items = append(items, row)
+	}
 
-		attemptItems := []ListUsersRow(nil)
-		for r, err := range resultSet.Rows(ctx) {
-			if err != nil {
-				return xerrors.WithStackTrace(err)
-			}
-			var row ListUsersRow
-			if err := r.ScanNamed(
-				query.Named("id", &row.ID),
-				query.Named("name", &row.Name),
-			); err != nil {
-				return xerrors.WithStackTrace(err)
-			}
-			attemptItems = append(attemptItems, row)
-		}
+	_, err = result.NextResultSet(ctx)
+	switch {
+	case err == nil:
+		return []ListUsersRow(nil), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+	case errors.Is(err, io.EOF):
+	case err != nil:
+		return []ListUsersRow(nil), xerrors.WithStackTrace(err)
+	}
 
-		_, err = result.NextResultSet(ctx)
-		switch {
-		case err == nil:
-			return xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
-		case errors.Is(err, io.EOF):
-		case err != nil:
-			return xerrors.WithStackTrace(err)
-		}
-
-		items = attemptItems
-		return nil
-	})
-
-	return items, err`
+	return items, nil`
 	if !strings.Contains(source, want) {
-		t.Fatalf("native :many query does not stream and isolate retry attempts:\n%s", source)
+		t.Fatalf("native :many query does not validate exactly one result set:\n%s", source)
+	}
+	for _, unwanted := range []string{"q.db.Do", "query.Session", "QueryResultSet", "attemptItems"} {
+		if strings.Contains(source, unwanted) {
+			t.Fatalf("native :many source contains caller-owned retry/materialization API %q:\n%s", unwanted, source)
+		}
 	}
 	for _, wantImport := range []string{`"errors"`, `"io"`, `"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xerrors"`} {
 		if !strings.Contains(source, wantImport) {
@@ -198,7 +196,7 @@ func TestGeneratedYDBWithoutManyOmitsStreamingImports(t *testing.T) {
 	}
 }
 
-func TestGeneratedYDBInterfaceSupportsSessionRetries(t *testing.T) {
+func TestGeneratedYDBInterfaceSupportsClientsSessionsAndTransactions(t *testing.T) {
 	files, err := Generate(sample(), Options{Package: "db", Runtime: "ydb"})
 	if err != nil {
 		t.Fatal(err)
@@ -210,19 +208,21 @@ func TestGeneratedYDBInterfaceSupportsSessionRetries(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		`Do(context.Context, query.Operation, ...query.DoOption) error`,
+		`Query(context.Context, string, ...query.ExecuteOption) (query.Result, error)`,
 		"\t\"context\"\n\n\t\"github.com/ydb-platform/ydb-go-sdk/v3/query\"",
 	} {
 		if !strings.Contains(source, want) {
 			t.Fatalf("native DBTX misses %q:\n%s", want, source)
 		}
 	}
-	if strings.Contains(source, "QueryResultSet") {
-		t.Fatalf("native DBTX still exposes materializing QueryResultSet:\n%s", source)
+	for _, unwanted := range []string{"QueryResultSet", "query.Operation", "query.DoOption"} {
+		if strings.Contains(source, unwanted) {
+			t.Fatalf("native DBTX exposes %q:\n%s", unwanted, source)
+		}
 	}
 }
 
-func TestGeneratedYDBManyPreservesEmptySliceContractAcrossRetries(t *testing.T) {
+func TestGeneratedYDBManyPreservesEmptySliceContractOnErrors(t *testing.T) {
 	in := sample()
 	in.Queries = in.Queries[1:2]
 	files, err := Generate(in, Options{Package: "db", Runtime: "ydb", EmitEmptySlices: true})
@@ -237,12 +237,12 @@ func TestGeneratedYDBManyPreservesEmptySliceContractAcrossRetries(t *testing.T) 
 	}
 	for _, want := range []string{
 		"items := make([]ListUsersRow, 0)",
-		"attemptItems := make([]ListUsersRow, 0)",
-		"items = attemptItems\n\t\treturn nil",
-		"return items, err",
+		"return make([]ListUsersRow, 0), xerrors.WithStackTrace(query.ErrNoResultSets)",
+		"return make([]ListUsersRow, 0), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)",
+		"return items, nil",
 	} {
 		if !strings.Contains(source, want) {
-			t.Fatalf("emit_empty_slices retry contract misses %q:\n%s", want, source)
+			t.Fatalf("emit_empty_slices error contract misses %q:\n%s", want, source)
 		}
 	}
 }

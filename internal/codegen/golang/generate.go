@@ -399,7 +399,7 @@ package ` + o.Package + `
 import ("context"
 
 "github.com/ydb-platform/ydb-go-sdk/v3/query")
-type DBTX interface { Do(context.Context,query.Operation,...query.DoOption) error; Exec(context.Context,string,...query.ExecuteOption) error; QueryRow(context.Context,string,...query.ExecuteOption)(query.Row,error) }
+type DBTX interface { Exec(context.Context,string,...query.ExecuteOption) error; Query(context.Context,string,...query.ExecuteOption)(query.Result,error); QueryRow(context.Context,string,...query.ExecuteOption)(query.Row,error) }
 type Queries struct { db DBTX }
 func New(db DBTX) *Queries { return &Queries{db:db} }
 `)
@@ -645,31 +645,26 @@ func writeYDB(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 	if o.EmitEmptySlices {
 		init = "make([]" + q.Name + "Row, 0)"
 	}
-	b.WriteString("items := " + init + "\n\n")
-	b.WriteString("err := q.db.Do(ctx, func(ctx context.Context, s query.Session) error {\n")
-	b.WriteString("result, err := s.Query(ctx, " + queryConstName(q.Name) + ", " + opt + ")\n")
-	b.WriteString("if err != nil { return xerrors.WithStackTrace(err) }\n")
+	b.WriteString("result, err := q.db.Query(ctx, " + queryConstName(q.Name) + ", " + opt + ")\n")
+	b.WriteString("if err != nil { return " + init + ", err }\n")
 	b.WriteString("defer result.Close(ctx)\n\n")
 	b.WriteString("resultSet, err := result.NextResultSet(ctx)\n")
-	b.WriteString("if errors.Is(err, io.EOF) { return xerrors.WithStackTrace(query.ErrNoResultSets) }\n")
-	b.WriteString("if err != nil { return xerrors.WithStackTrace(err) }\n\n")
-	b.WriteString("attemptItems := " + init + "\n")
+	b.WriteString("if errors.Is(err, io.EOF) { return " + init + ", xerrors.WithStackTrace(query.ErrNoResultSets) }\n")
+	b.WriteString("if err != nil { return " + init + ", xerrors.WithStackTrace(err) }\n\n")
+	b.WriteString("items := " + init + "\n")
 	b.WriteString("for r, err := range resultSet.Rows(ctx) {\n")
-	b.WriteString("if err != nil { return xerrors.WithStackTrace(err) }\n")
+	b.WriteString("if err != nil { return " + init + ", xerrors.WithStackTrace(err) }\n")
 	b.WriteString("var row " + q.Name + "Row\n")
-	b.WriteString("if err := r.ScanNamed(\n" + scanNamed(q.ResultSets[0]) + ",\n); err != nil { return xerrors.WithStackTrace(err) }\n")
-	b.WriteString("attemptItems = append(attemptItems, row)\n")
+	b.WriteString("if err := r.ScanNamed(\n" + scanNamed(q.ResultSets[0]) + ",\n); err != nil { return " + init + ", xerrors.WithStackTrace(err) }\n")
+	b.WriteString("items = append(items, row)\n")
 	b.WriteString("}\n\n")
 	b.WriteString("_, err = result.NextResultSet(ctx)\n")
 	b.WriteString("switch {\n")
-	b.WriteString("case err == nil: return xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)\n")
+	b.WriteString("case err == nil: return " + init + ", xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)\n")
 	b.WriteString("case errors.Is(err, io.EOF):\n")
-	b.WriteString("case err != nil: return xerrors.WithStackTrace(err)\n")
+	b.WriteString("case err != nil: return " + init + ", xerrors.WithStackTrace(err)\n")
 	b.WriteString("}\n\n")
-	b.WriteString("items = attemptItems\n")
-	b.WriteString("return nil\n")
-	b.WriteString("})\n\n")
-	b.WriteString("return items, err\n")
+	b.WriteString("return items, nil\n")
 }
 
 func writeDecimalValidations(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
