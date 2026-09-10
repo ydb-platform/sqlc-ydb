@@ -15,106 +15,6 @@ use YdbPlatform\Ydb\Table;
 
 final class Queries
 {
-    public const GET_AUTHOR_SQL = <<<'SQLC_YDB_YQL'
--- name: GetAuthor :one
-SELECT author_id, name
-FROM authors
-WHERE author_id = $author_id;
-SQLC_YDB_YQL;
-
-    public const GET_BOOK_SQL = <<<'SQLC_YDB_YQL'
--- name: GetBook :one
-SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
-FROM books
-WHERE book_id = $book_id;
-SQLC_YDB_YQL;
-
-    public const DELETE_BOOK_SQL = <<<'SQLC_YDB_YQL'
--- name: DeleteBook :exec
-DELETE FROM books
-WHERE book_id = $book_id;
-SQLC_YDB_YQL;
-
-    public const BOOKS_BY_TITLE_YEAR_SQL = <<<'SQLC_YDB_YQL'
--- name: BooksByTitleYear :many
-SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
-FROM books
-WHERE title = $title AND publication_year = $publication_year;
-SQLC_YDB_YQL;
-
-    public const BOOKS_BY_TAGS_SQL = <<<'SQLC_YDB_YQL'
--- name: BooksByTags :many
-DECLARE $tags AS Json;
-SELECT
-    b.book_id,
-    b.title,
-    a.name,
-    b.isbn,
-    b.tags
-FROM books AS b
-LEFT JOIN authors AS a ON b.author_id = a.author_id
-WHERE NOT SetIsDisjoint(
-    ToSet(Yson::ConvertToStringList(b.tags)),
-    Yson::ConvertToStringList($tags)
-);
-SQLC_YDB_YQL;
-
-    public const CREATE_AUTHOR_SQL = <<<'SQLC_YDB_YQL'
--- name: CreateAuthor :one
-INSERT INTO authors (author_id, name)
-VALUES ($author_id, $name)
-RETURNING author_id, name;
-SQLC_YDB_YQL;
-
-    public const CREATE_BOOK_SQL = <<<'SQLC_YDB_YQL'
--- name: CreateBook :one
-INSERT INTO books (
-    book_id,
-    author_id,
-    isbn,
-    book_type,
-    title,
-    publication_year,
-    available,
-    tags
-) VALUES (
-    $book_id,
-    $author_id,
-    $isbn,
-    $book_type,
-    $title,
-    $publication_year,
-    $available,
-    $tags
-)
-RETURNING book_id, author_id, isbn, book_type, title, publication_year, available, tags;
-SQLC_YDB_YQL;
-
-    public const UPDATE_BOOK_SQL = <<<'SQLC_YDB_YQL'
--- name: UpdateBook :exec
-UPDATE books
-SET title = $title, tags = $tags
-WHERE book_id = $book_id;
-SQLC_YDB_YQL;
-
-    public const UPDATE_BOOK_ISBN_SQL = <<<'SQLC_YDB_YQL'
--- name: UpdateBookISBN :exec
-UPDATE books
-SET title = $title, tags = $tags, isbn = $isbn
-WHERE book_id = $book_id;
-SQLC_YDB_YQL;
-
-    public const DELETE_AUTHOR_BEFORE_YEAR_SQL = <<<'SQLC_YDB_YQL'
--- name: DeleteAuthorBeforeYear :exec
-DELETE FROM books
-WHERE publication_year < $publication_year AND author_id = $author_id;
-SQLC_YDB_YQL;
-
-    public const SAY_HELLO_SQL = <<<'SQLC_YDB_YQL'
--- name: SayHello :one
-SELECT "hello "u || $name AS greeting;
-SQLC_YDB_YQL;
-
     public function __construct(private readonly Table $table)
     {
         if (PHP_INT_SIZE !== 8) {
@@ -128,7 +28,12 @@ SQLC_YDB_YQL;
             '$author_id' => YdbValueCodec::typedUint64($authorId, 'author_id'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::GET_AUTHOR_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: GetAuthor :one
+                SELECT author_id, name
+                FROM authors
+                WHERE author_id = $author_id;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -154,7 +59,12 @@ SQLC_YDB_YQL;
             '$book_id' => YdbValueCodec::typedUint64($bookId, 'book_id'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::GET_BOOK_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: GetBook :one
+                SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
+                FROM books
+                WHERE book_id = $book_id;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -192,7 +102,11 @@ SQLC_YDB_YQL;
             '$book_id' => YdbValueCodec::typedUint64($bookId, 'book_id'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::DELETE_BOOK_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: DeleteBook :exec
+                DELETE FROM books
+                WHERE book_id = $book_id;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -207,7 +121,12 @@ SQLC_YDB_YQL;
             '$publication_year' => YdbValueCodec::typedInt32($params->publicationYear, 'publication_year'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::BOOKS_BY_TITLE_YEAR_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: BooksByTitleYear :many
+                SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
+                FROM books
+                WHERE title = $title AND publication_year = $publication_year;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -246,7 +165,22 @@ SQLC_YDB_YQL;
             '$tags' => YdbValueCodec::typedJson($tags, 'tags'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::BOOKS_BY_TAGS_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: BooksByTags :many
+                DECLARE $tags AS Json;
+                SELECT
+                    b.book_id,
+                    b.title,
+                    a.name,
+                    b.isbn,
+                    b.tags
+                FROM books AS b
+                LEFT JOIN authors AS a ON b.author_id = a.author_id
+                WHERE NOT SetIsDisjoint(
+                    ToSet(Yson::ConvertToStringList(b.tags)),
+                    Yson::ConvertToStringList($tags)
+                );
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -279,7 +213,12 @@ SQLC_YDB_YQL;
             '$name' => YdbValueCodec::typedUtf8($params->name, 'name'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::CREATE_AUTHOR_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: CreateAuthor :one
+                INSERT INTO authors (author_id, name)
+                VALUES ($author_id, $name)
+                RETURNING author_id, name;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -312,7 +251,29 @@ SQLC_YDB_YQL;
             '$tags' => YdbValueCodec::typedJson($params->tags, 'tags'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::CREATE_BOOK_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: CreateBook :one
+                INSERT INTO books (
+                    book_id,
+                    author_id,
+                    isbn,
+                    book_type,
+                    title,
+                    publication_year,
+                    available,
+                    tags
+                ) VALUES (
+                    $book_id,
+                    $author_id,
+                    $isbn,
+                    $book_type,
+                    $title,
+                    $publication_year,
+                    $available,
+                    $tags
+                )
+                RETURNING book_id, author_id, isbn, book_type, title, publication_year, available, tags;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -352,7 +313,12 @@ SQLC_YDB_YQL;
             '$book_id' => YdbValueCodec::typedUint64($params->bookId, 'book_id'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::UPDATE_BOOK_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: UpdateBook :exec
+                UPDATE books
+                SET title = $title, tags = $tags
+                WHERE book_id = $book_id;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -368,7 +334,12 @@ SQLC_YDB_YQL;
             '$book_id' => YdbValueCodec::typedUint64($params->bookId, 'book_id'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::UPDATE_BOOK_ISBN_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: UpdateBookISBN :exec
+                UPDATE books
+                SET title = $title, tags = $tags, isbn = $isbn
+                WHERE book_id = $book_id;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -382,7 +353,11 @@ SQLC_YDB_YQL;
             '$author_id' => YdbValueCodec::typedUint64($params->authorId, 'author_id'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::DELETE_AUTHOR_BEFORE_YEAR_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: DeleteAuthorBeforeYear :exec
+                DELETE FROM books
+                WHERE publication_year < $publication_year AND author_id = $author_id;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -395,7 +370,10 @@ SQLC_YDB_YQL;
             '$name' => YdbValueCodec::typedUtf8($name, 'name'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::SAY_HELLO_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: SayHello :one
+                SELECT "hello "u || $name AS greeting;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);

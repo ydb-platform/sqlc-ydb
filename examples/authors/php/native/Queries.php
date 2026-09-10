@@ -15,39 +15,6 @@ use YdbPlatform\Ydb\Table;
 
 final class Queries
 {
-    public const GET_AUTHOR_SQL = <<<'SQLC_YDB_YQL'
--- name: GetAuthor :one
-SELECT id, name, bio FROM authors WHERE id = $author_id;
-SQLC_YDB_YQL;
-
-    public const LIST_AUTHORS_SQL = <<<'SQLC_YDB_YQL'
--- name: ListAuthors :many
-SELECT id, name, bio FROM authors ORDER BY name;
-SQLC_YDB_YQL;
-
-    public const GET_AUTHOR_NAME_SQL = <<<'SQLC_YDB_YQL'
--- name: GetAuthorName :one
-SELECT name FROM authors WHERE id = $author_id;
-SQLC_YDB_YQL;
-
-    public const CREATE_AUTHOR_SQL = <<<'SQLC_YDB_YQL'
--- name: CreateAuthor :one
-INSERT INTO authors (id, name, bio)
-VALUES ($author_id, $author_name, $biography)
-RETURNING id, name, bio;
-SQLC_YDB_YQL;
-
-    public const UPSERT_AUTHOR_SQL = <<<'SQLC_YDB_YQL'
--- name: UpsertAuthor :exec
-UPSERT INTO authors (id, name, bio)
-VALUES ($author_id, $author_name, $biography);
-SQLC_YDB_YQL;
-
-    public const DELETE_AUTHOR_SQL = <<<'SQLC_YDB_YQL'
--- name: DeleteAuthor :exec
-DELETE FROM authors WHERE id = $author_id;
-SQLC_YDB_YQL;
-
     public function __construct(private readonly Table $table)
     {
         if (PHP_INT_SIZE !== 8) {
@@ -61,7 +28,10 @@ SQLC_YDB_YQL;
             '$author_id' => YdbValueCodec::typedUint64($authorId, 'author_id'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::GET_AUTHOR_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: GetAuthor :one
+                SELECT id, name, bio FROM authors WHERE id = $author_id;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -89,7 +59,10 @@ SQLC_YDB_YQL;
         $parameters = [
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::LIST_AUTHORS_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: ListAuthors :many
+                SELECT id, name, bio FROM authors ORDER BY name;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -117,7 +90,10 @@ SQLC_YDB_YQL;
             '$author_id' => YdbValueCodec::typedUint64($authorId, 'author_id'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::GET_AUTHOR_NAME_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: GetAuthorName :one
+                SELECT name FROM authors WHERE id = $author_id;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -143,7 +119,12 @@ SQLC_YDB_YQL;
             '$biography' => YdbValueCodec::typedOptionalUtf8($params->biography, 'biography'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::CREATE_AUTHOR_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: CreateAuthor :one
+                INSERT INTO authors (id, name, bio)
+                VALUES ($author_id, $author_name, $biography)
+                RETURNING id, name, bio;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -173,7 +154,11 @@ SQLC_YDB_YQL;
             '$biography' => YdbValueCodec::typedOptionalUtf8($params->biography, 'biography'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::UPSERT_AUTHOR_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: UpsertAuthor :exec
+                UPSERT INTO authors (id, name, bio)
+                VALUES ($author_id, $author_name, $biography);
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -186,7 +171,10 @@ SQLC_YDB_YQL;
             '$author_id' => YdbValueCodec::typedUint64($authorId, 'author_id'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::DELETE_AUTHOR_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: DeleteAuthor :exec
+                DELETE FROM authors WHERE id = $author_id;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);

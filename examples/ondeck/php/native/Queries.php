@@ -15,102 +15,6 @@ use YdbPlatform\Ydb\Table;
 
 final class Queries
 {
-    public const LIST_CITIES_SQL = <<<'SQLC_YDB_YQL'
--- name: ListCities :many
-SELECT slug, name
-FROM city
-ORDER BY name;
-SQLC_YDB_YQL;
-
-    public const GET_CITY_SQL = <<<'SQLC_YDB_YQL'
--- name: GetCity :one
-SELECT slug, name
-FROM city
-WHERE slug = $slug;
-SQLC_YDB_YQL;
-
-    public const CREATE_CITY_SQL = <<<'SQLC_YDB_YQL'
--- name: CreateCity :one
-INSERT INTO city (
-    name,
-    slug
-) VALUES (
-    $name,
-    $slug
-) RETURNING slug, name;
-SQLC_YDB_YQL;
-
-    public const UPDATE_CITY_NAME_SQL = <<<'SQLC_YDB_YQL'
--- name: UpdateCityName :exec
-UPDATE city
-SET name = $name
-WHERE slug = $slug;
-SQLC_YDB_YQL;
-
-    public const LIST_VENUES_SQL = <<<'SQLC_YDB_YQL'
--- name: ListVenues :many
-SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
-FROM venue
-WHERE city = $city
-ORDER BY name;
-SQLC_YDB_YQL;
-
-    public const DELETE_VENUE_SQL = <<<'SQLC_YDB_YQL'
--- name: DeleteVenue :exec
-DELETE FROM venue
-WHERE slug = $slug AND slug = $slug;
-SQLC_YDB_YQL;
-
-    public const GET_VENUE_SQL = <<<'SQLC_YDB_YQL'
--- name: GetVenue :one
-SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
-FROM venue
-WHERE slug = $slug AND city = $city;
-SQLC_YDB_YQL;
-
-    public const CREATE_VENUE_SQL = <<<'SQLC_YDB_YQL'
--- name: CreateVenue :one
-INSERT INTO venue (
-    id,
-    slug,
-    name,
-    city,
-    created_at,
-    spotify_playlist,
-    status,
-    statuses,
-    tags
-) VALUES (
-    $id,
-    $slug,
-    $name,
-    $city,
-    $created_at,
-    $spotify_playlist,
-    $status,
-    $statuses,
-    $tags
-) RETURNING id;
-SQLC_YDB_YQL;
-
-    public const UPDATE_VENUE_NAME_SQL = <<<'SQLC_YDB_YQL'
--- name: UpdateVenueName :one
-UPDATE venue
-SET name = $name
-WHERE slug = $slug
-RETURNING id;
-SQLC_YDB_YQL;
-
-    public const VENUE_COUNT_BY_CITY_SQL = <<<'SQLC_YDB_YQL'
--- name: VenueCountByCity :many
-SELECT
-    city,
-    COUNT(*) AS venue_count
-FROM venue
-GROUP BY city
-ORDER BY city;
-SQLC_YDB_YQL;
-
     public function __construct(private readonly Table $table)
     {
         if (PHP_INT_SIZE !== 8) {
@@ -124,7 +28,12 @@ SQLC_YDB_YQL;
         $parameters = [
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::LIST_CITIES_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: ListCities :many
+                SELECT slug, name
+                FROM city
+                ORDER BY name;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -150,7 +59,12 @@ SQLC_YDB_YQL;
             '$slug' => YdbValueCodec::typedUtf8($slug, 'slug'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::GET_CITY_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: GetCity :one
+                SELECT slug, name
+                FROM city
+                WHERE slug = $slug;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -177,7 +91,16 @@ SQLC_YDB_YQL;
             '$slug' => YdbValueCodec::typedUtf8($params->slug, 'slug'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::CREATE_CITY_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: CreateCity :one
+                INSERT INTO city (
+                    name,
+                    slug
+                ) VALUES (
+                    $name,
+                    $slug
+                ) RETURNING slug, name;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -204,7 +127,12 @@ SQLC_YDB_YQL;
             '$slug' => YdbValueCodec::typedUtf8($params->slug, 'slug'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::UPDATE_CITY_NAME_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: UpdateCityName :exec
+                UPDATE city
+                SET name = $name
+                WHERE slug = $slug;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -218,7 +146,13 @@ SQLC_YDB_YQL;
             '$city' => YdbValueCodec::typedUtf8($city, 'city'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::LIST_VENUES_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: ListVenues :many
+                SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
+                FROM venue
+                WHERE city = $city
+                ORDER BY name;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -260,7 +194,11 @@ SQLC_YDB_YQL;
             '$slug' => YdbValueCodec::typedUtf8($slug, 'slug'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::DELETE_VENUE_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: DeleteVenue :exec
+                DELETE FROM venue
+                WHERE slug = $slug AND slug = $slug;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -274,7 +212,12 @@ SQLC_YDB_YQL;
             '$city' => YdbValueCodec::typedUtf8($params->city, 'city'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::GET_VENUE_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: GetVenue :one
+                SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
+                FROM venue
+                WHERE slug = $slug AND city = $city;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -324,7 +267,30 @@ SQLC_YDB_YQL;
             '$tags' => YdbValueCodec::typedOptionalJson($params->tags, 'tags'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::CREATE_VENUE_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: CreateVenue :one
+                INSERT INTO venue (
+                    id,
+                    slug,
+                    name,
+                    city,
+                    created_at,
+                    spotify_playlist,
+                    status,
+                    statuses,
+                    tags
+                ) VALUES (
+                    $id,
+                    $slug,
+                    $name,
+                    $city,
+                    $created_at,
+                    $spotify_playlist,
+                    $status,
+                    $statuses,
+                    $tags
+                ) RETURNING id;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -349,7 +315,13 @@ SQLC_YDB_YQL;
             '$slug' => YdbValueCodec::typedUtf8($params->slug, 'slug'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::UPDATE_VENUE_NAME_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: UpdateVenueName :one
+                UPDATE venue
+                SET name = $name
+                WHERE slug = $slug
+                RETURNING id;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -373,7 +345,15 @@ SQLC_YDB_YQL;
         $parameters = [
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::VENUE_COUNT_BY_CITY_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: VenueCountByCity :many
+                SELECT
+                    city,
+                    COUNT(*) AS venue_count
+                FROM venue
+                GROUP BY city
+                ORDER BY city;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);

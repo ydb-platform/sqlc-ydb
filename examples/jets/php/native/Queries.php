@@ -15,21 +15,6 @@ use YdbPlatform\Ydb\Table;
 
 final class Queries
 {
-    public const COUNT_PILOTS_SQL = <<<'SQLC_YDB_YQL'
--- name: CountPilots :one
-SELECT COUNT(*) AS pilot_count FROM pilots;
-SQLC_YDB_YQL;
-
-    public const LIST_PILOTS_SQL = <<<'SQLC_YDB_YQL'
--- name: ListPilots :many
-SELECT id, name FROM pilots ORDER BY id LIMIT 5;
-SQLC_YDB_YQL;
-
-    public const DELETE_PILOT_SQL = <<<'SQLC_YDB_YQL'
--- name: DeletePilot :exec
-DELETE FROM pilots WHERE id = $pilot_id;
-SQLC_YDB_YQL;
-
     public function __construct(private readonly Table $table)
     {
         if (PHP_INT_SIZE !== 8) {
@@ -42,7 +27,10 @@ SQLC_YDB_YQL;
         $parameters = [
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::COUNT_PILOTS_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: CountPilots :one
+                SELECT COUNT(*) AS pilot_count FROM pilots;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -66,7 +54,10 @@ SQLC_YDB_YQL;
         $parameters = [
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::LIST_PILOTS_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: ListPilots :many
+                SELECT id, name FROM pilots ORDER BY id LIMIT 5;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
@@ -92,7 +83,10 @@ SQLC_YDB_YQL;
             '$pilot_id' => YdbValueCodec::typedInt32($pilotId, 'pilot_id'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::DELETE_PILOT_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: DeletePilot :exec
+                DELETE FROM pilots WHERE id = $pilot_id;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
