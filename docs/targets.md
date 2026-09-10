@@ -15,16 +15,13 @@
 | JavaScript | `gen.javascript.runtime: ydb` | ESM queries and TypeScript declarations |
 | Rust | `gen.rust.runtime: ydb` | async methods on a borrowed `QueryClient` |
 | PHP | `gen.php.runtime: ydb` | typed query methods for the YDB SDK |
+| Kotlin Query SDK | `gen.kotlin.runtime: ydb` | data classes and `Queries(SessionRetryContext)` |
+| Kotlin JDBC | `gen.kotlin.runtime: jdbc` | typed query methods on a borrowed `Connection` |
+| Kotlin Exposed | `gen.kotlin.runtime: exposed` | typed SQL methods on a borrowed `JdbcTransaction` |
 | Java native SDK | `gen.java.runtime: ydb` | `Queries(SessionRetryContext)`, Java 17 records |
 | Java JDBC | `gen.java.runtime: jdbc` | `Queries(Connection)`, named YDB prepared statements |
 | Java Spring JDBC | `gen.java.runtime: spring` | `Queries(JdbcTemplate)`, framework-owned connections |
 | Java Hibernate | `gen.java.runtime: hibernate` | `Queries(Session)`, JDBC work inside the session |
-
-Output references: the legacy YDB generators preserved at archive commit
-`da046efe95d7ec65c13cd1f88a9f55804c322f73`, sqlc's Go generator, and
-[sqlc-gen-python](https://github.com/sqlc-dev/sqlc-gen-python).
-The previous implementations are references for API shape, not an authority for
-YQL type semantics.
 
 `Utf8` is text (`string` / `str`); `String` is binary (`[]byte` / `bytes`).
 Optional values preserve nullability. Go integers retain their widths and signedness;
@@ -97,3 +94,6 @@ Native Go query methods and generated interfaces accept trailing
 caller's slice. Generated typed parameters are applied last, so a caller option
 cannot replace the bindings represented by the method arguments. Existing calls
 without execution options continue to compile.
+
+Kotlin types, nullable results and transaction ownership are documented in
+[Kotlin](kotlin.md). Kotlin examples use the shared authors schema and queries.

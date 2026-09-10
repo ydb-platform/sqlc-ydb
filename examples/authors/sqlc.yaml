@@ -5,6 +5,10 @@ sql:
     schema: schema.sql
     queries: queries.sql
     gen:
+      kotlin:
+        package: authors.nativeapi
+        out: kotlin/src/generated/kotlin/authors/nativeapi
+        runtime: ydb
       php:
         out: php/native
         namespace: Authors\Native
@@ -41,6 +45,10 @@ sql:
     schema: schema.sql
     queries: queries.sql
     gen:
+      kotlin:
+        package: authors.jdbc
+        out: kotlin/src/generated/kotlin/authors/jdbc
+        runtime: jdbc
       go:
         package: authors
         out: go/database/sql
@@ -52,6 +60,15 @@ sql:
         package: authors.jdbc
         out: java/jdbc/src/main/java/authors/jdbc
         runtime: jdbc
+  - name: exposed
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      kotlin:
+        package: authors.exposed
+        out: kotlin/src/generated/kotlin/authors/exposed
+        runtime: exposed
   - name: sqlalchemy
     engine: ydb
     schema: schema.sql

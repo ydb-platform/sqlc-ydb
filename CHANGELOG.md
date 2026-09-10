@@ -17,7 +17,8 @@ the version and moves these entries into a numbered section at release time.
   Go Decimal/UUID bindings and native per-query execution options.
 - Built-in Go (native SDK, database/sql), Python (native SDK, DB-API, SQLAlchemy),
   C++ (native SDK, userver), C# (ADO.NET, Dapper, linq2db), Java (native SDK,
-  JDBC, Spring JDBC, Hibernate), JavaScript, Rust and PHP generators.
+  JDBC, Spring JDBC, Hibernate), Kotlin (Query SDK, JDBC, Exposed), JavaScript,
+  Rust and PHP generators.
 - YDB adaptations of all upstream example families: authors, batch, booktest,
   jets and ondeck, with Go native SDK, database/sql, C# Dapper and linq2db,
   JavaScript, Rust and PHP generation and execution checks.

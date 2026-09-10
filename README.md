@@ -6,7 +6,7 @@
 [![codecov](https://codecov.io/gh/ydb-platform/sqlc-ydb/branch/main/graph/badge.svg?precision=2)](https://app.codecov.io/gh/ydb-platform/sqlc-ydb)
 [![View examples](https://img.shields.io/badge/learn-examples-brightgreen.svg)](examples/README.md)
 
-Generate typed query code from YQL for YDB in Go, Python, C++, C#, Java,
+Generate typed query code from YQL for YDB in Go, Python, C++, C#, Java, Kotlin,
 JavaScript, Rust and PHP. One executable contains the parser, semantic analyzer
 and generators. Generation works offline and does not require a running YDB,
 Python, or any separately installed codegen plugin.
@@ -26,6 +26,7 @@ Each link opens the authors example for the selected SDK or framework:
 | C++ | [YDB native SDK](examples/authors/cpp/native), [userver](examples/authors/cpp/userver) |
 | C# | [ADO.NET](examples/authors/csharp/adonet), [Dapper](examples/authors/csharp/dapper), [linq2db](examples/authors/csharp/linq2db) |
 | Java | [YDB native SDK](examples/authors/java/native), [JDBC](examples/authors/java/jdbc), [Spring JDBC](examples/authors/java/spring), [Hibernate](examples/authors/java/hibernate) |
+| Kotlin | [YDB Query SDK, JDBC and Exposed](examples/authors/kotlin) |
 | JavaScript | [YDB native SDK, ESM with TypeScript declarations](examples/authors/javascript/native) |
 | Rust | [YDB native SDK](examples/authors/rust/native) |
 | PHP | [YDB native SDK](examples/authors/php/native) |

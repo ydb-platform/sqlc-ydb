@@ -28,3 +28,4 @@ examples/php/vendor/
 /examples/*/javascript/native/
 /examples/*/rust/native/
 /examples/*/php/native/
+/examples/authors/kotlin/src/generated/kotlin/

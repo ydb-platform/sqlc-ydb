@@ -154,3 +154,10 @@ Go parameter binding adapts the historical ParamsBuilder idea against SDK
 - `tests/integration/database_sql_regression_test.go` and
   `tests/integration/decimal_test.go`: typed database/sql parameter and scanning
   examples. SDK runtime imports remain outside the generator's own module.
+
+## Kotlin SDK profiles
+
+Kotlin Query SDK, JDBC and Exposed profiles are compiled against the pinned
+application dependencies and exercised against local YDB, including Exposed
+transaction commit and rollback. Published API sources and dependency versions
+are recorded in the [Kotlin contract](kotlin.md#dependencies-and-verification).

@@ -17,6 +17,7 @@ import (
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/codegen/golang"
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/codegen/java"
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/codegen/javascript"
+	"github.com/ydb-platform/sqlc-engine-ydb/internal/codegen/kotlin"
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/codegen/php"
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/codegen/python"
 	"github.com/ydb-platform/sqlc-engine-ydb/internal/codegen/rust"
@@ -209,7 +210,7 @@ func prepare(c *config.Config, generate bool) ([]output, error) {
 			continue
 		}
 		if s.Gen.Go == nil && s.Gen.Python == nil && s.Gen.CPP == nil && s.Gen.CSharp == nil &&
-			s.Gen.Java == nil && s.Gen.JavaScript == nil && s.Gen.Rust == nil && s.Gen.PHP == nil {
+			s.Gen.Java == nil && s.Gen.Kotlin == nil && s.Gen.JavaScript == nil && s.Gen.Rust == nil && s.Gen.PHP == nil {
 			return nil, errors.New("generation requires a built-in generator in gen")
 		}
 		add := func(dir string, files []model.File) error {
@@ -264,6 +265,15 @@ func prepare(c *config.Config, generate bool) ([]output, error) {
 			files, err := java.Generate(result, java.Options{Package: g.Package, Runtime: g.Runtime})
 			if err != nil {
 				return nil, fmt.Errorf("Java generation: %w", err)
+			}
+			if err := add(g.Out, files); err != nil {
+				return nil, err
+			}
+		}
+		if g := s.Gen.Kotlin; g != nil {
+			files, err := kotlin.Generate(result, kotlin.Options{Package: g.Package, Runtime: g.Runtime})
+			if err != nil {
+				return nil, fmt.Errorf("Kotlin generation: %w", err)
 			}
 			if err := add(g.Out, files); err != nil {
 				return nil, err

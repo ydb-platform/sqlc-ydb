@@ -99,3 +99,42 @@ func TestAdditionalBuiltinTargets(t *testing.T) {
 		}
 	}
 }
+
+func TestKotlinConfiguration(t *testing.T) {
+	base := "version: '2'\nsql:\n- engine: ydb\n  schema: s.sql\n  queries: q.sql\n  gen:\n    kotlin:\n"
+	for _, runtime := range []string{"", "native", "ydb", "jdbc", "exposed"} {
+		t.Run("runtime_"+runtime, func(t *testing.T) {
+			options := "      out: generated/kotlin\n"
+			if runtime != "" {
+				options += "      runtime: " + runtime + "\n      package: example.db\n"
+			}
+			c, err := Parse([]byte(base + options))
+			if err != nil {
+				t.Fatal(err)
+			}
+			g := c.SQL[0].Gen.Kotlin
+			wantRuntime, wantPackage := runtime, "example.db"
+			if runtime == "" || runtime == "native" {
+				wantRuntime = "ydb"
+			}
+			if runtime == "" {
+				wantPackage = "db"
+			}
+			if g.Out != "generated/kotlin" || g.Package != wantPackage || g.Runtime != wantRuntime {
+				t.Fatalf("unexpected Kotlin options: %+v", g)
+			}
+		})
+	}
+	for _, tc := range []struct{ name, options, want string }{
+		{"missing output", "      package: db\n", "gen.kotlin.out is required"},
+		{"unsupported runtime", "      out: kt\n      runtime: spring\n", "unsupported Kotlin runtime"},
+		{"unknown option", "      out: kt\n      emit_async: true\n", "field emit_async"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Parse([]byte(base + tc.options))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v; want %s", err, tc.want)
+			}
+		})
+	}
+}
