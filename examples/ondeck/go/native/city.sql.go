@@ -49,11 +49,9 @@ func (q *Queries) ListCities(ctx context.Context, opts ...query.ExecuteOption) (
 	}
 
 	_, err = result.NextResultSet(ctx)
-	switch {
-	case err == nil:
+	if err == nil {
 		return []ListCitiesRow(nil), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
-	case errors.Is(err, io.EOF):
-	case err != nil:
+	} else if !errors.Is(err, io.EOF) {
 		return []ListCitiesRow(nil), xerrors.WithStackTrace(err)
 	}
 

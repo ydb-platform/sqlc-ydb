@@ -141,11 +141,9 @@ func (q *Queries) BooksByTitleYear(ctx context.Context, arg BooksByTitleYearPara
 	}
 
 	_, err = result.NextResultSet(ctx)
-	switch {
-	case err == nil:
+	if err == nil {
 		return make([]BooksByTitleYearRow, 0), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
-	case errors.Is(err, io.EOF):
-	case err != nil:
+	} else if !errors.Is(err, io.EOF) {
 		return make([]BooksByTitleYearRow, 0), xerrors.WithStackTrace(err)
 	}
 
@@ -208,11 +206,9 @@ func (q *Queries) BooksByTags(ctx context.Context, arg string, opts ...query.Exe
 	}
 
 	_, err = result.NextResultSet(ctx)
-	switch {
-	case err == nil:
+	if err == nil {
 		return make([]BooksByTagsRow, 0), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
-	case errors.Is(err, io.EOF):
-	case err != nil:
+	} else if !errors.Is(err, io.EOF) {
 		return make([]BooksByTagsRow, 0), xerrors.WithStackTrace(err)
 	}
 

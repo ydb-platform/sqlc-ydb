@@ -48,11 +48,9 @@ func (q *Queries) ListAuthorBooks(ctx context.Context, opts ...query.ExecuteOpti
 	}
 
 	_, err = result.NextResultSet(ctx)
-	switch {
-	case err == nil:
+	if err == nil {
 		return []ListAuthorBooksRow(nil), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
-	case errors.Is(err, io.EOF):
-	case err != nil:
+	} else if !errors.Is(err, io.EOF) {
 		return []ListAuthorBooksRow(nil), xerrors.WithStackTrace(err)
 	}
 

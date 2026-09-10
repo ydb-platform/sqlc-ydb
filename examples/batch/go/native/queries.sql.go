@@ -150,11 +150,9 @@ func (q *Queries) BooksByYear(ctx context.Context, arg int32, opts ...query.Exec
 	}
 
 	_, err = result.NextResultSet(ctx)
-	switch {
-	case err == nil:
+	if err == nil {
 		return []BooksByYearRow(nil), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
-	case errors.Is(err, io.EOF):
-	case err != nil:
+	} else if !errors.Is(err, io.EOF) {
 		return []BooksByYearRow(nil), xerrors.WithStackTrace(err)
 	}
 

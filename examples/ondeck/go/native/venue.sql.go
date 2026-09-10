@@ -64,11 +64,9 @@ func (q *Queries) ListVenues(ctx context.Context, arg string, opts ...query.Exec
 	}
 
 	_, err = result.NextResultSet(ctx)
-	switch {
-	case err == nil:
+	if err == nil {
 		return []ListVenuesRow(nil), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
-	case errors.Is(err, io.EOF):
-	case err != nil:
+	} else if !errors.Is(err, io.EOF) {
 		return []ListVenuesRow(nil), xerrors.WithStackTrace(err)
 	}
 
@@ -252,11 +250,9 @@ func (q *Queries) VenueCountByCity(ctx context.Context, opts ...query.ExecuteOpt
 	}
 
 	_, err = result.NextResultSet(ctx)
-	switch {
-	case err == nil:
+	if err == nil {
 		return []VenueCountByCityRow(nil), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
-	case errors.Is(err, io.EOF):
-	case err != nil:
+	} else if !errors.Is(err, io.EOF) {
 		return []VenueCountByCityRow(nil), xerrors.WithStackTrace(err)
 	}
 

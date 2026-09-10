@@ -67,11 +67,9 @@ func (q *Queries) ListPilots(ctx context.Context, opts ...query.ExecuteOption) (
 	}
 
 	_, err = result.NextResultSet(ctx)
-	switch {
-	case err == nil:
+	if err == nil {
 		return []ListPilotsRow(nil), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
-	case errors.Is(err, io.EOF):
-	case err != nil:
+	} else if !errors.Is(err, io.EOF) {
 		return []ListPilotsRow(nil), xerrors.WithStackTrace(err)
 	}
 

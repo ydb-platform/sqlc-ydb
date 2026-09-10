@@ -726,10 +726,8 @@ func writeYDB(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 	b.WriteString("items = append(items, row)\n")
 	b.WriteString("}\n\n")
 	b.WriteString("_, err = result.NextResultSet(ctx)\n")
-	b.WriteString("switch {\n")
-	b.WriteString("case err == nil: return " + init + ", xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)\n")
-	b.WriteString("case errors.Is(err, io.EOF):\n")
-	b.WriteString("case err != nil: return " + init + ", xerrors.WithStackTrace(err)\n")
+	b.WriteString("if err == nil { return " + init + ", xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)\n")
+	b.WriteString("} else if !errors.Is(err, io.EOF) { return " + init + ", xerrors.WithStackTrace(err)\n")
 	b.WriteString("}\n\n")
 	b.WriteString("return items, nil\n")
 }
