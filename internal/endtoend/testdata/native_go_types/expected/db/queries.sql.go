@@ -40,12 +40,12 @@ func (q *Queries) BindNativeTypes(ctx context.Context, arg BindNativeTypesParams
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx, `
-			-- name: BindNativeTypes :one
+		-- name: BindNativeTypes :one
 
 
 
 
-			SELECT $ids AS ids, $optional_ids AS optional_ids, $amount AS amount, $id AS id;
+		SELECT $ids AS ids, $optional_ids AS optional_ids, $amount AS amount, $id AS id;
 		`, callOptions...,
 	)
 	if err != nil {

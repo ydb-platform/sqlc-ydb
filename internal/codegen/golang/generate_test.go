@@ -31,17 +31,21 @@ func sample() *model.AnalysisResult {
 
 func TestGeneratedSQLUsesRawBlocksWhenRepresentable(t *testing.T) {
 	for _, tc := range []struct {
-		sql, wantLiteral string
-		raw              bool
+		sql, wantDatabase, wantYDB string
+		raw                        bool
 	}{
-		{"-- name: GetUser :one\nDECLARE $id AS Uint64;\nSELECT id, bio FROM users WHERE id = $id;", "`\n\t\t\t-- name: GetUser :one\n", true},
-		{"-- name: GetUser :one\nSELECT `id`, `bio` FROM `my/tbl`\nWHERE name = 'Автор' AND path = 'C:\\data';", "SELECT `+\"`id`\"+`, `+\"`bio`\"+` FROM `+\"`my/tbl`\"+`", true},
-		{"-- name: GetUser :one\r\nSELECT id, bio FROM users;\r\n", "\"-- name: GetUser :one\\r\\n\"+\n", false},
-		{"-- name: GetUser :one\nSELECT '\x00' FROM users;", "\"-- name: GetUser :one\\n\"+\n", false},
+		{"-- name: GetUser :one\nDECLARE $id AS Uint64;\nSELECT id, bio FROM users WHERE id = $id;", "`-- name: GetUser :one\n", "`\n\t\t-- name: GetUser :one\n", true},
+		{"-- name: GetUser :one\nSELECT `id`, `bio` FROM `my/tbl`\nWHERE name = 'Автор' AND path = 'C:\\data';", "SELECT `+\"`id`\"+`, `+\"`bio`\"+` FROM `+\"`my/tbl`\"+`", "SELECT `+\"`id`\"+`, `+\"`bio`\"+` FROM `+\"`my/tbl`\"+`", true},
+		{"-- name: GetUser :one\r\nSELECT id, bio FROM users;\r\n", "\"-- name: GetUser :one\\r\\n\"+\n", "\"-- name: GetUser :one\\r\\n\"+\n", false},
+		{"-- name: GetUser :one\nSELECT '\x00' FROM users;", "\"-- name: GetUser :one\\n\"+\n", "\"-- name: GetUser :one\\n\"+\n", false},
 	} {
 		for _, runtime := range []string{"database/sql", "ydb"} {
 			source := generatedSQLSource(t, runtime, tc.sql)
-			if !strings.Contains(string(source), tc.wantLiteral) {
+			wantLiteral := tc.wantDatabase
+			if runtime == "ydb" {
+				wantLiteral = tc.wantYDB
+			}
+			if !strings.Contains(string(source), wantLiteral) {
 				t.Fatalf("%s SQL is not a readable multiline literal:\n%s", runtime, source)
 			}
 			if strings.Contains(tc.sql, "`id`") && !strings.Contains(string(source), "`+\"`id`\"+`") {
@@ -49,7 +53,7 @@ func TestGeneratedSQLUsesRawBlocksWhenRepresentable(t *testing.T) {
 			}
 			wantSQL := tc.sql
 			if tc.raw {
-				wantSQL = rawBlockSQL(tc.sql)
+				wantSQL = rawBlockSQL(tc.sql, runtime == "ydb")
 			}
 			if got := generatedSQLValue(t, source); got != wantSQL {
 				t.Fatalf("%s SQL changed: got %q, want %q", runtime, got, wantSQL)
@@ -66,8 +70,9 @@ func TestGeneratedSQLUsesDeclarationFreeVariant(t *testing.T) {
 
 	for _, runtime := range []string{"database/sql", "ydb"} {
 		source := generatedSQLSourceForAnalysis(t, runtime, in)
-		if got := generatedSQLValue(t, source); got != rawBlockSQL(executableSQL) {
-			t.Fatalf("%s executable SQL = %q, want declaration-free block %q", runtime, got, rawBlockSQL(executableSQL))
+		want := rawBlockSQL(executableSQL, runtime == "ydb")
+		if got := generatedSQLValue(t, source); got != want {
+			t.Fatalf("%s executable SQL = %q, want declaration-free block %q", runtime, got, want)
 		}
 	}
 }
@@ -82,8 +87,7 @@ func TestGeneratedDatabaseSQLFormatsMultiParameterQueryRowCall(t *testing.T) {
 	}}}
 
 	source := generatedSQLSourceForAnalysis(t, "database/sql", in)
-	want := "err := q.db.QueryRowContext(ctx, `\n" +
-		"\t\t\tINSERT INTO authors VALUES ($author_id, $author_name, $biography) RETURNING id, name, bio;\n" +
+	want := "err := q.db.QueryRowContext(ctx, `INSERT INTO authors VALUES ($author_id, $author_name, $biography) RETURNING id, name, bio;\n" +
 		"\t\t`, sql.Named(\"author_id\", arg.AuthorID),\n" +
 		"\t\tsql.Named(\"author_name\", arg.AuthorName),\n" +
 		"\t\tsql.Named(\"biography\", arg.Biography),\n" +
@@ -107,10 +111,10 @@ func TestGeneratedDatabaseSQLFormatsParameterizedCallsAndScans(t *testing.T) {
 	}}
 	source := string(generatedSQLSourceForAnalysis(t, "database/sql", in))
 	for _, want := range []string{
-		"q.db.ExecContext(ctx, `\n\t\t\tDELETE FROM users WHERE id = $id;\n\t\t`, sql.Named(\"id\", arg),\n\t)",
-		"q.db.QueryContext(ctx, `\n\t\t\tSELECT id, name FROM users WHERE name = $name;\n\t\t`, sql.Named(\"name\", arg),\n\t)",
+		"q.db.ExecContext(ctx, `DELETE FROM users WHERE id = $id;\n\t\t`, sql.Named(\"id\", arg),\n\t)",
+		"q.db.QueryContext(ctx, `SELECT id, name FROM users WHERE name = $name;\n\t\t`, sql.Named(\"name\", arg),\n\t)",
 		"rows.Scan(\n\t\t\t&row.ID,\n\t\t\t&row.Name,\n\t\t)",
-		"q.db.QueryRowContext(ctx, `\n\t\t\tSELECT COUNT(*) AS count FROM users;\n\t\t`).Scan(\n\t\t&row.Count,\n\t)",
+		"q.db.QueryRowContext(ctx, `SELECT COUNT(*) AS count FROM users;\n\t\t`,\n\t).Scan(\n\t\t&row.Count,\n\t)",
 	} {
 		if !strings.Contains(source, want) {
 			t.Fatalf("generated database/sql source misses %q:\n%s", want, source)
@@ -137,7 +141,7 @@ func TestGeneratedYDBManyValidatesOneResultSet(t *testing.T) {
 	in.Queries = in.Queries[1:2]
 
 	source := string(generatedSQLSourceForAnalysis(t, "ydb", in))
-	want := "result, err := q.db.Query(ctx, `\n\t\t\tSELECT `+\"`id`\"+`, `+\"`name`\"+` FROM `+\"`users`\"+`;\n\t\t`, opts...,\n\t)" + `
+	want := "result, err := q.db.Query(ctx, `\n\t\tSELECT `+\"`id`\"+`, `+\"`name`\"+` FROM `+\"`users`\"+`;\n\t\t`, opts...,\n\t)" + `
 	if err != nil {
 		return []ListUsersRow(nil), err
 	}
@@ -331,7 +335,7 @@ func TestGeneratedSQLSpecialCharacters(t *testing.T) {
 				got := generatedSQLValue(t, generatedSQLSource(t, runtime, tc.sql))
 				want := tc.sql
 				if tc.raw {
-					want = rawBlockSQL(tc.sql)
+					want = rawBlockSQL(tc.sql, runtime == "ydb")
 				}
 				if got != want {
 					t.Fatalf("SQL changed: got %q, want %q", got, want)
@@ -341,16 +345,22 @@ func TestGeneratedSQLSpecialCharacters(t *testing.T) {
 	}
 }
 
-func rawBlockSQL(sql string) string {
+func rawBlockSQL(sql string, leadingNewline bool) string {
 	lines := strings.Split(sql, "\n")
 	for i, line := range lines {
 		if strings.TrimSpace(line) == "" {
 			lines[i] = ""
 			continue
 		}
-		lines[i] = "\t\t\t" + line
+		if i != 0 || leadingNewline {
+			lines[i] = "\t\t" + line
+		}
 	}
-	return "\n" + strings.Join(lines, "\n") + "\n\t\t"
+	body := strings.Join(lines, "\n") + "\n\t\t"
+	if leadingNewline {
+		body = "\n" + body
+	}
+	return body
 }
 
 func generatedSQLSource(t *testing.T, runtime, sql string) []byte {

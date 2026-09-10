@@ -13,9 +13,9 @@ import (
 
 func (q *Queries) ListAuthorBooks(ctx context.Context, opts ...query.ExecuteOption) ([]ListAuthorBooksRow, error) {
 	result, err := q.db.Query(ctx, `
-			-- name: ListAuthorBooks :many
-			SELECT a.id AS author_id, a.name AS author_name, b.title AS book_title
-			FROM authors AS a JOIN books AS b ON a.id = b.author_id;
+		-- name: ListAuthorBooks :many
+		SELECT a.id AS author_id, a.name AS author_name, b.title AS book_title
+		FROM authors AS a JOIN books AS b ON a.id = b.author_id;
 		`, opts...,
 	)
 	if err != nil {

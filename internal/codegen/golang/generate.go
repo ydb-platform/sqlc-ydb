@@ -509,7 +509,7 @@ func cleanWhitespaceOnlyLines(sql string) string {
 	return strings.Join(lines, "")
 }
 
-func sqlLiteral(sql string) string {
+func sqlLiteral(sql string, leadingNewline bool) string {
 	if sql == "" {
 		return `""`
 	}
@@ -529,9 +529,14 @@ func sqlLiteral(sql string) string {
 				lines[i] = ""
 				continue
 			}
-			lines[i] = "\t\t\t" + line
+			if i != 0 || leadingNewline {
+				lines[i] = "\t\t" + line
+			}
 		}
-		body := "\n" + strings.Join(lines, "\n") + "\n\t\t"
+		body := strings.Join(lines, "\n") + "\n\t\t"
+		if leadingNewline {
+			body = "\n" + body
+		}
 		return rawSQLLiteral(body)
 	}
 
@@ -572,14 +577,14 @@ func rawSQLLiteral(body string) string {
 	return literal.String()
 }
 
-func querySQL(q model.AnalyzedQuery) string {
+func querySQL(q model.AnalyzedQuery, leadingNewline bool) string {
 	sql := q.SQLWithoutDeclarations
 	if sql == "" {
 		sql = q.SQL
 	} else {
 		sql = cleanWhitespaceOnlyLines(sql)
 	}
-	return sqlLiteral(sql)
+	return sqlLiteral(sql, leadingNewline)
 }
 
 func methodArgs(q model.AnalyzedQuery, o Options) string {
@@ -641,6 +646,9 @@ func sqlArgumentList(q model.AnalyzedQuery) []string {
 }
 func generatedCall(name string, fixed, parameters []string) string {
 	if len(parameters) == 0 {
+		if strings.HasPrefix(fixed[len(fixed)-1], "`") {
+			return name + "(" + strings.Join(fixed, ", ") + ",\n)"
+		}
 		return name + "(" + strings.Join(fixed, ", ") + ")"
 	}
 	separator := ",\n"
@@ -663,17 +671,17 @@ func writeSQL(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 	parameters := sqlArgumentList(q)
 	switch q.Command {
 	case model.Exec:
-		call := generatedCall("q.db.ExecContext", []string{"ctx", querySQL(q)}, parameters)
+		call := generatedCall("q.db.ExecContext", []string{"ctx", querySQL(q, false)}, parameters)
 		b.WriteString("_, err := " + call + "\nreturn err\n")
 	case model.One:
-		call := generatedCall("q.db.QueryRowContext", []string{"ctx", querySQL(q)}, parameters)
+		call := generatedCall("q.db.QueryRowContext", []string{"ctx", querySQL(q, false)}, parameters)
 		b.WriteString("var row " + q.Name + "Row\nerr := " + scanCall(call+".Scan", scanDestinations(q.ResultSets[0])) + "\nreturn row, err\n")
 	case model.Many:
 		init := "[]" + q.Name + "Row(nil)"
 		if o.EmitEmptySlices {
 			init = "make([]" + q.Name + "Row, 0)"
 		}
-		call := generatedCall("q.db.QueryContext", []string{"ctx", querySQL(q)}, parameters)
+		call := generatedCall("q.db.QueryContext", []string{"ctx", querySQL(q, false)}, parameters)
 		b.WriteString("rows, err := " + call + "\nif err != nil { return " + init + ", err }; defer rows.Close()\nitems := " + init + "\nfor rows.Next() { var row " + q.Name + "Row\nif err := " + scanCall("rows.Scan", scanDestinations(q.ResultSets[0])) + "; err != nil { return nil, err }; items = append(items, row) }\nreturn items, rows.Err()\n")
 	}
 }
@@ -693,18 +701,18 @@ func writeYDB(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 		opt = "callOptions..."
 	}
 	if q.Command == model.Exec {
-		b.WriteString("return " + ydbCall("q.db.Exec", querySQL(q), opt) + "\n")
+		b.WriteString("return " + ydbCall("q.db.Exec", querySQL(q, true), opt) + "\n")
 		return
 	}
 	if q.Command == model.One {
-		b.WriteString("result, err := " + ydbCall("q.db.QueryRow", querySQL(q), opt) + "\nif err != nil { return " + q.Name + "Row{}, err }\n\nvar row " + q.Name + "Row\nif err := result.ScanNamed(\n" + scanNamed(q.ResultSets[0]) + ",\n); err != nil { return " + q.Name + "Row{}, err }\n\nreturn row, nil\n")
+		b.WriteString("result, err := " + ydbCall("q.db.QueryRow", querySQL(q, true), opt) + "\nif err != nil { return " + q.Name + "Row{}, err }\n\nvar row " + q.Name + "Row\nif err := result.ScanNamed(\n" + scanNamed(q.ResultSets[0]) + ",\n); err != nil { return " + q.Name + "Row{}, err }\n\nreturn row, nil\n")
 		return
 	}
 	init := "[]" + q.Name + "Row(nil)"
 	if o.EmitEmptySlices {
 		init = "make([]" + q.Name + "Row, 0)"
 	}
-	b.WriteString("result, err := " + ydbCall("q.db.Query", querySQL(q), opt) + "\n")
+	b.WriteString("result, err := " + ydbCall("q.db.Query", querySQL(q, true), opt) + "\n")
 	b.WriteString("if err != nil { return " + init + ", err }\n")
 	b.WriteString("defer result.Close(ctx)\n\n")
 	b.WriteString("resultSet, err := result.NextResultSet(ctx)\n")

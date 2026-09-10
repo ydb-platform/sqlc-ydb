@@ -14,10 +14,10 @@ import (
 
 func (q *Queries) ListCities(ctx context.Context, opts ...query.ExecuteOption) ([]ListCitiesRow, error) {
 	result, err := q.db.Query(ctx, `
-			-- name: ListCities :many
-			SELECT slug, name
-			FROM city
-			ORDER BY name;
+		-- name: ListCities :many
+		SELECT slug, name
+		FROM city
+		ORDER BY name;
 		`, opts...,
 	)
 	if err != nil {
@@ -68,10 +68,10 @@ func (q *Queries) GetCity(ctx context.Context, arg string, opts ...query.Execute
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx, `
-			-- name: GetCity :one
-			SELECT slug, name
-			FROM city
-			WHERE slug = $slug;
+		-- name: GetCity :one
+		SELECT slug, name
+		FROM city
+		WHERE slug = $slug;
 		`, callOptions...,
 	)
 	if err != nil {
@@ -98,14 +98,14 @@ func (q *Queries) CreateCity(ctx context.Context, arg CreateCityParams, opts ...
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx, `
-			-- name: CreateCity :one
-			INSERT INTO city (
-			    name,
-			    slug
-			) VALUES (
-			    $name,
-			    $slug
-			) RETURNING slug, name;
+		-- name: CreateCity :one
+		INSERT INTO city (
+		    name,
+		    slug
+		) VALUES (
+		    $name,
+		    $slug
+		) RETURNING slug, name;
 		`, callOptions...,
 	)
 	if err != nil {
@@ -132,10 +132,10 @@ func (q *Queries) UpdateCityName(ctx context.Context, arg UpdateCityNameParams, 
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	return q.db.Exec(ctx, `
-			-- name: UpdateCityName :exec
-			UPDATE city
-			SET name = $name
-			WHERE slug = $slug;
+		-- name: UpdateCityName :exec
+		UPDATE city
+		SET name = $name
+		WHERE slug = $slug;
 		`, callOptions...,
 	)
 }

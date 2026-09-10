@@ -20,10 +20,10 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx, `
-			-- name: GetAuthor :one
-			SELECT author_id, name
-			FROM authors
-			WHERE author_id = $author_id;
+		-- name: GetAuthor :one
+		SELECT author_id, name
+		FROM authors
+		WHERE author_id = $author_id;
 		`, callOptions...,
 	)
 	if err != nil {
@@ -49,10 +49,10 @@ func (q *Queries) GetBook(ctx context.Context, arg uint64, opts ...query.Execute
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx, `
-			-- name: GetBook :one
-			SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
-			FROM books
-			WHERE book_id = $book_id;
+		-- name: GetBook :one
+		SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
+		FROM books
+		WHERE book_id = $book_id;
 		`, callOptions...,
 	)
 	if err != nil {
@@ -84,9 +84,9 @@ func (q *Queries) DeleteBook(ctx context.Context, arg uint64, opts ...query.Exec
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	return q.db.Exec(ctx, `
-			-- name: DeleteBook :exec
-			DELETE FROM books
-			WHERE book_id = $book_id;
+		-- name: DeleteBook :exec
+		DELETE FROM books
+		WHERE book_id = $book_id;
 		`, callOptions...,
 	)
 }
@@ -100,10 +100,10 @@ func (q *Queries) BooksByTitleYear(ctx context.Context, arg BooksByTitleYearPara
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.Query(ctx, `
-			-- name: BooksByTitleYear :many
-			SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
-			FROM books
-			WHERE title = $title AND publication_year = $publication_year;
+		-- name: BooksByTitleYear :many
+		SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
+		FROM books
+		WHERE title = $title AND publication_year = $publication_year;
 		`, callOptions...,
 	)
 	if err != nil {
@@ -160,20 +160,20 @@ func (q *Queries) BooksByTags(ctx context.Context, arg string, opts ...query.Exe
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.Query(ctx, `
-			-- name: BooksByTags :many
+		-- name: BooksByTags :many
 
-			SELECT
-			    b.book_id,
-			    b.title,
-			    a.name,
-			    b.isbn,
-			    b.tags
-			FROM books AS b
-			LEFT JOIN authors AS a ON b.author_id = a.author_id
-			WHERE NOT SetIsDisjoint(
-			    ToSet(Yson::ConvertToStringList(b.tags)),
-			    Yson::ConvertToStringList($tags)
-			);
+		SELECT
+		    b.book_id,
+		    b.title,
+		    a.name,
+		    b.isbn,
+		    b.tags
+		FROM books AS b
+		LEFT JOIN authors AS a ON b.author_id = a.author_id
+		WHERE NOT SetIsDisjoint(
+		    ToSet(Yson::ConvertToStringList(b.tags)),
+		    Yson::ConvertToStringList($tags)
+		);
 		`, callOptions...,
 	)
 	if err != nil {
@@ -228,10 +228,10 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx, `
-			-- name: CreateAuthor :one
-			INSERT INTO authors (author_id, name)
-			VALUES ($author_id, $name)
-			RETURNING author_id, name;
+		-- name: CreateAuthor :one
+		INSERT INTO authors (author_id, name)
+		VALUES ($author_id, $name)
+		RETURNING author_id, name;
 		`, callOptions...,
 	)
 	if err != nil {
@@ -264,27 +264,27 @@ func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams, opts ...
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx, `
-			-- name: CreateBook :one
-			INSERT INTO books (
-			    book_id,
-			    author_id,
-			    isbn,
-			    book_type,
-			    title,
-			    publication_year,
-			    available,
-			    tags
-			) VALUES (
-			    $book_id,
-			    $author_id,
-			    $isbn,
-			    $book_type,
-			    $title,
-			    $publication_year,
-			    $available,
-			    $tags
-			)
-			RETURNING book_id, author_id, isbn, book_type, title, publication_year, available, tags;
+		-- name: CreateBook :one
+		INSERT INTO books (
+		    book_id,
+		    author_id,
+		    isbn,
+		    book_type,
+		    title,
+		    publication_year,
+		    available,
+		    tags
+		) VALUES (
+		    $book_id,
+		    $author_id,
+		    $isbn,
+		    $book_type,
+		    $title,
+		    $publication_year,
+		    $available,
+		    $tags
+		)
+		RETURNING book_id, author_id, isbn, book_type, title, publication_year, available, tags;
 		`, callOptions...,
 	)
 	if err != nil {
@@ -318,10 +318,10 @@ func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams, opts ...
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	return q.db.Exec(ctx, `
-			-- name: UpdateBook :exec
-			UPDATE books
-			SET title = $title, tags = $tags
-			WHERE book_id = $book_id;
+		-- name: UpdateBook :exec
+		UPDATE books
+		SET title = $title, tags = $tags
+		WHERE book_id = $book_id;
 		`, callOptions...,
 	)
 }
@@ -337,10 +337,10 @@ func (q *Queries) UpdateBookISBN(ctx context.Context, arg UpdateBookISBNParams, 
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	return q.db.Exec(ctx, `
-			-- name: UpdateBookISBN :exec
-			UPDATE books
-			SET title = $title, tags = $tags, isbn = $isbn
-			WHERE book_id = $book_id;
+		-- name: UpdateBookISBN :exec
+		UPDATE books
+		SET title = $title, tags = $tags, isbn = $isbn
+		WHERE book_id = $book_id;
 		`, callOptions...,
 	)
 }
@@ -354,9 +354,9 @@ func (q *Queries) DeleteAuthorBeforeYear(ctx context.Context, arg DeleteAuthorBe
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	return q.db.Exec(ctx, `
-			-- name: DeleteAuthorBeforeYear :exec
-			DELETE FROM books
-			WHERE publication_year < $publication_year AND author_id = $author_id;
+		-- name: DeleteAuthorBeforeYear :exec
+		DELETE FROM books
+		WHERE publication_year < $publication_year AND author_id = $author_id;
 		`, callOptions...,
 	)
 }
@@ -369,8 +369,8 @@ func (q *Queries) SayHello(ctx context.Context, arg string, opts ...query.Execut
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx, `
-			-- name: SayHello :one
-			SELECT "hello "u || $name AS greeting;
+		-- name: SayHello :one
+		SELECT "hello "u || $name AS greeting;
 		`, callOptions...,
 	)
 	if err != nil {
