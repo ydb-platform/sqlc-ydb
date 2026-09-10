@@ -9,8 +9,8 @@ sql:
         out: php/native
         namespace: Booktest\Native
         runtime: ydb
-      javascript:
-        out: javascript/native
+      typescript:
+        out: typescript/native
         runtime: ydb
       rust:
         out: rust/native

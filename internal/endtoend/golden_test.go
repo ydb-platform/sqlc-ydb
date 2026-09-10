@@ -15,7 +15,7 @@ import (
 
 var update = flag.Bool("update", false, "update end-to-end expected output")
 
-var outputRoots = []string{"db", "py", "cpp", "cs", "java", "javascript", "rust", "php"}
+var outputRoots = []string{"db", "py", "cpp", "cs", "java", "typescript", "rust", "php"}
 
 func TestGolden(t *testing.T) {
 	fixtures, err := os.ReadDir("testdata")

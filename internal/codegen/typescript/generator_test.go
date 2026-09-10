@@ -1,4 +1,4 @@
-package javascript
+package typescript
 
 import (
 	"encoding/json"
@@ -52,39 +52,64 @@ func fileContent(t *testing.T, files []model.File, name string) string {
 	return ""
 }
 
-func TestGenerateQueriesAndDeclarations(t *testing.T) {
+func TestGenerateTypeScript(t *testing.T) {
 	files, err := Generate(testAnalysis(), Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(files) != 2 {
-		t.Fatalf("got %d files, want 2", len(files))
+	if len(files) != 1 {
+		t.Fatalf("got %d files, want 1", len(files))
 	}
-	js := fileContent(t, files, "queries.js")
-	dts := fileContent(t, files, "queries.d.ts")
+	ts := fileContent(t, files, "queries.ts")
 	for _, want := range []string{
+		`import type { Query, SQL } from "@ydbjs/query";`,
+		`export type ConfigureQuery = (query: Query) => Query;`,
 		`import { Uint64, Utf8 } from "@ydbjs/value/primitive";`,
 		`export class Queries`,
-		`async getAuthor(authorId)`,
+		`async getAuthor(authorId: bigint, configure?: ConfigureQuery)`,
 		`.parameter("author_id", new Uint64(_uint64(authorId, "author_id")))`,
-		`async upsertAuthor(args)`,
+		`async upsertAuthor(args: UpsertAuthorParams, configure?: ConfigureQuery)`,
 		`.parameter("name", new Utf8(_string(args.name, "name")))`,
+		`async listAuthors(configure?: ConfigureQuery)`,
+		`if (configure) _pending = configure(_pending);`,
 		`return _rows.length === 0 ? null : _decodeGetAuthorRow(_rows[0]);`,
 		`return _rows.map(_decodeListAuthorsRow);`,
 	} {
-		if !strings.Contains(js, want) {
-			t.Errorf("queries.js missing %q\n%s", want, js)
+		if !strings.Contains(ts, want) {
+			t.Errorf("queries.ts missing %q\n%s", want, ts)
 		}
 	}
 	for _, want := range []string{
-		`constructor(client: QueryClient);`,
-		`getAuthor(authorId: bigint): Promise<GetAuthorRow | null>;`,
-		`upsertAuthor(args: UpsertAuthorParams): Promise<void>;`,
+		`constructor(sql: SQL) {`,
+		`async getAuthor(authorId: bigint, configure?: ConfigureQuery): Promise<GetAuthorRow | null>`,
+		`async upsertAuthor(args: UpsertAuthorParams, configure?: ConfigureQuery): Promise<void>`,
 		`readonly displayName: string;`,
 		`readonly bio: string | null;`,
 	} {
-		if !strings.Contains(dts, want) {
-			t.Errorf("queries.d.ts missing %q\n%s", want, dts)
+		if !strings.Contains(ts, want) {
+			t.Errorf("queries.ts missing %q\n%s", want, ts)
+		}
+	}
+}
+
+func TestConfigureQueryAndSQLNamesCannotShadowGeneratedBindings(t *testing.T) {
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{
+		{Name: "BySQL", Command: model.Exec, SQLWithoutDeclarations: "SELECT $sql;", Parameters: []model.Parameter{{Name: "sql", Type: model.Type{Kind: "Utf8"}}}},
+		{Name: "ByConfigure", Command: model.Exec, SQLWithoutDeclarations: "SELECT $configure;", Parameters: []model.Parameter{{Name: "configure", Type: model.Type{Kind: "Utf8"}}}},
+	}}
+	files, err := Generate(a, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := fileContent(t, files, "queries.ts")
+	for _, want := range []string{
+		`async bySQL(sql_: string, configure?: ConfigureQuery): Promise<void>`,
+		`async byConfigure(configure_: string, configure?: ConfigureQuery): Promise<void>`,
+		`_string(sql_, "sql")`,
+		`_string(configure_, "configure")`,
+	} {
+		if !strings.Contains(ts, want) {
+			t.Errorf("queries.ts missing %q\n%s", want, ts)
 		}
 	}
 }
@@ -100,17 +125,15 @@ func TestSQLLiteralRoundTripsThroughNode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	generated := fileContent(t, files, "queries.js")
+	generated := fileContent(t, files, "queries.ts")
 	for lineNumber, line := range strings.Split(generated, "\n") {
 		if strings.HasSuffix(line, " ") || strings.HasSuffix(line, "\t") {
-			t.Fatalf("generated JavaScript line %d has trailing whitespace: %q", lineNumber+1, line)
+			t.Fatalf("generated TypeScript line %d has trailing whitespace: %q", lineNumber+1, line)
 		}
 	}
 	dir := t.TempDir()
 	module := filepath.Join(dir, "queries.mjs")
-	if err := os.WriteFile(module, []byte(generated), 0600); err != nil {
-		t.Fatal(err)
-	}
+	transpileModule(t, node, generated, module)
 	expected, _ := json.Marshal(want)
 	script := `import { EXACT_SQL } from ` + string(mustJSON(module)) + `; if (EXACT_SQL !== ` + string(expected) + `) { throw new Error(JSON.stringify(EXACT_SQL)); }`
 	if out, err := exec.Command(node, "--input-type=module", "--eval", script).CombinedOutput(); err != nil {
@@ -124,6 +147,30 @@ func mustJSON(value string) []byte {
 		panic(err)
 	}
 	return out
+}
+
+func transpileModule(t *testing.T, node, source, output string) {
+	t.Helper()
+	compiler, err := filepath.Abs("../../../examples/node_modules/typescript/lib/typescript.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(compiler); err != nil {
+		t.Skip("the pinned TypeScript compiler is unavailable; run npm ci --prefix examples")
+	}
+	script := `import { pathToFileURL } from "node:url";
+const ts = (await import(pathToFileURL(` + string(mustJSON(compiler)) + `))).default;
+let source = ""; for await (const chunk of process.stdin) source += chunk;
+process.stdout.write(ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText);`
+	cmd := exec.Command(node, "--input-type=module", "--eval", script)
+	cmd.Stdin = strings.NewReader(source)
+	generated, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("transpile generated TypeScript: %v", err)
+	}
+	if err := os.WriteFile(output, generated, 0600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestGeneratedModuleBindsAndDecodesWithoutShapeFallbacks(t *testing.T) {
@@ -144,9 +191,7 @@ func TestGeneratedModuleBindsAndDecodesWithoutShapeFallbacks(t *testing.T) {
 	}
 	dir := t.TempDir()
 	module := filepath.Join(dir, "queries.mjs")
-	if err := os.WriteFile(module, []byte(fileContent(t, files, "queries.js")), 0600); err != nil {
-		t.Fatal(err)
-	}
+	transpileModule(t, node, fileContent(t, files, "queries.ts"), module)
 	// The loader supplies the exact public package exports used by generated code;
 	// the query client itself is a small contract probe that records named values.
 	loader := filepath.Join(dir, "loader.mjs")
@@ -175,11 +220,14 @@ const calls = [];
 const client = (text) => {
   const call = { text, params: [] }; calls.push(call);
   const promise = Promise.resolve([[{ id: 18446744073709551615n, display_name: 'Ada', bio: null }]]);
+  call.pending = promise;
   promise.parameter = (name, value) => { call.params.push([name, value.value]); return promise; };
   return promise;
 };
 const queries = new Queries(client);
-const row = await queries.getAuthor(18446744073709551615n);
+let configured = false;
+const row = await queries.getAuthor(18446744073709551615n, (pending) => { configured = pending === calls[0].pending; return pending; });
+if (!configured) throw new Error('configure hook did not receive the bound query');
 if (row.id !== 18446744073709551615n || row.displayName !== 'Ada' || row.bio !== null) throw new Error('decode failed');
 if (calls[0].text.includes('DECLARE') || !GET_AUTHOR_SQL.includes('DECLARE')) throw new Error('wrong SQL variant');
 if (calls[0].params[0][0] !== 'author_id' || calls[0].params[0][1] !== 18446744073709551615n) throw new Error('binding failed');
@@ -212,7 +260,7 @@ func TestRejectsUnsupportedInputsAndNameCollisions(t *testing.T) {
 		o    Options
 		want string
 	}{
-		{name: "runtime", a: &model.AnalysisResult{}, o: Options{Runtime: "legacy"}, want: `unsupported JavaScript runtime "legacy"`},
+		{name: "runtime", a: &model.AnalysisResult{}, o: Options{Runtime: "legacy"}, want: `unsupported TypeScript runtime "legacy"`},
 		{name: "diagnostics", a: &model.AnalysisResult{Diagnostics: []model.Diagnostic{{Message: "bad"}}}, want: "analysis has diagnostics"},
 		{name: "execrows", a: &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Count", Command: model.ExecRows}}}, want: ":execrows is unsupported"},
 		{
@@ -286,21 +334,20 @@ func TestTimestampUsesLosslessMicrosecondsAndRawResultDecoding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	js := fileContent(t, files, "queries.js")
-	dts := fileContent(t, files, "queries.d.ts")
+	ts := fileContent(t, files, "queries.ts")
 	for _, want := range []string{
 		`import { Primitive, TimestampType } from "@ydbjs/value/primitive";`,
 		`value > 4291747199999999n`,
 		`new Primitive({ value: { case: "uint64Value", value: _timestamp(value, "value") } }, new TimestampType())`,
 		`const _resultSets = await _pending.raw();`,
-		`value: _rawValue(row["value"], "EchoTimestamp.value", "uint64Value")`,
+		`value: _rawValue<bigint>(record["value"], "EchoTimestamp.value", "uint64Value")`,
 	} {
-		if !strings.Contains(js, want) {
-			t.Errorf("queries.js missing %q\n%s", want, js)
+		if !strings.Contains(ts, want) {
+			t.Errorf("queries.ts missing %q\n%s", want, ts)
 		}
 	}
-	if !strings.Contains(dts, "echoTimestamp(value: bigint): Promise<EchoTimestampRow | null>") || !strings.Contains(dts, "readonly value: bigint;") {
-		t.Fatalf("Timestamp declarations are not lossless bigint values:\n%s", dts)
+	if !strings.Contains(ts, "echoTimestamp(value: bigint, configure?: ConfigureQuery): Promise<EchoTimestampRow | null>") || !strings.Contains(ts, "readonly value: bigint;") {
+		t.Fatalf("Timestamp types are not lossless bigint values:\n%s", ts)
 	}
 }
 
@@ -332,9 +379,7 @@ func TestNumericInputsRejectValuesOutsideYQLRange(t *testing.T) {
 	}
 	dir := t.TempDir()
 	module := filepath.Join(dir, "queries.mjs")
-	if err := os.WriteFile(module, []byte(fileContent(t, files, "queries.js")), 0600); err != nil {
-		t.Fatal(err)
-	}
+	transpileModule(t, node, fileContent(t, files, "queries.ts"), module)
 	loader := filepath.Join(dir, "loader.mjs")
 	loaderSource := `
 export async function resolve(specifier, context, nextResolve) {
@@ -399,21 +444,20 @@ func TestJSONStaysExactText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	js := fileContent(t, files, "queries.js")
-	dts := fileContent(t, files, "queries.d.ts")
+	ts := fileContent(t, files, "queries.ts")
 	for _, want := range []string{
-		`function _json(value, name)`,
+		`function _json(value: unknown, name: string): string`,
 		`return value;`,
 		`new Json(_json(value, "value"))`,
 		`const _resultSets = await _pending.raw();`,
-		`value: _rawValue(row["value"], "EchoJSON.value", "textValue")`,
+		`value: _rawValue<string>(record["value"], "EchoJSON.value", "textValue")`,
 	} {
-		if !strings.Contains(js, want) {
-			t.Errorf("queries.js missing %q\n%s", want, js)
+		if !strings.Contains(ts, want) {
+			t.Errorf("queries.ts missing %q\n%s", want, ts)
 		}
 	}
-	if !strings.Contains(dts, "echoJSON(value: string): Promise<EchoJSONRow | null>") || !strings.Contains(dts, "readonly value: string;") {
-		t.Fatalf("JSON declarations do not preserve exact text:\n%s", dts)
+	if !strings.Contains(ts, "echoJSON(value: string, configure?: ConfigureQuery): Promise<EchoJSONRow | null>") || !strings.Contains(ts, "readonly value: string;") {
+		t.Fatalf("JSON types do not preserve exact text:\n%s", ts)
 	}
 }
 
@@ -426,16 +470,16 @@ func TestQualifiedProjectionUsesExactWireName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	js := fileContent(t, files, "queries.js")
+	ts := fileContent(t, files, "queries.ts")
 	for _, want := range []string{
 		`Object.hasOwn(row, "b.book_id")`,
-		`bookId: row["b.book_id"]`,
+		`bookId: record["b.book_id"] as bigint`,
 	} {
-		if !strings.Contains(js, want) {
-			t.Errorf("queries.js missing %q\n%s", want, js)
+		if !strings.Contains(ts, want) {
+			t.Errorf("queries.ts missing %q\n%s", want, ts)
 		}
 	}
-	if strings.Contains(js, `Object.hasOwn(row, "book_id")`) {
-		t.Fatalf("generated decoder guessed an unqualified fallback:\n%s", js)
+	if strings.Contains(ts, `Object.hasOwn(row, "book_id")`) {
+		t.Fatalf("generated decoder guessed an unqualified fallback:\n%s", ts)
 	}
 }

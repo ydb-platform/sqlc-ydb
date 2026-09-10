@@ -17,11 +17,11 @@ the version and moves these entries into a numbered section at release time.
   Go Decimal/UUID bindings and native per-query execution options.
 - Built-in Go (native SDK, database/sql), Python (native SDK, DB-API, SQLAlchemy),
   C++ (native SDK, userver), C# (ADO.NET, Dapper, linq2db), Java (native SDK,
-  JDBC, Spring JDBC, Hibernate), Kotlin (Query SDK, JDBC, Exposed), JavaScript,
+  JDBC, Spring JDBC, Hibernate), Kotlin (Query SDK, JDBC, Exposed), TypeScript,
   Rust and PHP generators.
 - YDB adaptations of all upstream example families: authors, batch, booktest,
   jets and ondeck, with Go native SDK, database/sql, C# Dapper and linq2db,
-  JavaScript, Rust and PHP generation and execution checks.
+  TypeScript, Rust and PHP generation and execution checks.
 - Shared authors examples for all built-in languages, exact generated-output fixtures, SQL literal
   round-trip tests, SDK compilation checks, and sequential live-YDB acceptance.
 - Release packaging for Linux, macOS, and Windows on amd64 and arm64, with
@@ -32,6 +32,9 @@ the version and moves these entries into a numbered section at release time.
 
 ### Compatibility
 
+- The JavaScript target was replaced by the TypeScript target. Rename
+  `gen.javascript` to `gen.typescript`; generated output is now one `queries.ts`
+  file instead of `queries.js` and `queries.d.ts`.
 - This is an independent implementation of the sqlc workflow. Only YDB and
   built-in generators are supported; external engine/codegen plugins are excluded.
 - The initial version implements a documented subset of YQL and sqlc options,

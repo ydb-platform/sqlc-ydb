@@ -7,8 +7,8 @@ sql:
       php:
         out: php
         namespace: Authors\Native
-      javascript:
-        out: javascript
+      typescript:
+        out: typescript
       rust:
         out: rust
       go:

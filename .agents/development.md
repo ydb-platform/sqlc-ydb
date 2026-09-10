@@ -137,9 +137,9 @@ restoring bulk snapshots or obsolete options.
 
 The [examples](../examples/README.md) share one Go module in `examples/`; generated
 code and tests live under each example's `go/` directory. C# framework,
-JavaScript, Rust and PHP examples share dependencies and test harnesses in
-`examples/csharp`, `examples/javascript`, `examples/rust` and `examples/php`.
-JavaScript dependencies resolve from `examples/package.json`. The authors
+TypeScript, Rust and PHP examples share dependencies and test harnesses in
+`examples/csharp`, `examples/typescript`, `examples/rust` and `examples/php`.
+TypeScript dependencies resolve from `examples/package.json`. The authors
 example retains the Python, Java, C++ and ADO.NET application builds. Schema,
 queries and generator configuration are shared in each example root. `make
 generate` and `make check-examples` cover every example configuration; the
@@ -234,7 +234,7 @@ Each creates and drops its own `authors` table only after a successful create.
 Use an otherwise empty disposable database. Java/.NET runtime builds and tests
 are separate from offline SQL generation.
 
-Run the shared Dapper, linq2db, JavaScript, Rust and PHP harnesses from the
+Run the shared Dapper, linq2db, TypeScript, Rust and PHP harnesses from the
 repository root. Each command covers all five example families:
 
 ```sh
@@ -248,6 +248,6 @@ YDB_CONNECTION_STRING=grpc://localhost:2136/local CARGO_BUILD_JOBS=1 \
 YDB_CONNECTION_STRING=grpc://localhost:2136/local composer --working-dir=examples/php smoke
 ```
 
-The [JavaScript](../docs/javascript.md), [Rust](../docs/rust.md) and
+The [TypeScript](../docs/typescript.md), [Rust](../docs/rust.md) and
 [PHP](../docs/php.md) pages define their value representations, dependencies
 and runtime ownership.

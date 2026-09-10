@@ -17,7 +17,7 @@ or simplifying SDK-specific code.
 | `internal/analyzer` | Direct YQL parse contexts, catalog evolution, name/type resolution and diagnostics |
 | `internal/yql/builtins` | Strict supported YQL function, cast and common-type rules |
 | `internal/model` | Resolved query/catalog data, type equality and diagnostic formatting |
-| `internal/codegen/{golang,python,cpp,csharp,java,kotlin,javascript,rust,php}` | Language naming and SDK-specific bindings, decoding and source rendering |
+| `internal/codegen/{golang,python,cpp,csharp,java,kotlin,typescript,rust,php}` | Language naming and SDK-specific bindings, decoding and source rendering |
 | `internal/endtoend` | CLI fixtures, expected diagnostics and generated golden files |
 | `examples` | All upstream example families adapted for YDB; shared language dependencies and sequential live tests |
 | `.github/workflows` | Offline verification and sequential acceptance steps per host |
@@ -28,7 +28,7 @@ or simplifying SDK-specific code.
 - [Compatibility](../docs/compatibility.md): supported config, queries, schema
   migrations, intentional exclusions and output ownership.
 - [Targets](../docs/targets.md), [C++](../docs/cpp.md), [C#](../docs/csharp.md),
-  [Java](../docs/java.md), [Kotlin](../docs/kotlin.md), [JavaScript](../docs/javascript.md),
+  [Java](../docs/java.md), [Kotlin](../docs/kotlin.md), [TypeScript](../docs/typescript.md),
   [Rust](../docs/rust.md), [PHP](../docs/php.md): generated API and runtime contracts.
 - [Installation](../docs/installation.md): release artifacts, checksum and version
   checks.

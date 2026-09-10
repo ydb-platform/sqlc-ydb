@@ -75,7 +75,7 @@ type Kotlin struct {
 	Runtime string `yaml:"runtime"`
 }
 
-type JavaScript struct {
+type TypeScript struct {
 	Out     string `yaml:"out"`
 	Runtime string `yaml:"runtime"`
 }
@@ -98,7 +98,7 @@ type Gen struct {
 	CSharp     *CSharp     `yaml:"csharp"`
 	Java       *Java       `yaml:"java"`
 	Kotlin     *Kotlin     `yaml:"kotlin"`
-	JavaScript *JavaScript `yaml:"javascript"`
+	TypeScript *TypeScript `yaml:"typescript"`
 	Rust       *Rust       `yaml:"rust"`
 	PHP        *PHP        `yaml:"php"`
 }
@@ -316,15 +316,15 @@ func Parse(data []byte) (*Config, error) {
 				return nil, fmt.Errorf("sql[%d]: unsupported Kotlin runtime %q (use ydb, jdbc or exposed)", i, g.Runtime)
 			}
 		}
-		if g := s.Gen.JavaScript; g != nil {
+		if g := s.Gen.TypeScript; g != nil {
 			if g.Out == "" {
-				return nil, fmt.Errorf("sql[%d].gen.javascript.out is required", i)
+				return nil, fmt.Errorf("sql[%d].gen.typescript.out is required", i)
 			}
 			if g.Runtime == "" {
 				g.Runtime = "ydb"
 			}
 			if g.Runtime != "ydb" {
-				return nil, fmt.Errorf("sql[%d]: unsupported JavaScript runtime %q", i, g.Runtime)
+				return nil, fmt.Errorf("sql[%d]: unsupported TypeScript runtime %q", i, g.Runtime)
 			}
 		}
 		if g := s.Gen.Rust; g != nil {

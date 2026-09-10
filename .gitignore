@@ -25,7 +25,9 @@ examples/php/vendor/
 /examples/*/csharp/*/Models.cs
 /examples/*/csharp/*/Queries.cs
 /examples/authors/java/*/src/main/java/
-/examples/*/javascript/native/
+/examples/*/typescript/native/
 /examples/*/rust/native/
 /examples/*/php/native/
 /examples/authors/kotlin/src/generated/kotlin/
+
+/examples/.typescript-build/

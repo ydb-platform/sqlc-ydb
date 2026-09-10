@@ -37,6 +37,7 @@ func TestRejectUnsupportedConfiguration(t *testing.T) {
 		{"codegen", base + "  codegen: []\n", "migrate"},
 		{"unknown", base + "  surprise: true\n", "field surprise"},
 		{"option", base + "  gen:\n    go:\n      out: db\n      emit_prepared_queries: true\n", "field emit_prepared_queries"},
+		{"removed JavaScript target", base + "  gen:\n    javascript:\n      out: js\n", "field javascript"},
 		{"ignored Python package", base + "  gen:\n    python:\n      out: py\n      package: ignored\n", "Python package directory is selected with out"},
 		{"engine", strings.Replace(base, "ydb", "postgresql", 1), "engine must be ydb"},
 		{"documents", base + "---\nversion: '2'\n", "exactly one"},
@@ -53,7 +54,7 @@ func TestRejectUnsupportedConfiguration(t *testing.T) {
 
 func TestAdditionalBuiltinTargets(t *testing.T) {
 	base := "version: '2'\nsql:\n- engine: ydb\n  schema: s.sql\n  queries: q.sql\n  gen:\n"
-	c, err := Parse([]byte(base + "    cpp:\n      out: cpp\n    csharp:\n      out: cs\n    java:\n      out: java\n    javascript:\n      out: js\n    rust:\n      out: rust\n    php:\n      out: php\n"))
+	c, err := Parse([]byte(base + "    cpp:\n      out: cpp\n    csharp:\n      out: cs\n    java:\n      out: java\n    typescript:\n      out: js\n    rust:\n      out: rust\n    php:\n      out: php\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,15 +62,15 @@ func TestAdditionalBuiltinTargets(t *testing.T) {
 	if g.CPP.Namespace != "db" || g.CPP.Runtime != "ydb" || g.CSharp.Namespace != "Db" || g.Java.Package != "db" || g.Java.Runtime != "ydb" {
 		t.Fatalf("unexpected defaults: %+v %+v %+v", g.CPP, g.CSharp, g.Java)
 	}
-	if g.CSharp.Runtime != "adonet" || g.JavaScript.Runtime != "ydb" || g.Rust.Runtime != "ydb" || g.PHP.Runtime != "ydb" || g.PHP.Namespace != "Db" {
-		t.Fatalf("unexpected new target defaults: %+v %+v %+v %+v", g.CSharp, g.JavaScript, g.Rust, g.PHP)
+	if g.CSharp.Runtime != "adonet" || g.TypeScript.Runtime != "ydb" || g.Rust.Runtime != "ydb" || g.PHP.Runtime != "ydb" || g.PHP.Namespace != "Db" {
+		t.Fatalf("unexpected new target defaults: %+v %+v %+v %+v", g.CSharp, g.TypeScript, g.Rust, g.PHP)
 	}
 	for _, runtime := range []string{"adonet", "dapper", "linq2db"} {
 		if _, err := Parse([]byte(base + "    csharp:\n      out: cs\n      runtime: " + runtime + "\n")); err != nil {
 			t.Fatalf("C# %s: %v", runtime, err)
 		}
 	}
-	for _, target := range []string{"javascript", "rust", "php"} {
+	for _, target := range []string{"typescript", "rust", "php"} {
 		for _, options := range []string{"{}", "{out: output, runtime: imaginary}"} {
 			if _, err := Parse([]byte(base + "    " + target + ": " + options + "\n")); err == nil {
 				t.Errorf("accepted invalid %s options: %s", target, options)

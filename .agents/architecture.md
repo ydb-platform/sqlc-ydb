@@ -10,7 +10,7 @@ flowchart LR
   D --> G[Built-in C++ generator]
   D --> H[Built-in C# generator]
   D --> I[Built-in Java generator]
-  D --> J[Built-in JavaScript generator]
+  D --> J[Built-in TypeScript generator]
   D --> K[Built-in Rust generator]
   D --> L[Built-in PHP generator]
 ```
@@ -33,7 +33,7 @@ selects `WireName` when present and otherwise `Name`; positional decoders retain
 the analyzed projection order. Generated API fields continue to use `Name`.
 `AnalyzedQuery.SQL` retains executable YQL and its declarations. The analyzer
 also derives `SQLWithoutDeclarations` from ANTLR token spans for SDKs that
-synthesize `DECLARE` from typed parameters, currently JavaScript and the
+synthesize `DECLARE` from typed parameters, currently TypeScript and the
 JDBC-based Java and Kotlin adapters. This removes only declaration syntax;
 comments, literals and local bindings remain intact. Generators do not
 independently reparse or strip declarations. Parameter names omit the leading

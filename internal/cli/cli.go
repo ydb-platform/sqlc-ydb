@@ -16,11 +16,11 @@ import (
 	"github.com/ydb-platform/sqlc-ydb/internal/codegen/csharp"
 	"github.com/ydb-platform/sqlc-ydb/internal/codegen/golang"
 	"github.com/ydb-platform/sqlc-ydb/internal/codegen/java"
-	"github.com/ydb-platform/sqlc-ydb/internal/codegen/javascript"
 	"github.com/ydb-platform/sqlc-ydb/internal/codegen/kotlin"
 	"github.com/ydb-platform/sqlc-ydb/internal/codegen/php"
 	"github.com/ydb-platform/sqlc-ydb/internal/codegen/python"
 	"github.com/ydb-platform/sqlc-ydb/internal/codegen/rust"
+	"github.com/ydb-platform/sqlc-ydb/internal/codegen/typescript"
 	"github.com/ydb-platform/sqlc-ydb/internal/config"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 	"github.com/ydb-platform/sqlc-ydb/internal/source"
@@ -210,7 +210,7 @@ func prepare(c *config.Config, generate bool) ([]output, error) {
 			continue
 		}
 		if s.Gen.Go == nil && s.Gen.Python == nil && s.Gen.CPP == nil && s.Gen.CSharp == nil &&
-			s.Gen.Java == nil && s.Gen.Kotlin == nil && s.Gen.JavaScript == nil && s.Gen.Rust == nil && s.Gen.PHP == nil {
+			s.Gen.Java == nil && s.Gen.Kotlin == nil && s.Gen.TypeScript == nil && s.Gen.Rust == nil && s.Gen.PHP == nil {
 			return nil, errors.New("generation requires a built-in generator in gen")
 		}
 		add := func(dir string, files []model.File) error {
@@ -288,10 +288,10 @@ func prepare(c *config.Config, generate bool) ([]output, error) {
 				return nil, err
 			}
 		}
-		if g := s.Gen.JavaScript; g != nil {
-			files, err := javascript.Generate(result, javascript.Options{Runtime: g.Runtime})
+		if g := s.Gen.TypeScript; g != nil {
+			files, err := typescript.Generate(result, typescript.Options{Runtime: g.Runtime})
 			if err != nil {
-				return nil, fmt.Errorf("JavaScript generation: %w", err)
+				return nil, fmt.Errorf("TypeScript generation: %w", err)
 			}
 			if err := add(g.Out, files); err != nil {
 				return nil, err

@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 
 const modules = await Promise.all([
-  import("../authors/javascript/native/queries.js"),
-  import("../batch/javascript/native/queries.js"),
-  import("../booktest/javascript/native/queries.js"),
-  import("../jets/javascript/native/queries.js"),
-  import("../ondeck/javascript/native/queries.js"),
+  import("../.typescript-build/authors/typescript/native/queries.js"),
+  import("../.typescript-build/batch/typescript/native/queries.js"),
+  import("../.typescript-build/booktest/typescript/native/queries.js"),
+  import("../.typescript-build/jets/typescript/native/queries.js"),
+  import("../.typescript-build/ondeck/typescript/native/queries.js"),
 ]);
 
 for (const generated of modules) {
@@ -74,4 +74,4 @@ await assert.rejects(
   /outside YQL Uint64 range/,
 );
 
-console.log("Imported generated JavaScript for all five examples against the pinned YDB SDK.");
+console.log("Imported generated TypeScript for all five examples against the pinned YDB SDK.");

@@ -1,5 +1,5 @@
 {
-  "name": "sqlc-ydb-javascript-examples",
+  "name": "sqlc-ydb-typescript-examples",
   "private": true,
   "type": "module",
   "engines": {
@@ -7,12 +7,17 @@
     "npm": ">=10"
   },
   "scripts": {
-    "check": "node javascript/check-generated.mjs",
-    "smoke": "node javascript/smoke.mjs"
+    "typecheck": "tsc -p tsconfig.json",
+    "check": "npm run typecheck && npm run build && node typescript/check-generated.mjs",
+    "smoke": "npm run build && node typescript/smoke.mjs",
+    "build": "tsc -p tsconfig.runtime.json"
   },
   "dependencies": {
     "@ydbjs/core": "6.3.1",
     "@ydbjs/query": "6.3.0",
     "@ydbjs/value": "6.0.8"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
   }
 }

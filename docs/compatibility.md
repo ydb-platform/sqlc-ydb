@@ -20,7 +20,7 @@ not designate a compatible upstream sqlc version.
 - `gen.kotlin` selects `runtime: ydb|jdbc|exposed`; `native` aliases `ydb`.
   Exposed uses SQL query methods inside a caller-owned JDBC transaction, not ORM
   table definitions or DSL translation. See [Kotlin](kotlin.md).
-- `gen.javascript`, `gen.rust`, and `gen.php` use `runtime: ydb` (the default).
+- `gen.typescript`, `gen.rust`, and `gen.php` use `runtime: ydb` (the default).
   They generate code for the official YDB SDKs.
 - No intermediate AST. ANTLR parse contexts feed semantic analysis directly.
 
@@ -51,7 +51,7 @@ not designate a compatible upstream sqlc version.
   The Python package directory is selected by `out`; remove `gen.python.package`
   from older configurations. That option was ignored and now produces an error.
 - C++ and C# options `namespace`, `out`, `runtime`;
-  Java and Kotlin options `package`, `out`, `runtime`; JavaScript and Rust options
+  Java and Kotlin options `package`, `out`, `runtime`; TypeScript and Rust options
   `out`, `runtime`; PHP options `namespace`, `out`, `runtime`. These are built-in
   extensions to the sqlc configuration shape, not external plugin options.
 - Unknown configuration options produce errors. Generation never silently

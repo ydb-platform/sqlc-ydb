@@ -3,11 +3,11 @@ import { readFile } from "node:fs/promises";
 import { Driver } from "@ydbjs/core";
 import { query } from "@ydbjs/query";
 
-import { Queries as AuthorQueries } from "../authors/javascript/native/queries.js";
-import { Queries as BatchQueries } from "../batch/javascript/native/queries.js";
-import { Queries as BooktestQueries } from "../booktest/javascript/native/queries.js";
-import { Queries as JetsQueries } from "../jets/javascript/native/queries.js";
-import { Queries as OndeckQueries } from "../ondeck/javascript/native/queries.js";
+import { Queries as AuthorQueries } from "../.typescript-build/authors/typescript/native/queries.js";
+import { Queries as BatchQueries } from "../.typescript-build/batch/typescript/native/queries.js";
+import { Queries as BooktestQueries } from "../.typescript-build/booktest/typescript/native/queries.js";
+import { Queries as JetsQueries } from "../.typescript-build/jets/typescript/native/queries.js";
+import { Queries as OndeckQueries } from "../.typescript-build/ondeck/typescript/native/queries.js";
 
 const dsn = process.env.YDB_CONNECTION_STRING;
 if (!dsn) {
@@ -143,7 +143,7 @@ try {
   await runBooktest();
   await runJets();
   await runOndeck();
-  console.log("All JavaScript generated-query examples passed.");
+  console.log("All TypeScript generated-query examples passed.");
 } finally {
   await client[Symbol.asyncDispose]();
   await driver[Symbol.asyncDispose]();

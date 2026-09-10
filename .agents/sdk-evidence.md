@@ -50,7 +50,7 @@ pinned in the [example Maven build](../examples/authors/java/pom.xml). The
   provide the selected SQL execution APIs. The generator does not infer JPA
   entities from query projections or require Spring Data repository support.
 
-## C#, JavaScript, Rust and PHP references
+## C#, TypeScript, Rust and PHP references
 
 Sources inspected for these targets on 2026-09-09:
 

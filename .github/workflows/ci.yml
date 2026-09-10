@@ -73,9 +73,12 @@ jobs:
         run: mvn -B -f examples/authors/kotlin/pom.xml test-compile
       - name: Compile all Dapper and linq2db examples
         run: dotnet build examples/csharp/GeneratedProfiles.csproj
-      - name: Check JavaScript examples against the pinned SDK
+      - name: Check TypeScript examples against the pinned SDK
         working-directory: examples
-        run: npm ci --ignore-scripts && npm run check
+        run: |
+          npm ci --ignore-scripts
+          go test -count=1 ../internal/codegen/typescript
+          npm run check
       - name: Compile and test Rust examples against the pinned SDK
         run: cargo test --manifest-path examples/rust/Cargo.toml --locked
       - name: Check PHP examples against the pinned SDK
@@ -179,7 +182,7 @@ jobs:
         run: |
           dotnet run --project examples/csharp/GeneratedProfiles.csproj --no-build -- dapper
           dotnet run --project examples/csharp/GeneratedProfiles.csproj --no-build -- linq2db
-      - name: Run all JavaScript examples sequentially
+      - name: Run all TypeScript examples sequentially
         working-directory: examples
         run: npm run smoke
       - name: Run all Rust examples sequentially
