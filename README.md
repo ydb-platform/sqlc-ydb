@@ -1,5 +1,10 @@
 # sqlc-ydb
 
+Inspired by [sqlc](https://github.com/sqlc-dev/sqlc), sqlc-ydb brings its
+SQL-first, typed query workflow to YDB as an independent implementation.
+Read [the project history](docs/history.md) for the upstream YDB proposals,
+engine-plugin discussions, and the decision to build a standalone tool.
+
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/ydb-platform/sqlc-ydb.svg?style=flat-square)](https://github.com/ydb-platform/sqlc-ydb/releases)
 [![CI](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/ci.yml)
@@ -13,7 +18,29 @@ Python, or any separately installed codegen plugin.
 
 Supported YQL and configuration options are listed in the
 [compatibility contract](docs/compatibility.md). See the
-[changelog](CHANGELOG.md) and [release plan](docs/release-plan.md) for release status.
+[changelog](CHANGELOG.md) and [GitHub Releases](https://github.com/ydb-platform/sqlc-ydb/releases)
+for release status. Installation and artifact verification are described in
+[installation](docs/installation.md).
+
+## Feature parity with sqlc
+
+| Feature | sqlc-ydb support / difference |
+| --- | --- |
+| `generate`, `compile`, `diff`, `init`, `version` | Supported. |
+| `-f` / `--file`, `-h` / `--help`, `init --v1` / `--v2` | Supported. |
+| `--no-remote` / `--remote` | Local execution only; `--no-remote` is accepted, `--remote` is rejected. |
+| `completion`, `createdb`, `push`, `verify`, `vet` | Not implemented. |
+| Configuration | v2 and basic v1 Go `packages`; generator option coverage is partial. |
+| SQL engines | YDB only. |
+| Parameters | YQL `$parameter`, with `DECLARE` or supported type inference; no `$1`, `?`, or `@name` compatibility layer. |
+| Query annotations | `:one`, `:many`, `:exec`; affected-row counts and other annotations are unsupported. |
+| `sqlc.arg`, `sqlc.narg`, `sqlc.embed`, `sqlc.slice` | Not implemented. |
+| Generators and plugins | [Built-in targets](docs/targets.md); external plugins are intentionally excluded. |
+| Database-assisted analysis | Not implemented. |
+| `version --verbose` | Additional option: reports the build commit. |
+
+See the [compatibility contract](docs/compatibility.md) for supported options,
+YQL coverage and generated API differences.
 
 ## Supported targets
 
@@ -89,10 +116,9 @@ or sharing directories between configurations.
 ## References
 
 - [Compatibility](docs/compatibility.md): supported SQL, configuration and output ownership.
+- [Installation](docs/installation.md): source builds, platform archives and version checks.
 - [Targets](docs/targets.md): generated APIs, types and runtime contracts.
-- [Architecture](docs/architecture.md): analysis and generation boundaries.
-- [Development](docs/development.md): contributor commands and tests.
-- [Roadmap](docs/roadmap.md): planned compiler features.
-- [Release plan](docs/release-plan.md): release gates, ydb.tech guide and consumer acceptance.
+- [History](docs/history.md): upstream proposals and the standalone project's origins.
+- [Source provenance](docs/provenance.md): adapted sources and attribution.
 
 For repository work, start with [AGENTS.md](AGENTS.md).

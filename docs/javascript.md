@@ -67,7 +67,7 @@ runtime manifests.
 The offline check imports every generated example module against the pinned SDK
 and verifies representative typed bindings. The smoke command runs all five
 example families sequentially against an already-running disposable YDB.
-Commands are in [development](development.md#generated-runtime-checks).
+Commands are in [development](../.agents/development.md#generated-runtime-checks).
 
 Primary references: the YDB documentation for
 [installing the JavaScript SDK](https://ydb.tech/docs/en/reference/ydb-sdk/install),

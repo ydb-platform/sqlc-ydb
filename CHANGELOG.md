@@ -1,6 +1,6 @@
 # Changelog
 
-Add changes under Unreleased. The [publish workflow](docs/releasing.md) assigns
+Add changes under Unreleased. The [publish workflow](.agents/releasing.md) assigns
 the version and moves these entries into a numbered section at release time.
 
 ## Unreleased

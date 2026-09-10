@@ -1,6 +1,6 @@
 # Compiler roadmap
 
-Current behavior is in [compatibility](compatibility.md), stage ownership in
+Current behavior is in [compatibility](../docs/compatibility.md), stage ownership in
 [architecture](architecture.md), and release gates in [the release plan](release-plan.md).
 
 ## Shared macros

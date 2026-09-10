@@ -76,5 +76,5 @@ trailing whitespace. Literal tests compile and execute the emitted Java and
 compare exact UTF-8 bytes with the original SQL.
 
 The inspected SDK sources and framework API references are recorded in
-[source provenance](provenance.md#java-sdk-and-framework-references).
+[source provenance](../.agents/sdk-evidence.md#java-sdk-and-framework-references).
 Dependency versions used by the example are pinned in [its Maven build](../examples/authors/java/pom.xml).

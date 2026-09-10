@@ -18,7 +18,7 @@ Every family generates Go native SDK and `database/sql`, C# Dapper and
 linq2db, JavaScript, Rust and PHP APIs. Dependencies and execution harnesses
 are shared by language across the families; `authors` also retains Python,
 C++, C# ADO.NET, Java and Kotlin (Query SDK, JDBC, Exposed) examples. Runtime commands are in
-[development](../docs/development.md).
+[development](../.agents/development.md).
 
 From the repository root:
 

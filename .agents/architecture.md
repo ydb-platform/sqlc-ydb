@@ -51,7 +51,7 @@ this protects individual files from interrupted writes, but does not promise a
 filesystem transaction covering every output.
 Before writing or comparing, the CLI checks current output directories for
 obsolete files with the sqlc-ydb generated header. It reports those files for
-manual removal; see [output ownership](compatibility.md#output-ownership).
+manual removal; see [output ownership](../docs/compatibility.md#output-ownership).
 
 ## Compilation boundary
 
@@ -66,5 +66,5 @@ built-in function resolver and Python model reuse checks share those operations.
 SDK-specific type mapping stays in each generator.
 
 The parser is pinned in `go.mod` to an official `ydb-platform/yql-parsers` release.
-See [provenance](provenance.md) for parser revisions and upstream references,
-and [decisions](../.agents/decisions.md) for lasting architectural choices.
+See [provenance](../docs/provenance.md) for parser revisions and upstream
+references, and [decisions](decisions.md) for lasting architectural choices.

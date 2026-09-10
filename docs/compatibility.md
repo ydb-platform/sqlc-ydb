@@ -1,8 +1,9 @@
 # Compatibility contract
 
-Reference workflow: [sqlc v1.31.1](https://docs.sqlc.dev/en/v1.31.1/reference/config.html).
-Compatibility is tracked at the user interface and generated API level; sqlc
-internal data structures and source history are not a dependency.
+Compatibility is tracked by individual CLI, configuration and generated API
+contracts. See the [feature table](../README.md#feature-parity-with-sqlc) for
+supported features and differences. sqlc-ydb is independently versioned and does
+not designate a compatible upstream sqlc version.
 
 ## Intentional differences
 
@@ -190,8 +191,6 @@ represented in the catalog; this is not a full server DDL validator.
 References: YDB [columns](https://ydb.tech/docs/en/yql/reference/syntax/alter_table/columns),
 [table rename](https://ydb.tech/docs/en/yql/reference/syntax/alter_table/rename),
 and [DROP TABLE](https://ydb.tech/docs/en/yql/reference/syntax/drop_table).
-YQL main at `d62403dadf7588c33d2d0a61296a157b61163d52` explicitly handles
-[`DROP TABLE IF EXISTS` through `missingOk`](https://github.com/ydb-platform/ydb/blob/d62403dadf7588c33d2d0a61296a157b61163d52/yql/essentials/sql/v1/translation/sql_query.cpp#L575)
-and [rejects combining RENAME TO with other ALTER actions](https://github.com/ydb-platform/ydb/blob/d62403dadf7588c33d2d0a61296a157b61163d52/yql/essentials/sql/v1/translation/sql_query.cpp#L2399).
-See [the roadmap](roadmap.md) for shared macros and deferred database-assisted
-analysis.
+Shared macros and database-assisted analysis remain planned; the supported
+workflow above does not include them. Implementation planning is maintained
+in [the contributor roadmap](../.agents/roadmap.md).

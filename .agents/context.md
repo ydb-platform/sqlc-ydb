@@ -22,24 +22,33 @@ or simplifying SDK-specific code.
 | `examples` | All upstream example families adapted for YDB; shared language dependencies and sequential live tests |
 | `.github/workflows` | Offline verification and sequential acceptance steps per host |
 
-## Sources of truth
+## Public sources of truth
 
 - [README](../README.md): build and first generation.
 - [Compatibility](../docs/compatibility.md): supported config, queries, schema
   migrations, intentional exclusions and output ownership.
-- [Architecture](../docs/architecture.md): current stages and responsibilities.
 - [Targets](../docs/targets.md), [C++](../docs/cpp.md), [C#](../docs/csharp.md),
   [Java](../docs/java.md), [Kotlin](../docs/kotlin.md), [JavaScript](../docs/javascript.md),
   [Rust](../docs/rust.md), [PHP](../docs/php.md): generated API and runtime contracts.
-- [Development](../docs/development.md): commands and validation requirements.
-- [Roadmap](../docs/roadmap.md): shared macros and deferred database-assisted analysis.
-- [Release plan](../docs/release-plan.md): release gates, ydb.tech documentation,
-  external query corpus, and user-owned SDK reviews/consumer pilots.
-- [Releasing](../docs/releasing.md): packaging, dry runs and publication workflow.
+- [Installation](../docs/installation.md): release artifacts, checksum and version
+  checks.
 - [Changelog](../CHANGELOG.md): pending Unreleased entries and published stable versions.
-- [Provenance](../docs/provenance.md): upstream references and inspected SDK sources.
+- [Provenance](../docs/provenance.md): source attribution, adaptations and licenses.
+- [History](../docs/history.md): upstream YDB proposals and the standalone decision.
 
-The Go module name is authoritative in `go.mod`; the executable is `sqlc-ydb`.
-Historical repository/module names can differ. Do not infer a rename or restore
-the old engine-plugin dependencies from an archive branch. Check the current
-Git branch, remote and worktree before any publication.
+## Maintainer sources of truth
+
+- [Architecture](architecture.md): current stages and responsibilities.
+- [Development](development.md): contributor commands, CI and runtime validation.
+- [Roadmap](roadmap.md): shared macros and deferred database-assisted analysis.
+- [Release plan](release-plan.md): dated release evidence, ydb.tech documentation,
+  external query corpus, and user-owned SDK reviews and consumer pilots.
+- [Release operations](releasing.md): packaging, dry runs, publication and recovery.
+- [SDK evidence](sdk-evidence.md), [YQL evidence](yql-evidence.md),
+  [C++ development](cpp-development.md) and
+  [C# SDK evidence](csharp-sdk-evidence.md): source-level implementation evidence
+  and build constraints.
+
+The repository is `ydb-platform/sqlc-ydb`; the Go module is
+`github.com/ydb-platform/sqlc-ydb` and the executable is `sqlc-ydb`.
+Check the current Git branch, remote and worktree before any publication.

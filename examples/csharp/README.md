@@ -12,7 +12,7 @@ behavior, DML `RETURNING`, aggregates, nullable `LEFT JOIN` results,
 `Optional<Json>`, `Json`, microsecond `Timestamp` values, high `Uint64` values,
 typed result decoding, and parameter binding. Run each profile sequentially
 against a disposable database without tables from these examples. Build and
-execution commands are in [development](../../docs/development.md#generated-runtime-checks).
+execution commands are in [development](../../.agents/development.md#generated-runtime-checks).
 
 The linq2db profile accepts a caller-owned `DataConnection`. Configure one with
 the official YDB provider, for example with

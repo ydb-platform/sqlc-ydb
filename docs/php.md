@@ -84,14 +84,14 @@ case before constructing a row.
 ## Dependency and checks
 
 The shared examples pin `ydb-platform/ydb-php-sdk` 1.16.1. Inspected SDK source
-versions and links are recorded in [provenance](provenance.md).
+versions and links are recorded in the [SDK investigation notes](../.agents/sdk-evidence.md).
 
 SDK 1.16.1 fixes `google/protobuf` at 3.15.8. On PHP 8.2 that protobuf runtime
 emits deprecation notices for legacy interface return types and dynamic
 properties; a deprecation-clean PHP 8.2 run requires the SDK to update its
 protobuf dependency.
 
-Use the repository's [development commands](development.md) for generated-code
+Use the repository's [development commands](../.agents/development.md) for generated-code
 and live checks. The [shared PHP example harness](../examples/php/README.md)
 documents its generated-class loading layout.
 

@@ -22,7 +22,7 @@ contents and expected diagnostics. Fixture updates are explicit, never an
 automatic part of tests. Semantic unit tests independently assert resolved
 parameters, result columns and errors in their owning analyzer and builtins suites.
 Adapted CLI fixtures use the same runner; source references are recorded in
-[provenance](provenance.md).
+[provenance](../docs/provenance.md).
 
 Review `git diff --cached --check` after staging new files: an unstaged diff
 does not include untracked generated outputs. If significant whitespace inside
@@ -190,7 +190,8 @@ C# and the four Java profiles run in successive acceptance steps too. C++ uses
 the pinned userver/SDK development image to compile both executables before
 starting local-ydb; native and userver runtime probes then execute sequentially.
 The test image and its CMake packaging workaround are in
-`examples/authors/cpp/Dockerfile`; see [C++](cpp.md) for commands.
+`examples/authors/cpp/Dockerfile`; see
+[C++ development](cpp-development.md) for commands.
 
 ```sh
 SQLC_YDB_TEST_DSN=grpc://localhost:2136/local go test -p 1 -count=1 -timeout=180s ./internal/codegen/golang -run TestLiveYDB -v
@@ -247,5 +248,6 @@ SQLC_YDB_TEST_DSN=grpc://localhost:2136/local CARGO_BUILD_JOBS=1 \
 SQLC_YDB_TEST_DSN=grpc://localhost:2136/local composer --working-dir=examples/php smoke
 ```
 
-The [JavaScript](javascript.md), [Rust](rust.md) and [PHP](php.md) pages define
-their value representations, dependencies and runtime ownership.
+The [JavaScript](../docs/javascript.md), [Rust](../docs/rust.md) and
+[PHP](../docs/php.md) pages define their value representations, dependencies
+and runtime ownership.

@@ -1,4 +1,4 @@
-# Releasing
+# Release operations
 
 Required reviews, documentation and consumer pilots are tracked in
 [the release plan](release-plan.md). Releases are started manually from

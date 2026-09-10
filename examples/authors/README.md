@@ -12,5 +12,5 @@ nullable. Queries use named parameters with YQL `DECLARE` statements.
 
 This example covers every built-in language/runtime. Each language's build files
 and executable smoke tests live in its own directory. The other upstream example
-families focus on Go, as upstream does. See [development](../../docs/development.md)
+families focus on Go, as upstream does. See [development](../../.agents/development.md)
 for generation and sequential live acceptance commands.
