@@ -4,8 +4,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
+import tech.ydb.common.transaction.TxMode;
 import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.query.QueryClient;
+import tech.ydb.query.QueryTransaction;
 import tech.ydb.query.tools.SessionRetryContext;
 
 /** Run from examples/authors; the smoke creates and drops its authors table. */
@@ -25,9 +27,12 @@ public final class Smoke {
              QueryClient client = QueryClient.newClient(transport).build()) {
             SessionRetryContext retry = SessionRetryContext.create(client).build();
             createSchema(retry, schema);
-            Queries queries = new Queries(retry);
             try {
-                exercise(queries);
+                retry.supplyResult(session -> {
+                    QueryTransaction tx = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+                    exercise(new Queries(tx));
+                    return tx.commit();
+                }).join().getStatus().expectSuccess();
             } finally {
                 dropSchema(retry);
             }
@@ -36,15 +41,15 @@ public final class Smoke {
 
     private static void exercise(Queries queries) {
         queries.upsertAuthor(MAX_UINT64, "Unsigned", null);
-        GetAuthorRow emptyBio = queries.getAuthor(MAX_UINT64).orElseThrow();
+        Authors emptyBio = queries.getAuthor(MAX_UINT64).orElseThrow();
         check(emptyBio.id() == MAX_UINT64 && "Unsigned".equals(emptyBio.name()) && emptyBio.bio() == null,
                 "nullable native row");
-        check("Unsigned".equals(queries.getAuthorName(MAX_UINT64).orElseThrow().name()), "native name");
+        check("Unsigned".equals(queries.getAuthorName(MAX_UINT64).orElseThrow()), "native name");
 
         queries.upsertAuthor(MAX_UINT64, "Unsigned", "Biography");
         check("Biography".equals(queries.getAuthor(MAX_UINT64).orElseThrow().bio()), "non-null native bio");
         queries.upsertAuthor(SECOND_ID, "Second", null);
-        List<ListAuthorsRow> rows = queries.listAuthors();
+        List<Authors> rows = queries.listAuthors();
         check(rows.stream().anyMatch(row -> row.id() == MAX_UINT64), "native list result");
 
         queries.deleteAuthor(SECOND_ID);
