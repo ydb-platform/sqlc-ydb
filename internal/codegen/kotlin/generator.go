@@ -223,6 +223,10 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		row, _ := name(q.Name, true)
 		row += "Row"
 		constant := method + "Sql"
+		preparedConstant := constant
+		if o.Runtime != "ydb" && len(q.Parameters) > 0 && q.SQLWithoutDeclarations != "" {
+			preparedConstant = method + "PreparedSql"
+		}
 		ret := "Unit"
 		switch q.Command {
 		case model.One, model.Many:
@@ -245,7 +249,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			return nil, fmt.Errorf("%s: Kotlin does not support %s", q.Name, q.Command)
 		}
 		params, names := []string{}, []string{}
-		seen := map[string]bool{"client": true, constant: true, "kotlin": true, "tech": true}
+		seen := map[string]bool{"client": true, constant: true, preparedConstant: true, "kotlin": true, "tech": true}
 		for _, p := range q.Parameters {
 			n, err := name(p.Name, false)
 			if err != nil {
@@ -262,7 +266,11 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			params = append(params, n+": "+typ)
 			names = append(names, n)
 		}
-		fmt.Fprintf(&b, "\n    private val %s: String = %s\n\n    fun %s(%s): %s {\n", constant, sqlLiteral(q.SQL), method, strings.Join(params, ", "), ret)
+		fmt.Fprintf(&b, "\n    private val %s: String = %s\n", constant, sqlLiteral(q.SQL))
+		if preparedConstant != constant {
+			fmt.Fprintf(&b, "    private val %s: String = %s\n", preparedConstant, sqlLiteral(jdbcSQL(q)))
+		}
+		fmt.Fprintf(&b, "\n    fun %s(%s): %s {\n", method, strings.Join(params, ", "), ret)
 		for i, p := range q.Parameters {
 			max := map[string]string{"Uint8": "255", "Uint16": "65535", "Uint32": "4294967295L"}[p.Type.UnwrapOptional().Kind]
 			if max == "" {
@@ -278,7 +286,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		if o.Runtime == "ydb" {
 			emitNative(&b, q, names, constant, row)
 		} else {
-			emitJDBC(&b, q, names, constant, row, o.Runtime)
+			emitJDBC(&b, q, names, preparedConstant, row, o.Runtime)
 		}
 		b.WriteString("    }\n")
 	}
@@ -286,6 +294,16 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 	files = append(files, model.File{Name: "Queries.kt", Content: []byte(b.String())})
 	return files, nil
 }
+
+func jdbcSQL(q model.AnalyzedQuery) string {
+	var b strings.Builder
+	for _, p := range q.Parameters {
+		fmt.Fprintf(&b, "DECLARE $%s AS %s;\n", p.Name, p.Type.String())
+	}
+	b.WriteString(q.SQLWithoutDeclarations)
+	return b.String()
+}
+
 func parameterValue(p model.Parameter, n string) string {
 	s, _, _ := typeInfo(p.Type)
 	value := "PrimitiveValue.new" + s.sdk + "(" + n + ")"

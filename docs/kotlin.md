@@ -33,7 +33,10 @@ types; an absent row differs from a row whose optional fields are null.
 JDBC and Exposed methods close their statements and result sets, but do not
 close borrowed connections, commit, roll back, or create nested transactions.
 Exposed output is SQL-first: it does not infer `Table` objects or translate SQL
-into the Exposed DSL.
+into the Exposed DSL. The readable SQL property preserves the declaration-free
+source. JDBC prepares a private companion query with `DECLARE` statements
+synthesized from the resolved parameter types because the driver prepares the
+query before `setObject` supplies those typed values.
 
 ## Type coverage
 

@@ -47,6 +47,30 @@ func TestGenerateRejectsInvalidContracts(t *testing.T) {
 	}
 }
 
+func TestJDBCPreparesWithResolvedParameterDeclarations(t *testing.T) {
+	querySQL := "-- name: GetAuthor :one\nSELECT id FROM authors WHERE id = $author_id;"
+	files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name: "GetAuthor", Command: model.One, SQL: querySQL, SQLWithoutDeclarations: querySQL,
+		Parameters: []model.Parameter{{Name: "author_id", Type: model.Type{Kind: "Uint64"}}},
+		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}}}}},
+	}}}, Options{Package: "authors.jdbc", Runtime: "jdbc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	generated := string(files[len(files)-1].Content)
+	wantReadable := "private val getAuthorSql: String = " + sqlLiteral(querySQL)
+	wantPrepared := "private val getAuthorPreparedSql: String = " + sqlLiteral("DECLARE $author_id AS Uint64;\n"+querySQL)
+	if !strings.Contains(generated, wantReadable) {
+		t.Fatalf("generated Kotlin JDBC API lost declaration-free source SQL:\n%s", generated)
+	}
+	if !strings.Contains(generated, wantPrepared) {
+		t.Fatalf("generated Kotlin JDBC API did not declare resolved parameters for driver preparation:\n%s", generated)
+	}
+	if !strings.Contains(generated, "client.prepareStatement(getAuthorPreparedSql)") {
+		t.Fatalf("generated Kotlin JDBC API did not prepare the driver-compatible SQL:\n%s", generated)
+	}
+}
+
 func TestNullableScalarModelsAndRuntimeOwnership(t *testing.T) {
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "GetAuthor", Command: model.One, SQL: "SELECT $id;", Parameters: []model.Parameter{{Name: "id", Type: model.Type{Kind: "Uint64"}}}, ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}}, {Name: "bio", Type: model.Optional(model.Type{Kind: "Utf8"})}}}}}}}
 	for _, runtime := range []string{"", "native", "ydb", "jdbc", "exposed"} {
