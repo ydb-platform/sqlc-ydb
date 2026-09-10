@@ -160,7 +160,7 @@ composer install --working-dir=examples/php
 composer --working-dir=examples/php check
 ```
 
-Optional live generator tests use `SQLC_YDB_TEST_DSN` to select an isolated YDB
+Optional live generator tests use `YDB_CONNECTION_STRING` to select an isolated YDB
 database. Use a disposable development database: tests create and drop uniquely
 named tables. No live tests run when the variable is absent.
 
@@ -169,7 +169,7 @@ order directly with YDB, independently of generated code. Run it sequentially
 with the runtime suites after installing the pinned Python dependencies:
 
 ```sh
-SQLC_YDB_TEST_DSN=grpc://localhost:2136/local SQLC_YDB_TEST_PYTHON=python3 \
+YDB_CONNECTION_STRING=grpc://localhost:2136/local SQLC_YDB_TEST_PYTHON=python3 \
   go test -p 1 -count=1 -timeout=180s ./internal/endtoend -run TestLiveYDBSemanticTypes -v
 ```
 
@@ -194,7 +194,7 @@ The test image and its CMake packaging workaround are in
 [C++ development](cpp-development.md) for commands.
 
 ```sh
-SQLC_YDB_TEST_DSN=grpc://localhost:2136/local go test -p 1 -count=1 -timeout=180s ./internal/codegen/golang -run TestLiveYDB -v
+YDB_CONNECTION_STRING=grpc://localhost:2136/local go test -p 1 -count=1 -timeout=180s ./internal/codegen/golang -run TestLiveYDB -v
 ```
 
 For Python live generator tests, install the pinned example requirements in a
@@ -210,9 +210,9 @@ but must never drop a pre-existing table. Run all example packages sequentially:
 
 ```sh
 cd examples
-SQLC_YDB_TEST_DSN=grpc://localhost:2136/local go test -p 1 -count=1 -timeout=180s -v ./...
+YDB_CONNECTION_STRING=grpc://localhost:2136/local go test -p 1 -count=1 -timeout=180s -v ./...
 cd authors
-SQLC_YDB_TEST_DSN=grpc://localhost:2136/local python -m python.smoke
+YDB_CONNECTION_STRING=grpc://localhost:2136/local python -m python.smoke
 ```
 
 From `examples/authors`, the Python interpreter needs
@@ -225,9 +225,9 @@ single-column projections, list queries, writes and missing rows.
 From `examples/authors`, the additional live checks are:
 
 ```sh
-SQLC_YDB_TEST_DSN='Host=localhost;Port=2136;Database=/local' \
+YDB_CONNECTION_STRING='Host=localhost;Port=2136;Database=/local' \
   dotnet run --project csharp/adonet/Authors.AdoNet.csproj
-SQLC_YDB_TEST_DSN=grpc://localhost:2136/local sh java/run-smoke.sh
+YDB_CONNECTION_STRING=grpc://localhost:2136/local sh java/run-smoke.sh
 ```
 
 Each creates and drops its own `authors` table only after a successful create.
@@ -238,14 +238,14 @@ Run the shared Dapper, linq2db, JavaScript, Rust and PHP harnesses from the
 repository root. Each command covers all five example families:
 
 ```sh
-SQLC_YDB_TEST_DSN='Host=localhost;Port=2136;Database=/local' \
+YDB_CONNECTION_STRING='Host=localhost;Port=2136;Database=/local' \
   dotnet run --project examples/csharp/GeneratedProfiles.csproj --no-build -- dapper
-SQLC_YDB_TEST_DSN='Host=localhost;Port=2136;Database=/local' \
+YDB_CONNECTION_STRING='Host=localhost;Port=2136;Database=/local' \
   dotnet run --project examples/csharp/GeneratedProfiles.csproj --no-build -- linq2db
-SQLC_YDB_TEST_DSN=grpc://localhost:2136/local npm run smoke --prefix examples
-SQLC_YDB_TEST_DSN=grpc://localhost:2136/local CARGO_BUILD_JOBS=1 \
+YDB_CONNECTION_STRING=grpc://localhost:2136/local npm run smoke --prefix examples
+YDB_CONNECTION_STRING=grpc://localhost:2136/local CARGO_BUILD_JOBS=1 \
   cargo test --manifest-path examples/rust/Cargo.toml --locked --test live_smoke -- --nocapture
-SQLC_YDB_TEST_DSN=grpc://localhost:2136/local composer --working-dir=examples/php smoke
+YDB_CONNECTION_STRING=grpc://localhost:2136/local composer --working-dir=examples/php smoke
 ```
 
 The [JavaScript](../docs/javascript.md), [Rust](../docs/rust.md) and

@@ -2,7 +2,7 @@
 
 From examples/authors, run: python -m python.smoke
 
-Requires SQLC_YDB_TEST_DSN and no existing authors table. An existing table is
+Requires YDB_CONNECTION_STRING and no existing authors table. An existing table is
 never dropped if CREATE TABLE fails. Run profiles sequentially with Go smoke.
 """
 
@@ -34,7 +34,7 @@ def check(querier):
 
 
 def main():
-    url = urlsplit(os.environ["SQLC_YDB_TEST_DSN"])
+    url = urlsplit(os.environ["YDB_CONNECTION_STRING"])
     config = ydb.DriverConfig(
         endpoint=f"{url.scheme}://{url.netloc}", database=url.path,
         credentials=ydb.AnonymousCredentials(),

@@ -14,7 +14,7 @@ dotnet build csharp/adonet/Authors.AdoNet.csproj
 Run the live smoke against a disposable database without an `authors` table:
 
 ```sh
-SQLC_YDB_TEST_DSN='Host=localhost;Port=2136;Database=/local' \
+YDB_CONNECTION_STRING='Host=localhost;Port=2136;Database=/local' \
   dotnet run --project csharp/adonet/Authors.AdoNet.csproj
 ```
 

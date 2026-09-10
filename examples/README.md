@@ -28,12 +28,12 @@ make check-examples # analyze SQL, compare outputs, check generated Go and Pytho
 ```
 
 Go tests compile without a database and skip live cases unless
-`SQLC_YDB_TEST_DSN` is set. Run the live cases sequentially against a disposable
+`YDB_CONNECTION_STRING` is set. Run the live cases sequentially against a disposable
 database with none of the example tables already present:
 
 ```sh
 cd examples
-SQLC_YDB_TEST_DSN=grpc://localhost:2136/local go test -p 1 -count=1 -timeout=180s ./... -v
+YDB_CONNECTION_STRING=grpc://localhost:2136/local go test -p 1 -count=1 -timeout=180s ./... -v
 ```
 
 Example READMEs document SQL changes and unsupported upstream contracts. These

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${SQLC_YDB_TEST_DSN:?set SQLC_YDB_TEST_DSN to a disposable YDB database}"
+: "${YDB_CONNECTION_STRING:?set YDB_CONNECTION_STRING to a disposable YDB database}"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 build_dir="${1:-${script_dir}/build}"
 cd "${script_dir}/.."

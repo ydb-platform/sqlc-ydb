@@ -9,9 +9,9 @@ import { Queries as BooktestQueries } from "../booktest/javascript/native/querie
 import { Queries as JetsQueries } from "../jets/javascript/native/queries.js";
 import { Queries as OndeckQueries } from "../ondeck/javascript/native/queries.js";
 
-const dsn = process.env.SQLC_YDB_TEST_DSN;
+const dsn = process.env.YDB_CONNECTION_STRING;
 if (!dsn) {
-  throw new Error("SQLC_YDB_TEST_DSN is required, for example grpc://localhost:2136/local");
+  throw new Error("YDB_CONNECTION_STRING is required, for example grpc://localhost:2136/local");
 }
 
 const driver = new Driver(dsn);

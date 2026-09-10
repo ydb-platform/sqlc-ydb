@@ -37,7 +37,7 @@ constexpr TestDatabase ParseTestDsn(std::string_view value) {
     constexpr std::string_view kPrefix{"grpc://"};
     const auto database_pos = value.find('/', kPrefix.size());
     if (!value.starts_with(kPrefix) || database_pos == std::string::npos || database_pos == kPrefix.size()) {
-        throw std::runtime_error("SQLC_YDB_TEST_DSN must look like grpc://host:port/database");
+        throw std::runtime_error("YDB_CONNECTION_STRING must look like grpc://host:port/database");
     }
     return {value.substr(kPrefix.size(), database_pos - kPrefix.size()), value.substr(database_pos)};
 }
@@ -80,9 +80,9 @@ private:
 }  // namespace
 
 int main() {
-    const char* dsn = std::getenv("SQLC_YDB_TEST_DSN");
+    const char* dsn = std::getenv("YDB_CONNECTION_STRING");
     if (!dsn || !*dsn) {
-        std::cerr << "SQLC_YDB_TEST_DSN is required\n";
+        std::cerr << "YDB_CONNECTION_STRING is required\n";
         return 2;
     }
 

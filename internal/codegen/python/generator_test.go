@@ -544,9 +544,9 @@ assert [connection.cur.params['$' + name][0] for name in ('ydb', 'models', 'text
 }
 
 func TestLiveYDBGeneratedRuntimes(t *testing.T) {
-	dsn, py := os.Getenv("SQLC_YDB_TEST_DSN"), os.Getenv("SQLC_YDB_TEST_PYTHON")
+	dsn, py := os.Getenv("YDB_CONNECTION_STRING"), os.Getenv("SQLC_YDB_TEST_PYTHON")
 	if dsn == "" || py == "" {
-		t.Skip("set SQLC_YDB_TEST_DSN and SQLC_YDB_TEST_PYTHON to run live YDB adapter validation")
+		t.Skip("set YDB_CONNECTION_STRING and SQLC_YDB_TEST_PYTHON to run live YDB adapter validation")
 	}
 	table := "sqlc_python_live_" + fmt.Sprint(time.Now().UnixNano())
 	a := liveAnalysis(table)
@@ -569,7 +569,7 @@ func TestLiveYDBGeneratedRuntimes(t *testing.T) {
 		paths[runtime] = dir
 	}
 	script := fmt.Sprintf(`import os, sys, urllib.parse
-dsn = os.environ["SQLC_YDB_TEST_DSN"]
+dsn = os.environ["YDB_CONNECTION_STRING"]
 u = urllib.parse.urlsplit(dsn); endpoint = u.scheme + "://" + u.netloc; database = u.path
 sys.path[:0] = [%q, %q, %q, %q]
 import ydb

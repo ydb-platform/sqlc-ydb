@@ -41,10 +41,10 @@ internal static class Program
             Console.Error.WriteLine("usage: GeneratedProfiles <dapper|linq2db>");
             return 2;
         }
-        var dsn = Environment.GetEnvironmentVariable("SQLC_YDB_TEST_DSN");
+        var dsn = Environment.GetEnvironmentVariable("YDB_CONNECTION_STRING");
         if (string.IsNullOrWhiteSpace(dsn))
         {
-            Console.Error.WriteLine("SQLC_YDB_TEST_DSN is required");
+            Console.Error.WriteLine("YDB_CONNECTION_STRING is required");
             return 2;
         }
 

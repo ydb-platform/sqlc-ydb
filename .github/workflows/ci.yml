@@ -105,7 +105,7 @@ jobs:
           --health-timeout=10s
           --health-retries=30
     env:
-      SQLC_YDB_TEST_DSN: grpc://localhost:2136/local
+      YDB_CONNECTION_STRING: grpc://localhost:2136/local
       SQLC_YDB_TEST_PYTHON: python3
       CARGO_BUILD_JOBS: 1
     steps:
@@ -167,7 +167,7 @@ jobs:
       - name: Run C# ADO.NET example
         working-directory: examples/authors
         env:
-          SQLC_YDB_TEST_DSN: Host=localhost;Port=2136;Database=/local
+          YDB_CONNECTION_STRING: Host=localhost;Port=2136;Database=/local
           DOTNET_CLI_TELEMETRY_OPTOUT: '1'
         run: dotnet run --project csharp/adonet/Authors.AdoNet.csproj
       - name: Run Java native, JDBC, Spring and Hibernate examples sequentially
@@ -176,7 +176,7 @@ jobs:
         run: sh examples/authors/kotlin/run-smoke.sh
       - name: Run Dapper and linq2db examples sequentially
         env:
-          SQLC_YDB_TEST_DSN: Host=localhost;Port=2136;Database=/local
+          YDB_CONNECTION_STRING: Host=localhost;Port=2136;Database=/local
         run: |
           dotnet run --project examples/csharp/GeneratedProfiles.csproj --no-build -- dapper
           dotnet run --project examples/csharp/GeneratedProfiles.csproj --no-build -- linq2db
@@ -241,7 +241,7 @@ jobs:
       - name: Run C++ native and userver examples sequentially
         run: |
           docker run --rm --network host -v "$PWD:/workspace" -w /workspace \
-            -e SQLC_YDB_TEST_DSN=grpc://localhost:2136/local \
+            -e YDB_CONNECTION_STRING=grpc://localhost:2136/local \
             sqlc-ydb-cpp-tests bash examples/authors/cpp/run-smoke.sh
       - name: Stop the disposable YDB service
         if: always()

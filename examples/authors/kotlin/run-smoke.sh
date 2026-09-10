@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-: "${SQLC_YDB_TEST_DSN:?SQLC_YDB_TEST_DSN is required}"
+: "${YDB_CONNECTION_STRING:?YDB_CONNECTION_STRING is required}"
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$SCRIPT_DIR/.."
 

@@ -16,9 +16,9 @@ public final class Smoke {
     private Smoke() { }
 
     public static void main(String[] args) throws Exception {
-        String url = System.getenv("SQLC_YDB_TEST_DSN");
+        String url = System.getenv("YDB_CONNECTION_STRING");
         if (url == null || url.isBlank()) {
-            throw new IllegalStateException("SQLC_YDB_TEST_DSN is required");
+            throw new IllegalStateException("YDB_CONNECTION_STRING is required");
         }
         String schema = readSchema();
         try (GrpcTransport transport = GrpcTransport.forConnectionString(url).build();

@@ -21,9 +21,9 @@ type DB struct {
 
 func Open(t *testing.T) *DB {
 	t.Helper()
-	dsn := os.Getenv("SQLC_YDB_TEST_DSN")
+	dsn := os.Getenv("YDB_CONNECTION_STRING")
 	if dsn == "" {
-		t.Skip("set SQLC_YDB_TEST_DSN for live acceptance")
+		t.Skip("set YDB_CONNECTION_STRING for live acceptance")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	t.Cleanup(cancel)

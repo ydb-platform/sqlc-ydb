@@ -23,10 +23,10 @@ private const val ROLLBACK_ID = 8L
 
 /** Run from examples/authors against a disposable database without an authors table. */
 fun main() {
-    val endpoint = requireNotNull(System.getenv("SQLC_YDB_TEST_DSN")) {
-        "SQLC_YDB_TEST_DSN is required"
+    val endpoint = requireNotNull(System.getenv("YDB_CONNECTION_STRING")) {
+        "YDB_CONNECTION_STRING is required"
     }
-    require(endpoint.isNotBlank()) { "SQLC_YDB_TEST_DSN is required" }
+    require(endpoint.isNotBlank()) { "YDB_CONNECTION_STRING is required" }
     val schema = Files.readString(Path.of("schema.sql"))
     require(schema.isNotBlank()) { "schema.sql must not be empty" }
     runNative(endpoint, schema)

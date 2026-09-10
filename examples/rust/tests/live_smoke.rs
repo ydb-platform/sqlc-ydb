@@ -180,10 +180,10 @@ async fn ondeck_smoke(client: &mut ydb::QueryClient) -> ydb::YdbResult<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn generated_queries_execute_all_five_example_families() -> ydb::YdbResult<()> {
-    let connection_string = match std::env::var("SQLC_YDB_TEST_DSN") {
+    let connection_string = match std::env::var("YDB_CONNECTION_STRING") {
         Ok(value) => value,
         Err(_) => {
-            eprintln!("set SQLC_YDB_TEST_DSN for live Rust acceptance");
+            eprintln!("set YDB_CONNECTION_STRING for live Rust acceptance");
             return Ok(());
         }
     };

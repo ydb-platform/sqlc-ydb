@@ -24,7 +24,7 @@ Build with Java 17 or newer and Maven, then run the smoke programs:
 ```sh
 cd examples/authors
 mvn -f java/pom.xml test-compile
-export SQLC_YDB_TEST_DSN=grpc://localhost:2136/local
+export YDB_CONNECTION_STRING=grpc://localhost:2136/local
 # Each smoke creates and drops `authors`; use a disposable database.
 sh java/run-smoke.sh
 ```

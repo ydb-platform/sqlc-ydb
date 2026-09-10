@@ -8,10 +8,10 @@ public static class Program
 {
     public static async Task<int> Main()
     {
-        var dsn = Environment.GetEnvironmentVariable("SQLC_YDB_TEST_DSN");
+        var dsn = Environment.GetEnvironmentVariable("YDB_CONNECTION_STRING");
         if (string.IsNullOrWhiteSpace(dsn))
         {
-            Console.Error.WriteLine("SQLC_YDB_TEST_DSN is required (for example Host=localhost;Port=2136;Database=/local)");
+            Console.Error.WriteLine("YDB_CONNECTION_STRING is required (for example Host=localhost;Port=2136;Database=/local)");
             return 2;
         }
         using var cancellationSource = new CancellationTokenSource(TimeSpan.FromSeconds(45));

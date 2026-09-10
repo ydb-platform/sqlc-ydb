@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-if [ -z "${SQLC_YDB_TEST_DSN:-}" ]; then
-    echo "SQLC_YDB_TEST_DSN is required" >&2
+if [ -z "${YDB_CONNECTION_STRING:-}" ]; then
+    echo "YDB_CONNECTION_STRING is required" >&2
     exit 2
 fi
 

@@ -14,8 +14,8 @@ public final class Smoke {
     private Smoke() { }
 
     public static void main(String[] args) throws Exception {
-        String endpoint = System.getenv("SQLC_YDB_TEST_DSN");
-        if (endpoint == null || endpoint.isBlank()) throw new IllegalStateException("SQLC_YDB_TEST_DSN is required");
+        String endpoint = System.getenv("YDB_CONNECTION_STRING");
+        if (endpoint == null || endpoint.isBlank()) throw new IllegalStateException("YDB_CONNECTION_STRING is required");
         String schema = readSchema();
         try (Connection connection = DriverManager.getConnection("jdbc:ydb:" + endpoint)) {
             try (var statement = connection.createStatement()) {

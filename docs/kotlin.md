@@ -72,4 +72,4 @@ mvn -f examples/authors/kotlin/pom.xml test-compile
 
 The harness uses a disposable YDB database and runs profiles sequentially.
 It checks typed values, absent and nullable results, CRUD, and caller-owned
-transaction commit/rollback. Run it with `SQLC_YDB_TEST_DSN=grpc://localhost:2136/local sh examples/authors/kotlin/run-smoke.sh`.
+transaction commit/rollback. Run it with `YDB_CONNECTION_STRING=grpc://localhost:2136/local sh examples/authors/kotlin/run-smoke.sh`.

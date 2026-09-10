@@ -259,13 +259,13 @@ function runOndeck(Table $table): void
     }
 }
 
-$dsn = getenv('SQLC_YDB_TEST_DSN');
+$dsn = getenv('YDB_CONNECTION_STRING');
 if ($dsn === false || $dsn === '') {
-    throw new RuntimeException('SQLC_YDB_TEST_DSN is required, for example grpc://localhost:2136/local');
+    throw new RuntimeException('YDB_CONNECTION_STRING is required, for example grpc://localhost:2136/local');
 }
 $parts = parse_url($dsn);
 if (!is_array($parts) || !isset($parts['host'], $parts['port'], $parts['path'])) {
-    throw new InvalidArgumentException('SQLC_YDB_TEST_DSN must contain scheme, host, port and database path');
+    throw new InvalidArgumentException('YDB_CONNECTION_STRING must contain scheme, host, port and database path');
 }
 $ydb = new Ydb([
     'database' => $parts['path'],

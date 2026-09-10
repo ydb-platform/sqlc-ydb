@@ -376,11 +376,11 @@ func generatedSQLValue(t *testing.T, source []byte) string {
 }
 
 // TestLiveYDB is deliberately opt-in: it creates and drops its own table on the
-// supplied development database. Example: SQLC_YDB_TEST_DSN=grpc://127.0.0.1:22136/local.
+// supplied development database. Example: YDB_CONNECTION_STRING=grpc://127.0.0.1:22136/local.
 func TestLiveYDB(t *testing.T) {
-	dsn := os.Getenv("SQLC_YDB_TEST_DSN")
+	dsn := os.Getenv("YDB_CONNECTION_STRING")
 	if dsn == "" {
-		t.Skip("set SQLC_YDB_TEST_DSN to run against YDB")
+		t.Skip("set YDB_CONNECTION_STRING to run against YDB")
 	}
 	table := fmt.Sprintf("sqlc_codegen_go_%d", time.Now().UnixNano())
 	for _, runtime := range []string{"ydb", "database/sql"} {

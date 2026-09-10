@@ -18,9 +18,9 @@ import (
 // Verify server column names, order and full types independently of renderers.
 // Run only against an explicitly supplied disposable test database.
 func TestLiveYDBSemanticTypes(t *testing.T) {
-	dsn, python := os.Getenv("SQLC_YDB_TEST_DSN"), os.Getenv("SQLC_YDB_TEST_PYTHON")
+	dsn, python := os.Getenv("YDB_CONNECTION_STRING"), os.Getenv("SQLC_YDB_TEST_PYTHON")
 	if dsn == "" || python == "" {
-		t.Skip("set SQLC_YDB_TEST_DSN and SQLC_YDB_TEST_PYTHON for live semantic validation")
+		t.Skip("set YDB_CONNECTION_STRING and SQLC_YDB_TEST_PYTHON for live semantic validation")
 	}
 	table := fmt.Sprintf("sqlc_semantic_%d", time.Now().UnixNano())
 	schema := "CREATE TABLE " + table + " (id Uint64 NOT NULL, flag Bool NOT NULL, n Int32 NOT NULL, f Float NOT NULL, maybe Int32, label Utf8, stamp Timestamp NOT NULL, amount Decimal(22,9), PRIMARY KEY(id));"
@@ -86,7 +86,7 @@ func TestLiveYDBSemanticTypes(t *testing.T) {
 	const script = `import json, os, sys, urllib.parse
 import ydb
 payload = json.load(sys.stdin)
-u = urllib.parse.urlsplit(os.environ["SQLC_YDB_TEST_DSN"])
+u = urllib.parse.urlsplit(os.environ["YDB_CONNECTION_STRING"])
 def typename(t):
     if t.HasField("optional_type"): return "Optional<" + typename(t.optional_type.item) + ">"
     if t.HasField("list_type"): return "List<" + typename(t.list_type.item) + ">"
