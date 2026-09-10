@@ -4,7 +4,10 @@ package db
 
 import (
 	"context"
+	"errors"
+	"io"
 
+	"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xerrors"
 	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 
@@ -13,25 +16,51 @@ SELECT a.id AS author_id, a.name AS author_name, b.title AS book_title
 FROM authors AS a JOIN books AS b ON a.id = b.author_id;`
 
 func (q *Queries) ListAuthorBooks(ctx context.Context, opts ...query.ExecuteOption) ([]ListAuthorBooksRow, error) {
-	result, err := q.db.QueryResultSet(ctx, queryListAuthorBooks, opts...)
-	if err != nil {
-		return []ListAuthorBooksRow(nil), err
-	}
-	defer result.Close(ctx)
 	items := []ListAuthorBooksRow(nil)
-	for r, err := range result.Rows(ctx) {
+
+	err := q.db.Do(ctx, func(ctx context.Context, s query.Session) error {
+		result, err := s.Query(ctx, queryListAuthorBooks, opts...)
 		if err != nil {
-			return nil, err
+			return xerrors.WithStackTrace(err)
 		}
-		var row ListAuthorBooksRow
-		if err := r.ScanNamed(
-			query.Named("author_id", &row.AuthorID),
-			query.Named("author_name", &row.AuthorName),
-			query.Named("book_title", &row.BookTitle),
-		); err != nil {
-			return nil, err
+		defer result.Close(ctx)
+
+		resultSet, err := result.NextResultSet(ctx)
+		if errors.Is(err, io.EOF) {
+			return xerrors.WithStackTrace(query.ErrNoResultSets)
 		}
-		items = append(items, row)
-	}
-	return items, nil
+		if err != nil {
+			return xerrors.WithStackTrace(err)
+		}
+
+		attemptItems := []ListAuthorBooksRow(nil)
+		for r, err := range resultSet.Rows(ctx) {
+			if err != nil {
+				return xerrors.WithStackTrace(err)
+			}
+			var row ListAuthorBooksRow
+			if err := r.ScanNamed(
+				query.Named("author_id", &row.AuthorID),
+				query.Named("author_name", &row.AuthorName),
+				query.Named("book_title", &row.BookTitle),
+			); err != nil {
+				return xerrors.WithStackTrace(err)
+			}
+			attemptItems = append(attemptItems, row)
+		}
+
+		_, err = result.NextResultSet(ctx)
+		switch {
+		case err == nil:
+			return xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+		case errors.Is(err, io.EOF):
+		case err != nil:
+			return xerrors.WithStackTrace(err)
+		}
+
+		items = attemptItems
+		return nil
+	})
+
+	return items, err
 }

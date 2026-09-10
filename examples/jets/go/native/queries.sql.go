@@ -4,8 +4,11 @@ package jets
 
 import (
 	"context"
+	"errors"
+	"io"
 
 	ydb "github.com/ydb-platform/ydb-go-sdk/v3"
+	"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xerrors"
 	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 
@@ -17,12 +20,14 @@ func (q *Queries) CountPilots(ctx context.Context, opts ...query.ExecuteOption) 
 	if err != nil {
 		return CountPilotsRow{}, err
 	}
+
 	var row CountPilotsRow
 	if err := result.ScanNamed(
 		query.Named("pilot_count", &row.PilotCount),
 	); err != nil {
 		return CountPilotsRow{}, err
 	}
+
 	return row, nil
 }
 
@@ -30,26 +35,52 @@ const queryListPilots = `-- name: ListPilots :many
 SELECT id, name FROM pilots ORDER BY id LIMIT 5;`
 
 func (q *Queries) ListPilots(ctx context.Context, opts ...query.ExecuteOption) ([]ListPilotsRow, error) {
-	result, err := q.db.QueryResultSet(ctx, queryListPilots, opts...)
-	if err != nil {
-		return []ListPilotsRow(nil), err
-	}
-	defer result.Close(ctx)
 	items := []ListPilotsRow(nil)
-	for r, err := range result.Rows(ctx) {
+
+	err := q.db.Do(ctx, func(ctx context.Context, s query.Session) error {
+		result, err := s.Query(ctx, queryListPilots, opts...)
 		if err != nil {
-			return nil, err
+			return xerrors.WithStackTrace(err)
 		}
-		var row ListPilotsRow
-		if err := r.ScanNamed(
-			query.Named("id", &row.ID),
-			query.Named("name", &row.Name),
-		); err != nil {
-			return nil, err
+		defer result.Close(ctx)
+
+		resultSet, err := result.NextResultSet(ctx)
+		if errors.Is(err, io.EOF) {
+			return xerrors.WithStackTrace(query.ErrNoResultSets)
 		}
-		items = append(items, row)
-	}
-	return items, nil
+		if err != nil {
+			return xerrors.WithStackTrace(err)
+		}
+
+		attemptItems := []ListPilotsRow(nil)
+		for r, err := range resultSet.Rows(ctx) {
+			if err != nil {
+				return xerrors.WithStackTrace(err)
+			}
+			var row ListPilotsRow
+			if err := r.ScanNamed(
+				query.Named("id", &row.ID),
+				query.Named("name", &row.Name),
+			); err != nil {
+				return xerrors.WithStackTrace(err)
+			}
+			attemptItems = append(attemptItems, row)
+		}
+
+		_, err = result.NextResultSet(ctx)
+		switch {
+		case err == nil:
+			return xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+		case errors.Is(err, io.EOF):
+		case err != nil:
+			return xerrors.WithStackTrace(err)
+		}
+
+		items = attemptItems
+		return nil
+	})
+
+	return items, err
 }
 
 const queryDeletePilot = `-- name: DeletePilot :exec
@@ -58,7 +89,9 @@ DELETE FROM pilots WHERE id = $pilot_id;`
 func (q *Queries) DeletePilot(ctx context.Context, arg int32, opts ...query.ExecuteOption) error {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$pilot_id").Int32(arg)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	return q.db.Exec(ctx, queryDeletePilot, callOptions...)
 }

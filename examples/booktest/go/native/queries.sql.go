@@ -4,8 +4,11 @@ package booktest
 
 import (
 	"context"
+	"errors"
+	"io"
 
 	ydb "github.com/ydb-platform/ydb-go-sdk/v3"
+	"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xerrors"
 	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 
@@ -17,12 +20,15 @@ WHERE author_id = $author_id;`
 func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$author_id").Uint64(arg)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	result, err := q.db.QueryRow(ctx, queryGetAuthor, callOptions...)
 	if err != nil {
 		return GetAuthorRow{}, err
 	}
+
 	var row GetAuthorRow
 	if err := result.ScanNamed(
 		query.Named("author_id", &row.AuthorID),
@@ -30,6 +36,7 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 	); err != nil {
 		return GetAuthorRow{}, err
 	}
+
 	return row, nil
 }
 
@@ -41,12 +48,15 @@ WHERE book_id = $book_id;`
 func (q *Queries) GetBook(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetBookRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$book_id").Uint64(arg)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	result, err := q.db.QueryRow(ctx, queryGetBook, callOptions...)
 	if err != nil {
 		return GetBookRow{}, err
 	}
+
 	var row GetBookRow
 	if err := result.ScanNamed(
 		query.Named("book_id", &row.BookID),
@@ -60,6 +70,7 @@ func (q *Queries) GetBook(ctx context.Context, arg uint64, opts ...query.Execute
 	); err != nil {
 		return GetBookRow{}, err
 	}
+
 	return row, nil
 }
 
@@ -70,8 +81,10 @@ WHERE book_id = $book_id;`
 func (q *Queries) DeleteBook(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$book_id").Uint64(arg)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	return q.db.Exec(ctx, queryDeleteBook, callOptions...)
 }
 
@@ -84,34 +97,62 @@ func (q *Queries) BooksByTitleYear(ctx context.Context, arg BooksByTitleYearPara
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$title").Text(arg.Title)
 	parameters = parameters.Param("$publication_year").Int32(arg.PublicationYear)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
-	result, err := q.db.QueryResultSet(ctx, queryBooksByTitleYear, callOptions...)
-	if err != nil {
-		return make([]BooksByTitleYearRow, 0), err
-	}
-	defer result.Close(ctx)
+
 	items := make([]BooksByTitleYearRow, 0)
-	for r, err := range result.Rows(ctx) {
+
+	err := q.db.Do(ctx, func(ctx context.Context, s query.Session) error {
+		result, err := s.Query(ctx, queryBooksByTitleYear, callOptions...)
 		if err != nil {
-			return nil, err
+			return xerrors.WithStackTrace(err)
 		}
-		var row BooksByTitleYearRow
-		if err := r.ScanNamed(
-			query.Named("book_id", &row.BookID),
-			query.Named("author_id", &row.AuthorID),
-			query.Named("isbn", &row.Isbn),
-			query.Named("book_type", &row.BookType),
-			query.Named("title", &row.Title),
-			query.Named("publication_year", &row.PublicationYear),
-			query.Named("available", &row.Available),
-			query.Named("tags", &row.Tags),
-		); err != nil {
-			return nil, err
+		defer result.Close(ctx)
+
+		resultSet, err := result.NextResultSet(ctx)
+		if errors.Is(err, io.EOF) {
+			return xerrors.WithStackTrace(query.ErrNoResultSets)
 		}
-		items = append(items, row)
-	}
-	return items, nil
+		if err != nil {
+			return xerrors.WithStackTrace(err)
+		}
+
+		attemptItems := make([]BooksByTitleYearRow, 0)
+		for r, err := range resultSet.Rows(ctx) {
+			if err != nil {
+				return xerrors.WithStackTrace(err)
+			}
+			var row BooksByTitleYearRow
+			if err := r.ScanNamed(
+				query.Named("book_id", &row.BookID),
+				query.Named("author_id", &row.AuthorID),
+				query.Named("isbn", &row.Isbn),
+				query.Named("book_type", &row.BookType),
+				query.Named("title", &row.Title),
+				query.Named("publication_year", &row.PublicationYear),
+				query.Named("available", &row.Available),
+				query.Named("tags", &row.Tags),
+			); err != nil {
+				return xerrors.WithStackTrace(err)
+			}
+			attemptItems = append(attemptItems, row)
+		}
+
+		_, err = result.NextResultSet(ctx)
+		switch {
+		case err == nil:
+			return xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+		case errors.Is(err, io.EOF):
+		case err != nil:
+			return xerrors.WithStackTrace(err)
+		}
+
+		items = attemptItems
+		return nil
+	})
+
+	return items, err
 }
 
 const queryBooksByTags = `-- name: BooksByTags :many
@@ -132,31 +173,59 @@ WHERE NOT SetIsDisjoint(
 func (q *Queries) BooksByTags(ctx context.Context, arg string, opts ...query.ExecuteOption) ([]BooksByTagsRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$tags").JSON(arg)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
-	result, err := q.db.QueryResultSet(ctx, queryBooksByTags, callOptions...)
-	if err != nil {
-		return make([]BooksByTagsRow, 0), err
-	}
-	defer result.Close(ctx)
+
 	items := make([]BooksByTagsRow, 0)
-	for r, err := range result.Rows(ctx) {
+
+	err := q.db.Do(ctx, func(ctx context.Context, s query.Session) error {
+		result, err := s.Query(ctx, queryBooksByTags, callOptions...)
 		if err != nil {
-			return nil, err
+			return xerrors.WithStackTrace(err)
 		}
-		var row BooksByTagsRow
-		if err := r.ScanNamed(
-			query.Named("b.book_id", &row.BookID),
-			query.Named("b.title", &row.Title),
-			query.Named("a.name", &row.Name),
-			query.Named("b.isbn", &row.Isbn),
-			query.Named("b.tags", &row.Tags),
-		); err != nil {
-			return nil, err
+		defer result.Close(ctx)
+
+		resultSet, err := result.NextResultSet(ctx)
+		if errors.Is(err, io.EOF) {
+			return xerrors.WithStackTrace(query.ErrNoResultSets)
 		}
-		items = append(items, row)
-	}
-	return items, nil
+		if err != nil {
+			return xerrors.WithStackTrace(err)
+		}
+
+		attemptItems := make([]BooksByTagsRow, 0)
+		for r, err := range resultSet.Rows(ctx) {
+			if err != nil {
+				return xerrors.WithStackTrace(err)
+			}
+			var row BooksByTagsRow
+			if err := r.ScanNamed(
+				query.Named("b.book_id", &row.BookID),
+				query.Named("b.title", &row.Title),
+				query.Named("a.name", &row.Name),
+				query.Named("b.isbn", &row.Isbn),
+				query.Named("b.tags", &row.Tags),
+			); err != nil {
+				return xerrors.WithStackTrace(err)
+			}
+			attemptItems = append(attemptItems, row)
+		}
+
+		_, err = result.NextResultSet(ctx)
+		switch {
+		case err == nil:
+			return xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+		case errors.Is(err, io.EOF):
+		case err != nil:
+			return xerrors.WithStackTrace(err)
+		}
+
+		items = attemptItems
+		return nil
+	})
+
+	return items, err
 }
 
 const queryCreateAuthor = `-- name: CreateAuthor :one
@@ -168,12 +237,15 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$author_id").Uint64(arg.AuthorID)
 	parameters = parameters.Param("$name").Text(arg.Name)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	result, err := q.db.QueryRow(ctx, queryCreateAuthor, callOptions...)
 	if err != nil {
 		return CreateAuthorRow{}, err
 	}
+
 	var row CreateAuthorRow
 	if err := result.ScanNamed(
 		query.Named("author_id", &row.AuthorID),
@@ -181,6 +253,7 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts
 	); err != nil {
 		return CreateAuthorRow{}, err
 	}
+
 	return row, nil
 }
 
@@ -216,12 +289,15 @@ func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams, opts ...
 	parameters = parameters.Param("$publication_year").Int32(arg.PublicationYear)
 	parameters = parameters.Param("$available").Timestamp(arg.Available)
 	parameters = parameters.Param("$tags").JSON(arg.Tags)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	result, err := q.db.QueryRow(ctx, queryCreateBook, callOptions...)
 	if err != nil {
 		return CreateBookRow{}, err
 	}
+
 	var row CreateBookRow
 	if err := result.ScanNamed(
 		query.Named("book_id", &row.BookID),
@@ -235,6 +311,7 @@ func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams, opts ...
 	); err != nil {
 		return CreateBookRow{}, err
 	}
+
 	return row, nil
 }
 
@@ -248,8 +325,10 @@ func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams, opts ...
 	parameters = parameters.Param("$title").Text(arg.Title)
 	parameters = parameters.Param("$tags").JSON(arg.Tags)
 	parameters = parameters.Param("$book_id").Uint64(arg.BookID)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	return q.db.Exec(ctx, queryUpdateBook, callOptions...)
 }
 
@@ -264,8 +343,10 @@ func (q *Queries) UpdateBookISBN(ctx context.Context, arg UpdateBookISBNParams, 
 	parameters = parameters.Param("$tags").JSON(arg.Tags)
 	parameters = parameters.Param("$isbn").Text(arg.Isbn)
 	parameters = parameters.Param("$book_id").Uint64(arg.BookID)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	return q.db.Exec(ctx, queryUpdateBookISBN, callOptions...)
 }
 
@@ -277,8 +358,10 @@ func (q *Queries) DeleteAuthorBeforeYear(ctx context.Context, arg DeleteAuthorBe
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$publication_year").Int32(arg.PublicationYear)
 	parameters = parameters.Param("$author_id").Uint64(arg.AuthorID)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	return q.db.Exec(ctx, queryDeleteAuthorBeforeYear, callOptions...)
 }
 
@@ -288,17 +371,21 @@ SELECT "hello "u || $name AS greeting;`
 func (q *Queries) SayHello(ctx context.Context, arg string, opts ...query.ExecuteOption) (SayHelloRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$name").Text(arg)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	result, err := q.db.QueryRow(ctx, querySayHello, callOptions...)
 	if err != nil {
 		return SayHelloRow{}, err
 	}
+
 	var row SayHelloRow
 	if err := result.ScanNamed(
 		query.Named("greeting", &row.Greeting),
 	); err != nil {
 		return SayHelloRow{}, err
 	}
+
 	return row, nil
 }

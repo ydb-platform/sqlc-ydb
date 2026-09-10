@@ -4,8 +4,11 @@ package ondeck
 
 import (
 	"context"
+	"errors"
+	"io"
 
 	ydb "github.com/ydb-platform/ydb-go-sdk/v3"
+	"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xerrors"
 	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 
@@ -15,26 +18,52 @@ FROM city
 ORDER BY name;`
 
 func (q *Queries) ListCities(ctx context.Context, opts ...query.ExecuteOption) ([]ListCitiesRow, error) {
-	result, err := q.db.QueryResultSet(ctx, queryListCities, opts...)
-	if err != nil {
-		return []ListCitiesRow(nil), err
-	}
-	defer result.Close(ctx)
 	items := []ListCitiesRow(nil)
-	for r, err := range result.Rows(ctx) {
+
+	err := q.db.Do(ctx, func(ctx context.Context, s query.Session) error {
+		result, err := s.Query(ctx, queryListCities, opts...)
 		if err != nil {
-			return nil, err
+			return xerrors.WithStackTrace(err)
 		}
-		var row ListCitiesRow
-		if err := r.ScanNamed(
-			query.Named("slug", &row.Slug),
-			query.Named("name", &row.Name),
-		); err != nil {
-			return nil, err
+		defer result.Close(ctx)
+
+		resultSet, err := result.NextResultSet(ctx)
+		if errors.Is(err, io.EOF) {
+			return xerrors.WithStackTrace(query.ErrNoResultSets)
 		}
-		items = append(items, row)
-	}
-	return items, nil
+		if err != nil {
+			return xerrors.WithStackTrace(err)
+		}
+
+		attemptItems := []ListCitiesRow(nil)
+		for r, err := range resultSet.Rows(ctx) {
+			if err != nil {
+				return xerrors.WithStackTrace(err)
+			}
+			var row ListCitiesRow
+			if err := r.ScanNamed(
+				query.Named("slug", &row.Slug),
+				query.Named("name", &row.Name),
+			); err != nil {
+				return xerrors.WithStackTrace(err)
+			}
+			attemptItems = append(attemptItems, row)
+		}
+
+		_, err = result.NextResultSet(ctx)
+		switch {
+		case err == nil:
+			return xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+		case errors.Is(err, io.EOF):
+		case err != nil:
+			return xerrors.WithStackTrace(err)
+		}
+
+		items = attemptItems
+		return nil
+	})
+
+	return items, err
 }
 
 const queryGetCity = `-- name: GetCity :one
@@ -45,12 +74,15 @@ WHERE slug = $slug;`
 func (q *Queries) GetCity(ctx context.Context, arg string, opts ...query.ExecuteOption) (GetCityRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$slug").Text(arg)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	result, err := q.db.QueryRow(ctx, queryGetCity, callOptions...)
 	if err != nil {
 		return GetCityRow{}, err
 	}
+
 	var row GetCityRow
 	if err := result.ScanNamed(
 		query.Named("slug", &row.Slug),
@@ -58,6 +90,7 @@ func (q *Queries) GetCity(ctx context.Context, arg string, opts ...query.Execute
 	); err != nil {
 		return GetCityRow{}, err
 	}
+
 	return row, nil
 }
 
@@ -74,12 +107,15 @@ func (q *Queries) CreateCity(ctx context.Context, arg CreateCityParams, opts ...
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$name").Text(arg.Name)
 	parameters = parameters.Param("$slug").Text(arg.Slug)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	result, err := q.db.QueryRow(ctx, queryCreateCity, callOptions...)
 	if err != nil {
 		return CreateCityRow{}, err
 	}
+
 	var row CreateCityRow
 	if err := result.ScanNamed(
 		query.Named("slug", &row.Slug),
@@ -87,6 +123,7 @@ func (q *Queries) CreateCity(ctx context.Context, arg CreateCityParams, opts ...
 	); err != nil {
 		return CreateCityRow{}, err
 	}
+
 	return row, nil
 }
 
@@ -99,7 +136,9 @@ func (q *Queries) UpdateCityName(ctx context.Context, arg UpdateCityNameParams, 
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$name").Text(arg.Name)
 	parameters = parameters.Param("$slug").Text(arg.Slug)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	return q.db.Exec(ctx, queryUpdateCityName, callOptions...)
 }

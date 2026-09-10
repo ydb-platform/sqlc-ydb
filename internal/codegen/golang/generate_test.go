@@ -118,11 +118,132 @@ func TestGeneratedYDBManyUsesNamedColumnScans(t *testing.T) {
 
 	source := generatedSQLSourceForAnalysis(t, "ydb", in)
 	want := `if err := r.ScanNamed(
-			query.Named("id", &row.ID),
-			query.Named("name", &row.Name),
-		); err != nil {`
+				query.Named("id", &row.ID),
+				query.Named("name", &row.Name),
+			); err != nil {`
 	if !strings.Contains(string(source), want) {
 		t.Fatalf("native :many rows were not scanned by column name:\n%s", source)
+	}
+}
+
+func TestGeneratedYDBManyStreamsOneResultSetPerRetryAttempt(t *testing.T) {
+	in := sample()
+	in.Queries = in.Queries[1:2]
+
+	source := string(generatedSQLSourceForAnalysis(t, "ydb", in))
+	want := `items := []ListUsersRow(nil)
+
+	err := q.db.Do(ctx, func(ctx context.Context, s query.Session) error {
+		result, err := s.Query(ctx, queryListUsers, opts...)
+		if err != nil {
+			return xerrors.WithStackTrace(err)
+		}
+		defer result.Close(ctx)
+
+		resultSet, err := result.NextResultSet(ctx)
+		if errors.Is(err, io.EOF) {
+			return xerrors.WithStackTrace(query.ErrNoResultSets)
+		}
+		if err != nil {
+			return xerrors.WithStackTrace(err)
+		}
+
+		attemptItems := []ListUsersRow(nil)
+		for r, err := range resultSet.Rows(ctx) {
+			if err != nil {
+				return xerrors.WithStackTrace(err)
+			}
+			var row ListUsersRow
+			if err := r.ScanNamed(
+				query.Named("id", &row.ID),
+				query.Named("name", &row.Name),
+			); err != nil {
+				return xerrors.WithStackTrace(err)
+			}
+			attemptItems = append(attemptItems, row)
+		}
+
+		_, err = result.NextResultSet(ctx)
+		switch {
+		case err == nil:
+			return xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+		case errors.Is(err, io.EOF):
+		case err != nil:
+			return xerrors.WithStackTrace(err)
+		}
+
+		items = attemptItems
+		return nil
+	})
+
+	return items, err`
+	if !strings.Contains(source, want) {
+		t.Fatalf("native :many query does not stream and isolate retry attempts:\n%s", source)
+	}
+	for _, wantImport := range []string{`"errors"`, `"io"`, `"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xerrors"`} {
+		if !strings.Contains(source, wantImport) {
+			t.Fatalf("native :many source misses import %s:\n%s", wantImport, source)
+		}
+	}
+}
+
+func TestGeneratedYDBWithoutManyOmitsStreamingImports(t *testing.T) {
+	in := sample()
+	in.Queries = []model.AnalyzedQuery{in.Queries[0], in.Queries[2]}
+	source := string(generatedSQLSourceForAnalysis(t, "ydb", in))
+	for _, unwanted := range []string{`"errors"`, `"io"`, `pkg/xerrors`} {
+		if strings.Contains(source, unwanted) {
+			t.Fatalf("native source without :many imports %s:\n%s", unwanted, source)
+		}
+	}
+}
+
+func TestGeneratedYDBInterfaceSupportsSessionRetries(t *testing.T) {
+	files, err := Generate(sample(), Options{Package: "db", Runtime: "ydb"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var source string
+	for _, file := range files {
+		if file.Name == "db.go" {
+			source = string(file.Content)
+		}
+	}
+	for _, want := range []string{
+		`Do(context.Context, query.Operation, ...query.DoOption) error`,
+		"\t\"context\"\n\n\t\"github.com/ydb-platform/ydb-go-sdk/v3/query\"",
+	} {
+		if !strings.Contains(source, want) {
+			t.Fatalf("native DBTX misses %q:\n%s", want, source)
+		}
+	}
+	if strings.Contains(source, "QueryResultSet") {
+		t.Fatalf("native DBTX still exposes materializing QueryResultSet:\n%s", source)
+	}
+}
+
+func TestGeneratedYDBManyPreservesEmptySliceContractAcrossRetries(t *testing.T) {
+	in := sample()
+	in.Queries = in.Queries[1:2]
+	files, err := Generate(in, Options{Package: "db", Runtime: "ydb", EmitEmptySlices: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var source string
+	for _, file := range files {
+		if file.Name == "query.sql.go" {
+			source = string(file.Content)
+		}
+	}
+	for _, want := range []string{
+		"items := make([]ListUsersRow, 0)",
+		"attemptItems := make([]ListUsersRow, 0)",
+		"items = attemptItems\n\t\treturn nil",
+		"return items, err",
+	} {
+		if !strings.Contains(source, want) {
+			t.Fatalf("emit_empty_slices retry contract misses %q:\n%s", want, source)
+		}
 	}
 }
 
@@ -150,7 +271,7 @@ func TestGeneratedQueryImportsSeparateStandardLibraryAndExternalPackages(t *test
 		if runtime == "database/sql" {
 			want = "\t\"context\"\n\t\"database/sql\"\n\n\t\"github.com/ydb-platform/ydb-go-sdk/v3"
 		} else {
-			want = "\t\"context\"\n\n\tydb \"github.com/ydb-platform/ydb-go-sdk/v3\""
+			want = "\t\"context\"\n\t\"errors\"\n\t\"io\"\n\n\tydb \"github.com/ydb-platform/ydb-go-sdk/v3\""
 		}
 		if !strings.Contains(source, want) {
 			t.Fatalf("%s imports do not separate stdlib and SDK packages:\n%s", runtime, source)

@@ -42,12 +42,15 @@ func (q *Queries) BindNativeTypes(ctx context.Context, arg BindNativeTypesParams
 	}
 	parameters = parameters.Param("$amount").Decimal(arg.Amount.Bytes, 22, 9)
 	parameters = parameters.Param("$id").Uuid(arg.ID)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	result, err := q.db.QueryRow(ctx, queryBindNativeTypes, callOptions...)
 	if err != nil {
 		return BindNativeTypesRow{}, err
 	}
+
 	var row BindNativeTypesRow
 	if err := result.ScanNamed(
 		query.Named("ids", &row.Ids),
@@ -57,5 +60,6 @@ func (q *Queries) BindNativeTypes(ctx context.Context, arg BindNativeTypesParams
 	); err != nil {
 		return BindNativeTypesRow{}, err
 	}
+
 	return row, nil
 }

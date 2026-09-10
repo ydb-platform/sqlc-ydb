@@ -4,8 +4,11 @@ package ondeck
 
 import (
 	"context"
+	"errors"
+	"io"
 
 	ydb "github.com/ydb-platform/ydb-go-sdk/v3"
+	"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xerrors"
 	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 
@@ -18,36 +21,64 @@ ORDER BY name;`
 func (q *Queries) ListVenues(ctx context.Context, arg string, opts ...query.ExecuteOption) ([]ListVenuesRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$city").Text(arg)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
-	result, err := q.db.QueryResultSet(ctx, queryListVenues, callOptions...)
-	if err != nil {
-		return []ListVenuesRow(nil), err
-	}
-	defer result.Close(ctx)
+
 	items := []ListVenuesRow(nil)
-	for r, err := range result.Rows(ctx) {
+
+	err := q.db.Do(ctx, func(ctx context.Context, s query.Session) error {
+		result, err := s.Query(ctx, queryListVenues, callOptions...)
 		if err != nil {
-			return nil, err
+			return xerrors.WithStackTrace(err)
 		}
-		var row ListVenuesRow
-		if err := r.ScanNamed(
-			query.Named("id", &row.ID),
-			query.Named("slug", &row.Slug),
-			query.Named("name", &row.Name),
-			query.Named("city", &row.City),
-			query.Named("status", &row.Status),
-			query.Named("statuses", &row.Statuses),
-			query.Named("spotify_playlist", &row.SpotifyPlaylist),
-			query.Named("songkick_id", &row.SongkickID),
-			query.Named("tags", &row.Tags),
-			query.Named("created_at", &row.CreatedAt),
-		); err != nil {
-			return nil, err
+		defer result.Close(ctx)
+
+		resultSet, err := result.NextResultSet(ctx)
+		if errors.Is(err, io.EOF) {
+			return xerrors.WithStackTrace(query.ErrNoResultSets)
 		}
-		items = append(items, row)
-	}
-	return items, nil
+		if err != nil {
+			return xerrors.WithStackTrace(err)
+		}
+
+		attemptItems := []ListVenuesRow(nil)
+		for r, err := range resultSet.Rows(ctx) {
+			if err != nil {
+				return xerrors.WithStackTrace(err)
+			}
+			var row ListVenuesRow
+			if err := r.ScanNamed(
+				query.Named("id", &row.ID),
+				query.Named("slug", &row.Slug),
+				query.Named("name", &row.Name),
+				query.Named("city", &row.City),
+				query.Named("status", &row.Status),
+				query.Named("statuses", &row.Statuses),
+				query.Named("spotify_playlist", &row.SpotifyPlaylist),
+				query.Named("songkick_id", &row.SongkickID),
+				query.Named("tags", &row.Tags),
+				query.Named("created_at", &row.CreatedAt),
+			); err != nil {
+				return xerrors.WithStackTrace(err)
+			}
+			attemptItems = append(attemptItems, row)
+		}
+
+		_, err = result.NextResultSet(ctx)
+		switch {
+		case err == nil:
+			return xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+		case errors.Is(err, io.EOF):
+		case err != nil:
+			return xerrors.WithStackTrace(err)
+		}
+
+		items = attemptItems
+		return nil
+	})
+
+	return items, err
 }
 
 const queryDeleteVenue = `-- name: DeleteVenue :exec
@@ -57,8 +88,10 @@ WHERE slug = $slug AND slug = $slug;`
 func (q *Queries) DeleteVenue(ctx context.Context, arg string, opts ...query.ExecuteOption) error {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$slug").Text(arg)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	return q.db.Exec(ctx, queryDeleteVenue, callOptions...)
 }
 
@@ -71,12 +104,15 @@ func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams, opts ...quer
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$slug").Text(arg.Slug)
 	parameters = parameters.Param("$city").Text(arg.City)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	result, err := q.db.QueryRow(ctx, queryGetVenue, callOptions...)
 	if err != nil {
 		return GetVenueRow{}, err
 	}
+
 	var row GetVenueRow
 	if err := result.ScanNamed(
 		query.Named("id", &row.ID),
@@ -92,6 +128,7 @@ func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams, opts ...quer
 	); err != nil {
 		return GetVenueRow{}, err
 	}
+
 	return row, nil
 }
 
@@ -129,18 +166,22 @@ func (q *Queries) CreateVenue(ctx context.Context, arg CreateVenueParams, opts .
 	parameters = parameters.Param("$status").Text(arg.Status)
 	parameters = parameters.Param("$statuses").BeginOptional().JSON(arg.Statuses).EndOptional()
 	parameters = parameters.Param("$tags").BeginOptional().JSON(arg.Tags).EndOptional()
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	result, err := q.db.QueryRow(ctx, queryCreateVenue, callOptions...)
 	if err != nil {
 		return CreateVenueRow{}, err
 	}
+
 	var row CreateVenueRow
 	if err := result.ScanNamed(
 		query.Named("id", &row.ID),
 	); err != nil {
 		return CreateVenueRow{}, err
 	}
+
 	return row, nil
 }
 
@@ -154,18 +195,22 @@ func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$name").Text(arg.Name)
 	parameters = parameters.Param("$slug").Text(arg.Slug)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	result, err := q.db.QueryRow(ctx, queryUpdateVenueName, callOptions...)
 	if err != nil {
 		return UpdateVenueNameRow{}, err
 	}
+
 	var row UpdateVenueNameRow
 	if err := result.ScanNamed(
 		query.Named("id", &row.ID),
 	); err != nil {
 		return UpdateVenueNameRow{}, err
 	}
+
 	return row, nil
 }
 
@@ -178,24 +223,50 @@ GROUP BY city
 ORDER BY city;`
 
 func (q *Queries) VenueCountByCity(ctx context.Context, opts ...query.ExecuteOption) ([]VenueCountByCityRow, error) {
-	result, err := q.db.QueryResultSet(ctx, queryVenueCountByCity, opts...)
-	if err != nil {
-		return []VenueCountByCityRow(nil), err
-	}
-	defer result.Close(ctx)
 	items := []VenueCountByCityRow(nil)
-	for r, err := range result.Rows(ctx) {
+
+	err := q.db.Do(ctx, func(ctx context.Context, s query.Session) error {
+		result, err := s.Query(ctx, queryVenueCountByCity, opts...)
 		if err != nil {
-			return nil, err
+			return xerrors.WithStackTrace(err)
 		}
-		var row VenueCountByCityRow
-		if err := r.ScanNamed(
-			query.Named("city", &row.City),
-			query.Named("venue_count", &row.VenueCount),
-		); err != nil {
-			return nil, err
+		defer result.Close(ctx)
+
+		resultSet, err := result.NextResultSet(ctx)
+		if errors.Is(err, io.EOF) {
+			return xerrors.WithStackTrace(query.ErrNoResultSets)
 		}
-		items = append(items, row)
-	}
-	return items, nil
+		if err != nil {
+			return xerrors.WithStackTrace(err)
+		}
+
+		attemptItems := []VenueCountByCityRow(nil)
+		for r, err := range resultSet.Rows(ctx) {
+			if err != nil {
+				return xerrors.WithStackTrace(err)
+			}
+			var row VenueCountByCityRow
+			if err := r.ScanNamed(
+				query.Named("city", &row.City),
+				query.Named("venue_count", &row.VenueCount),
+			); err != nil {
+				return xerrors.WithStackTrace(err)
+			}
+			attemptItems = append(attemptItems, row)
+		}
+
+		_, err = result.NextResultSet(ctx)
+		switch {
+		case err == nil:
+			return xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+		case errors.Is(err, io.EOF):
+		case err != nil:
+			return xerrors.WithStackTrace(err)
+		}
+
+		items = attemptItems
+		return nil
+	})
+
+	return items, err
 }

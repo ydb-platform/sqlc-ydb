@@ -4,8 +4,11 @@ package batch
 
 import (
 	"context"
+	"errors"
+	"io"
 
 	ydb "github.com/ydb-platform/ydb-go-sdk/v3"
+	"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xerrors"
 	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 
@@ -16,12 +19,15 @@ WHERE author_id = $author_id;`
 func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$author_id").Uint64(arg)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	result, err := q.db.QueryRow(ctx, queryGetAuthor, callOptions...)
 	if err != nil {
 		return GetAuthorRow{}, err
 	}
+
 	var row GetAuthorRow
 	if err := result.ScanNamed(
 		query.Named("author_id", &row.AuthorID),
@@ -30,6 +36,7 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 	); err != nil {
 		return GetAuthorRow{}, err
 	}
+
 	return row, nil
 }
 
@@ -40,8 +47,10 @@ WHERE book_id = $book_id;`
 func (q *Queries) DeleteBookExecResult(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$book_id").Uint64(arg)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	return q.db.Exec(ctx, queryDeleteBookExecResult, callOptions...)
 }
 
@@ -52,8 +61,10 @@ WHERE book_id = $book_id;`
 func (q *Queries) DeleteBook(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$book_id").Uint64(arg)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	return q.db.Exec(ctx, queryDeleteBook, callOptions...)
 }
 
@@ -64,8 +75,10 @@ WHERE book_id = $book_id;`
 func (q *Queries) DeleteBookNamedFunc(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$book_id").Uint64(arg)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	return q.db.Exec(ctx, queryDeleteBookNamedFunc, callOptions...)
 }
 
@@ -76,8 +89,10 @@ WHERE book_id = $book_id;`
 func (q *Queries) DeleteBookNamedSign(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$book_id").Uint64(arg)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	return q.db.Exec(ctx, queryDeleteBookNamedSign, callOptions...)
 }
 
@@ -89,34 +104,62 @@ WHERE year = $year;`
 func (q *Queries) BooksByYear(ctx context.Context, arg int32, opts ...query.ExecuteOption) ([]BooksByYearRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$year").Int32(arg)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
-	result, err := q.db.QueryResultSet(ctx, queryBooksByYear, callOptions...)
-	if err != nil {
-		return []BooksByYearRow(nil), err
-	}
-	defer result.Close(ctx)
+
 	items := []BooksByYearRow(nil)
-	for r, err := range result.Rows(ctx) {
+
+	err := q.db.Do(ctx, func(ctx context.Context, s query.Session) error {
+		result, err := s.Query(ctx, queryBooksByYear, callOptions...)
 		if err != nil {
-			return nil, err
+			return xerrors.WithStackTrace(err)
 		}
-		var row BooksByYearRow
-		if err := r.ScanNamed(
-			query.Named("book_id", &row.BookID),
-			query.Named("author_id", &row.AuthorID),
-			query.Named("isbn", &row.Isbn),
-			query.Named("book_type", &row.BookType),
-			query.Named("title", &row.Title),
-			query.Named("year", &row.Year),
-			query.Named("available", &row.Available),
-			query.Named("tags", &row.Tags),
-		); err != nil {
-			return nil, err
+		defer result.Close(ctx)
+
+		resultSet, err := result.NextResultSet(ctx)
+		if errors.Is(err, io.EOF) {
+			return xerrors.WithStackTrace(query.ErrNoResultSets)
 		}
-		items = append(items, row)
-	}
-	return items, nil
+		if err != nil {
+			return xerrors.WithStackTrace(err)
+		}
+
+		attemptItems := []BooksByYearRow(nil)
+		for r, err := range resultSet.Rows(ctx) {
+			if err != nil {
+				return xerrors.WithStackTrace(err)
+			}
+			var row BooksByYearRow
+			if err := r.ScanNamed(
+				query.Named("book_id", &row.BookID),
+				query.Named("author_id", &row.AuthorID),
+				query.Named("isbn", &row.Isbn),
+				query.Named("book_type", &row.BookType),
+				query.Named("title", &row.Title),
+				query.Named("year", &row.Year),
+				query.Named("available", &row.Available),
+				query.Named("tags", &row.Tags),
+			); err != nil {
+				return xerrors.WithStackTrace(err)
+			}
+			attemptItems = append(attemptItems, row)
+		}
+
+		_, err = result.NextResultSet(ctx)
+		switch {
+		case err == nil:
+			return xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+		case errors.Is(err, io.EOF):
+		case err != nil:
+			return xerrors.WithStackTrace(err)
+		}
+
+		items = attemptItems
+		return nil
+	})
+
+	return items, err
 }
 
 const queryCreateAuthor = `-- name: CreateAuthor :one
@@ -129,12 +172,15 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts
 	parameters = parameters.Param("$author_id").Uint64(arg.AuthorID)
 	parameters = parameters.Param("$name").Text(arg.Name)
 	parameters = parameters.Param("$biography").BeginOptional().JSON(arg.Biography).EndOptional()
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	result, err := q.db.QueryRow(ctx, queryCreateAuthor, callOptions...)
 	if err != nil {
 		return CreateAuthorRow{}, err
 	}
+
 	var row CreateAuthorRow
 	if err := result.ScanNamed(
 		query.Named("author_id", &row.AuthorID),
@@ -143,6 +189,7 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts
 	); err != nil {
 		return CreateAuthorRow{}, err
 	}
+
 	return row, nil
 }
 
@@ -161,12 +208,15 @@ func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams, opts ...
 	parameters = parameters.Param("$year").Int32(arg.Year)
 	parameters = parameters.Param("$available").Timestamp(arg.Available)
 	parameters = parameters.Param("$tags").JSON(arg.Tags)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	result, err := q.db.QueryRow(ctx, queryCreateBook, callOptions...)
 	if err != nil {
 		return CreateBookRow{}, err
 	}
+
 	var row CreateBookRow
 	if err := result.ScanNamed(
 		query.Named("book_id", &row.BookID),
@@ -180,6 +230,7 @@ func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams, opts ...
 	); err != nil {
 		return CreateBookRow{}, err
 	}
+
 	return row, nil
 }
 
@@ -193,8 +244,10 @@ func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams, opts ...
 	parameters = parameters.Param("$title").Text(arg.Title)
 	parameters = parameters.Param("$tags").JSON(arg.Tags)
 	parameters = parameters.Param("$book_id").Uint64(arg.BookID)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	return q.db.Exec(ctx, queryUpdateBook, callOptions...)
 }
 
@@ -205,17 +258,21 @@ WHERE author_id = $author_id;`
 func (q *Queries) GetBiography(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetBiographyRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$author_id").Uint64(arg)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	result, err := q.db.QueryRow(ctx, queryGetBiography, callOptions...)
 	if err != nil {
 		return GetBiographyRow{}, err
 	}
+
 	var row GetBiographyRow
 	if err := result.ScanNamed(
 		query.Named("biography", &row.Biography),
 	); err != nil {
 		return GetBiographyRow{}, err
 	}
+
 	return row, nil
 }

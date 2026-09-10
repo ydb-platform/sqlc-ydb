@@ -4,8 +4,11 @@ package authors
 
 import (
 	"context"
+	"errors"
+	"io"
 
 	ydb "github.com/ydb-platform/ydb-go-sdk/v3"
+	"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xerrors"
 	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 
@@ -15,12 +18,15 @@ SELECT id, name, bio FROM authors WHERE id = $author_id;`
 func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$author_id").Uint64(arg)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	result, err := q.db.QueryRow(ctx, queryGetAuthor, callOptions...)
 	if err != nil {
 		return GetAuthorRow{}, err
 	}
+
 	var row GetAuthorRow
 	if err := result.ScanNamed(
 		query.Named("id", &row.ID),
@@ -29,6 +35,7 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 	); err != nil {
 		return GetAuthorRow{}, err
 	}
+
 	return row, nil
 }
 
@@ -36,27 +43,53 @@ const queryListAuthors = `-- name: ListAuthors :many
 SELECT id, name, bio FROM authors ORDER BY name;`
 
 func (q *Queries) ListAuthors(ctx context.Context, opts ...query.ExecuteOption) ([]ListAuthorsRow, error) {
-	result, err := q.db.QueryResultSet(ctx, queryListAuthors, opts...)
-	if err != nil {
-		return make([]ListAuthorsRow, 0), err
-	}
-	defer result.Close(ctx)
 	items := make([]ListAuthorsRow, 0)
-	for r, err := range result.Rows(ctx) {
+
+	err := q.db.Do(ctx, func(ctx context.Context, s query.Session) error {
+		result, err := s.Query(ctx, queryListAuthors, opts...)
 		if err != nil {
-			return nil, err
+			return xerrors.WithStackTrace(err)
 		}
-		var row ListAuthorsRow
-		if err := r.ScanNamed(
-			query.Named("id", &row.ID),
-			query.Named("name", &row.Name),
-			query.Named("bio", &row.Bio),
-		); err != nil {
-			return nil, err
+		defer result.Close(ctx)
+
+		resultSet, err := result.NextResultSet(ctx)
+		if errors.Is(err, io.EOF) {
+			return xerrors.WithStackTrace(query.ErrNoResultSets)
 		}
-		items = append(items, row)
-	}
-	return items, nil
+		if err != nil {
+			return xerrors.WithStackTrace(err)
+		}
+
+		attemptItems := make([]ListAuthorsRow, 0)
+		for r, err := range resultSet.Rows(ctx) {
+			if err != nil {
+				return xerrors.WithStackTrace(err)
+			}
+			var row ListAuthorsRow
+			if err := r.ScanNamed(
+				query.Named("id", &row.ID),
+				query.Named("name", &row.Name),
+				query.Named("bio", &row.Bio),
+			); err != nil {
+				return xerrors.WithStackTrace(err)
+			}
+			attemptItems = append(attemptItems, row)
+		}
+
+		_, err = result.NextResultSet(ctx)
+		switch {
+		case err == nil:
+			return xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+		case errors.Is(err, io.EOF):
+		case err != nil:
+			return xerrors.WithStackTrace(err)
+		}
+
+		items = attemptItems
+		return nil
+	})
+
+	return items, err
 }
 
 const queryGetAuthorName = `-- name: GetAuthorName :one
@@ -65,18 +98,22 @@ SELECT name FROM authors WHERE id = $author_id;`
 func (q *Queries) GetAuthorName(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorNameRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$author_id").Uint64(arg)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	result, err := q.db.QueryRow(ctx, queryGetAuthorName, callOptions...)
 	if err != nil {
 		return GetAuthorNameRow{}, err
 	}
+
 	var row GetAuthorNameRow
 	if err := result.ScanNamed(
 		query.Named("name", &row.Name),
 	); err != nil {
 		return GetAuthorNameRow{}, err
 	}
+
 	return row, nil
 }
 
@@ -90,12 +127,15 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts
 	parameters = parameters.Param("$author_id").Uint64(arg.AuthorID)
 	parameters = parameters.Param("$author_name").Text(arg.AuthorName)
 	parameters = parameters.Param("$biography").BeginOptional().Text(arg.Biography).EndOptional()
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	result, err := q.db.QueryRow(ctx, queryCreateAuthor, callOptions...)
 	if err != nil {
 		return CreateAuthorRow{}, err
 	}
+
 	var row CreateAuthorRow
 	if err := result.ScanNamed(
 		query.Named("id", &row.ID),
@@ -104,6 +144,7 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts
 	); err != nil {
 		return CreateAuthorRow{}, err
 	}
+
 	return row, nil
 }
 
@@ -116,8 +157,10 @@ func (q *Queries) UpsertAuthor(ctx context.Context, arg UpsertAuthorParams, opts
 	parameters = parameters.Param("$author_id").Uint64(arg.AuthorID)
 	parameters = parameters.Param("$author_name").Text(arg.AuthorName)
 	parameters = parameters.Param("$biography").BeginOptional().Text(arg.Biography).EndOptional()
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	return q.db.Exec(ctx, queryUpsertAuthor, callOptions...)
 }
 
@@ -127,7 +170,9 @@ DELETE FROM authors WHERE id = $author_id;`
 func (q *Queries) DeleteAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$author_id").Uint64(arg)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	return q.db.Exec(ctx, queryDeleteAuthor, callOptions...)
 }

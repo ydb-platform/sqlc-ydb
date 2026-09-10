@@ -16,12 +16,15 @@ SELECT * FROM authors WHERE id = $id;`
 func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$id").Uint64(arg)
+
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
 	result, err := q.db.QueryRow(ctx, queryGetAuthor, callOptions...)
 	if err != nil {
 		return GetAuthorRow{}, err
 	}
+
 	var row GetAuthorRow
 	if err := result.ScanNamed(
 		query.Named("id", &row.ID),
@@ -29,5 +32,6 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 	); err != nil {
 		return GetAuthorRow{}, err
 	}
+
 	return row, nil
 }
