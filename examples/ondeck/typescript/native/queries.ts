@@ -6,32 +6,32 @@ import { Optional } from "@ydbjs/value/optional";
 
 export type ConfigureQuery = (query: Query) => void;
 
-export interface ListCitiesRow {
+export type ListCitiesRow = {
   readonly slug: string;
   readonly name: string;
-}
+};
 
-export interface GetCityRow {
+export type GetCityRow = {
   readonly slug: string;
   readonly name: string;
-}
+};
 
-export interface CreateCityParams {
+export type CreateCityParams = {
   readonly name: string;
   readonly slug: string;
-}
+};
 
-export interface CreateCityRow {
+export type CreateCityRow = {
   readonly slug: string;
   readonly name: string;
-}
+};
 
-export interface UpdateCityNameParams {
+export type UpdateCityNameParams = {
   readonly name: string;
   readonly slug: string;
-}
+};
 
-export interface ListVenuesRow {
+export type ListVenuesRow = {
   readonly id: bigint;
   readonly slug: string;
   readonly name: string;
@@ -42,14 +42,14 @@ export interface ListVenuesRow {
   readonly songkickId: string | null;
   readonly tags: string | null;
   readonly createdAt: bigint | null;
-}
+};
 
-export interface GetVenueParams {
+export type GetVenueParams = {
   readonly slug: string;
   readonly city: string;
-}
+};
 
-export interface GetVenueRow {
+export type GetVenueRow = {
   readonly id: bigint;
   readonly slug: string;
   readonly name: string;
@@ -60,9 +60,9 @@ export interface GetVenueRow {
   readonly songkickId: string | null;
   readonly tags: string | null;
   readonly createdAt: bigint | null;
-}
+};
 
-export interface CreateVenueParams {
+export type CreateVenueParams = {
   readonly id: bigint;
   readonly slug: string;
   readonly name: string;
@@ -72,25 +72,25 @@ export interface CreateVenueParams {
   readonly status: string;
   readonly statuses: string | null;
   readonly tags: string | null;
-}
+};
 
-export interface CreateVenueRow {
+export type CreateVenueRow = {
   readonly id: bigint;
-}
+};
 
-export interface UpdateVenueNameParams {
+export type UpdateVenueNameParams = {
   readonly name: string;
   readonly slug: string;
-}
+};
 
-export interface UpdateVenueNameRow {
+export type UpdateVenueNameRow = {
   readonly id: bigint;
-}
+};
 
-export interface VenueCountByCityRow {
+export type VenueCountByCityRow = {
   readonly city: string;
   readonly venueCount: bigint;
-}
+};
 
 function _uint64(value: unknown, name: string): bigint { if (typeof value !== "bigint" || value < 0n || value > 18446744073709551615n) throw new RangeError(`${name} is outside YQL Uint64 range`); return value; }
 function _string(value: unknown, name: string): string { if (typeof value !== "string") throw new TypeError(`${name} must be a string`); return value; }
@@ -101,39 +101,6 @@ function _optional<T>(value: T | null | undefined, name: string, itemType: Type,
 type _RawValue = { value?: { case?: string; value?: unknown } };
 function _rawValue<T>(value: unknown, name: string, expectedCase: string): T { if (value === null || typeof value !== "object") throw new TypeError(`${name} has an unexpected YDB value shape`); const raw = value as _RawValue; if (raw.value?.case !== expectedCase) throw new TypeError(`${name} has an unexpected YDB value shape`); return raw.value.value as T; }
 function _rawOptional<T>(value: unknown, name: string, read: (value: unknown) => T): T | null { if (value === null || typeof value !== "object") throw new TypeError(`${name} has an unexpected YDB Optional shape`); const raw = value as _RawValue; return raw.value?.case === "nullFlagValue" ? null : read(value); }
-
-function _decodeListCitiesRow(row: unknown): ListCitiesRow {
-  if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("ListCities: expected an object row");
-  const record = row as Record<string, unknown>;
-  if (!Object.hasOwn(row, "slug")) throw new TypeError("ListCities: result row is missing column slug");
-  if (!Object.hasOwn(row, "name")) throw new TypeError("ListCities: result row is missing column name");
-  return {
-    slug: record["slug"] as string,
-    name: record["name"] as string,
-  };
-}
-
-function _decodeGetCityRow(row: unknown): GetCityRow {
-  if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("GetCity: expected an object row");
-  const record = row as Record<string, unknown>;
-  if (!Object.hasOwn(row, "slug")) throw new TypeError("GetCity: result row is missing column slug");
-  if (!Object.hasOwn(row, "name")) throw new TypeError("GetCity: result row is missing column name");
-  return {
-    slug: record["slug"] as string,
-    name: record["name"] as string,
-  };
-}
-
-function _decodeCreateCityRow(row: unknown): CreateCityRow {
-  if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("CreateCity: expected an object row");
-  const record = row as Record<string, unknown>;
-  if (!Object.hasOwn(row, "slug")) throw new TypeError("CreateCity: result row is missing column slug");
-  if (!Object.hasOwn(row, "name")) throw new TypeError("CreateCity: result row is missing column name");
-  return {
-    slug: record["slug"] as string,
-    name: record["name"] as string,
-  };
-}
 
 function _decodeListVenuesRow(row: unknown): ListVenuesRow {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("ListVenues: expected an object row");
@@ -189,24 +156,6 @@ function _decodeGetVenueRow(row: unknown): GetVenueRow {
   };
 }
 
-function _decodeCreateVenueRow(row: unknown): CreateVenueRow {
-  if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("CreateVenue: expected an object row");
-  const record = row as Record<string, unknown>;
-  if (!Object.hasOwn(row, "id")) throw new TypeError("CreateVenue: result row is missing column id");
-  return {
-    id: record["id"] as bigint,
-  };
-}
-
-function _decodeUpdateVenueNameRow(row: unknown): UpdateVenueNameRow {
-  if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("UpdateVenueName: expected an object row");
-  const record = row as Record<string, unknown>;
-  if (!Object.hasOwn(row, "id")) throw new TypeError("UpdateVenueName: result row is missing column id");
-  return {
-    id: record["id"] as bigint,
-  };
-}
-
 function _decodeVenueCountByCityRow(row: unknown): VenueCountByCityRow {
   if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("VenueCountByCity: expected an object row");
   const record = row as Record<string, unknown>;
@@ -232,10 +181,9 @@ SELECT slug, name
 FROM city
 ORDER BY name;`;
     configure?.(pending);
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("ListCities: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.map(_decodeListCitiesRow);
+    const [rows] = await pending;
+
+    return rows;
   }
 
   async getCity(slug: string, configure?: ConfigureQuery): Promise<GetCityRow | null> {
@@ -245,10 +193,9 @@ FROM city
 WHERE slug = $slug;`
       .parameter("slug", new Utf8(_string(slug, "slug")));
     configure?.(pending);
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("GetCity: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : _decodeGetCityRow(rows[0]);
+    const [rows] = await pending;
+
+    return rows[0] ?? null;
   }
 
   async createCity(args: CreateCityParams, configure?: ConfigureQuery): Promise<CreateCityRow | null> {
@@ -263,10 +210,9 @@ INSERT INTO city (
       .parameter("name", new Utf8(_string(args.name, "name")))
       .parameter("slug", new Utf8(_string(args.slug, "slug")));
     configure?.(pending);
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("CreateCity: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : _decodeCreateCityRow(rows[0]);
+    const [rows] = await pending;
+
+    return rows[0] ?? null;
   }
 
   async updateCityName(args: UpdateCityNameParams, configure?: ConfigureQuery): Promise<void> {
@@ -350,10 +296,9 @@ INSERT INTO venue (
       .parameter("statuses", _optional(args.statuses, "statuses", new JsonType(), (item) => new Json(_json(item, "statuses"))))
       .parameter("tags", _optional(args.tags, "tags", new JsonType(), (item) => new Json(_json(item, "tags"))));
     configure?.(pending);
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("CreateVenue: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : _decodeCreateVenueRow(rows[0]);
+    const [rows] = await pending;
+
+    return rows[0] ?? null;
   }
 
   async updateVenueName(args: UpdateVenueNameParams, configure?: ConfigureQuery): Promise<UpdateVenueNameRow | null> {
@@ -365,10 +310,9 @@ RETURNING id;`
       .parameter("name", new Utf8(_string(args.name, "name")))
       .parameter("slug", new Utf8(_string(args.slug, "slug")));
     configure?.(pending);
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("UpdateVenueName: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : _decodeUpdateVenueNameRow(rows[0]);
+    const [rows] = await pending;
+
+    return rows[0] ?? null;
   }
 
   async venueCountByCity(configure?: ConfigureQuery): Promise<VenueCountByCityRow[]> {

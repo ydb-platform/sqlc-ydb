@@ -4,12 +4,12 @@ import { Int32, Json, Primitive, TimestampType, Uint64, Utf8 } from "@ydbjs/valu
 
 export type ConfigureQuery = (query: Query) => void;
 
-export interface GetAuthorRow {
+export type GetAuthorRow = {
   readonly authorId: bigint;
   readonly name: string;
-}
+};
 
-export interface GetBookRow {
+export type GetBookRow = {
   readonly bookId: bigint;
   readonly authorId: bigint;
   readonly isbn: string;
@@ -18,14 +18,14 @@ export interface GetBookRow {
   readonly publicationYear: number;
   readonly available: bigint;
   readonly tags: string;
-}
+};
 
-export interface BooksByTitleYearParams {
+export type BooksByTitleYearParams = {
   readonly title: string;
   readonly publicationYear: number;
-}
+};
 
-export interface BooksByTitleYearRow {
+export type BooksByTitleYearRow = {
   readonly bookId: bigint;
   readonly authorId: bigint;
   readonly isbn: string;
@@ -34,27 +34,27 @@ export interface BooksByTitleYearRow {
   readonly publicationYear: number;
   readonly available: bigint;
   readonly tags: string;
-}
+};
 
-export interface BooksByTagsRow {
+export type BooksByTagsRow = {
   readonly bookId: bigint;
   readonly title: string;
   readonly name: string | null;
   readonly isbn: string;
   readonly tags: string;
-}
+};
 
-export interface CreateAuthorParams {
+export type CreateAuthorParams = {
   readonly authorId: bigint;
   readonly name: string;
-}
+};
 
-export interface CreateAuthorRow {
+export type CreateAuthorRow = {
   readonly authorId: bigint;
   readonly name: string;
-}
+};
 
-export interface CreateBookParams {
+export type CreateBookParams = {
   readonly bookId: bigint;
   readonly authorId: bigint;
   readonly isbn: string;
@@ -63,9 +63,9 @@ export interface CreateBookParams {
   readonly publicationYear: number;
   readonly available: bigint;
   readonly tags: string;
-}
+};
 
-export interface CreateBookRow {
+export type CreateBookRow = {
   readonly bookId: bigint;
   readonly authorId: bigint;
   readonly isbn: string;
@@ -74,29 +74,29 @@ export interface CreateBookRow {
   readonly publicationYear: number;
   readonly available: bigint;
   readonly tags: string;
-}
+};
 
-export interface UpdateBookParams {
+export type UpdateBookParams = {
   readonly title: string;
   readonly tags: string;
   readonly bookId: bigint;
-}
+};
 
-export interface UpdateBookISBNParams {
+export type UpdateBookISBNParams = {
   readonly title: string;
   readonly tags: string;
   readonly isbn: string;
   readonly bookId: bigint;
-}
+};
 
-export interface DeleteAuthorBeforeYearParams {
+export type DeleteAuthorBeforeYearParams = {
   readonly publicationYear: number;
   readonly authorId: bigint;
-}
+};
 
-export interface SayHelloRow {
+export type SayHelloRow = {
   readonly greeting: string;
-}
+};
 
 function _int32(value: unknown, name: string): number { if (typeof value !== "number" || !Number.isInteger(value) || value < -2147483648 || value > 2147483647) throw new RangeError(`${name} is outside YQL Int32 range`); return value; }
 function _uint64(value: unknown, name: string): bigint { if (typeof value !== "bigint" || value < 0n || value > 18446744073709551615n) throw new RangeError(`${name} is outside YQL Uint64 range`); return value; }
@@ -213,15 +213,6 @@ function _decodeCreateBookRow(row: unknown): CreateBookRow {
     publicationYear: _rawValue<number>(record["publication_year"], "CreateBook.publication_year", "int32Value"),
     available: _rawValue<bigint>(record["available"], "CreateBook.available", "uint64Value"),
     tags: _rawValue<string>(record["tags"], "CreateBook.tags", "textValue"),
-  };
-}
-
-function _decodeSayHelloRow(row: unknown): SayHelloRow {
-  if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("SayHello: expected an object row");
-  const record = row as Record<string, unknown>;
-  if (!Object.hasOwn(row, "greeting")) throw new TypeError("SayHello: result row is missing column greeting");
-  return {
-    greeting: record["greeting"] as string,
   };
 }
 
@@ -396,9 +387,8 @@ WHERE publication_year < $publication_year AND author_id = $author_id;`
 SELECT "hello "u || $name AS greeting;`
       .parameter("name", new Utf8(_string(name, "name")));
     configure?.(pending);
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("SayHello: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : _decodeSayHelloRow(rows[0]);
+    const [rows] = await pending;
+
+    return rows[0] ?? null;
   }
 }

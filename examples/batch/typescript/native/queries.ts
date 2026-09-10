@@ -6,13 +6,13 @@ import { Optional } from "@ydbjs/value/optional";
 
 export type ConfigureQuery = (query: Query) => void;
 
-export interface GetAuthorRow {
+export type GetAuthorRow = {
   readonly authorId: bigint;
   readonly name: string;
   readonly biography: string | null;
-}
+};
 
-export interface BooksByYearRow {
+export type BooksByYearRow = {
   readonly bookId: bigint;
   readonly authorId: bigint;
   readonly isbn: string;
@@ -21,21 +21,21 @@ export interface BooksByYearRow {
   readonly year: number;
   readonly available: bigint;
   readonly tags: string;
-}
+};
 
-export interface CreateAuthorParams {
+export type CreateAuthorParams = {
   readonly authorId: bigint;
   readonly name: string;
   readonly biography: string | null;
-}
+};
 
-export interface CreateAuthorRow {
+export type CreateAuthorRow = {
   readonly authorId: bigint;
   readonly name: string;
   readonly biography: string | null;
-}
+};
 
-export interface CreateBookParams {
+export type CreateBookParams = {
   readonly bookId: bigint;
   readonly authorId: bigint;
   readonly isbn: string;
@@ -44,9 +44,9 @@ export interface CreateBookParams {
   readonly year: number;
   readonly available: bigint;
   readonly tags: string;
-}
+};
 
-export interface CreateBookRow {
+export type CreateBookRow = {
   readonly bookId: bigint;
   readonly authorId: bigint;
   readonly isbn: string;
@@ -55,17 +55,17 @@ export interface CreateBookRow {
   readonly year: number;
   readonly available: bigint;
   readonly tags: string;
-}
+};
 
-export interface UpdateBookParams {
+export type UpdateBookParams = {
   readonly title: string;
   readonly tags: string;
   readonly bookId: bigint;
-}
+};
 
-export interface GetBiographyRow {
+export type GetBiographyRow = {
   readonly biography: string | null;
-}
+};
 
 function _int32(value: unknown, name: string): number { if (typeof value !== "number" || !Number.isInteger(value) || value < -2147483648 || value > 2147483647) throw new RangeError(`${name} is outside YQL Int32 range`); return value; }
 function _uint64(value: unknown, name: string): bigint { if (typeof value !== "bigint" || value < 0n || value > 18446744073709551615n) throw new RangeError(`${name} is outside YQL Uint64 range`); return value; }

@@ -6,91 +6,43 @@ import { Optional } from "@ydbjs/value/optional";
 
 export type ConfigureQuery = (query: Query) => void;
 
-export interface GetAuthorRow {
+export type GetAuthorRow = {
   readonly id: bigint;
   readonly name: string;
   readonly bio: string | null;
-}
+};
 
-export interface ListAuthorsRow {
+export type ListAuthorsRow = {
   readonly id: bigint;
   readonly name: string;
   readonly bio: string | null;
-}
+};
 
-export interface GetAuthorNameRow {
+export type GetAuthorNameRow = {
   readonly name: string;
-}
+};
 
-export interface CreateAuthorParams {
+export type CreateAuthorParams = {
   readonly authorId: bigint;
   readonly authorName: string;
   readonly biography: string | null;
-}
+};
 
-export interface CreateAuthorRow {
+export type CreateAuthorRow = {
   readonly id: bigint;
   readonly name: string;
   readonly bio: string | null;
-}
+};
 
-export interface UpsertAuthorParams {
+export type UpsertAuthorParams = {
   readonly authorId: bigint;
   readonly authorName: string;
   readonly biography: string | null;
-}
+};
 
 function _uint64(value: unknown, name: string): bigint { if (typeof value !== "bigint" || value < 0n || value > 18446744073709551615n) throw new RangeError(`${name} is outside YQL Uint64 range`); return value; }
 function _string(value: unknown, name: string): string { if (typeof value !== "string") throw new TypeError(`${name} must be a string`); return value; }
 function _optional<T>(value: T | null | undefined, name: string, itemType: Type, makeValue: (item: T) => Value): Value { if (value === undefined) throw new TypeError(`${name} must not be undefined; use null for an empty Optional`); return new Optional(value === null ? null : makeValue(value), itemType); }
-
-function _decodeGetAuthorRow(row: unknown): GetAuthorRow {
-  if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("GetAuthor: expected an object row");
-  const record = row as Record<string, unknown>;
-  if (!Object.hasOwn(row, "id")) throw new TypeError("GetAuthor: result row is missing column id");
-  if (!Object.hasOwn(row, "name")) throw new TypeError("GetAuthor: result row is missing column name");
-  if (!Object.hasOwn(row, "bio")) throw new TypeError("GetAuthor: result row is missing column bio");
-  return {
-    id: record["id"] as bigint,
-    name: record["name"] as string,
-    bio: record["bio"] as string | null,
-  };
-}
-
-function _decodeListAuthorsRow(row: unknown): ListAuthorsRow {
-  if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("ListAuthors: expected an object row");
-  const record = row as Record<string, unknown>;
-  if (!Object.hasOwn(row, "id")) throw new TypeError("ListAuthors: result row is missing column id");
-  if (!Object.hasOwn(row, "name")) throw new TypeError("ListAuthors: result row is missing column name");
-  if (!Object.hasOwn(row, "bio")) throw new TypeError("ListAuthors: result row is missing column bio");
-  return {
-    id: record["id"] as bigint,
-    name: record["name"] as string,
-    bio: record["bio"] as string | null,
-  };
-}
-
-function _decodeGetAuthorNameRow(row: unknown): GetAuthorNameRow {
-  if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("GetAuthorName: expected an object row");
-  const record = row as Record<string, unknown>;
-  if (!Object.hasOwn(row, "name")) throw new TypeError("GetAuthorName: result row is missing column name");
-  return {
-    name: record["name"] as string,
-  };
-}
-
-function _decodeCreateAuthorRow(row: unknown): CreateAuthorRow {
-  if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("CreateAuthor: expected an object row");
-  const record = row as Record<string, unknown>;
-  if (!Object.hasOwn(row, "id")) throw new TypeError("CreateAuthor: result row is missing column id");
-  if (!Object.hasOwn(row, "name")) throw new TypeError("CreateAuthor: result row is missing column name");
-  if (!Object.hasOwn(row, "bio")) throw new TypeError("CreateAuthor: result row is missing column bio");
-  return {
-    id: record["id"] as bigint,
-    name: record["name"] as string,
-    bio: record["bio"] as string | null,
-  };
-}
 
 export class Queries {
   readonly #sql: SQL;
@@ -105,20 +57,18 @@ export class Queries {
 SELECT id, name, bio FROM authors WHERE id = $author_id;`
       .parameter("author_id", new Uint64(_uint64(authorId, "author_id")));
     configure?.(pending);
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("GetAuthor: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : _decodeGetAuthorRow(rows[0]);
+    const [rows] = await pending;
+
+    return rows[0] ?? null;
   }
 
   async listAuthors(configure?: ConfigureQuery): Promise<ListAuthorsRow[]> {
     const pending = this.#sql<[ListAuthorsRow]>`-- name: ListAuthors :many
 SELECT id, name, bio FROM authors ORDER BY name;`;
     configure?.(pending);
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("ListAuthors: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.map(_decodeListAuthorsRow);
+    const [rows] = await pending;
+
+    return rows;
   }
 
   async getAuthorName(authorId: bigint, configure?: ConfigureQuery): Promise<GetAuthorNameRow | null> {
@@ -126,10 +76,9 @@ SELECT id, name, bio FROM authors ORDER BY name;`;
 SELECT name FROM authors WHERE id = $author_id;`
       .parameter("author_id", new Uint64(_uint64(authorId, "author_id")));
     configure?.(pending);
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("GetAuthorName: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : _decodeGetAuthorNameRow(rows[0]);
+    const [rows] = await pending;
+
+    return rows[0] ?? null;
   }
 
   async createAuthor(args: CreateAuthorParams, configure?: ConfigureQuery): Promise<CreateAuthorRow | null> {
@@ -141,10 +90,9 @@ RETURNING id, name, bio;`
       .parameter("author_name", new Utf8(_string(args.authorName, "author_name")))
       .parameter("biography", _optional(args.biography, "biography", new Utf8Type(), (item) => new Utf8(_string(item, "biography"))));
     configure?.(pending);
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("CreateAuthor: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : _decodeCreateAuthorRow(rows[0]);
+    const [rows] = await pending;
+
+    return rows[0] ?? null;
   }
 
   async upsertAuthor(args: UpsertAuthorParams, configure?: ConfigureQuery): Promise<void> {

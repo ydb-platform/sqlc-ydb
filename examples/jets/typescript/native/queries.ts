@@ -4,14 +4,14 @@ import { Int32 } from "@ydbjs/value/primitive";
 
 export type ConfigureQuery = (query: Query) => void;
 
-export interface CountPilotsRow {
+export type CountPilotsRow = {
   readonly pilotCount: bigint;
-}
+};
 
-export interface ListPilotsRow {
+export type ListPilotsRow = {
   readonly id: number;
   readonly name: string;
-}
+};
 
 function _int32(value: unknown, name: string): number { if (typeof value !== "number" || !Number.isInteger(value) || value < -2147483648 || value > 2147483647) throw new RangeError(`${name} is outside YQL Int32 range`); return value; }
 
@@ -21,17 +21,6 @@ function _decodeCountPilotsRow(row: unknown): CountPilotsRow {
   if (!Object.hasOwn(row, "pilot_count")) throw new TypeError("CountPilots: result row is missing column pilot_count");
   return {
     pilotCount: record["pilot_count"] as bigint,
-  };
-}
-
-function _decodeListPilotsRow(row: unknown): ListPilotsRow {
-  if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("ListPilots: expected an object row");
-  const record = row as Record<string, unknown>;
-  if (!Object.hasOwn(row, "id")) throw new TypeError("ListPilots: result row is missing column id");
-  if (!Object.hasOwn(row, "name")) throw new TypeError("ListPilots: result row is missing column name");
-  return {
-    id: record["id"] as number,
-    name: record["name"] as string,
   };
 }
 
@@ -57,10 +46,9 @@ SELECT COUNT(*) AS pilot_count FROM pilots;`;
     const pending = this.#sql<[ListPilotsRow]>`-- name: ListPilots :many
 SELECT id, name FROM pilots ORDER BY id LIMIT 5;`;
     configure?.(pending);
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("ListPilots: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.map(_decodeListPilotsRow);
+    const [rows] = await pending;
+
+    return rows;
   }
 
   async deletePilot(pilotId: number, configure?: ConfigureQuery): Promise<void> {
