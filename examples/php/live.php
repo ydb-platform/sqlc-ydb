@@ -120,8 +120,17 @@ function runBooktest(Table $table): void
         check($queries->booksByTitleYear(new Booktest\Native\BooksByTitleYearParams('Earthsea', 1968))[0]->bookId === $bookId, 'booktest: compound parameters failed');
         check($queries->booksByTags('["fantasy"]')[0]->name === 'Ursula', 'booktest: LEFT JOIN/Json failed');
         check($queries->sayHello('YDB')?->greeting === 'hello YDB', 'booktest: scalar expression failed');
-        $queries->updateBook(new Booktest\Native\UpdateBookParams($bookId, 'A Wizard of Earthsea', '["classic"]'));
-        $queries->updateBookIsbn(new Booktest\Native\UpdateBookIsbnParams($bookId, 'A Wizard of Earthsea', '["classic"]', 'new-isbn'));
+        $queries->updateBook(new Booktest\Native\UpdateBookParams(
+            title: 'A Wizard of Earthsea',
+            tags: '["classic"]',
+            bookId: $bookId,
+        ));
+        $queries->updateBookIsbn(new Booktest\Native\UpdateBookIsbnParams(
+            title: 'A Wizard of Earthsea',
+            tags: '["classic"]',
+            isbn: 'new-isbn',
+            bookId: $bookId,
+        ));
         $queries->deleteAuthorBeforeYear(new Booktest\Native\DeleteAuthorBeforeYearParams($authorId, 1900));
         $queries->deleteBook($bookId);
         check($queries->getBook($bookId) === null, 'booktest: delete failed');
