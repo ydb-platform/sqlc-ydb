@@ -5,57 +5,19 @@
 #include <utility>
 
 namespace authors::userver {
-namespace {
-
-const ::userver::ydb::Query kGetAuthorQuery{
-    R"sqlc(-- name: GetAuthor :one
-SELECT id, name, bio FROM authors WHERE id = $author_id;)sqlc",
-    ::userver::ydb::Query::NameLiteral{"GetAuthor"},
-    ::userver::ydb::Query::LogMode::kNameOnly,
-};
-
-const ::userver::ydb::Query kListAuthorsQuery{
-    R"sqlc(-- name: ListAuthors :many
-SELECT id, name, bio FROM authors ORDER BY name;)sqlc",
-    ::userver::ydb::Query::NameLiteral{"ListAuthors"},
-    ::userver::ydb::Query::LogMode::kNameOnly,
-};
-
-const ::userver::ydb::Query kGetAuthorNameQuery{
-    R"sqlc(-- name: GetAuthorName :one
-SELECT name FROM authors WHERE id = $author_id;)sqlc",
-    ::userver::ydb::Query::NameLiteral{"GetAuthorName"},
-    ::userver::ydb::Query::LogMode::kNameOnly,
-};
-
-const ::userver::ydb::Query kCreateAuthorQuery{
-    R"sqlc(-- name: CreateAuthor :one
-INSERT INTO authors (id, name, bio)
-VALUES ($author_id, $author_name, $biography)
-RETURNING id, name, bio;)sqlc",
-    ::userver::ydb::Query::NameLiteral{"CreateAuthor"},
-    ::userver::ydb::Query::LogMode::kNameOnly,
-};
-
-const ::userver::ydb::Query kUpsertAuthorQuery{
-    R"sqlc(-- name: UpsertAuthor :exec
-UPSERT INTO authors (id, name, bio)
-VALUES ($author_id, $author_name, $biography);)sqlc",
-    ::userver::ydb::Query::NameLiteral{"UpsertAuthor"},
-    ::userver::ydb::Query::LogMode::kNameOnly,
-};
-
-const ::userver::ydb::Query kDeleteAuthorQuery{
-    R"sqlc(-- name: DeleteAuthor :exec
-DELETE FROM authors WHERE id = $author_id;)sqlc",
-    ::userver::ydb::Query::NameLiteral{"DeleteAuthor"},
-    ::userver::ydb::Query::LogMode::kNameOnly,
-};
-
-}  // namespace
 
 std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
-    auto sqlc_response = this->client_.ExecuteQuery(kGetAuthorQuery, "$author_id", author_id);
+    auto sqlc_response = this->client_.ExecuteQuery(
+        ::userver::ydb::Query{
+            std::string{
+                R"sqlc(-- name: GetAuthor :one)sqlc"
+                "\n"
+                R"sqlc(SELECT id, name, bio FROM authors WHERE id = $author_id;)sqlc",
+                80
+            },
+            ::userver::ydb::Query::NameLiteral{"GetAuthor"},
+            ::userver::ydb::Query::LogMode::kNameOnly,
+        }, "$author_id", author_id);
     auto sqlc_cursor = sqlc_response.GetSingleCursor();
     if (sqlc_cursor.empty()) {
         return std::nullopt;
@@ -69,7 +31,17 @@ std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
 }
 
 std::vector<ListAuthorsRow> Queries::ListAuthors() const {
-    auto sqlc_response = this->client_.ExecuteQuery(kListAuthorsQuery);
+    auto sqlc_response = this->client_.ExecuteQuery(
+        ::userver::ydb::Query{
+            std::string{
+                R"sqlc(-- name: ListAuthors :many)sqlc"
+                "\n"
+                R"sqlc(SELECT id, name, bio FROM authors ORDER BY name;)sqlc",
+                75
+            },
+            ::userver::ydb::Query::NameLiteral{"ListAuthors"},
+            ::userver::ydb::Query::LogMode::kNameOnly,
+        });
     auto sqlc_cursor = sqlc_response.GetSingleCursor();
     std::vector<ListAuthorsRow> sqlc_rows;
     sqlc_rows.reserve(sqlc_cursor.size());
@@ -84,7 +56,17 @@ std::vector<ListAuthorsRow> Queries::ListAuthors() const {
 }
 
 std::optional<GetAuthorNameRow> Queries::GetAuthorName(std::uint64_t author_id) const {
-    auto sqlc_response = this->client_.ExecuteQuery(kGetAuthorNameQuery, "$author_id", author_id);
+    auto sqlc_response = this->client_.ExecuteQuery(
+        ::userver::ydb::Query{
+            std::string{
+                R"sqlc(-- name: GetAuthorName :one)sqlc"
+                "\n"
+                R"sqlc(SELECT name FROM authors WHERE id = $author_id;)sqlc",
+                75
+            },
+            ::userver::ydb::Query::NameLiteral{"GetAuthorName"},
+            ::userver::ydb::Query::LogMode::kNameOnly,
+        }, "$author_id", author_id);
     auto sqlc_cursor = sqlc_response.GetSingleCursor();
     if (sqlc_cursor.empty()) {
         return std::nullopt;
@@ -96,7 +78,21 @@ std::optional<GetAuthorNameRow> Queries::GetAuthorName(std::uint64_t author_id) 
 }
 
 std::optional<CreateAuthorRow> Queries::CreateAuthor(std::uint64_t author_id, const ::userver::ydb::Utf8& author_name, const std::optional<::userver::ydb::Utf8>& biography) const {
-    auto sqlc_response = this->client_.ExecuteQuery(kCreateAuthorQuery, "$author_id", author_id, "$author_name", author_name, "$biography", biography);
+    auto sqlc_response = this->client_.ExecuteQuery(
+        ::userver::ydb::Query{
+            std::string{
+                R"sqlc(-- name: CreateAuthor :one)sqlc"
+                "\n"
+                R"sqlc(INSERT INTO authors (id, name, bio))sqlc"
+                "\n"
+                R"sqlc(VALUES ($author_id, $author_name, $biography))sqlc"
+                "\n"
+                R"sqlc(RETURNING id, name, bio;)sqlc",
+                133
+            },
+            ::userver::ydb::Query::NameLiteral{"CreateAuthor"},
+            ::userver::ydb::Query::LogMode::kNameOnly,
+        }, "$author_id", author_id, "$author_name", author_name, "$biography", biography);
     auto sqlc_cursor = sqlc_response.GetSingleCursor();
     if (sqlc_cursor.empty()) {
         return std::nullopt;
@@ -110,11 +106,33 @@ std::optional<CreateAuthorRow> Queries::CreateAuthor(std::uint64_t author_id, co
 }
 
 void Queries::UpsertAuthor(std::uint64_t author_id, const ::userver::ydb::Utf8& author_name, const std::optional<::userver::ydb::Utf8>& biography) const {
-    static_cast<void>(this->client_.ExecuteQuery(kUpsertAuthorQuery, "$author_id", author_id, "$author_name", author_name, "$biography", biography));
+    static_cast<void>(this->client_.ExecuteQuery(
+        ::userver::ydb::Query{
+            std::string{
+                R"sqlc(-- name: UpsertAuthor :exec)sqlc"
+                "\n"
+                R"sqlc(UPSERT INTO authors (id, name, bio))sqlc"
+                "\n"
+                R"sqlc(VALUES ($author_id, $author_name, $biography);)sqlc",
+                110
+            },
+            ::userver::ydb::Query::NameLiteral{"UpsertAuthor"},
+            ::userver::ydb::Query::LogMode::kNameOnly,
+        }, "$author_id", author_id, "$author_name", author_name, "$biography", biography));
 }
 
 void Queries::DeleteAuthor(std::uint64_t author_id) const {
-    static_cast<void>(this->client_.ExecuteQuery(kDeleteAuthorQuery, "$author_id", author_id));
+    static_cast<void>(this->client_.ExecuteQuery(
+        ::userver::ydb::Query{
+            std::string{
+                R"sqlc(-- name: DeleteAuthor :exec)sqlc"
+                "\n"
+                R"sqlc(DELETE FROM authors WHERE id = $author_id;)sqlc",
+                70
+            },
+            ::userver::ydb::Query::NameLiteral{"DeleteAuthor"},
+            ::userver::ydb::Query::LogMode::kNameOnly,
+        }, "$author_id", author_id));
 }
 
 }  // namespace authors::userver
