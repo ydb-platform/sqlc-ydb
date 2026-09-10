@@ -12,14 +12,13 @@ import tech.ydb.table.values.OptionalType
 // The caller owns the injected client and its lifecycle.
 class Queries(private val client: SessionRetryContext) {
 
-    private val getAuthorSql: String = """-- name: GetAuthor :one
-SELECT id, name, bio FROM authors WHERE id = ${'$'}author_id;"""
-
     fun getAuthor(authorId: Long): GetAuthorRow? {
         val _params = Params.create()
         _params.put("\$author_id", PrimitiveValue.newUint64(authorId))
         val _query = client.supplyResult { _session ->
-            QueryReader.readFrom(_session.createQuery(getAuthorSql, TxMode.SERIALIZABLE_RW, _params))
+            QueryReader.readFrom(_session.createQuery(
+                "-- name: GetAuthor :one\n" +
+                "SELECT id, name, bio FROM authors WHERE id = \$author_id;", TxMode.SERIALIZABLE_RW, _params))
         }.join().getValue()
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
         val _rows = _query.getResultSet(0)
@@ -30,13 +29,12 @@ SELECT id, name, bio FROM authors WHERE id = ${'$'}author_id;"""
         return GetAuthorRow(_value0, _value1, _value2)
     }
 
-    private val listAuthorsSql: String = """-- name: ListAuthors :many
-SELECT id, name, bio FROM authors ORDER BY name;"""
-
     fun listAuthors(): List<ListAuthorsRow> {
         val _params = Params.create()
         val _query = client.supplyResult { _session ->
-            QueryReader.readFrom(_session.createQuery(listAuthorsSql, TxMode.SERIALIZABLE_RW, _params))
+            QueryReader.readFrom(_session.createQuery(
+                "-- name: ListAuthors :many\n" +
+                "SELECT id, name, bio FROM authors ORDER BY name;", TxMode.SERIALIZABLE_RW, _params))
         }.join().getValue()
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
         val _rows = _query.getResultSet(0)
@@ -50,14 +48,13 @@ SELECT id, name, bio FROM authors ORDER BY name;"""
         return _items
     }
 
-    private val getAuthorNameSql: String = """-- name: GetAuthorName :one
-SELECT name FROM authors WHERE id = ${'$'}author_id;"""
-
     fun getAuthorName(authorId: Long): GetAuthorNameRow? {
         val _params = Params.create()
         _params.put("\$author_id", PrimitiveValue.newUint64(authorId))
         val _query = client.supplyResult { _session ->
-            QueryReader.readFrom(_session.createQuery(getAuthorNameSql, TxMode.SERIALIZABLE_RW, _params))
+            QueryReader.readFrom(_session.createQuery(
+                "-- name: GetAuthorName :one\n" +
+                "SELECT name FROM authors WHERE id = \$author_id;", TxMode.SERIALIZABLE_RW, _params))
         }.join().getValue()
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
         val _rows = _query.getResultSet(0)
@@ -66,18 +63,17 @@ SELECT name FROM authors WHERE id = ${'$'}author_id;"""
         return GetAuthorNameRow(_value0)
     }
 
-    private val createAuthorSql: String = """-- name: CreateAuthor :one
-INSERT INTO authors (id, name, bio)
-VALUES (${'$'}author_id, ${'$'}author_name, ${'$'}biography)
-RETURNING id, name, bio;"""
-
     fun createAuthor(authorId: Long, authorName: String, biography: String?): CreateAuthorRow? {
         val _params = Params.create()
         _params.put("\$author_id", PrimitiveValue.newUint64(authorId))
         _params.put("\$author_name", PrimitiveValue.newText(authorName))
         _params.put("\$biography", if (biography == null) OptionalType.of(PrimitiveType.Text).emptyValue() else OptionalType.of(PrimitiveType.Text).newValue(PrimitiveValue.newText(biography)))
         val _query = client.supplyResult { _session ->
-            QueryReader.readFrom(_session.createQuery(createAuthorSql, TxMode.SERIALIZABLE_RW, _params))
+            QueryReader.readFrom(_session.createQuery(
+                "-- name: CreateAuthor :one\n" +
+                "INSERT INTO authors (id, name, bio)\n" +
+                "VALUES (\$author_id, \$author_name, \$biography)\n" +
+                "RETURNING id, name, bio;", TxMode.SERIALIZABLE_RW, _params))
         }.join().getValue()
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
         val _rows = _query.getResultSet(0)
@@ -88,28 +84,26 @@ RETURNING id, name, bio;"""
         return CreateAuthorRow(_value0, _value1, _value2)
     }
 
-    private val upsertAuthorSql: String = """-- name: UpsertAuthor :exec
-UPSERT INTO authors (id, name, bio)
-VALUES (${'$'}author_id, ${'$'}author_name, ${'$'}biography);"""
-
     fun upsertAuthor(authorId: Long, authorName: String, biography: String?): Unit {
         val _params = Params.create()
         _params.put("\$author_id", PrimitiveValue.newUint64(authorId))
         _params.put("\$author_name", PrimitiveValue.newText(authorName))
         _params.put("\$biography", if (biography == null) OptionalType.of(PrimitiveType.Text).emptyValue() else OptionalType.of(PrimitiveType.Text).newValue(PrimitiveValue.newText(biography)))
         val _query = client.supplyResult { _session ->
-            QueryReader.readFrom(_session.createQuery(upsertAuthorSql, TxMode.SERIALIZABLE_RW, _params))
+            QueryReader.readFrom(_session.createQuery(
+                "-- name: UpsertAuthor :exec\n" +
+                "UPSERT INTO authors (id, name, bio)\n" +
+                "VALUES (\$author_id, \$author_name, \$biography);", TxMode.SERIALIZABLE_RW, _params))
         }.join().getValue()
     }
-
-    private val deleteAuthorSql: String = """-- name: DeleteAuthor :exec
-DELETE FROM authors WHERE id = ${'$'}author_id;"""
 
     fun deleteAuthor(authorId: Long): Unit {
         val _params = Params.create()
         _params.put("\$author_id", PrimitiveValue.newUint64(authorId))
         val _query = client.supplyResult { _session ->
-            QueryReader.readFrom(_session.createQuery(deleteAuthorSql, TxMode.SERIALIZABLE_RW, _params))
+            QueryReader.readFrom(_session.createQuery(
+                "-- name: DeleteAuthor :exec\n" +
+                "DELETE FROM authors WHERE id = \$author_id;", TxMode.SERIALIZABLE_RW, _params))
         }.join().getValue()
     }
 }

@@ -8,15 +8,12 @@ import tech.ydb.table.values.OptionalType
 // The caller owns the injected client and its lifecycle.
 class Queries(private val client: org.jetbrains.exposed.v1.jdbc.JdbcTransaction) {
 
-    private val getAuthorSql: String = """-- name: GetAuthor :one
-SELECT id, name, bio FROM authors WHERE id = ${'$'}author_id;"""
-    private val getAuthorPreparedSql: String = """DECLARE ${'$'}author_id AS Uint64;
--- name: GetAuthor :one
-SELECT id, name, bio FROM authors WHERE id = ${'$'}author_id;"""
-
     fun getAuthor(authorId: Long): GetAuthorRow? {
         val _connection = client.connection.connection as java.sql.Connection
-        _connection.prepareStatement(getAuthorPreparedSql).use { _prepared ->
+        _connection.prepareStatement(
+            "DECLARE \$author_id AS Uint64;\n" +
+            "-- name: GetAuthor :one\n" +
+            "SELECT id, name, bio FROM authors WHERE id = \$author_id;").use { _prepared ->
             val _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement::class.java)
             _statement.setObject("author_id", PrimitiveValue.newUint64(authorId))
             _prepared.executeQuery().use { _rows ->
@@ -30,12 +27,11 @@ SELECT id, name, bio FROM authors WHERE id = ${'$'}author_id;"""
         }
     }
 
-    private val listAuthorsSql: String = """-- name: ListAuthors :many
-SELECT id, name, bio FROM authors ORDER BY name;"""
-
     fun listAuthors(): List<ListAuthorsRow> {
         val _connection = client.connection.connection as java.sql.Connection
-        _connection.prepareStatement(listAuthorsSql).use { _prepared ->
+        _connection.prepareStatement(
+            "-- name: ListAuthors :many\n" +
+            "SELECT id, name, bio FROM authors ORDER BY name;").use { _prepared ->
             _prepared.executeQuery().use { _rows ->
                 val _items = ArrayList<ListAuthorsRow>()
                 while (_rows.next()) {
@@ -50,15 +46,12 @@ SELECT id, name, bio FROM authors ORDER BY name;"""
         }
     }
 
-    private val getAuthorNameSql: String = """-- name: GetAuthorName :one
-SELECT name FROM authors WHERE id = ${'$'}author_id;"""
-    private val getAuthorNamePreparedSql: String = """DECLARE ${'$'}author_id AS Uint64;
--- name: GetAuthorName :one
-SELECT name FROM authors WHERE id = ${'$'}author_id;"""
-
     fun getAuthorName(authorId: Long): GetAuthorNameRow? {
         val _connection = client.connection.connection as java.sql.Connection
-        _connection.prepareStatement(getAuthorNamePreparedSql).use { _prepared ->
+        _connection.prepareStatement(
+            "DECLARE \$author_id AS Uint64;\n" +
+            "-- name: GetAuthorName :one\n" +
+            "SELECT name FROM authors WHERE id = \$author_id;").use { _prepared ->
             val _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement::class.java)
             _statement.setObject("author_id", PrimitiveValue.newUint64(authorId))
             _prepared.executeQuery().use { _rows ->
@@ -69,21 +62,16 @@ SELECT name FROM authors WHERE id = ${'$'}author_id;"""
         }
     }
 
-    private val createAuthorSql: String = """-- name: CreateAuthor :one
-INSERT INTO authors (id, name, bio)
-VALUES (${'$'}author_id, ${'$'}author_name, ${'$'}biography)
-RETURNING id, name, bio;"""
-    private val createAuthorPreparedSql: String = """DECLARE ${'$'}author_id AS Uint64;
-DECLARE ${'$'}author_name AS Utf8;
-DECLARE ${'$'}biography AS Optional<Utf8>;
--- name: CreateAuthor :one
-INSERT INTO authors (id, name, bio)
-VALUES (${'$'}author_id, ${'$'}author_name, ${'$'}biography)
-RETURNING id, name, bio;"""
-
     fun createAuthor(authorId: Long, authorName: String, biography: String?): CreateAuthorRow? {
         val _connection = client.connection.connection as java.sql.Connection
-        _connection.prepareStatement(createAuthorPreparedSql).use { _prepared ->
+        _connection.prepareStatement(
+            "DECLARE \$author_id AS Uint64;\n" +
+            "DECLARE \$author_name AS Utf8;\n" +
+            "DECLARE \$biography AS Optional<Utf8>;\n" +
+            "-- name: CreateAuthor :one\n" +
+            "INSERT INTO authors (id, name, bio)\n" +
+            "VALUES (\$author_id, \$author_name, \$biography)\n" +
+            "RETURNING id, name, bio;").use { _prepared ->
             val _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement::class.java)
             _statement.setObject("author_id", PrimitiveValue.newUint64(authorId))
             _statement.setObject("author_name", PrimitiveValue.newText(authorName))
@@ -99,19 +87,15 @@ RETURNING id, name, bio;"""
         }
     }
 
-    private val upsertAuthorSql: String = """-- name: UpsertAuthor :exec
-UPSERT INTO authors (id, name, bio)
-VALUES (${'$'}author_id, ${'$'}author_name, ${'$'}biography);"""
-    private val upsertAuthorPreparedSql: String = """DECLARE ${'$'}author_id AS Uint64;
-DECLARE ${'$'}author_name AS Utf8;
-DECLARE ${'$'}biography AS Optional<Utf8>;
--- name: UpsertAuthor :exec
-UPSERT INTO authors (id, name, bio)
-VALUES (${'$'}author_id, ${'$'}author_name, ${'$'}biography);"""
-
     fun upsertAuthor(authorId: Long, authorName: String, biography: String?): Unit {
         val _connection = client.connection.connection as java.sql.Connection
-        _connection.prepareStatement(upsertAuthorPreparedSql).use { _prepared ->
+        _connection.prepareStatement(
+            "DECLARE \$author_id AS Uint64;\n" +
+            "DECLARE \$author_name AS Utf8;\n" +
+            "DECLARE \$biography AS Optional<Utf8>;\n" +
+            "-- name: UpsertAuthor :exec\n" +
+            "UPSERT INTO authors (id, name, bio)\n" +
+            "VALUES (\$author_id, \$author_name, \$biography);").use { _prepared ->
             val _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement::class.java)
             _statement.setObject("author_id", PrimitiveValue.newUint64(authorId))
             _statement.setObject("author_name", PrimitiveValue.newText(authorName))
@@ -120,15 +104,12 @@ VALUES (${'$'}author_id, ${'$'}author_name, ${'$'}biography);"""
         }
     }
 
-    private val deleteAuthorSql: String = """-- name: DeleteAuthor :exec
-DELETE FROM authors WHERE id = ${'$'}author_id;"""
-    private val deleteAuthorPreparedSql: String = """DECLARE ${'$'}author_id AS Uint64;
--- name: DeleteAuthor :exec
-DELETE FROM authors WHERE id = ${'$'}author_id;"""
-
     fun deleteAuthor(authorId: Long): Unit {
         val _connection = client.connection.connection as java.sql.Connection
-        _connection.prepareStatement(deleteAuthorPreparedSql).use { _prepared ->
+        _connection.prepareStatement(
+            "DECLARE \$author_id AS Uint64;\n" +
+            "-- name: DeleteAuthor :exec\n" +
+            "DELETE FROM authors WHERE id = \$author_id;").use { _prepared ->
             val _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement::class.java)
             _statement.setObject("author_id", PrimitiveValue.newUint64(authorId))
             _prepared.execute()
