@@ -22,25 +22,29 @@ public final class Smoke {
                 statement.execute(schema);
             }
             try {
+                connection.setAutoCommit(false);
                 Queries queries = new Queries(connection);
                 exercise(queries);
+                connection.commit();
             } finally {
-                try (var statement = connection.createStatement()) { statement.execute("DROP TABLE authors;"); }
+                try (var statement = connection.createStatement()) {
+                    statement.execute("DROP TABLE authors;");
+                }
             }
         }
     }
 
     private static void exercise(Queries queries) throws java.sql.SQLException {
-        queries.upsertAuthor(MAX_UINT64, "Unsigned", null);
-        GetAuthorRow emptyBio = queries.getAuthor(MAX_UINT64).orElseThrow();
+        queries.createAuthor(MAX_UINT64, "Unsigned", null);
+        Authors emptyBio = queries.getAuthor(MAX_UINT64).orElseThrow();
         check(emptyBio.id() == MAX_UINT64 && "Unsigned".equals(emptyBio.name()) && emptyBio.bio() == null,
                 "nullable JDBC row");
-        check("Unsigned".equals(queries.getAuthorName(MAX_UINT64).orElseThrow().name()), "JDBC name");
+        check("Unsigned".equals(queries.getAuthorName(MAX_UINT64).orElseThrow()), "JDBC name");
 
         queries.upsertAuthor(MAX_UINT64, "Unsigned", "Biography");
         check("Biography".equals(queries.getAuthor(MAX_UINT64).orElseThrow().bio()), "non-null JDBC bio");
         queries.upsertAuthor(SECOND_ID, "Second", null);
-        List<ListAuthorsRow> rows = queries.listAuthors();
+        List<Authors> rows = queries.listAuthors();
         check(rows.stream().anyMatch(row -> row.id() == MAX_UINT64), "JDBC list result");
 
         queries.deleteAuthor(SECOND_ID);
