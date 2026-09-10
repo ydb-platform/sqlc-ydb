@@ -206,7 +206,7 @@ func renderTypeScript(a *model.AnalysisResult) (string, error) {
 	for _, query := range a.Queries {
 		constant := constantName(query.Name)
 		b.WriteString("export const " + constant + " = " + sqlLiteral(query.SQL) + ";\n")
-		if len(query.Parameters) != 0 {
+		if len(query.Parameters) != 0 && query.SQL != query.SQLWithoutDeclarations {
 			b.WriteString("const _" + constant + "_EXEC = " + sqlLiteral(query.SQLWithoutDeclarations) + ";\n")
 		}
 		b.WriteByte('\n')
@@ -324,6 +324,10 @@ func renderMethod(b *strings.Builder, query model.AnalyzedQuery) error {
 	}
 	b.WriteString("\n  async " + method + "(" + params + "): Promise<" + ret + "> {\n")
 	constant := constantName(query.Name)
+	executionConstant := constant
+	if len(query.Parameters) != 0 && query.SQL != query.SQLWithoutDeclarations {
+		executionConstant = "_" + constant + "_EXEC"
+	}
 	rawSuffix := ""
 	if resultNeedsRaw(query) {
 		rawSuffix = ".raw()"
@@ -331,7 +335,7 @@ func renderMethod(b *strings.Builder, query model.AnalyzedQuery) error {
 	if len(query.Parameters) == 0 {
 		b.WriteString("    let _pending = this.#sql(" + constant + ");\n")
 	} else {
-		b.WriteString("    let _pending = this.#sql(_" + constant + "_EXEC)\n")
+		b.WriteString("    let _pending = this.#sql(" + executionConstant + ")\n")
 		for _, parameter := range query.Parameters {
 			field, _ := identifier(parameter.Name, false)
 			value := field

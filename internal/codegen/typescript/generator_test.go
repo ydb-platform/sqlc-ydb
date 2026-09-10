@@ -114,6 +114,28 @@ func TestConfigureQueryAndSQLNamesCannotShadowGeneratedBindings(t *testing.T) {
 	}
 }
 
+func TestEqualExecutableSQLReusesExportedConstant(t *testing.T) {
+	const query = "SELECT $value;"
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name: "Echo", Command: model.Exec, SQL: query, SQLWithoutDeclarations: query,
+		Parameters: []model.Parameter{{Name: "value", Type: model.Type{Kind: "Utf8"}}},
+	}}}
+	files, err := Generate(a, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := fileContent(t, files, "queries.ts")
+	if strings.Contains(ts, "_ECHO_SQL_EXEC") {
+		t.Fatalf("equal executable SQL produced a duplicate private constant:\n%s", ts)
+	}
+	if strings.Count(ts, "`SELECT $value;`") != 1 {
+		t.Fatalf("got %d SQL literals, want 1:\n%s", strings.Count(ts, "`SELECT $value;`"), ts)
+	}
+	if !strings.Contains(ts, "let _pending = this.#sql(ECHO_SQL)") {
+		t.Fatalf("method does not reuse exported SQL constant:\n%s", ts)
+	}
+}
+
 func TestSQLLiteralRoundTripsThroughNode(t *testing.T) {
 	node, err := exec.LookPath("node")
 	if err != nil {
