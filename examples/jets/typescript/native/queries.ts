@@ -13,17 +13,6 @@ export type ListPilotsRow = {
   readonly name: string;
 };
 
-function _int32(value: unknown, name: string): number { if (typeof value !== "number" || !Number.isInteger(value) || value < -2147483648 || value > 2147483647) throw new RangeError(`${name} is outside YQL Int32 range`); return value; }
-
-function _decodeCountPilotsRow(row: unknown): CountPilotsRow {
-  if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("CountPilots: expected an object row");
-  const record = row as Record<string, unknown>;
-  if (!Object.hasOwn(row, "pilot_count")) throw new TypeError("CountPilots: result row is missing column pilot_count");
-  return {
-    pilotCount: record["pilot_count"] as bigint,
-  };
-}
-
 export class Queries {
   readonly #sql: SQL;
 
@@ -33,29 +22,28 @@ export class Queries {
   }
 
   async countPilots(configure?: ConfigureQuery): Promise<CountPilotsRow | null> {
-    const pending = this.#sql<[CountPilotsRow]>`-- name: CountPilots :one
-SELECT COUNT(*) AS pilot_count FROM pilots;`;
-    configure?.(pending);
-    const resultSets = await pending;
-    if (!Array.isArray(resultSets) || !Array.isArray(resultSets[0])) throw new TypeError("CountPilots: expected the first YDB result set to be an array");
-    const rows = resultSets[0];
-    return rows.length === 0 ? null : _decodeCountPilotsRow(rows[0]);
+    const stmt = this.#sql<[CountPilotsRow]>`-- name: CountPilots :one
+      SELECT COUNT(*) AS pilotCount FROM pilots;`;
+    configure?.(stmt);
+    const [rows] = await stmt;
+
+    return rows[0] ?? null;
   }
 
   async listPilots(configure?: ConfigureQuery): Promise<ListPilotsRow[]> {
-    const pending = this.#sql<[ListPilotsRow]>`-- name: ListPilots :many
-SELECT id, name FROM pilots ORDER BY id LIMIT 5;`;
-    configure?.(pending);
-    const [rows] = await pending;
+    const stmt = this.#sql<[ListPilotsRow]>`-- name: ListPilots :many
+      SELECT id, name FROM pilots ORDER BY id LIMIT 5;`;
+    configure?.(stmt);
+    const [rows] = await stmt;
 
     return rows;
   }
 
   async deletePilot(pilotId: number, configure?: ConfigureQuery): Promise<void> {
-    const pending = this.#sql`-- name: DeletePilot :exec
-DELETE FROM pilots WHERE id = $pilot_id;`
-      .parameter("pilot_id", new Int32(_int32(pilotId, "pilot_id")));
-    configure?.(pending);
-    await pending;
+    const stmt = this.#sql`-- name: DeletePilot :exec
+      DELETE FROM pilots WHERE id = $pilot_id;`
+      .parameter("pilot_id", new Int32(pilotId));
+    configure?.(stmt);
+    await stmt;
   }
 }

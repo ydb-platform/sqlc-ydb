@@ -40,9 +40,7 @@ export type UpsertAuthorParams = {
   readonly biography: string | null;
 };
 
-function _uint64(value: unknown, name: string): bigint { if (typeof value !== "bigint" || value < 0n || value > 18446744073709551615n) throw new RangeError(`${name} is outside YQL Uint64 range`); return value; }
-function _string(value: unknown, name: string): string { if (typeof value !== "string") throw new TypeError(`${name} must be a string`); return value; }
-function _optional<T>(value: T | null | undefined, name: string, itemType: Type, makeValue: (item: T) => Value): Value { if (value === undefined) throw new TypeError(`${name} must not be undefined; use null for an empty Optional`); return new Optional(value === null ? null : makeValue(value), itemType); }
+function _optional<T>(value: T | null, itemType: Type, makeValue: (item: T) => Value): Value { return new Optional(value === null ? null : makeValue(value), itemType); }
 
 export class Queries {
   readonly #sql: SQL;
@@ -53,64 +51,64 @@ export class Queries {
   }
 
   async getAuthor(authorId: bigint, configure?: ConfigureQuery): Promise<GetAuthorRow | null> {
-    const pending = this.#sql<[GetAuthorRow]>`-- name: GetAuthor :one
-SELECT id, name, bio FROM authors WHERE id = $author_id;`
-      .parameter("author_id", new Uint64(_uint64(authorId, "author_id")));
-    configure?.(pending);
-    const [rows] = await pending;
+    const stmt = this.#sql<[GetAuthorRow]>`-- name: GetAuthor :one
+      SELECT id, name, bio FROM authors WHERE id = $author_id;`
+      .parameter("author_id", new Uint64(authorId));
+    configure?.(stmt);
+    const [rows] = await stmt;
 
     return rows[0] ?? null;
   }
 
   async listAuthors(configure?: ConfigureQuery): Promise<ListAuthorsRow[]> {
-    const pending = this.#sql<[ListAuthorsRow]>`-- name: ListAuthors :many
-SELECT id, name, bio FROM authors ORDER BY name;`;
-    configure?.(pending);
-    const [rows] = await pending;
+    const stmt = this.#sql<[ListAuthorsRow]>`-- name: ListAuthors :many
+      SELECT id, name, bio FROM authors ORDER BY name;`;
+    configure?.(stmt);
+    const [rows] = await stmt;
 
     return rows;
   }
 
   async getAuthorName(authorId: bigint, configure?: ConfigureQuery): Promise<GetAuthorNameRow | null> {
-    const pending = this.#sql<[GetAuthorNameRow]>`-- name: GetAuthorName :one
-SELECT name FROM authors WHERE id = $author_id;`
-      .parameter("author_id", new Uint64(_uint64(authorId, "author_id")));
-    configure?.(pending);
-    const [rows] = await pending;
+    const stmt = this.#sql<[GetAuthorNameRow]>`-- name: GetAuthorName :one
+      SELECT name FROM authors WHERE id = $author_id;`
+      .parameter("author_id", new Uint64(authorId));
+    configure?.(stmt);
+    const [rows] = await stmt;
 
     return rows[0] ?? null;
   }
 
   async createAuthor(args: CreateAuthorParams, configure?: ConfigureQuery): Promise<CreateAuthorRow | null> {
-    const pending = this.#sql<[CreateAuthorRow]>`-- name: CreateAuthor :one
-INSERT INTO authors (id, name, bio)
-VALUES ($author_id, $author_name, $biography)
-RETURNING id, name, bio;`
-      .parameter("author_id", new Uint64(_uint64(args.authorId, "author_id")))
-      .parameter("author_name", new Utf8(_string(args.authorName, "author_name")))
-      .parameter("biography", _optional(args.biography, "biography", new Utf8Type(), (item) => new Utf8(_string(item, "biography"))));
-    configure?.(pending);
-    const [rows] = await pending;
+    const stmt = this.#sql<[CreateAuthorRow]>`-- name: CreateAuthor :one
+      INSERT INTO authors (id, name, bio)
+      VALUES ($author_id, $author_name, $biography)
+      RETURNING id, name, bio;`
+      .parameter("author_id", new Uint64(args.authorId))
+      .parameter("author_name", new Utf8(args.authorName))
+      .parameter("biography", _optional(args.biography, new Utf8Type(), (item) => new Utf8(item)));
+    configure?.(stmt);
+    const [rows] = await stmt;
 
     return rows[0] ?? null;
   }
 
   async upsertAuthor(args: UpsertAuthorParams, configure?: ConfigureQuery): Promise<void> {
-    const pending = this.#sql`-- name: UpsertAuthor :exec
-UPSERT INTO authors (id, name, bio)
-VALUES ($author_id, $author_name, $biography);`
-      .parameter("author_id", new Uint64(_uint64(args.authorId, "author_id")))
-      .parameter("author_name", new Utf8(_string(args.authorName, "author_name")))
-      .parameter("biography", _optional(args.biography, "biography", new Utf8Type(), (item) => new Utf8(_string(item, "biography"))));
-    configure?.(pending);
-    await pending;
+    const stmt = this.#sql`-- name: UpsertAuthor :exec
+      UPSERT INTO authors (id, name, bio)
+      VALUES ($author_id, $author_name, $biography);`
+      .parameter("author_id", new Uint64(args.authorId))
+      .parameter("author_name", new Utf8(args.authorName))
+      .parameter("biography", _optional(args.biography, new Utf8Type(), (item) => new Utf8(item)));
+    configure?.(stmt);
+    await stmt;
   }
 
   async deleteAuthor(authorId: bigint, configure?: ConfigureQuery): Promise<void> {
-    const pending = this.#sql`-- name: DeleteAuthor :exec
-DELETE FROM authors WHERE id = $author_id;`
-      .parameter("author_id", new Uint64(_uint64(authorId, "author_id")));
-    configure?.(pending);
-    await pending;
+    const stmt = this.#sql`-- name: DeleteAuthor :exec
+      DELETE FROM authors WHERE id = $author_id;`
+      .parameter("author_id", new Uint64(authorId));
+    configure?.(stmt);
+    await stmt;
   }
 }
