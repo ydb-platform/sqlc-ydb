@@ -4,27 +4,6 @@ from typing import Iterable, Optional
 from . import models as _models
 import ydb as _ydb
 
-SQL_GET_AUTHOR = """-- name: GetAuthor :one
-SELECT id, name, bio FROM authors WHERE id = $author_id;"""
-
-SQL_LIST_AUTHORS = """-- name: ListAuthors :many
-SELECT id, name, bio FROM authors ORDER BY name;"""
-
-SQL_GET_AUTHOR_NAME = """-- name: GetAuthorName :one
-SELECT name FROM authors WHERE id = $author_id;"""
-
-SQL_CREATE_AUTHOR = """-- name: CreateAuthor :one
-INSERT INTO authors (id, name, bio)
-VALUES ($author_id, $author_name, $biography)
-RETURNING id, name, bio;"""
-
-SQL_UPSERT_AUTHOR = """-- name: UpsertAuthor :exec
-UPSERT INTO authors (id, name, bio)
-VALUES ($author_id, $author_name, $biography);"""
-
-SQL_DELETE_AUTHOR = """-- name: DeleteAuthor :exec
-DELETE FROM authors WHERE id = $author_id;"""
-
 
 def _typed(value, typ):
     return _ydb.TypedValue(value, typ)
@@ -36,7 +15,9 @@ class Querier:
 
     def get_author(self, author_id: int) -> Optional[_models.Author]:
         parameters = {"$author_id": _typed(author_id, _ydb.PrimitiveType.Uint64)}
-        result_sets = self._pool.execute_with_retries(SQL_GET_AUTHOR, parameters)
+        result_sets = self._pool.execute_with_retries(
+            ("-- name: GetAuthor :one\n"
+             "SELECT id, name, bio FROM authors WHERE id = $author_id;"), parameters)
         rows = result_sets[0].rows
         if not rows:
             return None
@@ -49,7 +30,9 @@ class Querier:
 
     def list_authors(self) -> Iterable[_models.Author]:
         parameters = {}
-        result_sets = self._pool.execute_with_retries(SQL_LIST_AUTHORS, parameters)
+        result_sets = self._pool.execute_with_retries(
+            ("-- name: ListAuthors :many\n"
+             "SELECT id, name, bio FROM authors ORDER BY name;"), parameters)
         rows = result_sets[0].rows
         return (_models.Author(
             id=row["id"],
@@ -59,7 +42,9 @@ class Querier:
 
     def get_author_name(self, author_id: int) -> Optional[_models.GetAuthorNameRow]:
         parameters = {"$author_id": _typed(author_id, _ydb.PrimitiveType.Uint64)}
-        result_sets = self._pool.execute_with_retries(SQL_GET_AUTHOR_NAME, parameters)
+        result_sets = self._pool.execute_with_retries(
+            ("-- name: GetAuthorName :one\n"
+             "SELECT name FROM authors WHERE id = $author_id;"), parameters)
         rows = result_sets[0].rows
         if not rows:
             return None
@@ -70,7 +55,11 @@ class Querier:
 
     def create_author(self, author_id: int, author_name: str, biography: Optional[str]) -> Optional[_models.Author]:
         parameters = {"$author_id": _typed(author_id, _ydb.PrimitiveType.Uint64),"$author_name": _typed(author_name, _ydb.PrimitiveType.Utf8),"$biography": _typed(biography, _ydb.OptionalType(_ydb.PrimitiveType.Utf8))}
-        result_sets = self._pool.execute_with_retries(SQL_CREATE_AUTHOR, parameters)
+        result_sets = self._pool.execute_with_retries(
+            ("-- name: CreateAuthor :one\n"
+             "INSERT INTO authors (id, name, bio)\n"
+             "VALUES ($author_id, $author_name, $biography)\n"
+             "RETURNING id, name, bio;"), parameters)
         rows = result_sets[0].rows
         if not rows:
             return None
@@ -83,10 +72,15 @@ class Querier:
 
     def upsert_author(self, author_id: int, author_name: str, biography: Optional[str]) -> None:
         parameters = {"$author_id": _typed(author_id, _ydb.PrimitiveType.Uint64),"$author_name": _typed(author_name, _ydb.PrimitiveType.Utf8),"$biography": _typed(biography, _ydb.OptionalType(_ydb.PrimitiveType.Utf8))}
-        result_sets = self._pool.execute_with_retries(SQL_UPSERT_AUTHOR, parameters)
+        result_sets = self._pool.execute_with_retries(
+            ("-- name: UpsertAuthor :exec\n"
+             "UPSERT INTO authors (id, name, bio)\n"
+             "VALUES ($author_id, $author_name, $biography);"), parameters)
         return None
 
     def delete_author(self, author_id: int) -> None:
         parameters = {"$author_id": _typed(author_id, _ydb.PrimitiveType.Uint64)}
-        result_sets = self._pool.execute_with_retries(SQL_DELETE_AUTHOR, parameters)
+        result_sets = self._pool.execute_with_retries(
+            ("-- name: DeleteAuthor :exec\n"
+             "DELETE FROM authors WHERE id = $author_id;"), parameters)
         return None

@@ -4,27 +4,6 @@ from typing import Iterable, Optional
 from . import models as _models
 import ydb as _ydb
 
-SQL_GET_AUTHOR = """-- name: GetAuthor :one
-SELECT id, name, bio FROM authors WHERE id = $author_id;"""
-
-SQL_LIST_AUTHORS = """-- name: ListAuthors :many
-SELECT id, name, bio FROM authors ORDER BY name;"""
-
-SQL_GET_AUTHOR_NAME = """-- name: GetAuthorName :one
-SELECT name FROM authors WHERE id = $author_id;"""
-
-SQL_CREATE_AUTHOR = """-- name: CreateAuthor :one
-INSERT INTO authors (id, name, bio)
-VALUES ($author_id, $author_name, $biography)
-RETURNING id, name, bio;"""
-
-SQL_UPSERT_AUTHOR = """-- name: UpsertAuthor :exec
-UPSERT INTO authors (id, name, bio)
-VALUES ($author_id, $author_name, $biography);"""
-
-SQL_DELETE_AUTHOR = """-- name: DeleteAuthor :exec
-DELETE FROM authors WHERE id = $author_id;"""
-
 
 def _typed(value, typ):
     return (value, typ)
@@ -38,7 +17,9 @@ class Querier:
         parameters = {"$author_id": _typed(author_id, _ydb.PrimitiveType.Uint64)}
         cursor = self._connection.cursor()
         try:
-            cursor.execute(SQL_GET_AUTHOR, parameters)
+            cursor.execute(
+                ("-- name: GetAuthor :one\n"
+                 "SELECT id, name, bio FROM authors WHERE id = $author_id;"), parameters)
             rows = cursor.fetchall()
             if not rows:
                 return None
@@ -55,7 +36,9 @@ class Querier:
         parameters = {}
         cursor = self._connection.cursor()
         try:
-            cursor.execute(SQL_LIST_AUTHORS, parameters)
+            cursor.execute(
+                ("-- name: ListAuthors :many\n"
+                 "SELECT id, name, bio FROM authors ORDER BY name;"), parameters)
             rows = cursor.fetchall()
             return (_models.Author(
                 id=row[0],
@@ -69,7 +52,9 @@ class Querier:
         parameters = {"$author_id": _typed(author_id, _ydb.PrimitiveType.Uint64)}
         cursor = self._connection.cursor()
         try:
-            cursor.execute(SQL_GET_AUTHOR_NAME, parameters)
+            cursor.execute(
+                ("-- name: GetAuthorName :one\n"
+                 "SELECT name FROM authors WHERE id = $author_id;"), parameters)
             rows = cursor.fetchall()
             if not rows:
                 return None
@@ -84,7 +69,11 @@ class Querier:
         parameters = {"$author_id": _typed(author_id, _ydb.PrimitiveType.Uint64),"$author_name": _typed(author_name, _ydb.PrimitiveType.Utf8),"$biography": _typed(biography, _ydb.OptionalType(_ydb.PrimitiveType.Utf8))}
         cursor = self._connection.cursor()
         try:
-            cursor.execute(SQL_CREATE_AUTHOR, parameters)
+            cursor.execute(
+                ("-- name: CreateAuthor :one\n"
+                 "INSERT INTO authors (id, name, bio)\n"
+                 "VALUES ($author_id, $author_name, $biography)\n"
+                 "RETURNING id, name, bio;"), parameters)
             rows = cursor.fetchall()
             if not rows:
                 return None
@@ -101,7 +90,10 @@ class Querier:
         parameters = {"$author_id": _typed(author_id, _ydb.PrimitiveType.Uint64),"$author_name": _typed(author_name, _ydb.PrimitiveType.Utf8),"$biography": _typed(biography, _ydb.OptionalType(_ydb.PrimitiveType.Utf8))}
         cursor = self._connection.cursor()
         try:
-            cursor.execute(SQL_UPSERT_AUTHOR, parameters)
+            cursor.execute(
+                ("-- name: UpsertAuthor :exec\n"
+                 "UPSERT INTO authors (id, name, bio)\n"
+                 "VALUES ($author_id, $author_name, $biography);"), parameters)
             return None
         finally:
             cursor.close()
@@ -110,7 +102,9 @@ class Querier:
         parameters = {"$author_id": _typed(author_id, _ydb.PrimitiveType.Uint64)}
         cursor = self._connection.cursor()
         try:
-            cursor.execute(SQL_DELETE_AUTHOR, parameters)
+            cursor.execute(
+                ("-- name: DeleteAuthor :exec\n"
+                 "DELETE FROM authors WHERE id = $author_id;"), parameters)
             return None
         finally:
             cursor.close()
