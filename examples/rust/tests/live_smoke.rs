@@ -91,7 +91,7 @@ async fn booktest_smoke(client: &mut ydb::QueryClient) -> ydb::YdbResult<()> {
         assert_eq!(rows[0].name, None);
         assert_eq!(queries.say_hello("YDB".into()).await?.greeting, "hello YDB");
         queries
-            .update_book_isbn(7, "Updated".into(), "[]".into(), "isbn-new".into())
+            .update_book_isbn("Updated".into(), "[]".into(), "isbn-new".into(), 7)
             .await?;
         assert_eq!(queries.get_book(7).await?.isbn, "isbn-new");
         Ok::<(), ydb::YdbError>(())
