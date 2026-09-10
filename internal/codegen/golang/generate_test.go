@@ -53,6 +53,66 @@ func TestGeneratedSQLIsMultilineAndPreservesText(t *testing.T) {
 	}
 }
 
+func TestGeneratedSQLUsesDeclarationFreeVariant(t *testing.T) {
+	const executableSQL = "-- name: GetUser :one\n\nSELECT id, bio FROM users WHERE id = $id;"
+	in := sample()
+	in.Queries = in.Queries[:1]
+	in.Queries[0].SQLWithoutDeclarations = "-- name: GetUser :one\n   \nSELECT id, bio FROM users WHERE id = $id;"
+
+	for _, runtime := range []string{"database/sql", "ydb"} {
+		source := generatedSQLSourceForAnalysis(t, runtime, in)
+		if got := generatedSQLValue(t, source); got != executableSQL {
+			t.Fatalf("%s executable SQL = %q, want declaration-free %q", runtime, got, executableSQL)
+		}
+	}
+}
+
+func TestGeneratedDatabaseSQLFormatsMultiParameterQueryRowCall(t *testing.T) {
+	utf8 := model.Type{Kind: "Utf8"}
+	u64 := model.Type{Kind: "Uint64"}
+	in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name: "CreateAuthor", Command: model.One, SQL: "INSERT INTO authors VALUES ($author_id, $author_name, $biography) RETURNING id, name, bio;",
+		Parameters: []model.Parameter{{Name: "author_id", Type: u64}, {Name: "author_name", Type: utf8}, {Name: "biography", Type: model.Optional(utf8)}},
+		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: u64}, {Name: "name", Type: utf8}, {Name: "bio", Type: model.Optional(utf8)}}}},
+	}}}
+
+	source := generatedSQLSourceForAnalysis(t, "database/sql", in)
+	want := `err := q.db.QueryRowContext(ctx, queryCreateAuthor,
+		sql.Named("author_id", arg.AuthorID),
+		sql.Named("author_name", arg.AuthorName),
+		sql.Named("biography", arg.Biography),
+	).Scan(&row.ID, &row.Name, &row.Bio)`
+	if !strings.Contains(string(source), want) {
+		t.Fatalf("multi-parameter QueryRowContext call was not formatted readably:\n%s", source)
+	}
+}
+
+func TestGeneratedYDBManyUsesNamedColumnScans(t *testing.T) {
+	in := sample()
+	in.Queries = in.Queries[1:2]
+
+	source := generatedSQLSourceForAnalysis(t, "ydb", in)
+	want := `if err := r.ScanNamed(
+			query.Named("id", &row.ID),
+			query.Named("name", &row.Name),
+		); err != nil {`
+	if !strings.Contains(string(source), want) {
+		t.Fatalf("native :many rows were not scanned by column name:\n%s", source)
+	}
+}
+
+func TestGeneratedYDBNamedScanUsesWireNameAndGoFieldName(t *testing.T) {
+	in := sample()
+	in.Queries = in.Queries[1:2]
+	in.Queries[0].ResultSets[0].Columns[1].WireName = "users.name"
+
+	source := generatedSQLSourceForAnalysis(t, "ydb", in)
+	want := `query.Named("users.name", &row.Name)`
+	if !strings.Contains(string(source), want) {
+		t.Fatalf("native named scan did not bind the wire name to the generated Go field:\n%s", source)
+	}
+}
+
 func TestGeneratedSQLSpecialCharacters(t *testing.T) {
 	cases := []struct{ name, sql string }{
 		{"quotes", "SELECT '\"\"\"', '```', '\\\"', '\\\\', '''', `id` FROM `users`;"},
@@ -86,6 +146,11 @@ func generatedSQLSource(t *testing.T, runtime, sql string) []byte {
 	in := sample()
 	in.Queries = in.Queries[:1]
 	in.Queries[0].SQL = sql
+	return generatedSQLSourceForAnalysis(t, runtime, in)
+}
+
+func generatedSQLSourceForAnalysis(t *testing.T, runtime string, in *model.AnalysisResult) []byte {
+	t.Helper()
 	files, err := Generate(in, Options{Package: "db", Runtime: runtime})
 	if err != nil {
 		t.Fatal(err)

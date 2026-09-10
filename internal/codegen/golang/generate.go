@@ -466,7 +466,13 @@ func queryFile(source string, qs []model.AnalyzedQuery, o Options) []byte {
 }
 
 func writeQuery(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
-	c := "const " + queryConstName(q.Name) + " = " + sqlLiteral(q.SQL) + "\n\n"
+	sql := q.SQLWithoutDeclarations
+	if sql == "" {
+		sql = q.SQL
+	} else {
+		sql = cleanWhitespaceOnlyLines(sql)
+	}
+	c := "const " + queryConstName(q.Name) + " = " + sqlLiteral(sql) + "\n\n"
 	b.WriteString(c)
 	ret := "error"
 	if q.Command == model.One {
@@ -483,6 +489,24 @@ func writeQuery(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 		writeYDB(b, q, o)
 	}
 	b.WriteString("}\n\n")
+}
+
+func cleanWhitespaceOnlyLines(sql string) string {
+	lines := strings.SplitAfter(sql, "\n")
+	for i, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			continue
+		}
+		switch {
+		case strings.HasSuffix(line, "\r\n"):
+			lines[i] = "\r\n"
+		case strings.HasSuffix(line, "\n"):
+			lines[i] = "\n"
+		default:
+			lines[i] = ""
+		}
+	}
+	return strings.Join(lines, "")
 }
 
 func sqlLiteral(sql string) string {
@@ -520,7 +544,7 @@ func varRef(q model.AnalyzedQuery, p model.Parameter) string {
 	}
 	return "arg"
 }
-func sqlArgs(q model.AnalyzedQuery) string {
+func sqlArgumentList(q model.AnalyzedQuery) []string {
 	x := make([]string, len(q.Parameters))
 	for i, p := range q.Parameters {
 		value := varRef(q, p)
@@ -556,6 +580,10 @@ func sqlArgs(q model.AnalyzedQuery) string {
 			x[i] = "sql.Named(" + strconv.Quote(p.Name) + ", " + value + ")"
 		}
 	}
+	return x
+}
+func sqlArgs(q model.AnalyzedQuery) string {
+	x := sqlArgumentList(q)
 	if len(x) == 0 {
 		return ""
 	}
@@ -568,6 +596,9 @@ func writeSQL(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 	case model.Exec:
 		b.WriteString("_, err := q.db.ExecContext(ctx, " + queryConstName(q.Name) + a + ")\nreturn err\n")
 	case model.One:
+		if len(q.Parameters) > 1 {
+			a = ",\n" + strings.Join(sqlArgumentList(q), ",\n") + ",\n"
+		}
 		b.WriteString("var row " + q.Name + "Row\nerr := q.db.QueryRowContext(ctx, " + queryConstName(q.Name) + a + ").Scan(" + scan(q.ResultSets[0]) + ")\nreturn row, err\n")
 	case model.Many:
 		init := "[]" + q.Name + "Row(nil)"
@@ -604,7 +635,7 @@ func writeYDB(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 	if o.EmitEmptySlices {
 		init = "make([]" + q.Name + "Row, 0)"
 	}
-	b.WriteString("result, err := q.db.QueryResultSet(ctx, " + queryConstName(q.Name) + ", " + opt + ")\nif err != nil { return " + init + ", err }; defer result.Close(ctx)\nitems := " + init + "\nfor r, err := range result.Rows(ctx) { if err != nil { return nil, err }; var row " + q.Name + "Row; if err := r.Scan(" + scan(q.ResultSets[0]) + "); err != nil { return nil, err }; items = append(items, row) }\nreturn items, nil\n")
+	b.WriteString("result, err := q.db.QueryResultSet(ctx, " + queryConstName(q.Name) + ", " + opt + ")\nif err != nil { return " + init + ", err }; defer result.Close(ctx)\nitems := " + init + "\nfor r, err := range result.Rows(ctx) { if err != nil { return nil, err }; var row " + q.Name + "Row; if err := r.ScanNamed(\n" + scanNamed(q.ResultSets[0]) + ",\n); err != nil { return nil, err }; items = append(items, row) }\nreturn items, nil\n")
 }
 
 func writeDecimalValidations(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
@@ -655,6 +686,13 @@ func scan(rs model.ResultSet) string {
 		x[i] = "&row." + goName(c.Name)
 	}
 	return strings.Join(x, ", ")
+}
+func scanNamed(rs model.ResultSet) string {
+	x := make([]string, len(rs.Columns))
+	for i, c := range rs.Columns {
+		x[i] = "query.Named(" + strconv.Quote(c.ResultName()) + ", &row." + goName(c.Name) + ")"
+	}
+	return strings.Join(x, ",\n")
 }
 func writeYDBParameter(b *bytes.Buffer, p model.Parameter, value string, index int) {
 	if strings.EqualFold(p.Type.Kind, "List") {

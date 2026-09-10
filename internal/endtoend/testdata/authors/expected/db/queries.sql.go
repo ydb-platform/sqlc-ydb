@@ -8,7 +8,7 @@ import (
 )
 
 const queryGetAuthor = "-- name: GetAuthor :one\n" +
-	"DECLARE $author_id AS Uint64;\n" +
+	"\n" +
 	"SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;"
 
 func (q *Queries) GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, error) {

@@ -23,7 +23,11 @@ func (q *Queries) ListAuthorBooks(ctx context.Context, opts ...query.ExecuteOpti
 			return nil, err
 		}
 		var row ListAuthorBooksRow
-		if err := r.Scan(&row.AuthorID, &row.AuthorName, &row.BookTitle); err != nil {
+		if err := r.ScanNamed(
+			query.Named("author_id", &row.AuthorID),
+			query.Named("author_name", &row.AuthorName),
+			query.Named("book_title", &row.BookTitle),
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, row)
