@@ -33,10 +33,11 @@ selects `WireName` when present and otherwise `Name`; positional decoders retain
 the analyzed projection order. Generated API fields continue to use `Name`.
 `AnalyzedQuery.SQL` retains executable YQL and its declarations. The analyzer
 also derives `SQLWithoutDeclarations` from ANTLR token spans for SDKs that
-synthesize `DECLARE` from typed parameters, currently JavaScript. This removes
-only declaration syntax; comments, literals and local bindings remain intact.
-Generators do not independently reparse or strip declarations. Parameter names
-omit the leading `$`; their types and result column types must be resolved.
+synthesize `DECLARE` from typed parameters, currently JavaScript and the
+JDBC-based Java and Kotlin adapters. This removes only declaration syntax;
+comments, literals and local bindings remain intact. Generators do not
+independently reparse or strip declarations. Parameter names omit the leading
+`$`; their types and result column types must be resolved.
 `analyzer.Analyze` returns an error whenever its result contains diagnostics.
 
 The language packages in `internal/codegen` produce files from that

@@ -75,6 +75,30 @@ func TestSQLLiteralRoundTripsThroughJava17(t *testing.T) {
 	}
 }
 
+func TestJDBCPreparesWithResolvedParameterDeclarations(t *testing.T) {
+	querySQL := "-- name: GetAuthor :one\nSELECT id FROM authors WHERE id = $author_id;"
+	files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name: "GetAuthor", Command: model.One, SQL: querySQL, SQLWithoutDeclarations: querySQL,
+		Parameters: []model.Parameter{{Name: "author_id", Type: model.Type{Kind: "Uint64"}}},
+		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}}}}},
+	}}}, Options{Package: "authors.jdbc", Runtime: "jdbc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	generated := string(files[len(files)-1].Content)
+	wantReadable := "private static final String getAuthorSql = " + sqlLiteral(querySQL)
+	wantPrepared := "private static final String getAuthorPreparedSql = " + sqlLiteral("DECLARE $author_id AS Uint64;\n"+querySQL)
+	if !strings.Contains(generated, wantReadable) {
+		t.Fatalf("generated JDBC API lost declaration-free source SQL:\n%s", generated)
+	}
+	if !strings.Contains(generated, wantPrepared) {
+		t.Fatalf("generated JDBC API did not declare resolved parameters for driver preparation:\n%s", generated)
+	}
+	if !strings.Contains(generated, "client.prepareStatement(getAuthorPreparedSql)") {
+		t.Fatalf("generated JDBC API did not prepare the driver-compatible SQL:\n%s", generated)
+	}
+}
+
 func TestGenerateRejectsInvalidContracts(t *testing.T) {
 	utf8 := model.Type{Kind: "Utf8"}
 	for _, tc := range []struct {

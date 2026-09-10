@@ -37,7 +37,11 @@ pinned in the [example Maven build](../examples/authors/java/pom.xml). The
   to avoid depending on positional order. It supplies SDK `Value<?>` objects,
   handled by `SimpleJdbcPrm.setValue` and `ValueFactory.readValue`, to preserve
   unsigned and optional types. The inspected `setObject(name, object, Type)`
-  overload ignores its `Type` argument and is deliberately not used.
+  overload ignores its `Type` argument and is deliberately not used. The
+  driver's default `prepareStatement` path calls `prepareDataQuery` before any
+  values are bound, so JDBC-based generators synthesize declarations from the
+  analyzer's resolved types in a private preparation query while retaining the
+  declaration-free source SQL separately.
 - SDK constructors for `Uint8/16/32` mask the signed Java carrier. Generated
   range checks prevent truncation; `Uint64` intentionally retains every bit
   of a Java `long`.

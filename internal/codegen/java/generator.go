@@ -228,6 +228,10 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		row, _ := name(q.Name, true)
 		row += "Row"
 		constant := method + "Sql"
+		preparedConstant := constant
+		if o.Runtime != "ydb" && len(q.Parameters) > 0 && q.SQLWithoutDeclarations != "" {
+			preparedConstant = method + "PreparedSql"
+		}
 		ret := "void"
 		switch q.Command {
 		case model.One, model.Many:
@@ -248,7 +252,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		}
 		params := []string{}
 		paramNames := []string{}
-		seen := map[string]bool{"client": true, constant: true, "_params": true, "_query": true, "_connection": true, "_statement": true, "_prepared": true, "_rows": true, "_items": true}
+		seen := map[string]bool{"client": true, constant: true, preparedConstant: true, "_params": true, "_query": true, "_connection": true, "_statement": true, "_prepared": true, "_rows": true, "_items": true}
 		for _, p := range q.Parameters {
 			n, err := name(p.Name, false)
 			if err != nil {
@@ -266,6 +270,9 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			paramNames = append(paramNames, n)
 		}
 		fmt.Fprintf(&b, "\n    private static final String %s = %s;\n", constant, sqlLiteral(q.SQL))
+		if preparedConstant != constant {
+			fmt.Fprintf(&b, "    private static final String %s = %s;\n", preparedConstant, sqlLiteral(jdbcSQL(q)))
+		}
 		throws := ""
 		if o.Runtime == "jdbc" {
 			throws = " throws java.sql.SQLException"
@@ -288,13 +295,22 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		if o.Runtime == "ydb" {
 			emitNative(&b, q, paramNames, constant, row)
 		} else {
-			emitJDBC(&b, q, paramNames, constant, row, ret, o.Runtime)
+			emitJDBC(&b, q, paramNames, preparedConstant, row, ret, o.Runtime)
 		}
 		b.WriteString("    }\n")
 	}
 	b.WriteString("}\n")
 	files = append(files, model.File{Name: "Queries.java", Content: []byte(b.String())})
 	return files, nil
+}
+
+func jdbcSQL(q model.AnalyzedQuery) string {
+	var b strings.Builder
+	for _, p := range q.Parameters {
+		fmt.Fprintf(&b, "DECLARE $%s AS %s;\n", p.Name, p.Type.String())
+	}
+	b.WriteString(q.SQLWithoutDeclarations)
+	return b.String()
 }
 
 func emitNative(b *strings.Builder, q model.AnalyzedQuery, names []string, constant, row string) {

@@ -56,8 +56,10 @@ indexed `$p1` parameters first and then other names alphabetically. `Uint64`
 uses `long` as a bit-preserving representation, so `-1L` must remain `-1L`; do
 not convert it through `int` or floating point. Nullable `Utf8` is `String`
 with a null binding and nullable result; binary YQL `String` values are
-`byte[]` in the generated Java API.
-Explicit values also retain inferred YQL types when the SQL has no `DECLARE`.
+`byte[]` in the generated Java API. The readable SQL constant preserves the
+declaration-free source. JDBC prepares a private companion query with `DECLARE`
+statements synthesized from the resolved parameter types because the driver
+prepares the query before `setObject` supplies those typed values.
 `Uint8`, `Uint16`, and `Uint32` inputs are checked before execution, so a wider
 Java integer cannot be silently truncated by an SDK constructor.
 
