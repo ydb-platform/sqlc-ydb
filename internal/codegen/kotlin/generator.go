@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/ydb-platform/sqlc-engine-ydb/internal/model"
+	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
 type Options struct{ Package, Runtime string }

@@ -8,7 +8,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/ydb-platform/sqlc-engine-ydb/internal/model"
+	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
 // Options controls the generated namespace and runtime profile.

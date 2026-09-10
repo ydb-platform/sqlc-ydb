@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ydb-platform/sqlc-engine-ydb/internal/model"
+	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
 func scalar(kind string) model.Type { return model.Type{Kind: kind} }

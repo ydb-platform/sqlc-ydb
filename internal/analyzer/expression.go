@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/ydb-platform/sqlc-engine-ydb/internal/model"
-	"github.com/ydb-platform/sqlc-engine-ydb/internal/yql/builtins"
+	"github.com/ydb-platform/sqlc-ydb/internal/model"
+	"github.com/ydb-platform/sqlc-ydb/internal/yql/builtins"
 	parser "github.com/ydb-platform/yql-parsers/go"
 )
 

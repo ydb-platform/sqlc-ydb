@@ -1,4 +1,4 @@
-module github.com/ydb-platform/sqlc-engine-ydb
+module github.com/ydb-platform/sqlc-ydb
 
 go 1.26.0
 

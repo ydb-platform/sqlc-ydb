@@ -3,7 +3,7 @@ package builtins
 import (
 	"fmt"
 
-	"github.com/ydb-platform/sqlc-engine-ydb/internal/model"
+	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
 func resolveLibrary(name string, args []model.Type) (model.Type, error) {

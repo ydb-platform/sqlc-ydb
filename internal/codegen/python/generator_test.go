@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ydb-platform/sqlc-engine-ydb/internal/model"
+	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
 func sampleAnalysis() *model.AnalysisResult {

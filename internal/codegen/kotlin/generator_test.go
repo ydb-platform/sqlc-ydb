@@ -3,7 +3,7 @@ package kotlin
 import (
 	"encoding/base64"
 	"fmt"
-	"github.com/ydb-platform/sqlc-engine-ydb/internal/model"
+	"github.com/ydb-platform/sqlc-ydb/internal/model"
 	"os"
 	"os/exec"
 	"path/filepath"

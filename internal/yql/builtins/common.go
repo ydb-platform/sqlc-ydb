@@ -5,7 +5,7 @@ package builtins
 import (
 	"fmt"
 
-	"github.com/ydb-platform/sqlc-engine-ydb/internal/model"
+	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
 // CommonType returns the YQL common type used for branch and value

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly module_path='github.com/ydb-platform/sqlc-engine-ydb'
+readonly module_path='github.com/ydb-platform/sqlc-ydb'
 declare -a cleanup_paths=()
 
 cleanup() {

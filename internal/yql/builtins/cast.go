@@ -3,7 +3,7 @@ package builtins
 import (
 	"fmt"
 
-	"github.com/ydb-platform/sqlc-engine-ydb/internal/model"
+	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
 // Cast returns the static result type of a supported YQL CAST. Conversions that

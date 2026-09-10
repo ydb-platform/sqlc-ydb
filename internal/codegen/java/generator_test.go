@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ydb-platform/sqlc-engine-ydb/internal/model"
+	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
 func TestSQLLiteralRoundTripsThroughJava17(t *testing.T) {

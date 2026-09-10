@@ -9,7 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/ydb-platform/sqlc-engine-ydb/internal/model"
+	"github.com/ydb-platform/sqlc-ydb/internal/model"
 	yql "github.com/ydb-platform/yql-parsers/go"
 )
 

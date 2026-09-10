@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/ydb-platform/sqlc-engine-ydb/internal/cli"
+	"github.com/ydb-platform/sqlc-ydb/internal/cli"
 	"os"
 )
 

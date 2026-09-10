@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ydb-platform/sqlc-engine-ydb/internal/cli"
+	"github.com/ydb-platform/sqlc-ydb/internal/cli"
 )
 
 var update = flag.Bool("update", false, "update end-to-end expected output")
