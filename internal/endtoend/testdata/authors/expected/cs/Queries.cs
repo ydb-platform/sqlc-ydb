@@ -25,14 +25,12 @@ public sealed class Queries
 
     public Queries WithTransaction(YdbTransaction transaction) => new(_connection, transaction ?? throw new ArgumentNullException(nameof(transaction)));
 
-    private const string SqlGetAuthor =
-        "-- name: GetAuthor :one\n" +
-        "DECLARE $author_id AS Uint64;\n" +
-        "SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;";
-
     public async Task<GetAuthorRow> GetAuthorAsync(ulong AuthorID, CancellationToken cancellationToken = default)
     {
-        await using var command = new YdbCommand(SqlGetAuthor, _connection) { Transaction = _transaction };
+        await using var command = new YdbCommand(
+            "-- name: GetAuthor :one\n" +
+            "DECLARE $author_id AS Uint64;\n" +
+            "SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;", _connection) { Transaction = _transaction };
         command.Parameters.Add(new YdbParameter("$author_id", DbType.UInt64, AuthorID));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))

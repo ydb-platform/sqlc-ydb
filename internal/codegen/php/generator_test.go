@@ -80,14 +80,14 @@ func TestGenerateUsesLosslessOfficialSDKContract(t *testing.T) {
 	for _, want := range []string{
 		"namespace Books\\Native;",
 		"require_once __DIR__ . '/YdbRuntime.php';",
-		"public const GET_AUTHOR_SQL = <<<'SQLC_YDB_YQL'",
+		"$session->newQuery(<<<'SQLC_YDB_YQL'",
 		"public function getAuthor(string $authorId): ?GetAuthorRow",
 		"public function createBook(CreateBookParams $params): ?CreateBookRow",
 		"public function deleteAuthor(): void",
 		"YdbValueCodec::typedUint64($authorId, 'author_id')",
 		"YdbValueCodec::typedTimestamp($params->available, 'available')",
 		"YdbValueCodec::typedJson($params->tags, 'tags')",
-		"$session->newQuery(self::GET_AUTHOR_SQL)",
+		"$session->newQuery(<<<'SQLC_YDB_YQL'",
 		"->beginTx('serializable_read_write')",
 		"return (new YdbRawExecutor($this->table))->execute($session, $query);",
 	} {

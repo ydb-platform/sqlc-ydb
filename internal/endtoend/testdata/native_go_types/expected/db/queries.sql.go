@@ -10,13 +10,6 @@ import (
 	"github.com/ydb-platform/ydb-go-sdk/v3/types"
 )
 
-const queryBindNativeTypes = `-- name: BindNativeTypes :one
-
-
-
-
-SELECT $ids AS ids, $optional_ids AS optional_ids, $amount AS amount, $id AS id;`
-
 func (q *Queries) BindNativeTypes(ctx context.Context, arg BindNativeTypesParams, opts ...query.ExecuteOption) (BindNativeTypesRow, error) {
 	if err := validateDecimalParameter("$amount", arg.Amount, 22, 9); err != nil {
 		return BindNativeTypesRow{}, err
@@ -46,7 +39,12 @@ func (q *Queries) BindNativeTypes(ctx context.Context, arg BindNativeTypesParams
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx, queryBindNativeTypes, callOptions...)
+	result, err := q.db.QueryRow(ctx, "-- name: BindNativeTypes :one\n"+
+		"\n"+
+		"\n"+
+		"\n"+
+		"\n"+
+		"SELECT $ids AS ids, $optional_ids AS optional_ids, $amount AS amount, $id AS id;", callOptions...)
 	if err != nil {
 		return BindNativeTypesRow{}, err
 	}

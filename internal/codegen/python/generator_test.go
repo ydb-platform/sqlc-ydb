@@ -168,7 +168,7 @@ func TestSQLAlchemyParameterScannerPreservesLiterals(t *testing.T) {
 	}
 }
 
-func TestGeneratedMultilineSQLConstantIsReadableAndRoundTrips(t *testing.T) {
+func TestGeneratedMultilineSQLLiteralIsReadableAndRoundTrips(t *testing.T) {
 	queries := []struct {
 		name string
 		sql  string
@@ -188,19 +188,8 @@ func TestGeneratedMultilineSQLConstantIsReadableAndRoundTrips(t *testing.T) {
 		t.Fatal(err)
 	}
 	source := string(files[1].Content)
-	start := strings.Index(source, "SQL_MULTILINE_SQL = ")
-	if start < 0 {
-		t.Fatalf("missing SQL constant: %s", source)
-	}
-	literal := source[start : start+strings.Index(source[start:], "\n\n")]
-	if !strings.HasPrefix(literal, "SQL_MULTILINE_SQL = \"\"\"") || strings.Contains(literal, `\n`) {
-		t.Fatalf("SQL constant is not a readable multiline literal: %q", literal)
-	}
-	if !strings.Contains(literal, "\n\tSELECT") || strings.Contains(literal, `\tSELECT`) {
-		t.Fatalf("SQL literal did not retain tab indentation: %q", literal)
-	}
-	if !strings.Contains(literal, `\"\"\"quoted\"\"\"`) || !strings.HasSuffix(literal, `\\"""`) {
-		t.Fatalf("SQL literal did not safely escape quote delimiters or a trailing backslash: %q", literal)
+	if strings.Contains(source, "SQL_MULTILINE_SQL =") || !strings.Contains(source, "cursor.execute(\n") {
+		t.Fatalf("expected inline SQL: %s", source)
 	}
 	dir := t.TempDir()
 	pkg := filepath.Join(dir, "db")
@@ -215,9 +204,9 @@ func TestGeneratedMultilineSQLConstantIsReadableAndRoundTrips(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "ydb.py"), []byte(""), 0600); err != nil {
 		t.Fatal(err)
 	}
-	script := fmt.Sprintf("import sys; sys.path.insert(0, %q); from db import queries\n", dir)
+	script := fmt.Sprintf("import ast, pathlib\ntree = ast.parse(pathlib.Path(%q).read_text())\nvalues = {node.name: next(ast.literal_eval(call.args[0]) for call in ast.walk(node) if isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and call.func.attr == 'execute') for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and not node.name.startswith('_')}\n", filepath.Join(pkg, "queries.py"))
 	for _, q := range queries {
-		script += fmt.Sprintf("assert queries.SQL_%s == %q, repr(queries.SQL_%s)\n", strings.ToUpper(q.name), q.sql, strings.ToUpper(q.name))
+		script += fmt.Sprintf("assert values[%q] == %q, repr(values[%q])\n", q.name, q.sql, q.name)
 	}
 	cmd := exec.Command("python3", "-c", script)
 	cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
@@ -226,7 +215,7 @@ func TestGeneratedMultilineSQLConstantIsReadableAndRoundTrips(t *testing.T) {
 	}
 }
 
-func TestGeneratedSQLConstantsRoundTripSpecialCharacters(t *testing.T) {
+func TestGeneratedSQLLiteralsRoundTripSpecialCharacters(t *testing.T) {
 	type queryCase struct {
 		name string
 		sql  string
@@ -274,11 +263,11 @@ func TestGeneratedSQLConstantsRoundTripSpecialCharacters(t *testing.T) {
 		if err := os.WriteFile(expectedPath, expectedJSON, 0600); err != nil {
 			t.Fatal(err)
 		}
-		script := fmt.Sprintf("import json, sys; sys.path.insert(0, %q); from db import queries\nwith open(%q, encoding='utf-8') as f: expected = json.load(f)\nfor name, want in expected.items():\n    got = getattr(queries, name)\n    assert got == want, (name, repr(got), repr(want))\n", dir, expectedPath)
+		script := fmt.Sprintf("import ast, inspect, json, sys; sys.path.insert(0, %q); from db import queries\ntree = ast.parse(inspect.getsource(queries))\nwith open(%q, encoding='utf-8') as f: expected = json.load(f)\nfor name, want in expected.items():\n    node = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == name.removeprefix('SQL_').lower())\n    call = next(c for c in ast.walk(node) if isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute) and c.func.attr in ('execute', 'execute_with_retries'))\n    got = ast.literal_eval(call.args[0])\n    assert got == want, (name, repr(got), repr(want))\n", dir, expectedPath)
 		cmd := exec.Command("python3", "-c", script)
 		cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
 		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("%s SQL constants did not round-trip through Python: %v\n%s", runtime, err, out)
+			t.Fatalf("%s inline SQL expressions did not round-trip through Python: %v\n%s", runtime, err, out)
 		}
 	}
 
@@ -287,7 +276,7 @@ func TestGeneratedSQLConstantsRoundTripSpecialCharacters(t *testing.T) {
 	}
 }
 
-func TestGeneratedSQLAlchemySQLConstantRoundTripsLexicalRewrite(t *testing.T) {
+func TestGeneratedSQLAlchemySQLLiteralRoundTripsLexicalRewrite(t *testing.T) {
 	sql := "-- name: Пример :one\n-- comment $author_id :note\nDECLARE $author_id AS Uint64;\n$local = $author_id;\nSELECT ':ghost', @@:ghost $author_id@@, `:column`, $local FROM authors WHERE id = $author_id;"
 	want := "-- name\\: Пример \\:one\n-- comment $author_id \\:note\nDECLARE $author_id AS Uint64;\n$local = :author_id;\nSELECT '\\:ghost', @@\\:ghost $author_id@@, `\\:column`, $local FROM authors WHERE id = :author_id;"
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "find_author", Command: model.Exec, SQL: sql, Parameters: []model.Parameter{{Name: "author_id", Type: model.Type{Kind: "Uint64"}}}}}}
@@ -326,11 +315,11 @@ func TestGeneratedSQLAlchemySQLConstantRoundTripsLexicalRewrite(t *testing.T) {
 	if err := os.WriteFile(expectedPath, expectedJSON, 0600); err != nil {
 		t.Fatal(err)
 	}
-	script := fmt.Sprintf("import json, sys; sys.path.insert(0, %q); from db import queries\nwith open(%q, encoding='utf-8') as f: expected = json.load(f)\nassert queries.SQL_FIND_AUTHOR == expected['SQL_FIND_AUTHOR'], (repr(queries.SQL_FIND_AUTHOR), repr(expected['SQL_FIND_AUTHOR']))\n", dir, expectedPath)
+	script := fmt.Sprintf("import ast, inspect, json, sys; sys.path.insert(0, %q); from db import queries\ntree = ast.parse(inspect.getsource(queries))\nwith open(%q, encoding='utf-8') as f: expected = json.load(f)\ncall = next(c for c in ast.walk(tree) if isinstance(c, ast.Call) and isinstance(c.func, ast.Name) and c.func.id == '_text')\ngot = ast.literal_eval(call.args[0])\nassert got == expected['SQL_FIND_AUTHOR'], (repr(got), repr(expected['SQL_FIND_AUTHOR']))\n", dir, expectedPath)
 	cmd := exec.Command("python3", "-c", script)
 	cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("SQLAlchemy SQL constant did not round-trip through Python: %v\n%s", err, out)
+		t.Fatalf("SQLAlchemy inline SQL expression did not round-trip through Python: %v\n%s", err, out)
 	}
 }
 

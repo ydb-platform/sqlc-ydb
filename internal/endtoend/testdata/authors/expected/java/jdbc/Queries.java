@@ -13,20 +13,13 @@ public final class Queries {
         this.client = java.util.Objects.requireNonNull(client);
     }
 
-    private static final String getAuthorSql = """
--- name: GetAuthor :one
-DECLARE $author_id AS Uint64;
-SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;\
-""";
-    private static final String getAuthorPreparedSql = """
-DECLARE $author_id AS Uint64;
--- name: GetAuthor :one
-  \s
-SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;\
-""";
-
     public java.util.Optional<GetAuthorRow> getAuthor(long authorId) throws java.sql.SQLException {
-        try (var _prepared = client.prepareStatement(getAuthorPreparedSql)) {
+        try (var _prepared = client.prepareStatement("""
+            DECLARE $author_id AS Uint64;
+            -- name: GetAuthor :one
+              \s
+            SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;\
+            """)) {
             var _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement.class);
             _statement.setObject("author_id", PrimitiveValue.newUint64(authorId));
             try (var _rows = _prepared.executeQuery()) {

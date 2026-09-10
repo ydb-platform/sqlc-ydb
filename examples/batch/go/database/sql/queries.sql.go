@@ -9,13 +9,11 @@ import (
 	"github.com/ydb-platform/ydb-go-sdk/v3/types"
 )
 
-const queryGetAuthor = `-- name: GetAuthor :one
-SELECT author_id, name, biography FROM authors
-WHERE author_id = $author_id;`
-
 func (q *Queries) GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, error) {
 	var row GetAuthorRow
-	err := q.db.QueryRowContext(ctx, queryGetAuthor,
+	err := q.db.QueryRowContext(ctx, "-- name: GetAuthor :one\n"+
+		"SELECT author_id, name, biography FROM authors\n"+
+		"WHERE author_id = $author_id;",
 		sql.Named("author_id", arg),
 	).Scan(
 		&row.AuthorID,
@@ -25,57 +23,47 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, erro
 	return row, err
 }
 
-const queryDeleteBookExecResult = `-- name: DeleteBookExecResult :exec
-DELETE FROM books
-WHERE book_id = $book_id;`
-
 func (q *Queries) DeleteBookExecResult(ctx context.Context, arg uint64) error {
-	_, err := q.db.ExecContext(ctx, queryDeleteBookExecResult,
+	_, err := q.db.ExecContext(ctx, "-- name: DeleteBookExecResult :exec\n"+
+		"DELETE FROM books\n"+
+		"WHERE book_id = $book_id;",
 		sql.Named("book_id", arg),
 	)
 	return err
 }
-
-const queryDeleteBook = `-- name: DeleteBook :exec
-DELETE FROM books
-WHERE book_id = $book_id;`
 
 func (q *Queries) DeleteBook(ctx context.Context, arg uint64) error {
-	_, err := q.db.ExecContext(ctx, queryDeleteBook,
+	_, err := q.db.ExecContext(ctx, "-- name: DeleteBook :exec\n"+
+		"DELETE FROM books\n"+
+		"WHERE book_id = $book_id;",
 		sql.Named("book_id", arg),
 	)
 	return err
 }
-
-const queryDeleteBookNamedFunc = `-- name: DeleteBookNamedFunc :exec
-DELETE FROM books
-WHERE book_id = $book_id;`
 
 func (q *Queries) DeleteBookNamedFunc(ctx context.Context, arg uint64) error {
-	_, err := q.db.ExecContext(ctx, queryDeleteBookNamedFunc,
+	_, err := q.db.ExecContext(ctx, "-- name: DeleteBookNamedFunc :exec\n"+
+		"DELETE FROM books\n"+
+		"WHERE book_id = $book_id;",
 		sql.Named("book_id", arg),
 	)
 	return err
 }
-
-const queryDeleteBookNamedSign = `-- name: DeleteBookNamedSign :exec
-DELETE FROM books
-WHERE book_id = $book_id;`
 
 func (q *Queries) DeleteBookNamedSign(ctx context.Context, arg uint64) error {
-	_, err := q.db.ExecContext(ctx, queryDeleteBookNamedSign,
+	_, err := q.db.ExecContext(ctx, "-- name: DeleteBookNamedSign :exec\n"+
+		"DELETE FROM books\n"+
+		"WHERE book_id = $book_id;",
 		sql.Named("book_id", arg),
 	)
 	return err
 }
 
-const queryBooksByYear = `-- name: BooksByYear :many
-SELECT book_id, author_id, isbn, book_type, title, year, available, tags
-FROM books
-WHERE year = $year;`
-
 func (q *Queries) BooksByYear(ctx context.Context, arg int32) ([]BooksByYearRow, error) {
-	rows, err := q.db.QueryContext(ctx, queryBooksByYear,
+	rows, err := q.db.QueryContext(ctx, "-- name: BooksByYear :many\n"+
+		"SELECT book_id, author_id, isbn, book_type, title, year, available, tags\n"+
+		"FROM books\n"+
+		"WHERE year = $year;",
 		sql.Named("year", arg),
 	)
 	if err != nil {
@@ -102,14 +90,12 @@ func (q *Queries) BooksByYear(ctx context.Context, arg int32) ([]BooksByYearRow,
 	return items, rows.Err()
 }
 
-const queryCreateAuthor = `-- name: CreateAuthor :one
-INSERT INTO authors (author_id, name, biography)
-VALUES ($author_id, $name, $biography)
-RETURNING author_id, name, biography;`
-
 func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (CreateAuthorRow, error) {
 	var row CreateAuthorRow
-	err := q.db.QueryRowContext(ctx, queryCreateAuthor,
+	err := q.db.QueryRowContext(ctx, "-- name: CreateAuthor :one\n"+
+		"INSERT INTO authors (author_id, name, biography)\n"+
+		"VALUES ($author_id, $name, $biography)\n"+
+		"RETURNING author_id, name, biography;",
 		sql.Named("author_id", arg.AuthorID),
 		sql.Named("name", arg.Name),
 		sql.Named("biography", types.NullableJSONValue(arg.Biography)),
@@ -121,14 +107,12 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (Cre
 	return row, err
 }
 
-const queryCreateBook = `-- name: CreateBook :one
-INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)
-VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)
-RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;`
-
 func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams) (CreateBookRow, error) {
 	var row CreateBookRow
-	err := q.db.QueryRowContext(ctx, queryCreateBook,
+	err := q.db.QueryRowContext(ctx, "-- name: CreateBook :one\n"+
+		"INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)\n"+
+		"VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)\n"+
+		"RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;",
 		sql.Named("book_id", arg.BookID),
 		sql.Named("author_id", arg.AuthorID),
 		sql.Named("isbn", arg.Isbn),
@@ -150,13 +134,11 @@ func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams) (CreateB
 	return row, err
 }
 
-const queryUpdateBook = `-- name: UpdateBook :exec
-UPDATE books
-SET title = $title, tags = $tags
-WHERE book_id = $book_id;`
-
 func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams) error {
-	_, err := q.db.ExecContext(ctx, queryUpdateBook,
+	_, err := q.db.ExecContext(ctx, "-- name: UpdateBook :exec\n"+
+		"UPDATE books\n"+
+		"SET title = $title, tags = $tags\n"+
+		"WHERE book_id = $book_id;",
 		sql.Named("title", arg.Title),
 		sql.Named("tags", types.JSONValue(arg.Tags)),
 		sql.Named("book_id", arg.BookID),
@@ -164,13 +146,11 @@ func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams) error {
 	return err
 }
 
-const queryGetBiography = `-- name: GetBiography :one
-SELECT biography FROM authors
-WHERE author_id = $author_id;`
-
 func (q *Queries) GetBiography(ctx context.Context, arg uint64) (GetBiographyRow, error) {
 	var row GetBiographyRow
-	err := q.db.QueryRowContext(ctx, queryGetBiography,
+	err := q.db.QueryRowContext(ctx, "-- name: GetBiography :one\n"+
+		"SELECT biography FROM authors\n"+
+		"WHERE author_id = $author_id;",
 		sql.Named("author_id", arg),
 	).Scan(
 		&row.Biography,

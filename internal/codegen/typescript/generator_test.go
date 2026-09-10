@@ -8,8 +8,105 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
+	"github.com/ydb-platform/sqlc-ydb/internal/source"
 )
+
+func TestApprovedExamples(t *testing.T) {
+	for _, family := range []string{"authors", "batch", "booktest", "jets", "ondeck"} {
+		t.Run(family, func(t *testing.T) {
+			base := filepath.Join("../../../examples", family)
+			schemaPath, queryPath := "schema.sql", "queries.sql"
+			if family == "ondeck" {
+				schemaPath, queryPath = "schema", "query"
+			}
+			schema, err := source.Read(base, []string{schemaPath}, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			queries, err := source.Read(base, []string{queryPath}, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			a, err := analyzer.Analyze(schema, queries)
+			if err != nil {
+				t.Fatal(err)
+			}
+			files, err := Generate(a, Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			want, err := os.ReadFile(filepath.Join(base, "typescript/native/queries.ts"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(want) != string(files[0].Content) {
+				t.Fatal("generated source differs from maintainer-approved example")
+			}
+		})
+	}
+}
+
+func TestSDKNativeTypes(t *testing.T) {
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Echo", Command: model.One,
+		SQL: "SELECT $created, $payload;", SQLWithoutDeclarations: "SELECT $created, $payload;",
+		Parameters: []model.Parameter{{Name: "created", Type: model.Type{Kind: "Timestamp"}}, {Name: "payload", Type: model.Optional(model.Type{Kind: "Json"})}},
+		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "created", Type: model.Type{Kind: "Timestamp"}}, {Name: "payload", Type: model.Optional(model.Type{Kind: "Json"})}}}},
+	}}}
+	files, err := Generate(a, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := fileContent(t, files, "queries.ts")
+	for _, want := range []string{"readonly created: Date;", "readonly payload: string | null;", "readonly payload: JSValue;", "new Timestamp(args.created)", "new Optional(args.payload === null ? null : new Json(args.payload), new JsonType())", "this.#sql<[EchoRow]>"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+	for _, unwanted := range []string{".raw()", "function _", "_SQL", "Record<string, unknown>"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("unexpected %s", unwanted)
+		}
+	}
+}
+
+func TestAliasQuoting(t *testing.T) {
+	for _, tc := range []struct{ name, want string }{{"bookId", "bookId"}, {"select", "`select`"}, {"имя", "`имя`"}} {
+		if got := quoteAlias(tc.name); got != tc.want {
+			t.Errorf("quoteAlias(%q) = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestDeclarationLineFormattingRetainsCommentsAndBlankLines(t *testing.T) {
+	original := "-- name: Q :exec\nDECLARE $id AS Uint64;\n\nDECLARE $name AS Utf8; -- keep\n$local = 1;\nSELECT $id;"
+	executable := "-- name: Q :exec\n   \n\n    -- keep\n$local = 1;\nSELECT $id;"
+	want := "-- name: Q :exec\n\n    -- keep\n$local = 1;\nSELECT $id;"
+	if got := omitDeclarationLines(original, executable); got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestProjectionAliasesAndStableFallbacks(t *testing.T) {
+	for _, tc := range []struct{ sql, want string }{
+		{"SELECT display_name FROM authors;", "SELECT display_name AS displayName FROM authors;"},
+		{"SELECT * FROM authors;", "displayName: row.display_name"},
+		{"SELECT display_name FROM authors UNION ALL SELECT display_name FROM authors;", "displayName: row.display_name"},
+	} {
+		a, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE authors (id Uint64 NOT NULL, display_name Utf8 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "query.sql", Text: "-- name: List :many\n" + tc.sql}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		files, err := Generate(a, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := fileContent(t, files, "queries.ts"); !strings.Contains(got, tc.want) {
+			t.Errorf("%s: missing %q\n%s", tc.sql, tc.want, got)
+		}
+	}
+}
 
 func testAnalysis() *model.AnalysisResult {
 	uint64Type := model.Type{Kind: "Uint64"}
@@ -63,17 +160,17 @@ func TestGenerateTypeScript(t *testing.T) {
 	ts := fileContent(t, files, "queries.ts")
 	for _, want := range []string{
 		`import type { Query, SQL } from "@ydbjs/query";`,
-		`export type ConfigureQuery = (query: Query) => Query;`,
+		`export type ConfigureQuery = (query: Query) => void;`,
 		`import { Uint64, Utf8 } from "@ydbjs/value/primitive";`,
 		`export class Queries`,
 		`async getAuthor(authorId: bigint, configure?: ConfigureQuery)`,
-		`.parameter("author_id", new Uint64(_uint64(authorId, "author_id")))`,
+		`.parameter("author_id", new Uint64(authorId))`,
 		`async upsertAuthor(args: UpsertAuthorParams, configure?: ConfigureQuery)`,
-		`.parameter("name", new Utf8(_string(args.name, "name")))`,
+		`.parameter("name", new Utf8(args.name))`,
 		`async listAuthors(configure?: ConfigureQuery)`,
-		`if (configure) _pending = configure(_pending);`,
-		`return _rows.length === 0 ? null : _decodeGetAuthorRow(_rows[0]);`,
-		`return _rows.map(_decodeListAuthorsRow);`,
+		`configure?.(stmt);`,
+		`return row === undefined ? null : {`,
+		`return rows.map((row) => ({`,
 	} {
 		if !strings.Contains(ts, want) {
 			t.Errorf("queries.ts missing %q\n%s", want, ts)
@@ -105,8 +202,8 @@ func TestConfigureQueryAndSQLNamesCannotShadowGeneratedBindings(t *testing.T) {
 	for _, want := range []string{
 		`async bySQL(sql_: string, configure?: ConfigureQuery): Promise<void>`,
 		`async byConfigure(configure_: string, configure?: ConfigureQuery): Promise<void>`,
-		`_string(sql_, "sql")`,
-		`_string(configure_, "configure")`,
+		`new Utf8(sql_)`,
+		`new Utf8(configure_)`,
 	} {
 		if !strings.Contains(ts, want) {
 			t.Errorf("queries.ts missing %q\n%s", want, ts)
@@ -114,7 +211,7 @@ func TestConfigureQueryAndSQLNamesCannotShadowGeneratedBindings(t *testing.T) {
 	}
 }
 
-func TestEqualExecutableSQLReusesExportedConstant(t *testing.T) {
+func TestExecutableSQLAppearsOnlyAtCall(t *testing.T) {
 	const query = "SELECT $value;"
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
 		Name: "Echo", Command: model.Exec, SQL: query, SQLWithoutDeclarations: query,
@@ -131,8 +228,8 @@ func TestEqualExecutableSQLReusesExportedConstant(t *testing.T) {
 	if strings.Count(ts, "`SELECT $value;`") != 1 {
 		t.Fatalf("got %d SQL literals, want 1:\n%s", strings.Count(ts, "`SELECT $value;`"), ts)
 	}
-	if !strings.Contains(ts, "let _pending = this.#sql(ECHO_SQL)") {
-		t.Fatalf("method does not reuse exported SQL constant:\n%s", ts)
+	if !strings.Contains(ts, "const stmt = this.#sql") {
+		t.Fatalf("method does not construct an inline SQL statement:\n%s", ts)
 	}
 }
 
@@ -156,8 +253,8 @@ func TestSQLLiteralRoundTripsThroughNode(t *testing.T) {
 	dir := t.TempDir()
 	module := filepath.Join(dir, "queries.mjs")
 	transpileModule(t, node, generated, module)
-	expected, _ := json.Marshal(want)
-	script := `import { EXACT_SQL } from ` + string(mustJSON(module)) + `; if (EXACT_SQL !== ` + string(expected) + `) { throw new Error(JSON.stringify(EXACT_SQL)); }`
+	expected, _ := json.Marshal(strings.ReplaceAll(strings.TrimSpace(want), "\n", "\n      "))
+	script := `import { Queries } from ` + string(mustJSON(module)) + `; let actual; await new Queries((parts) => { actual = parts.join(""); return Promise.resolve([]); }).exact(); if (actual !== ` + string(expected) + `) { throw new Error(JSON.stringify(actual)); }`
 	if out, err := exec.Command(node, "--input-type=module", "--eval", script).CombinedOutput(); err != nil {
 		t.Fatalf("generated literal did not round-trip: %v\n%s", err, out)
 	}
@@ -237,10 +334,10 @@ export async function load(url, context, nextLoad) {
 	}
 	program := filepath.Join(dir, "main.mjs")
 	programSource := `
-import { Queries, GET_AUTHOR_SQL } from './queries.mjs';
+import { Queries } from './queries.mjs';
 const calls = [];
 const client = (text) => {
-  const call = { text, params: [] }; calls.push(call);
+  const call = { text: text.join(""), params: [] }; calls.push(call);
   const promise = Promise.resolve([[{ id: 18446744073709551615n, display_name: 'Ada', bio: null }]]);
   call.pending = promise;
   promise.parameter = (name, value) => { call.params.push([name, value.value]); return promise; };
@@ -251,19 +348,13 @@ let configured = false;
 const row = await queries.getAuthor(18446744073709551615n, (pending) => { configured = pending === calls[0].pending; return pending; });
 if (!configured) throw new Error('configure hook did not receive the bound query');
 if (row.id !== 18446744073709551615n || row.displayName !== 'Ada' || row.bio !== null) throw new Error('decode failed');
-if (calls[0].text.includes('DECLARE') || !GET_AUTHOR_SQL.includes('DECLARE')) throw new Error('wrong SQL variant');
+if (calls[0].text.includes('DECLARE')) throw new Error('wrong SQL variant');
 if (calls[0].params[0][0] !== 'author_id' || calls[0].params[0][1] !== 18446744073709551615n) throw new Error('binding failed');
-for (const [method, name] of [['pending', 'pending'], ['resultSets', 'result_sets'], ['rows', 'rows'], ['named', 'decode_named_row']]) {
+for (const [method, name] of [['pending', 'pending'], ['resultSets', 'result_sets'], ['rows_', 'rows'], ['named', 'decode_named_row']]) {
   const row = await queries[method](7n);
   const params = calls.at(-1).params;
   if (row.displayName !== 'Ada' || params[0][0] !== name || params[0][1] !== 7n) throw new Error('shadowed parameter: ' + name);
 }
-const bad = new Queries(() => {
-  const promise = Promise.resolve([[{ id: 1n, bio: null }]]);
-  promise.parameter = () => promise;
-  return promise;
-});
-try { await bad.getAuthor(1n); throw new Error('missing column accepted'); } catch (error) { if (!String(error).includes('display_name')) throw error; }
 `
 	if err := os.WriteFile(program, []byte(programSource), 0600); err != nil {
 		t.Fatal(err)
@@ -344,145 +435,6 @@ func TestSupportedExampleTypes(t *testing.T) {
 	}
 }
 
-func TestTimestampUsesLosslessMicrosecondsAndRawResultDecoding(t *testing.T) {
-	timestamp := model.Type{Kind: "Timestamp"}
-	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
-		Name: "EchoTimestamp", Command: model.One,
-		SQL: "DECLARE $value AS Timestamp; SELECT $value AS value;", SQLWithoutDeclarations: " SELECT $value AS value;",
-		Parameters: []model.Parameter{{Name: "value", Type: timestamp}},
-		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "value", Type: timestamp}}}},
-	}}}
-	files, err := Generate(a, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ts := fileContent(t, files, "queries.ts")
-	for _, want := range []string{
-		`import { Primitive, TimestampType } from "@ydbjs/value/primitive";`,
-		`value > 4291747199999999n`,
-		`new Primitive({ value: { case: "uint64Value", value: _timestamp(value, "value") } }, new TimestampType())`,
-		`const _resultSets = await _pending.raw();`,
-		`value: _rawValue<bigint>(record["value"], "EchoTimestamp.value", "uint64Value")`,
-	} {
-		if !strings.Contains(ts, want) {
-			t.Errorf("queries.ts missing %q\n%s", want, ts)
-		}
-	}
-	if !strings.Contains(ts, "echoTimestamp(value: bigint, configure?: ConfigureQuery): Promise<EchoTimestampRow | null>") || !strings.Contains(ts, "readonly value: bigint;") {
-		t.Fatalf("Timestamp types are not lossless bigint values:\n%s", ts)
-	}
-}
-
-func TestNumericInputsRejectValuesOutsideYQLRange(t *testing.T) {
-	node, err := exec.LookPath("node")
-	if err != nil {
-		t.Skip("node is unavailable")
-	}
-	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{
-		{
-			Name: "StoreTimestamp", Command: model.Exec,
-			SQL: "DECLARE $value AS Timestamp; SELECT $value;", SQLWithoutDeclarations: " SELECT $value;",
-			Parameters: []model.Parameter{{Name: "value", Type: model.Type{Kind: "Timestamp"}}},
-		},
-		{
-			Name: "StoreFloat", Command: model.Exec,
-			SQL: "DECLARE $value AS Float; SELECT $value;", SQLWithoutDeclarations: " SELECT $value;",
-			Parameters: []model.Parameter{{Name: "value", Type: model.Type{Kind: "Float"}}},
-		},
-		{
-			Name: "StoreOptionalFloat", Command: model.Exec,
-			SQL: "DECLARE $value AS Optional<Float>; SELECT $value;", SQLWithoutDeclarations: " SELECT $value;",
-			Parameters: []model.Parameter{{Name: "value", Type: model.Optional(model.Type{Kind: "Float"})}},
-		},
-	}}
-	files, err := Generate(a, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	dir := t.TempDir()
-	module := filepath.Join(dir, "queries.mjs")
-	transpileModule(t, node, fileContent(t, files, "queries.ts"), module)
-	loader := filepath.Join(dir, "loader.mjs")
-	loaderSource := `
-export async function resolve(specifier, context, nextResolve) {
-  if (specifier === '@ydbjs/value/primitive') return { url: 'stub:primitive', shortCircuit: true };
-  if (specifier === '@ydbjs/value/optional') return { url: 'stub:optional', shortCircuit: true };
-  return nextResolve(specifier, context);
-}
-export async function load(url, context, nextLoad) {
-  if (url === 'stub:primitive') return { format: 'module', shortCircuit: true, source: ` + "`" + `
-    export class Primitive {}
-    export class TimestampType {}
-    export class FloatType {}
-    export class Float { constructor(value) { this.value = value; } }
-  ` + "`" + ` };
-  if (url === 'stub:optional') return { format: 'module', shortCircuit: true, source: 'export class Optional {}' };
-  return nextLoad(url, context);
-}`
-	if err := os.WriteFile(loader, []byte(loaderSource), 0600); err != nil {
-		t.Fatal(err)
-	}
-	program := filepath.Join(dir, "main.mjs")
-	programSource := `
-import { Queries } from './queries.mjs';
-const client = () => {
-  const pending = Promise.resolve([]);
-  pending.parameter = () => pending;
-  return pending;
-};
-const queries = new Queries(client);
-for (const [run, message] of [
-  [() => queries.storeTimestamp(4291747200000000n), 'Timestamp microsecond range'],
-  [() => queries.storeFloat(1e40), 'YQL Float range'],
-  [() => queries.storeOptionalFloat(1e40), 'YQL Float range'],
-]) {
-  try {
-    await run();
-    throw new Error('out-of-range value accepted');
-  } catch (error) {
-    if (!(error instanceof RangeError) || !String(error).includes(message)) throw error;
-  }
-}
-`
-	if err := os.WriteFile(program, []byte(programSource), 0600); err != nil {
-		t.Fatal(err)
-	}
-	cmd := exec.Command(node, "--experimental-loader", loader, program)
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("generated numeric validation failed: %v\n%s", err, out)
-	}
-}
-
-func TestJSONStaysExactText(t *testing.T) {
-	jsonType := model.Type{Kind: "Json"}
-	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
-		Name: "EchoJSON", Command: model.One,
-		SQL: "DECLARE $value AS Json; SELECT $value AS value;", SQLWithoutDeclarations: " SELECT $value AS value;",
-		Parameters: []model.Parameter{{Name: "value", Type: jsonType}},
-		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "value", Type: jsonType}}}},
-	}}}
-	files, err := Generate(a, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ts := fileContent(t, files, "queries.ts")
-	for _, want := range []string{
-		`function _json(value: unknown, name: string): string`,
-		`return value;`,
-		`new Json(_json(value, "value"))`,
-		`const _resultSets = await _pending.raw();`,
-		`value: _rawValue<string>(record["value"], "EchoJSON.value", "textValue")`,
-	} {
-		if !strings.Contains(ts, want) {
-			t.Errorf("queries.ts missing %q\n%s", want, ts)
-		}
-	}
-	if !strings.Contains(ts, "echoJSON(value: string, configure?: ConfigureQuery): Promise<EchoJSONRow | null>") || !strings.Contains(ts, "readonly value: string;") {
-		t.Fatalf("JSON types do not preserve exact text:\n%s", ts)
-	}
-}
-
 func TestQualifiedProjectionUsesExactWireName(t *testing.T) {
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
 		Name: "Joined", Command: model.Many, SQL: "SELECT b.book_id FROM books AS b;", SQLWithoutDeclarations: "SELECT b.book_id FROM books AS b;",
@@ -494,8 +446,8 @@ func TestQualifiedProjectionUsesExactWireName(t *testing.T) {
 	}
 	ts := fileContent(t, files, "queries.ts")
 	for _, want := range []string{
-		`Object.hasOwn(row, "b.book_id")`,
-		`bookId: record["b.book_id"] as bigint`,
+		`readonly "b.book_id": bigint;`,
+		`bookId: row["b.book_id"]`,
 	} {
 		if !strings.Contains(ts, want) {
 			t.Errorf("queries.ts missing %q\n%s", want, ts)

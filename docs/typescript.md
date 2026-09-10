@@ -35,46 +35,42 @@ also run inside a caller-owned transaction:
 ```ts
 await client.transaction(async (tx, signal) => {
   const queries = new Queries(tx);
-  return queries.getAuthor(42n, (pending) => pending.signal(signal));
+  return queries.getAuthor(42n, (stmt) => { stmt.signal(signal); });
 });
 ```
 
 Every method has a final optional `ConfigureQuery` callback. It receives the
-fully parameterized SDK `Query` before execution and before `.raw()` decoding.
+fully parameterized SDK `Query` before execution.
 Use it for SDK controls such as `signal`, `timeout`, `idempotent`, `isolation`
-and `withStats`; return the configured query from the callback.
+and `withStats`. The callback returns `void`; awaiting the statement starts execution.
 
 The generator writes one `queries.ts` file containing the implementation and its
-exported parameter and result types. SQL
-constants such as `GET_AUTHOR_SQL` contain the original analyzed query byte for
-byte. For execution, the analyzer also supplies the same SQL with top-level
+exported parameter and result type aliases. SQL appears directly in indented
+tagged templates such as `sql<[GetAuthorRow]>\`SELECT ...\``. The analyzer supplies SQL with top-level
 `DECLARE` statements removed: `@ydbjs/query` reconstructs those declarations
 from the explicit typed values passed through `.parameter()`. Comments, string
-literals, identifiers, whitespace and non-parameter local bindings remain
-unchanged.
+literals and non-parameter local bindings are preserved. SQL source lines are
+indented within the method, and lines emptied by declaration removal are omitted.
 
 A method with one parameter accepts that value directly. Methods with multiple
 parameters accept a named object. `:one` returns the first typed row, or `null`
 when YDB returns no rows. `:many` returns an array, including an empty array for
 no rows. `:exec` resolves to `undefined`. `:execrows` is rejected because the SDK
-does not expose a portable affected-row count. Missing result sets, non-object
-rows and absent projected columns throw an error rather than trying another row
-shape.
-The analyzer records exact result keys where YDB adds a qualifier, such as
-`b.book_id` in a join; generated API properties retain their ordinary names.
+does not expose a portable affected-row count. Result types describe the SDK's
+decoded rows; generated code adds no runtime row validators. SELECT projections
+receive camelCase aliases where the analyzer can safely rewrite them. RETURNING
+and projections that cannot be renamed safely use a typed wire row and an inline
+property mapping.
 
 `Int64` and `Uint64` use `bigint`, including the complete Uint64 range. Smaller
-integers use `number` with generated integer and range checks. `Float` and
-`Double` require finite numbers; `Float` also rejects Float32 overflow. YQL `Utf8` is a
+integers, `Float` and `Double` use `number`. YQL `Utf8` is a
 TypeScript `string`; binary YQL `String` is `Uint8Array`. `Json` and
-`JsonDocument` accept and return validated JSON text as `string`, preserving
-large numeric tokens and exact object-member order rather than routing through
-JavaScript numbers at runtime. Optional values use `null`. Timestamp values are `bigint`
-microseconds since the Unix epoch, from `0n` through `4291747199999999n`.
-Queries returning Timestamp or JSON decode every projected column from the
-SDK's raw-value mode against its analyzed YQL type. This avoids
-the SDK's default conversion through JavaScript `Date`, which truncates
-sub-millisecond precision.
+`JsonDocument` accept JSON text as `string` and return SDK-decoded `JSValue`.
+Optional values use `null` and explicit SDK `Optional` wrappers with the element
+type when binding parameters. Timestamp parameters and results use `Date`, with
+millisecond precision. JSON decoding follows `JSON.parse`, including JavaScript
+number precision. The generator uses SDK value constructors directly and adds
+no duplicate runtime parameter validators.
 
 The verified dependencies are `@ydbjs/core` 6.3.1, `@ydbjs/query` 6.3.0 and
 `@ydbjs/value` 6.0.8. The example harness compiles generated sources with

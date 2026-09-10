@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -474,14 +473,6 @@ func queryFile(source string, qs []model.AnalyzedQuery, o Options) []byte {
 }
 
 func writeQuery(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
-	sql := q.SQLWithoutDeclarations
-	if sql == "" {
-		sql = q.SQL
-	} else {
-		sql = cleanWhitespaceOnlyLines(sql)
-	}
-	c := "const " + queryConstName(q.Name) + " = " + sqlLiteral(sql) + "\n\n"
-	b.WriteString(c)
 	ret := "error"
 	if q.Command == model.One {
 		ret = "(" + q.Name + "Row, error)"
@@ -518,11 +509,7 @@ func cleanWhitespaceOnlyLines(sql string) string {
 }
 
 func sqlLiteral(sql string) string {
-	if !strings.ContainsAny(sql, "`\r\x00\ufeff") && utf8.ValidString(sql) {
-		return "`" + sql + "`"
-	}
-	// Keep each SQL line intact when raw strings cannot represent its contents.
-	// SplitAfter retains line endings, including the final newline if present.
+	// Quoted lines let gofmt indent the expression without changing SQL bytes.
 	lines := strings.SplitAfter(sql, "\n")
 	if lines[len(lines)-1] == "" {
 		lines = lines[:len(lines)-1]
@@ -530,7 +517,20 @@ func sqlLiteral(sql string) string {
 	for i, line := range lines {
 		lines[i] = strconv.Quote(line)
 	}
+	if len(lines) == 0 {
+		return `""`
+	}
 	return strings.Join(lines, " +\n")
+}
+
+func querySQL(q model.AnalyzedQuery) string {
+	sql := q.SQLWithoutDeclarations
+	if sql == "" {
+		sql = q.SQL
+	} else {
+		sql = cleanWhitespaceOnlyLines(sql)
+	}
+	return sqlLiteral(sql)
 }
 
 func methodArgs(q model.AnalyzedQuery, o Options) string {
@@ -604,17 +604,17 @@ func writeSQL(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 	parameters := sqlArgumentList(q)
 	switch q.Command {
 	case model.Exec:
-		call := generatedCall("q.db.ExecContext", []string{"ctx", queryConstName(q.Name)}, parameters)
+		call := generatedCall("q.db.ExecContext", []string{"ctx", querySQL(q)}, parameters)
 		b.WriteString("_, err := " + call + "\nreturn err\n")
 	case model.One:
-		call := generatedCall("q.db.QueryRowContext", []string{"ctx", queryConstName(q.Name)}, parameters)
+		call := generatedCall("q.db.QueryRowContext", []string{"ctx", querySQL(q)}, parameters)
 		b.WriteString("var row " + q.Name + "Row\nerr := " + scanCall(call+".Scan", scanDestinations(q.ResultSets[0])) + "\nreturn row, err\n")
 	case model.Many:
 		init := "[]" + q.Name + "Row(nil)"
 		if o.EmitEmptySlices {
 			init = "make([]" + q.Name + "Row, 0)"
 		}
-		call := generatedCall("q.db.QueryContext", []string{"ctx", queryConstName(q.Name)}, parameters)
+		call := generatedCall("q.db.QueryContext", []string{"ctx", querySQL(q)}, parameters)
 		b.WriteString("rows, err := " + call + "\nif err != nil { return " + init + ", err }; defer rows.Close()\nitems := " + init + "\nfor rows.Next() { var row " + q.Name + "Row\nif err := " + scanCall("rows.Scan", scanDestinations(q.ResultSets[0])) + "; err != nil { return nil, err }; items = append(items, row) }\nreturn items, rows.Err()\n")
 	}
 }
@@ -634,18 +634,18 @@ func writeYDB(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 		opt = "callOptions..."
 	}
 	if q.Command == model.Exec {
-		b.WriteString("return q.db.Exec(ctx, " + queryConstName(q.Name) + ", " + opt + ")\n")
+		b.WriteString("return q.db.Exec(ctx, " + querySQL(q) + ", " + opt + ")\n")
 		return
 	}
 	if q.Command == model.One {
-		b.WriteString("result, err := q.db.QueryRow(ctx, " + queryConstName(q.Name) + ", " + opt + ")\nif err != nil { return " + q.Name + "Row{}, err }\n\nvar row " + q.Name + "Row\nif err := result.ScanNamed(\n" + scanNamed(q.ResultSets[0]) + ",\n); err != nil { return " + q.Name + "Row{}, err }\n\nreturn row, nil\n")
+		b.WriteString("result, err := q.db.QueryRow(ctx, " + querySQL(q) + ", " + opt + ")\nif err != nil { return " + q.Name + "Row{}, err }\n\nvar row " + q.Name + "Row\nif err := result.ScanNamed(\n" + scanNamed(q.ResultSets[0]) + ",\n); err != nil { return " + q.Name + "Row{}, err }\n\nreturn row, nil\n")
 		return
 	}
 	init := "[]" + q.Name + "Row(nil)"
 	if o.EmitEmptySlices {
 		init = "make([]" + q.Name + "Row, 0)"
 	}
-	b.WriteString("result, err := q.db.Query(ctx, " + queryConstName(q.Name) + ", " + opt + ")\n")
+	b.WriteString("result, err := q.db.Query(ctx, " + querySQL(q) + ", " + opt + ")\n")
 	b.WriteString("if err != nil { return " + init + ", err }\n")
 	b.WriteString("defer result.Close(ctx)\n\n")
 	b.WriteString("resultSet, err := result.NextResultSet(ctx)\n")
@@ -854,7 +854,6 @@ func outputName(s string) string {
 	s = strings.TrimSuffix(s, ".sql")
 	return s + ".sql.go"
 }
-func queryConstName(name string) string { return "query" + name }
 func goName(s string) string {
 	var b strings.Builder
 	for _, part := range strings.FieldsFunc(s, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {

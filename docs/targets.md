@@ -12,7 +12,7 @@
 | C# ADO.NET | `gen.csharp.runtime: adonet` | async `Queries(YdbConnection)`, records, cancellation and transactions |
 | C# Dapper | `gen.csharp.runtime: dapper` | async query methods on a borrowed `YdbConnection` |
 | C# linq2db | `gen.csharp.runtime: linq2db` | SQL query methods on a borrowed `DataConnection` |
-| TypeScript | `gen.typescript.runtime: ydb` | typed query classes and interfaces |
+| TypeScript | `gen.typescript.runtime: ydb` | query classes, row and parameter type aliases |
 | Rust | `gen.rust.runtime: ydb` | async methods on a borrowed `QueryClient` |
 | PHP | `gen.php.runtime: ydb` | typed query methods for the YDB SDK |
 | Kotlin Query SDK | `gen.kotlin.runtime: ydb` | data classes and `Queries(SessionRetryContext)` |

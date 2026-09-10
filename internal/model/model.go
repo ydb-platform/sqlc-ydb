@@ -135,9 +135,17 @@ type AnalyzedQuery struct {
 	// SQLWithoutDeclarations preserves the source except DECLARE tokens. SDKs that
 	// synthesize declarations from typed parameters execute this form instead.
 	SQLWithoutDeclarations string
-	Parameters             []Parameter // names without the leading dollar sign
-	ResultSets             []ResultSet
-	Source                 Position
+	// ResultAliases contains safe alias edits for explicit single-SELECT results.
+	// Offsets are rune indices in SQLWithoutDeclarations; empty spans insert AS.
+	ResultAliases []ResultAlias
+	Parameters    []Parameter // names without the leading dollar sign
+	ResultSets    []ResultSet
+	Source        Position
+}
+
+type ResultAlias struct {
+	Start int
+	End   int
 }
 
 type AnalysisResult struct {

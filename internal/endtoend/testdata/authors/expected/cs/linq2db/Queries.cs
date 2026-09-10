@@ -20,14 +20,12 @@ public sealed class Queries
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));
     }
 
-    private const string SqlGetAuthor =
-        "-- name: GetAuthor :one\n" +
-        "DECLARE $author_id AS Uint64;\n" +
-        "SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;";
-
     public async Task<GetAuthorRow> GetAuthorAsync(ulong AuthorID, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(GetAuthorRowFrom, SqlGetAuthor, cancellationToken, new DataParameter("$author_id", AuthorID, DataType.UInt64)).ConfigureAwait(false);
+        var rows = await _connection.QueryToListAsync(GetAuthorRowFrom,
+            "-- name: GetAuthor :one\n" +
+            "DECLARE $author_id AS Uint64;\n" +
+            "SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;", cancellationToken, new DataParameter("$author_id", AuthorID, DataType.UInt64)).ConfigureAwait(false);
         if (rows.Count == 0)
         {
             throw new InvalidOperationException("query returned no rows");

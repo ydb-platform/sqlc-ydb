@@ -132,10 +132,10 @@ func TestGenerateUserverAuthorsAPI(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		"const ::userver::ydb::Query kGetAuthorQuery",
+		"::userver::ydb::Query{",
 		"::userver::ydb::Query::NameLiteral{\"GetAuthor\"}",
 		"::userver::ydb::Query::LogMode::kNameOnly",
-		"client_.ExecuteQuery(kGetAuthorQuery, \"$author_id\", author_id)",
+		"}, \"$author_id\", author_id)",
 		"sqlc_row.Get<std::uint64_t>(\"id\")",
 		"sqlc_row.Get<::userver::ydb::Utf8>(\"name\")",
 		"sqlc_row.Get<std::optional<::userver::ydb::Utf8>>(\"bio\")",
@@ -265,11 +265,11 @@ func TestRejectsGeneratedNameCollisions(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
-	t.Run("parameter hides SQL constant", func(t *testing.T) {
+	t.Run("former SQL constant name is available", func(t *testing.T) {
 		a := authorsAnalysis()
 		a.Queries[0].Parameters[0].Name = "kGetAuthorSql"
 		_, err := Generate(a, Options{Runtime: "ydb"})
-		if err == nil || !strings.Contains(err.Error(), "kGetAuthorSql") || !strings.Contains(err.Error(), "SQL constant") {
+		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -358,7 +358,7 @@ func TestSQLLiteralReadableAndRoundTripsAllBytes(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			literal := sqlLiteral(tc.sql)
-			if tc.name == "multiline" && (!strings.HasPrefix(literal, `R"sqlc(`) || strings.Contains(literal, `\nSELECT`)) {
+			if tc.name == "multiline" && (!strings.Contains(literal, `R"sqlc(SELECT`) || strings.Contains(literal, `\nSELECT`)) {
 				t.Fatalf("multiline SQL is not a readable raw literal: %s", literal)
 			}
 			dir := t.TempDir()

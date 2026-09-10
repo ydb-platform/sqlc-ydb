@@ -100,7 +100,6 @@ func validate(in *model.AnalysisResult) error {
 		"ydbquery": "imported YDB SDK YdbQuery class", "executequeryresult": "imported YDB protobuf ExecuteQueryResult class",
 	}
 	methods := map[string]string{"__construct": "generated constructor", "decoderows": "generated row decoder"}
-	constants := map[string]string{}
 	add := func(set map[string]string, name, original, kind string) error {
 		key := strings.ToLower(name)
 		if previous, ok := set[key]; ok {
@@ -124,7 +123,6 @@ func validate(in *model.AnalysisResult) error {
 	for _, query := range in.Queries {
 		method := camelName(query.Name)
 		classBase := pascalName(query.Name)
-		constant := screamingName(query.Name) + "_SQL"
 		if !validPHPIdentifier(method) || phpReserved[strings.ToLower(method)] {
 			return fmt.Errorf("php generator: query %q has invalid generated method name %q", query.Name, method)
 		}
@@ -132,9 +130,6 @@ func validate(in *model.AnalysisResult) error {
 			return fmt.Errorf("php generator: query %q has invalid generated class name %q", query.Name, classBase)
 		}
 		if err := add(methods, method, query.Name, "method name"); err != nil {
-			return err
-		}
-		if err := add(constants, constant, query.Name, "SQL constant name"); err != nil {
 			return err
 		}
 		switch query.Command {
@@ -236,11 +231,6 @@ func renderQueries(in *model.AnalysisResult, namespace string) string {
 	b.WriteString("require_once __DIR__ . '/YdbRuntime.php';\n\n")
 	b.WriteString("use Closure;\nuse UnexpectedValueException;\nuse Ydb\\Table\\ExecuteQueryResult;\nuse Ydb\\Type\\PrimitiveTypeId;\nuse YdbPlatform\\Ydb\\Session;\nuse YdbPlatform\\Ydb\\Table;\n\n")
 	b.WriteString("final class Queries\n{\n")
-	for _, query := range in.Queries {
-		constant := screamingName(query.Name) + "_SQL"
-		fmt.Fprintf(&b, "    public const %s = %s;\n", constant, phpSQLString(query.SQL, "        "))
-		b.WriteByte('\n')
-	}
 	b.WriteString("    public function __construct(private readonly Table $table)\n    {\n        if (PHP_INT_SIZE !== 8) {\n            throw new \\LogicException('sqlc-ydb generated PHP code requires a 64-bit PHP runtime');\n        }\n    }\n")
 	for _, query := range in.Queries {
 		renderMethod(&b, query)
@@ -320,9 +310,9 @@ func renderMethod(b *strings.Builder, query model.AnalyzedQuery) {
 		fmt.Fprintf(b, "            %s => YdbValueCodec::%s(%s, %s),\n", phpString("$"+parameter.Name, ""), fn, value, phpString(parameter.Name, ""))
 	}
 	b.WriteString("        ];\n")
-	constant := "self::" + screamingName(query.Name) + "_SQL"
+	literal := phpSQLString(query.SQL, "                ")
 	b.WriteString("        $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {\n")
-	fmt.Fprintf(b, "            $query = $session->newQuery(%s)\n                ->parameters($parameters)\n                ->beginTx('serializable_read_write');\n", constant)
+	fmt.Fprintf(b, "            $query = $session->newQuery(%s)\n                ->parameters($parameters)\n                ->beginTx('serializable_read_write');\n", literal)
 	b.WriteString("            return (new YdbRawExecutor($this->table))->execute($session, $query);\n        }, false);\n")
 	if query.Command == model.Exec {
 		b.WriteString("    }\n")
@@ -620,11 +610,7 @@ func phpSQLString(value, indent string) string {
 		} else if strings.HasSuffix(value, "\n") {
 			ending = ` . "\n"`
 		}
-		separator := "\n"
-		if strings.HasSuffix(value, "\n") {
-			separator = ""
-		}
-		return "<<<'" + delimiter + "'\n" + value + separator + delimiter + ending
+		return "<<<'" + delimiter + "'\n" + indent + strings.ReplaceAll(strings.TrimSuffix(value, "\n"), "\n", "\n"+indent) + "\n" + indent + delimiter + ending
 	}
 	return escapedPHPString(value, indent)
 }
@@ -731,8 +717,6 @@ func camelName(value string) string {
 	first, size := utf8.DecodeRuneInString(name)
 	return string(unicode.ToLower(first)) + name[size:]
 }
-
-func screamingName(value string) string { return strings.ToUpper(strings.Join(words(value), "_")) }
 
 func validNamespace(value string) bool {
 	parts := strings.Split(value, `\`)

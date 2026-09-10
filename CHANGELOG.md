@@ -19,6 +19,8 @@ the version and moves these entries into a numbered section at release time.
   C++ (native SDK, userver), C# (ADO.NET, Dapper, linq2db), Java (native SDK,
   JDBC, Spring JDBC, Hibernate), Kotlin (Query SDK, JDBC, Exposed), TypeScript,
   Rust and PHP generators.
+- Readable SQL literals at execution sites in every language; TypeScript uses
+  typed SDK tagged templates with native Date and parsed JSON results.
 - YDB adaptations of all upstream example families: authors, batch, booktest,
   jets and ondeck, with Go native SDK, database/sql, C# Dapper and linq2db,
   TypeScript, Rust and PHP generation and execution checks.

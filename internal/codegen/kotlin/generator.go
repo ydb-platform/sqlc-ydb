@@ -108,22 +108,14 @@ func quoted(s string) string {
 // Interpolated character escapes prevent dollars, quotes and controls from
 // becoming Kotlin syntax or being normalized by the source-file reader.
 func sqlLiteral(s string) string {
-	var b strings.Builder
-	b.WriteString(`"""`)
-	for _, r := range s {
-		switch {
-		case r == '$':
-			b.WriteString(`${'$'}`)
-		case r == '"':
-			b.WriteString(`${'"'}`)
-		case r != '\n' && (r < 32 || r == 127):
-			fmt.Fprintf(&b, "${'\\u%04x'}", r)
-		default:
-			b.WriteRune(r)
-		}
+	parts := strings.SplitAfter(s, "\n")
+	if len(parts) > 1 && parts[len(parts)-1] == "" {
+		parts = parts[:len(parts)-1]
 	}
-	b.WriteString(`"""`)
-	return b.String()
+	for i := range parts {
+		parts[i] = quoted(parts[i])
+	}
+	return "\n            " + strings.Join(parts, " +\n            ")
 }
 
 func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
@@ -222,10 +214,10 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		methods[method] = true
 		row, _ := name(q.Name, true)
 		row += "Row"
-		constant := method + "Sql"
-		preparedConstant := constant
+		sql := sqlLiteral(q.SQL)
+		preparedSQL := sql
 		if o.Runtime != "ydb" && len(q.Parameters) > 0 && q.SQLWithoutDeclarations != "" {
-			preparedConstant = method + "PreparedSql"
+			preparedSQL = sqlLiteral(jdbcSQL(q))
 		}
 		ret := "Unit"
 		switch q.Command {
@@ -249,7 +241,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			return nil, fmt.Errorf("%s: Kotlin does not support %s", q.Name, q.Command)
 		}
 		params, names := []string{}, []string{}
-		seen := map[string]bool{"client": true, constant: true, preparedConstant: true, "kotlin": true, "tech": true}
+		seen := map[string]bool{"client": true, "kotlin": true, "tech": true}
 		for _, p := range q.Parameters {
 			n, err := name(p.Name, false)
 			if err != nil {
@@ -266,10 +258,6 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			params = append(params, n+": "+typ)
 			names = append(names, n)
 		}
-		fmt.Fprintf(&b, "\n    private val %s: String = %s\n", constant, sqlLiteral(q.SQL))
-		if preparedConstant != constant {
-			fmt.Fprintf(&b, "    private val %s: String = %s\n", preparedConstant, sqlLiteral(jdbcSQL(q)))
-		}
 		fmt.Fprintf(&b, "\n    fun %s(%s): %s {\n", method, strings.Join(params, ", "), ret)
 		for i, p := range q.Parameters {
 			max := map[string]string{"Uint8": "255", "Uint16": "65535", "Uint32": "4294967295L"}[p.Type.UnwrapOptional().Kind]
@@ -284,9 +272,9 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			fmt.Fprintf(&b, "        kotlin.require(%s) { %s }\n", condition, quoted("parameter $"+p.Name+" is outside "+p.Type.UnwrapOptional().Kind+" range"))
 		}
 		if o.Runtime == "ydb" {
-			emitNative(&b, q, names, constant, row)
+			emitNative(&b, q, names, sql, row)
 		} else {
-			emitJDBC(&b, q, names, preparedConstant, row, o.Runtime)
+			emitJDBC(&b, q, names, preparedSQL, row, o.Runtime)
 		}
 		b.WriteString("    }\n")
 	}
@@ -313,26 +301,27 @@ func parameterValue(p model.Parameter, n string) string {
 	}
 	return value
 }
-func emitNative(b *strings.Builder, q model.AnalyzedQuery, names []string, constant, row string) {
+func emitNative(b *strings.Builder, q model.AnalyzedQuery, names []string, sql, row string) {
+	sql = strings.ReplaceAll(sql, "\n", "\n    ")
 	b.WriteString("        val _params = Params.create()\n")
 	for i, p := range q.Parameters {
 		fmt.Fprintf(b, "        _params.put(%s, %s)\n", quoted("$"+p.Name), parameterValue(p, names[i]))
 	}
 	b.WriteString("        val _query = client.supplyResult { _session ->\n")
-	fmt.Fprintf(b, "            QueryReader.readFrom(_session.createQuery(%s, TxMode.SERIALIZABLE_RW, _params))\n        }.join().getValue()\n", constant)
+	fmt.Fprintf(b, "            QueryReader.readFrom(_session.createQuery(%s, TxMode.SERIALIZABLE_RW, _params))\n        }.join().getValue()\n", sql)
 	if q.Command == model.Exec {
 		return
 	}
 	b.WriteString("        kotlin.check(_query.getResultSetCount() == 1) { \"Expected one result set\" }\n        val _rows = _query.getResultSet(0)\n")
 	emitRows(b, q, row, "        ", true)
 }
-func emitJDBC(b *strings.Builder, q model.AnalyzedQuery, names []string, constant, row, runtime string) {
+func emitJDBC(b *strings.Builder, q model.AnalyzedQuery, names []string, sql, row, runtime string) {
 	connection := "client"
 	if runtime == "exposed" {
 		b.WriteString("        val _connection = client.connection.connection as java.sql.Connection\n")
 		connection = "_connection"
 	}
-	fmt.Fprintf(b, "        %s.prepareStatement(%s).use { _prepared ->\n", connection, constant)
+	fmt.Fprintf(b, "        %s.prepareStatement(%s).use { _prepared ->\n", connection, sql)
 	if len(q.Parameters) > 0 {
 		b.WriteString("            val _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement::class.java)\n")
 	}

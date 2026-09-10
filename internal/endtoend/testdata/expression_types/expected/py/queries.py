@@ -4,19 +4,6 @@ from typing import Iterable, Optional
 from . import models as _models
 import ydb as _ydb
 
-SQL_NORMALIZE_PROFILES = """-- name: NormalizeProfiles :many
-DECLARE $fallback AS Utf8;
-DECLARE $minimum_score AS Int32;
-DECLARE $use_nickname AS Bool;
-SELECT
-    CASE WHEN $use_nickname THEN nickname ELSE $fallback END AS display_name,
-    CAST(score AS Int64) AS score64,
-    COALESCE(nickname, $fallback) AS normalized_name,
-    LENGTH(COALESCE(nickname, $fallback)) AS normalized_length,
-    ABS(score) AS absolute_score
-FROM profiles
-WHERE score >= $minimum_score;"""
-
 
 def _typed(value, typ):
     return _ydb.TypedValue(value, typ)
@@ -28,7 +15,19 @@ class Querier:
 
     def normalize_profiles(self, fallback: str, minimum_score: int, use_nickname: bool) -> Iterable[_models.NormalizeProfilesRow]:
         parameters = {"$fallback": _typed(fallback, _ydb.PrimitiveType.Utf8),"$minimum_score": _typed(minimum_score, _ydb.PrimitiveType.Int32),"$use_nickname": _typed(use_nickname, _ydb.PrimitiveType.Bool)}
-        result_sets = self._pool.execute_with_retries(SQL_NORMALIZE_PROFILES, parameters)
+        result_sets = self._pool.execute_with_retries(
+            ("-- name: NormalizeProfiles :many\n"
+             "DECLARE $fallback AS Utf8;\n"
+             "DECLARE $minimum_score AS Int32;\n"
+             "DECLARE $use_nickname AS Bool;\n"
+             "SELECT\n"
+             "    CASE WHEN $use_nickname THEN nickname ELSE $fallback END AS display_name,\n"
+             "    CAST(score AS Int64) AS score64,\n"
+             "    COALESCE(nickname, $fallback) AS normalized_name,\n"
+             "    LENGTH(COALESCE(nickname, $fallback)) AS normalized_length,\n"
+             "    ABS(score) AS absolute_score\n"
+             "FROM profiles\n"
+             "WHERE score >= $minimum_score;"), parameters)
         rows = result_sets[0].rows
         return (_models.NormalizeProfilesRow(
             display_name=row["display_name"],

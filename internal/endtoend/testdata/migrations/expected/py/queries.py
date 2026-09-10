@@ -6,10 +6,6 @@ import ydb as _ydb
 from sqlalchemy import text as _text
 from sqlalchemy.engine import Connection
 
-SQL_GET_AUTHOR = """-- name\\: GetAuthor \\:one
-DECLARE $id AS Uint64;
-SELECT * FROM authors WHERE id = :id;"""
-
 
 def _typed(value, typ):
     return (value, typ)
@@ -21,7 +17,10 @@ class Querier:
 
     def get_author(self, id: int) -> Optional[_models.Author]:
         parameters = {"id": _typed(id, _ydb.PrimitiveType.Uint64)}
-        result = self._connection.execute(_text(SQL_GET_AUTHOR), parameters)
+        result = self._connection.execute(_text(
+            ("-- name\\: GetAuthor \\:one\n"
+             "DECLARE $id AS Uint64;\n"
+             "SELECT * FROM authors WHERE id = :id;")), parameters)
         try:
             rows = result.fetchall()
         finally:

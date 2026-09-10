@@ -10,21 +10,20 @@ const modules = await Promise.all([
 
 for (const generated of modules) {
   assert.equal(typeof generated.Queries, "function");
-  assert.ok(Object.entries(generated).some(([name, value]) => name.endsWith("_SQL") && typeof value === "string"));
+  assert.deepEqual(Object.keys(generated), ["Queries"]);
 }
 
 function recordingClient(resultSets = [[]]) {
   const calls = [];
   const client = (text) => {
-    const call = { text, parameters: new Map() };
+    const call = { text: text.join(""), parameters: new Map() };
     calls.push(call);
-    const pending = Promise.resolve(resultSets);
-    pending.parameter = (name, value) => {
+    const stmt = Promise.resolve(resultSets);
+    stmt.parameter = (name, value) => {
       call.parameters.set(name, value);
-      return pending;
+      return stmt;
     };
-    pending.raw = () => pending;
-    return pending;
+    return stmt;
   };
   return { calls, client };
 }
@@ -43,35 +42,30 @@ await new modules[1].Queries(batchProbe.client).createBook({
   bookType: "novel",
   title: "title",
   year: 2026,
-  available: 1788957296789123n,
+  available: new Date(1788957296789),
   tags: '{"nested":[true,9007199254740993123456789,"x"]}',
 });
-assert.equal(batchProbe.calls[0].parameters.get("available").constructor.name, "Primitive");
+assert.equal(batchProbe.calls[0].parameters.get("available").constructor.name, "Timestamp");
 assert.equal(batchProbe.calls[0].parameters.get("available").type.constructor.name, "TimestampType");
-assert.equal(batchProbe.calls[0].parameters.get("available").encode().value.value, 1788957296789123n);
+assert.equal(batchProbe.calls[0].parameters.get("available").encode().value.value, 1788957296789000n);
 assert.equal(batchProbe.calls[0].parameters.get("tags").constructor.name, "Json");
 assert.equal(batchProbe.calls[0].parameters.get("tags").value, '{"nested":[true,9007199254740993123456789,"x"]}');
 
-const raw = (caseName, value) => ({ value: { case: caseName, value } });
-const rawBookProbe = recordingClient([[
+const bookProbe = recordingClient([[
   {
-    book_id: raw("uint64Value", 1n),
-    author_id: raw("uint64Value", 2n),
-    isbn: raw("textValue", "isbn"),
-    book_type: raw("textValue", "novel"),
-    title: raw("textValue", "title"),
-    year: raw("int32Value", 2026),
-    available: raw("uint64Value", 1788957296789123n),
-    tags: raw("textValue", '{"number":9007199254740993123456789}'),
+    bookId: 1n,
+    authorId: 2n,
+    isbn: "isbn",
+    bookType: "novel",
+    title: "title",
+    year: 2026,
+    available: new Date(1788957296789),
+    tags: { genre: "novel" },
   },
 ]]);
-const [rawBook] = await new modules[1].Queries(rawBookProbe.client).booksByYear(2026);
-assert.equal(rawBook.available, 1788957296789123n);
-assert.equal(rawBook.tags, '{"number":9007199254740993123456789}');
-
-await assert.rejects(
-  new modules[0].Queries(authorsProbe.client).getAuthor(18446744073709551616n),
-  /outside YQL Uint64 range/,
-);
+const [book] = await new modules[1].Queries(bookProbe.client).booksByYear(2026);
+assert.equal(book.available.getTime(), 1788957296789);
+assert.deepEqual(book.tags, { genre: "novel" });
+assert.match(bookProbe.calls[0].text, /book_id AS bookId/);
 
 console.log("Imported generated TypeScript for all five examples against the pinned YDB SDK.");

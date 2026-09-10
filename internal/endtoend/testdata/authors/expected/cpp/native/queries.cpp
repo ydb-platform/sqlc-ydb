@@ -9,13 +9,6 @@
 #include <utility>
 
 namespace authors::native {
-namespace {
-
-const std::string kGetAuthorSql = R"sqlc(-- name: GetAuthor :one
-DECLARE $author_id AS Uint64;
-SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;)sqlc";
-
-}  // namespace
 
 std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
     std::optional<NYdb::TResultSet> sqlc_result_set;
@@ -24,7 +17,14 @@ std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
             .AddParam("$author_id").Uint64(author_id).Build()
             .Build();
         auto sqlc_result = sqlc_session.ExecuteQuery(
-            kGetAuthorSql,
+            std::string{
+                R"sqlc(-- name: GetAuthor :one)sqlc"
+                "\n"
+                R"sqlc(DECLARE $author_id AS Uint64;)sqlc"
+                "\n"
+                R"sqlc(SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;)sqlc",
+                120
+            },
             NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),
             sqlc_params
         ).GetValueSync();

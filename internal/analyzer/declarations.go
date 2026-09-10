@@ -13,6 +13,21 @@ func withoutDeclarations(sql string, tokens []antlr.Token, declarations []*parse
 	if len(declarations) == 0 {
 		return sql
 	}
+	removed := declarationTokens(tokens, declarations)
+	source := []rune(sql)
+	var out strings.Builder
+	last := 0
+	for i, token := range tokens {
+		if removed[i] {
+			out.WriteString(string(source[last:token.GetStart()]))
+			last = token.GetStop() + 1
+		}
+	}
+	out.WriteString(string(source[last:]))
+	return out.String()
+}
+
+func declarationTokens(tokens []antlr.Token, declarations []*parser.Declare_stmtContext) map[int]bool {
 	removed := make(map[int]bool)
 	for _, declaration := range declarations {
 		start, stop := declaration.GetStart().GetTokenIndex(), declaration.GetStop().GetTokenIndex()
@@ -31,15 +46,5 @@ func withoutDeclarations(sql string, tokens []antlr.Token, declarations []*parse
 			break
 		}
 	}
-	source := []rune(sql)
-	var out strings.Builder
-	last := 0
-	for i, token := range tokens {
-		if removed[i] {
-			out.WriteString(string(source[last:token.GetStart()]))
-			last = token.GetStop() + 1
-		}
-	}
-	out.WriteString(string(source[last:]))
-	return out.String()
+	return removed
 }

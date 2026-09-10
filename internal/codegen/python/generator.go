@@ -104,7 +104,7 @@ func validateQuery(q model.AnalyzedQuery) error {
 }
 
 func validateNames(a *model.AnalysisResult) error {
-	consts, methods, classes := map[string]string{}, map[string]string{}, map[string]string{}
+	methods, classes := map[string]string{}, map[string]string{}
 	add := func(dst map[string]string, n, original, kind string) error {
 		if !validPythonName(n) {
 			return fmt.Errorf("python generator: %s %q has invalid generated Python name %q", kind, original, n)
@@ -137,9 +137,6 @@ func validateNames(a *model.AnalysisResult) error {
 		}
 	}
 	for _, q := range a.Queries {
-		if err := add(consts, constName(q.Name), q.Name, "SQL constant"); err != nil {
-			return err
-		}
 		if err := add(methods, methodName(q.Name), q.Name, "method"); err != nil {
 			return err
 		}
@@ -241,17 +238,6 @@ func renderQueries(a *model.AnalysisResult, o Options) (string, error) {
 		b.WriteString("from sqlalchemy import text as _text\nfrom sqlalchemy.engine import Connection\n")
 	}
 	b.WriteString("\n")
-	for _, q := range a.Queries {
-		sql := q.SQL
-		if o.Runtime == "sqlalchemy" {
-			var err error
-			sql, err = sqlalchemySQL(q)
-			if err != nil {
-				return "", err
-			}
-		}
-		b.WriteString(constName(q.Name) + " = " + pySQLString(sql) + "\n\n")
-	}
 	if o.Runtime == "ydb" {
 		b.WriteString(ydbTypedHelper)
 	} else {
@@ -345,6 +331,15 @@ func renderClass(b *strings.Builder, a *model.AnalysisResult, o Options) error {
 }
 
 func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQuery, o Options) error {
+	sql := q.SQL
+	if o.Runtime == "sqlalchemy" {
+		var err error
+		sql, err = sqlalchemySQL(q)
+		if err != nil {
+			return err
+		}
+	}
+	literal := pySQLString(sql)
 	typeExprs := make([]string, len(q.Parameters))
 	for i, parameter := range q.Parameters {
 		var err error
@@ -380,7 +375,7 @@ func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQ
 			value := "_typed(" + fieldName(x.Name) + ", " + typeExprs[i] + ")"
 			b.WriteString(pyString("$"+x.Name) + ": " + value)
 		}
-		b.WriteString("}\n        result_sets = self._pool.execute_with_retries(" + constName(q.Name) + ", parameters)\n")
+		b.WriteString("}\n        result_sets = self._pool.execute_with_retries(\n            " + literal + ", parameters)\n")
 	}
 	if o.Runtime == "dbapi" {
 		b.WriteString("        parameters = {")
@@ -390,7 +385,7 @@ func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQ
 			}
 			b.WriteString(pyString("$"+x.Name) + ": _typed(" + fieldName(x.Name) + ", " + typeExprs[i] + ")")
 		}
-		b.WriteString("}\n        cursor = self._connection.cursor()\n        try:\n            cursor.execute(" + constName(q.Name) + ", parameters)\n")
+		b.WriteString("}\n        cursor = self._connection.cursor()\n        try:\n            cursor.execute(\n                " + strings.ReplaceAll(literal, "\n", "\n    ") + ", parameters)\n")
 	}
 	if o.Runtime == "sqlalchemy" {
 		b.WriteString("        parameters = {")
@@ -401,7 +396,7 @@ func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQ
 			b.WriteString(pyString(x.Name) + ": _typed(" + fieldName(x.Name) + ", " + typeExprs[i] + ")")
 		}
 		b.WriteString("}\n        result = ")
-		b.WriteString("self._connection.execute(_text(" + constName(q.Name) + "), parameters)\n")
+		b.WriteString("self._connection.execute(_text(\n            " + literal + "), parameters)\n")
 	}
 	if q.Command == model.One || q.Command == model.Many {
 		if o.Runtime == "ydb" {
@@ -597,37 +592,19 @@ var pythonPrimitiveTypes = map[string]pythonPrimitiveType{
 func pyString(s string) string { return strconv.Quote(s) }
 
 func pySQLString(s string) string {
-	var b strings.Builder
-	b.WriteString(`"""`)
-	for _, r := range s {
-		switch r {
-		case '\\':
-			b.WriteString(`\\`)
-		case '"':
-			b.WriteString(`\"`)
-		case '\r':
-			b.WriteString(`\r`)
-		case '\n', '\t':
-			b.WriteRune(r)
-		default:
-			if unicode.IsControl(r) {
-				quoted := strconv.QuoteRune(r)
-				b.WriteString(quoted[1 : len(quoted)-1])
-			} else {
-				b.WriteRune(r)
-			}
+	lines := strings.SplitAfter(s, "\n")
+	parts := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if line != "" {
+			parts = append(parts, pyString(line))
 		}
 	}
-	b.WriteString(`"""`)
-	return b.String()
-}
-func constName(s string) string {
-	x := strings.ToUpper(snake(s))
-	if x == "" {
-		x = "QUERY"
+	if len(parts) == 0 {
+		return `""`
 	}
-	return "SQL_" + x
+	return "(" + strings.Join(parts, "\n             ") + ")"
 }
+
 func methodName(s string) string { return fieldName(s) }
 func className(s string) string {
 	x := snake(s)

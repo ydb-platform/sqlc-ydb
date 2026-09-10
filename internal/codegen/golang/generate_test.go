@@ -33,14 +33,14 @@ func TestGeneratedSQLIsMultilineAndPreservesText(t *testing.T) {
 	for _, tc := range []struct {
 		sql, wantLiteral string
 	}{
-		{"-- name: GetUser :one\nDECLARE $id AS Uint64;\nSELECT id, bio FROM users WHERE id = $id;", "`-- name: GetUser :one\n"},
-		{"-- name: GetUser :one\nSELECT `id`, `bio` FROM `users`\nWHERE name = 'Автор' AND path = 'C:\\data';", "\"-- name: GetUser :one\\n\" +\n"},
-		{"-- name: GetUser :one\r\nSELECT id, bio FROM users;\r\n", "\"-- name: GetUser :one\\r\\n\" +\n"},
-		{"-- name: GetUser :one\nSELECT '\x00' FROM users;", "\"-- name: GetUser :one\\n\" +\n"},
+		{"-- name: GetUser :one\nDECLARE $id AS Uint64;\nSELECT id, bio FROM users WHERE id = $id;", "\"-- name: GetUser :one\\n\"+\n"},
+		{"-- name: GetUser :one\nSELECT `id`, `bio` FROM `users`\nWHERE name = 'Автор' AND path = 'C:\\data';", "\"-- name: GetUser :one\\n\"+\n"},
+		{"-- name: GetUser :one\r\nSELECT id, bio FROM users;\r\n", "\"-- name: GetUser :one\\r\\n\"+\n"},
+		{"-- name: GetUser :one\nSELECT '\x00' FROM users;", "\"-- name: GetUser :one\\n\"+\n"},
 	} {
 		for _, runtime := range []string{"database/sql", "ydb"} {
 			source := generatedSQLSource(t, runtime, tc.sql)
-			if !strings.Contains(string(source), "const queryGetUser = "+tc.wantLiteral) {
+			if !strings.Contains(string(source), tc.wantLiteral) {
 				t.Fatalf("%s SQL is not a readable multiline literal:\n%s", runtime, source)
 			}
 			if strings.Contains(tc.sql, "`id`") && !strings.Contains(string(source), "\"SELECT `id`, `bio` FROM `users`\\n\"") {
@@ -77,7 +77,7 @@ func TestGeneratedDatabaseSQLFormatsMultiParameterQueryRowCall(t *testing.T) {
 	}}}
 
 	source := generatedSQLSourceForAnalysis(t, "database/sql", in)
-	want := `err := q.db.QueryRowContext(ctx, queryCreateAuthor,
+	want := `err := q.db.QueryRowContext(ctx, "INSERT INTO authors VALUES ($author_id, $author_name, $biography) RETURNING id, name, bio;",
 		sql.Named("author_id", arg.AuthorID),
 		sql.Named("author_name", arg.AuthorName),
 		sql.Named("biography", arg.Biography),
@@ -101,10 +101,10 @@ func TestGeneratedDatabaseSQLFormatsParameterizedCallsAndScans(t *testing.T) {
 	}}
 	source := string(generatedSQLSourceForAnalysis(t, "database/sql", in))
 	for _, want := range []string{
-		"q.db.ExecContext(ctx, queryDeleteUser,\n\t\tsql.Named(\"id\", arg),\n\t)",
-		"q.db.QueryContext(ctx, queryFindUsers,\n\t\tsql.Named(\"name\", arg),\n\t)",
+		"q.db.ExecContext(ctx, \"DELETE FROM users WHERE id = $id;\",\n\t\tsql.Named(\"id\", arg),\n\t)",
+		"q.db.QueryContext(ctx, \"SELECT id, name FROM users WHERE name = $name;\",\n\t\tsql.Named(\"name\", arg),\n\t)",
 		"rows.Scan(\n\t\t\t&row.ID,\n\t\t\t&row.Name,\n\t\t)",
-		"q.db.QueryRowContext(ctx, queryCountUsers).Scan(\n\t\t&row.Count,\n\t)",
+		"q.db.QueryRowContext(ctx, \"SELECT COUNT(*) AS count FROM users;\").Scan(\n\t\t&row.Count,\n\t)",
 	} {
 		if !strings.Contains(source, want) {
 			t.Fatalf("generated database/sql source misses %q:\n%s", want, source)
@@ -131,7 +131,7 @@ func TestGeneratedYDBManyValidatesOneResultSet(t *testing.T) {
 	in.Queries = in.Queries[1:2]
 
 	source := string(generatedSQLSourceForAnalysis(t, "ydb", in))
-	want := `result, err := q.db.Query(ctx, queryListUsers, opts...)
+	want := "result, err := q.db.Query(ctx, \"SELECT `id`, `name` FROM `users`;\", opts...)" + `
 	if err != nil {
 		return []ListUsersRow(nil), err
 	}
@@ -355,12 +355,16 @@ func generatedSQLValue(t *testing.T, source []byte) string {
 	var result string
 	found := false
 	ast.Inspect(file, func(node ast.Node) bool {
-		decl, ok := node.(*ast.ValueSpec)
-		if !ok || len(decl.Names) != 1 || decl.Names[0].Name != "queryGetUser" {
+		call, ok := node.(*ast.CallExpr)
+		if !ok || len(call.Args) < 2 || found {
+			return true
+		}
+		selector, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || (selector.Sel.Name != "QueryRowContext" && selector.Sel.Name != "QueryRow") {
 			return true
 		}
 		found = true
-		expr := decl.Values[0]
+		expr := call.Args[1]
 		start, end := fset.Position(expr.Pos()).Offset, fset.Position(expr.End()).Offset
 		value, err := types.Eval(fset, nil, token.NoPos, string(source[start:end]))
 		if err != nil {
@@ -370,7 +374,7 @@ func generatedSQLValue(t *testing.T, source []byte) string {
 		return false
 	})
 	if !found {
-		t.Fatal("generated SQL constant missing")
+		t.Fatal("inline SQL argument missing")
 	}
 	return result
 }
@@ -646,7 +650,7 @@ var lastSQL string
 var fail bool
 type drv struct{}; func (drv) Open(string)(driver.Conn,error){return conn{},nil}
 type conn struct{}; func (conn) Prepare(string)(driver.Stmt,error){return nil,driver.ErrSkip}; func (conn) Close()error{return nil}; func (conn) Begin()(driver.Tx,error){return nil,driver.ErrSkip}
-func (conn) QueryContext(_ context.Context, q string, a []driver.NamedValue)(driver.Rows,error){ calls=a;lastSQL=q;if fail{return nil,errors.New("query failed")}; if q==queryGetUser {return &rows{data:[][]driver.Value{{uint64(7),nil}}},nil}; return &rows{data:[][]driver.Value{{uint64(8),"a"}}},nil }
+func (conn) QueryContext(_ context.Context, q string, a []driver.NamedValue)(driver.Rows,error){ calls=a;lastSQL=q;if fail{return nil,errors.New("query failed")}; if strings.Contains(q,"bio") {return &rows{data:[][]driver.Value{{uint64(7),nil}}},nil}; return &rows{data:[][]driver.Value{{uint64(8),"a"}}},nil }
 func (conn) ExecContext(_ context.Context, _ string, a []driver.NamedValue)(driver.Result,error){calls=a; return result(3),nil}
 type rows struct{data [][]driver.Value; i int}; func (r *rows) Columns()[]string{return []string{"id","bio"}}; func (r *rows) Close()error{closed=true;return nil}; func (r *rows) Next(dst []driver.Value)error{if r.i==len(r.data){return io.EOF};copy(dst,r.data[r.i]);r.i++;return nil}
 type result int64; func (r result) LastInsertId()(int64,error){return 0,nil};func(r result) RowsAffected()(int64,error){return int64(r),nil}
@@ -741,7 +745,7 @@ func TestDatabaseSQLRejectsQueryNamedWithTx(t *testing.T) {
 	}
 }
 
-func TestQueryConstantsPreserveCaseDistinctNames(t *testing.T) {
+func TestQueriesPreserveCaseDistinctNames(t *testing.T) {
 	in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{
 		{Name: "Foo", Command: model.Exec, SQL: "SELECT 1;"},
 		{Name: "foo", Command: model.Exec, SQL: "SELECT 2;"},
@@ -977,11 +981,11 @@ func TestNativeOptionsAreForwardedAndCannotReplaceTypedArguments(t *testing.T) {
 	}
 	for _, want := range []string{
 		"func (q *Queries) Ping(ctx context.Context, opts ...query.ExecuteOption) error",
-		"return q.db.Exec(ctx, queryPing, opts...)",
+		`return q.db.Exec(ctx, "", opts...)`,
 		"func (q *Queries) Put(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error",
 		"callOptions := append([]query.ExecuteOption(nil), opts...)",
 		"callOptions = append(callOptions, query.WithParameters(parameters.Build()))",
-		"return q.db.Exec(ctx, queryPut, callOptions...)",
+		`return q.db.Exec(ctx, "", callOptions...)`,
 	} {
 		if !strings.Contains(source, want) {
 			t.Fatalf("native option forwarding lacks %q:\n%s", want, source)

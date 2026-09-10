@@ -53,10 +53,10 @@ func TestSQLLiteralRoundTripsThroughJava17(t *testing.T) {
 	}
 	var program strings.Builder
 	program.WriteString("package literal;\nimport java.lang.reflect.*; import java.nio.charset.StandardCharsets; import java.util.Base64;\npublic final class Main {\n")
-	program.WriteString("  private static void check(String field, String expected) throws Exception { Field f=Queries.class.getDeclaredField(field); f.setAccessible(true); String actual=(String)f.get(null); if (!Base64.getEncoder().encodeToString(actual.getBytes(StandardCharsets.UTF_8)).equals(expected)) throw new AssertionError(field+\" changed: \"+actual); }\n")
+	program.WriteString("  private static void check(String method, String expected) throws Exception { var client=(java.sql.Connection)Proxy.newProxyInstance(Main.class.getClassLoader(),new Class<?>[]{java.sql.Connection.class},(p,m,a)->{ if (!m.getName().equals(\"prepareStatement\")) throw new AssertionError(m); String actual=(String)a[0]; if (!Base64.getEncoder().encodeToString(actual.getBytes(StandardCharsets.UTF_8)).equals(expected)) throw new AssertionError(method+\" changed: \"+actual); throw new java.sql.SQLException(\"captured\"); }); try { Queries.class.getMethod(method).invoke(new Queries(client)); throw new AssertionError(\"no prepare\"); } catch (InvocationTargetException e) { if (!(e.getCause() instanceof java.sql.SQLException) || !e.getCause().getMessage().equals(\"captured\")) throw e; } }\n")
 	program.WriteString("  public static void main(String[] args) throws Exception {\n")
 	for i, tc := range cases {
-		fmt.Fprintf(&program, "    check(\"case%02dSql\", \"%s\");\n", i, base64.StdEncoding.EncodeToString([]byte(tc.sql)))
+		fmt.Fprintf(&program, "    check(\"case%02d\", \"%s\");\n", i, base64.StdEncoding.EncodeToString([]byte(tc.sql)))
 	}
 	program.WriteString("  }\n}\n")
 	if err := os.WriteFile(filepath.Join(dir, "Main.java"), []byte(program.String()), 0600); err != nil {
@@ -86,16 +86,9 @@ func TestJDBCPreparesWithResolvedParameterDeclarations(t *testing.T) {
 		t.Fatal(err)
 	}
 	generated := string(files[len(files)-1].Content)
-	wantReadable := "private static final String getAuthorSql = " + sqlLiteral(querySQL)
-	wantPrepared := "private static final String getAuthorPreparedSql = " + sqlLiteral("DECLARE $author_id AS Uint64;\n"+querySQL)
-	if !strings.Contains(generated, wantReadable) {
-		t.Fatalf("generated JDBC API lost declaration-free source SQL:\n%s", generated)
-	}
+	wantPrepared := "client.prepareStatement(" + sqlLiteral("DECLARE $author_id AS Uint64;\n"+querySQL) + ")"
 	if !strings.Contains(generated, wantPrepared) {
 		t.Fatalf("generated JDBC API did not declare resolved parameters for driver preparation:\n%s", generated)
-	}
-	if !strings.Contains(generated, "client.prepareStatement(getAuthorPreparedSql)") {
-		t.Fatalf("generated JDBC API did not prepare the driver-compatible SQL:\n%s", generated)
 	}
 }
 
@@ -121,7 +114,7 @@ func TestGenerateRejectsInvalidContracts(t *testing.T) {
 		{"many_two_results", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.Many, ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "value", Type: utf8}}}, {Columns: []model.Column{{Name: "other", Type: utf8}}}}}}}, Options{}, "requires one nonempty result set"},
 		{"method_collision", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Get_User", Command: model.Exec}, {Name: "getUser", Command: model.Exec}}}, Options{}, "method name collision"},
 		{"parameter_collision", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.Exec, Parameters: []model.Parameter{{Name: "a-b", Type: utf8}, {Name: "a_b", Type: utf8}}}}}, Options{}, "parameter name collision"},
-		{"parameter_shadows_sql_constant", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "GetAuthor", Command: model.Exec, Parameters: []model.Parameter{{Name: "get_author_sql", Type: utf8}}}}}, Options{}, "parameter name collision"},
+		{"parameter_shadows_client", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "GetAuthor", Command: model.Exec, Parameters: []model.Parameter{{Name: "client", Type: utf8}}}}}, Options{}, "parameter name collision"},
 		{"field_collision", &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "items", Columns: []model.Column{{Name: "a-b", Type: utf8}, {Name: "a_b", Type: utf8}}}}}}, Options{}, "field name collision"},
 		{"record_collision", &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "get_author_row", Columns: []model.Column{{Name: "id", Type: utf8}}}}}, Queries: []model.AnalyzedQuery{{Name: "get_author", Command: model.One, ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: utf8}}}}}}}, Options{}, "type name collision"},
 		{"invalid_utf8", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.Exec, SQL: string([]byte{0xff})}}}, Options{}, "must be valid UTF-8"},

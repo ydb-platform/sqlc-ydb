@@ -5,20 +5,21 @@
 #include <utility>
 
 namespace authors::userver {
-namespace {
-
-const ::userver::ydb::Query kGetAuthorQuery{
-    R"sqlc(-- name: GetAuthor :one
-DECLARE $author_id AS Uint64;
-SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;)sqlc",
-    ::userver::ydb::Query::NameLiteral{"GetAuthor"},
-    ::userver::ydb::Query::LogMode::kNameOnly,
-};
-
-}  // namespace
 
 std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
-    auto sqlc_response = this->client_.ExecuteQuery(kGetAuthorQuery, "$author_id", author_id);
+    auto sqlc_response = this->client_.ExecuteQuery(
+        ::userver::ydb::Query{
+            std::string{
+                R"sqlc(-- name: GetAuthor :one)sqlc"
+                "\n"
+                R"sqlc(DECLARE $author_id AS Uint64;)sqlc"
+                "\n"
+                R"sqlc(SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;)sqlc",
+                120
+            },
+            ::userver::ydb::Query::NameLiteral{"GetAuthor"},
+            ::userver::ydb::Query::LogMode::kNameOnly,
+        }, "$author_id", author_id);
     auto sqlc_cursor = sqlc_response.GetSingleCursor();
     if (sqlc_cursor.empty()) {
         return std::nullopt;

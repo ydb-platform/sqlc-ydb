@@ -118,8 +118,6 @@ try {
     check(str_contains($error->getMessage(), 'Uint64'), 'Uint64 range diagnostic is unclear');
 }
 
-check(!str_contains(Authors\Native\Queries::GET_AUTHOR_SQL, 'DECLARE '), 'generated SQL still contains a parameter declaration');
-check(str_contains(Authors\Native\Queries::GET_AUTHOR_SQL, 'SELECT id, name, bio FROM authors'), 'original readable SQL constant was not preserved');
 check(class_exists('Batch\\Native\\CreateBookParams'), 'typed parameter DTO was not generated');
 check(class_exists('Booktest\\Native\\BooksByTagsRow'), 'LEFT JOIN row DTO was not generated');
 check(class_exists('Jets\\Native\\CountPilotsRow'), 'COUNT row DTO was not generated');
@@ -197,6 +195,7 @@ final class RetryProbeClient
 {
     public static int $resetExecutions = 0;
     public int $executions = 0;
+    public string $sql = '';
 
     public function __construct(private readonly string $kind, array $options = [])
     {
@@ -205,6 +204,7 @@ final class RetryProbeClient
     public function ExecuteDataQuery(\Ydb\Table\ExecuteDataQueryRequest $request, array $metadata, array $options): RetryProbeCall
     {
         ++$this->executions;
+        $this->sql = $request->getQuery()->getYqlText();
         return new RetryProbeCall($this->kind, $request->getSessionId());
     }
 }
@@ -292,6 +292,9 @@ final class RetryProbeTable extends Table
 $retryProbeTable = new RetryProbeTable();
 (new Authors\Native\Queries($retryProbeTable))->deleteAuthor('1');
 $retryProbeClients = $retryProbeTable->clients();
+check(!str_contains($retryProbeClients[0]->sql, 'DECLARE '), 'generated SQL still contains a parameter declaration');
+check(str_contains($retryProbeClients[0]->sql, 'DELETE FROM authors WHERE id = $author_id;'), 'inline SQL was not passed to the SDK');
+check($retryProbeClients[0]->sql === $retryProbeClients[1]->sql, 'retry changed the inline SQL');
 check($retryProbeClients[0]->executions === 1, 'first retry attempt did not use the first Table client');
 check($retryProbeClients[1]->executions === 1, 'second retry attempt did not rebuild the executor from the current Table client');
 check(RetryProbeClient::$resetExecutions === 0, 'failed executor client was reused by a later retry attempt');

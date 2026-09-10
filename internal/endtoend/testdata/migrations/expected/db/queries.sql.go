@@ -9,10 +9,6 @@ import (
 	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 
-const queryGetAuthor = `-- name: GetAuthor :one
-
-SELECT * FROM authors WHERE id = $id;`
-
 func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$id").Uint64(arg)
@@ -20,7 +16,9 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx, queryGetAuthor, callOptions...)
+	result, err := q.db.QueryRow(ctx, "-- name: GetAuthor :one\n"+
+		"\n"+
+		"SELECT * FROM authors WHERE id = $id;", callOptions...)
 	if err != nil {
 		return GetAuthorRow{}, err
 	}

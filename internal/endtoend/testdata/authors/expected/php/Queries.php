@@ -15,12 +15,6 @@ use YdbPlatform\Ydb\Table;
 
 final class Queries
 {
-    public const GET_AUTHOR_SQL = <<<'SQLC_YDB_YQL'
--- name: GetAuthor :one
-DECLARE $author_id AS Uint64;
-SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;
-SQLC_YDB_YQL;
-
     public function __construct(private readonly Table $table)
     {
         if (PHP_INT_SIZE !== 8) {
@@ -34,7 +28,11 @@ SQLC_YDB_YQL;
             '$author_id' => YdbValueCodec::typedUint64($authorId, 'author_id'),
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
-            $query = $session->newQuery(self::GET_AUTHOR_SQL)
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                -- name: GetAuthor :one
+                DECLARE $author_id AS Uint64;
+                SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;
+                SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);

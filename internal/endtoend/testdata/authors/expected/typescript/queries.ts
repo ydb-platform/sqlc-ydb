@@ -2,35 +2,13 @@
 import type { Query, SQL } from "@ydbjs/query";
 import { Uint64 } from "@ydbjs/value/primitive";
 
-export type ConfigureQuery = (query: Query) => Query;
+export type ConfigureQuery = (query: Query) => void;
 
-export const GET_AUTHOR_SQL = `-- name: GetAuthor :one
-DECLARE $author_id AS Uint64;
-SELECT \`id\`, \`name\`, \`bio\` FROM \`authors\` WHERE \`id\` = $author_id;`;
-const _GET_AUTHOR_SQL_EXEC = `-- name: GetAuthor :one
-\x20\x20\x20
-SELECT \`id\`, \`name\`, \`bio\` FROM \`authors\` WHERE \`id\` = $author_id;`;
-
-export interface GetAuthorRow {
+export type GetAuthorRow = {
   readonly id: bigint;
   readonly name: string;
   readonly bio: string | null;
-}
-
-function _uint64(value: unknown, name: string): bigint { if (typeof value !== "bigint" || value < 0n || value > 18446744073709551615n) throw new RangeError(`${name} is outside YQL Uint64 range`); return value; }
-
-function _decodeGetAuthorRow(row: unknown): GetAuthorRow {
-  if (row === null || typeof row !== "object" || Array.isArray(row)) throw new TypeError("GetAuthor: expected an object row");
-  const record = row as Record<string, unknown>;
-  if (!Object.hasOwn(row, "id")) throw new TypeError("GetAuthor: result row is missing column id");
-  if (!Object.hasOwn(row, "name")) throw new TypeError("GetAuthor: result row is missing column name");
-  if (!Object.hasOwn(row, "bio")) throw new TypeError("GetAuthor: result row is missing column bio");
-  return {
-    id: record["id"] as bigint,
-    name: record["name"] as string,
-    bio: record["bio"] as string | null,
-  };
-}
+};
 
 export class Queries {
   readonly #sql: SQL;
@@ -41,13 +19,12 @@ export class Queries {
   }
 
   async getAuthor(authorId: bigint, configure?: ConfigureQuery): Promise<GetAuthorRow | null> {
-    let _pending = this.#sql(_GET_AUTHOR_SQL_EXEC)
-      .parameter("author_id", new Uint64(_uint64(authorId, "author_id")))
-    ;
-    if (configure) _pending = configure(_pending);
-    const _resultSets = await _pending;
-    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError("GetAuthor: expected the first YDB result set to be an array");
-    const _rows = _resultSets[0];
-    return _rows.length === 0 ? null : _decodeGetAuthorRow(_rows[0]);
+    const stmt = this.#sql<[GetAuthorRow]>`-- name: GetAuthor :one
+      SELECT \`id\`, \`name\`, \`bio\` FROM \`authors\` WHERE \`id\` = $author_id;`
+      .parameter("author_id", new Uint64(authorId));
+    configure?.(stmt);
+    const [rows] = await stmt;
+
+    return rows[0] ?? null;
   }
 }

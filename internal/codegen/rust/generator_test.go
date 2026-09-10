@@ -45,12 +45,12 @@ func TestGenerateYDBQuerierUsesNativeQueryClientContract(t *testing.T) {
 		"use super::models::*;",
 		"pub struct Queries<'a>",
 		"client: &'a mut ydb::QueryClient",
-		"self.client.query_result_set(CREATE_BOOK)",
+		".query_result_set(concat!(",
 		`.param("$id", id)`,
 		"row.remove_field(0)?.try_into()?",
-		".query_result_set(BOOKS_BY_YEAR)",
+		".query_result_set(concat!(",
 		"for mut row in result_set.rows()",
-		".exec(UPDATE_BOOK)",
+		".exec(concat!(",
 		`.param("$tags", JsonParam(tags))`,
 	} {
 		if !strings.Contains(queries, want) {
@@ -164,7 +164,17 @@ func TestGeneratedRawSQLRoundTripsThroughRustCompiler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = generatedFile(t, files, "queries.rs")
+	queries := generatedFile(t, files, "queries.rs")
+	start := strings.Index(queries, ".exec(")
+	if start < 0 || strings.Contains(queries, "pub const ") {
+		t.Fatalf("expected inline SQL: %s", queries)
+	}
+	start += len(".exec(")
+	end := strings.Index(queries[start:], ");")
+	if end < 0 {
+		t.Fatalf("missing inline SQL closing delimiter: %s", queries)
+	}
+	literal := queries[start : start+end]
 	var expected strings.Builder
 	expected.WriteString("&[")
 	for i, value := range []byte(sql) {
@@ -174,7 +184,7 @@ func TestGeneratedRawSQLRoundTripsThroughRustCompiler(t *testing.T) {
 		fmt.Fprintf(&expected, "%d", value)
 	}
 	expected.WriteString("]")
-	source := fmt.Sprintf("const SPECIAL_SQL: &str = %s;\nfn main() { assert_eq!(SPECIAL_SQL.as_bytes(), %s); }\n", rustString(sql), expected.String())
+	source := fmt.Sprintf("fn main() { assert_eq!((%s).as_bytes(), %s); }\n", literal, expected.String())
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.rs")
 	if err := os.WriteFile(path, []byte(source), 0600); err != nil {

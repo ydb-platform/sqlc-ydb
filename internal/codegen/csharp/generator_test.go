@@ -55,7 +55,7 @@ func TestGenerateUsesConcreteModernYdbAdoSurface(t *testing.T) {
 	}
 	for _, want := range []string{
 		"using Ydb.Sdk.Ado;", "private readonly YdbConnection _connection;", "private readonly YdbTransaction? _transaction;", "WithTransaction(YdbTransaction transaction)",
-		"new YdbCommand(SqlGetAuthor, _connection) { Transaction = _transaction }", "new YdbParameter(\"$author_id\", DbType.UInt64, AuthorID)",
+		"new YdbCommand(" + sqlLiteral(authorsAnalysis().Queries[0].SQL) + ", _connection) { Transaction = _transaction }", "new YdbParameter(\"$author_id\", DbType.UInt64, AuthorID)",
 		"using Ydb.Sdk.Value;", "new YdbParameter(\"$biography\", YdbValue.MakeOptionalUtf8(args.Biography))", "ExecuteReaderAsync(cancellationToken)", "ReadAsync(cancellationToken)", "reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)",
 	} {
 		if !strings.Contains(queries, want) {
@@ -70,7 +70,7 @@ func TestGenerateUsesConcreteModernYdbAdoSurface(t *testing.T) {
 func TestGenerateDapperProfileUsesDapperExecutionAndTypedYdbParameters(t *testing.T) {
 	_, queries := generatedRuntime(t, authorsAnalysis(), "dapper")
 	for _, want := range []string{
-		"using Dapper;", "new CommandDefinition(SqlGetAuthor", "_connection.ExecuteReaderAsync(command)",
+		"using Dapper;", "new CommandDefinition(" + sqlLiteral(authorsAnalysis().Queries[0].SQL), "_connection.ExecuteReaderAsync(command)",
 		"_connection.ExecuteAsync(command)", "SqlMapper.IDynamicParameters", "command.Parameters.Add(parameter)",
 		"new YdbParameter(\"$biography\", YdbValue.MakeOptionalUtf8(args.Biography))",
 	} {
@@ -84,8 +84,8 @@ func TestGenerateLinq2DBProfileUsesOfficialYdbDataConnection(t *testing.T) {
 	_, queries := generatedRuntime(t, authorsAnalysis(), "linq2db")
 	for _, want := range []string{
 		"using LinqToDB;", "using LinqToDB.Data;", "private readonly DataConnection _connection;",
-		"_connection.QueryToListAsync(GetAuthorRowFrom, SqlGetAuthor, cancellationToken",
-		"_connection.ExecuteAsync(SqlUpsertAuthor, cancellationToken",
+		"_connection.QueryToListAsync(GetAuthorRowFrom," + sqlLiteral(authorsAnalysis().Queries[0].SQL) + ", cancellationToken",
+		"_connection.ExecuteAsync(" + sqlLiteral(authorsAnalysis().Queries[2].SQL) + ", cancellationToken",
 		"new DataParameter(\"$biography\", YdbValue.MakeOptionalUtf8(args.Biography), DataType.NVarChar)",
 	} {
 		if !strings.Contains(queries, want) {
@@ -128,7 +128,7 @@ func TestSQLLiteralPreservesControlsQuotesAndBackslashes(t *testing.T) {
 	a.Queries = a.Queries[:1]
 	a.Queries[0].SQL = sql
 	_, queries := generated(t, a)
-	for _, want := range []string{`"SELECT '\"', '\\\\', '\u0000', '\u001F';\r\n" +`, `"-- \"\"\" delimiter-looking text\n";`} {
+	for _, want := range []string{`"SELECT '\"', '\\\\', '\u0000', '\u001F';\r\n" +`, `"-- \"\"\" delimiter-looking text\n"`} {
 		if !strings.Contains(queries, want) {
 			t.Errorf("SQL literal did not use portable exact escaping %q:\n%s", want, queries)
 		}
@@ -146,7 +146,7 @@ func TestRejectsUnsupportedOrCollidingInput(t *testing.T) {
 		{"execrows", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.ExecRows}}}, Options{}, "unsupported command"},
 		{"field collision", &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "t", Columns: []model.Column{{Name: "a_b", Type: model.Type{Kind: "Utf8"}}, {Name: "a b", Type: model.Type{Kind: "Utf8"}}}}}}}, Options{}, "column name collision"},
 		{"generated type collision", &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "queries"}}}}, Options{}, "model name collision"},
-		{"duplicate query", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Same", Command: model.Exec}, {Name: "Same", Command: model.Exec}}}, Options{}, "SQL constant collision"},
+		{"duplicate query", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Same", Command: model.Exec}, {Name: "Same", Command: model.Exec}}}, Options{}, "method name collision"},
 		{"unrepresentable table name", &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "---"}}}}, Options{}, "invalid model name"},
 		{"namespace", authorsAnalysis(), Options{Namespace: "Bad.class"}, "invalid namespace"},
 		{"runtime", authorsAnalysis(), Options{Runtime: "entity-framework"}, "unsupported runtime"},
@@ -378,7 +378,15 @@ func TestSQLLiteralRoundTripsThroughCSharpRuntime(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "literal.csproj"), []byte(project), 0600); err != nil {
 		t.Fatal(err)
 	}
-	program := fmt.Sprintf(`using System; using System.Reflection; using System.Text; using Authors.AdoNet; internal static class Program { static int Main() { var actual = (string)typeof(Queries).GetField("SqlGetAuthor", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!; if (Convert.ToBase64String(Encoding.UTF8.GetBytes(actual)) != %q) throw new Exception("SQL changed"); return 0; } }`, base64.StdEncoding.EncodeToString([]byte(sql)))
+	_, inline, ok := strings.Cut(string(files[1].Content), "new YdbCommand(")
+	if !ok {
+		t.Fatal("generated query does not construct a YdbCommand")
+	}
+	inline, _, ok = strings.Cut(inline, ", _connection)")
+	if !ok {
+		t.Fatal("generated query constructor has no connection argument")
+	}
+	program := fmt.Sprintf(`using System; using System.Text; using Ydb.Sdk.Ado; internal static class Program { static int Main() { using var command = new YdbCommand(%s); var actual = command.CommandText; if (Convert.ToBase64String(Encoding.UTF8.GetBytes(actual)) != %q) throw new Exception("SQL changed"); return 0; } }`, inline, base64.StdEncoding.EncodeToString([]byte(sql)))
 	if err := os.WriteFile(filepath.Join(dir, "Program.cs"), []byte(program), 0600); err != nil {
 		t.Fatal(err)
 	}

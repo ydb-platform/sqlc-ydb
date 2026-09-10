@@ -2,10 +2,6 @@
 
 use super::models::*;
 
-pub const GET_AUTHOR: &str = r"-- name: GetAuthor :one
-
-SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;";
-
 pub struct Queries<'a> {
     client: &'a mut ydb::QueryClient,
 }
@@ -18,7 +14,11 @@ impl<'a> Queries<'a> {
     pub async fn get_author(&mut self, author_id: u64) -> ydb::YdbResult<GetAuthorRow> {
         let call = self
             .client
-            .query_result_set(GET_AUTHOR)
+            .query_result_set(concat!(
+                concat!(r"-- name: GetAuthor :one", "\x0a"),
+                "\x0a",
+                r"SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;",
+            ))
             .param("$author_id", author_id);
         let result_set = call.await?;
         let mut row = result_set.rows().next().ok_or(ydb::YdbError::NoRows)?;

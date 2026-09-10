@@ -17,17 +17,15 @@ public final class Queries {
         this.client = java.util.Objects.requireNonNull(client);
     }
 
-    private static final String getAuthorSql = """
--- name: GetAuthor :one
-DECLARE $author_id AS Uint64;
-SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;\
-""";
-
     public java.util.Optional<GetAuthorRow> getAuthor(long authorId) {
         var _params = Params.create();
         _params.put("$author_id", PrimitiveValue.newUint64(authorId));
         var _query = client.supplyResult(_session -> QueryReader.readFrom(
-                _session.createQuery(getAuthorSql, TxMode.SERIALIZABLE_RW, _params))).join().getValue();
+                _session.createQuery("""
+                    -- name: GetAuthor :one
+                    DECLARE $author_id AS Uint64;
+                    SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;\
+                    """, TxMode.SERIALIZABLE_RW, _params))).join().getValue();
         if (_query.getResultSetCount() != 1) throw new IllegalStateException("Expected one result set");
         var _rows = _query.getResultSet(0);
         if (!_rows.next()) return java.util.Optional.empty();

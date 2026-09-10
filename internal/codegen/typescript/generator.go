@@ -9,7 +9,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/antlr4-go/antlr/v4"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
+	parser "github.com/ydb-platform/yql-parsers/go"
 )
 
 type Options struct {
@@ -20,30 +22,29 @@ type typeInfo struct {
 	tsType     string
 	valueClass string
 	typeClass  string
-	validator  string
 }
 
 var typescriptTypes = map[string]typeInfo{
-	"Bool":         {"boolean", "Bool", "BoolType", "boolean"},
-	"Int8":         {"number", "Int8", "Int8Type", "int8"},
-	"Uint8":        {"number", "Uint8", "Uint8Type", "uint8"},
-	"Int16":        {"number", "Int16", "Int16Type", "int16"},
-	"Uint16":       {"number", "Uint16", "Uint16Type", "uint16"},
-	"Int32":        {"number", "Int32", "Int32Type", "int32"},
-	"Uint32":       {"number", "Uint32", "Uint32Type", "uint32"},
-	"Int64":        {"bigint", "Int64", "Int64Type", "int64"},
-	"Uint64":       {"bigint", "Uint64", "Uint64Type", "uint64"},
-	"Float":        {"number", "Float", "FloatType", "float"},
-	"Double":       {"number", "Double", "DoubleType", "number"},
-	"Utf8":         {"string", "Utf8", "Utf8Type", "string"},
-	"String":       {"Uint8Array", "Bytes", "BytesType", "bytes"},
-	"Json":         {"string", "Json", "JsonType", "json"},
-	"JsonDocument": {"string", "JsonDocument", "JsonDocumentType", "json"},
-	"Timestamp":    {"bigint", "Primitive", "TimestampType", "timestamp"},
+	"Bool":         {"boolean", "Bool", "BoolType"},
+	"Int8":         {"number", "Int8", "Int8Type"},
+	"Uint8":        {"number", "Uint8", "Uint8Type"},
+	"Int16":        {"number", "Int16", "Int16Type"},
+	"Uint16":       {"number", "Uint16", "Uint16Type"},
+	"Int32":        {"number", "Int32", "Int32Type"},
+	"Uint32":       {"number", "Uint32", "Uint32Type"},
+	"Int64":        {"bigint", "Int64", "Int64Type"},
+	"Uint64":       {"bigint", "Uint64", "Uint64Type"},
+	"Float":        {"number", "Float", "FloatType"},
+	"Double":       {"number", "Double", "DoubleType"},
+	"Utf8":         {"string", "Utf8", "Utf8Type"},
+	"String":       {"Uint8Array", "Bytes", "BytesType"},
+	"Json":         {"string", "Json", "JsonType"},
+	"JsonDocument": {"string", "JsonDocument", "JsonDocumentType"},
+	"Timestamp":    {"Date", "Timestamp", "TimestampType"},
 }
 
 var reserved = func() map[string]bool {
-	m := map[string]bool{"constructor": true, "configure": true, "sql": true}
+	m := map[string]bool{"constructor": true, "configure": true, "sql": true, "stmt": true, "rows": true, "row": true, "args": true}
 	for _, word := range strings.Fields("await break case catch class const continue debugger default delete do else enum export extends false finally for function if implements import in instanceof interface let new null package private protected public return static super switch this throw true try typeof var void while with yield arguments eval") {
 		m[word] = true
 	}
@@ -75,7 +76,6 @@ func Generate(a *model.AnalysisResult, options Options) ([]model.File, error) {
 
 func validate(a *model.AnalysisResult) error {
 	methods := map[string]string{}
-	constants := map[string]string{}
 	for _, query := range a.Queries {
 		switch query.Command {
 		case model.One, model.Many, model.Exec:
@@ -95,11 +95,6 @@ func validate(a *model.AnalysisResult) error {
 			return fmt.Errorf("typescript generator: method name collision %q between %q and %q", method, previous, query.Name)
 		}
 		methods[method] = query.Name
-		constant := constantName(query.Name)
-		if previous, exists := constants[constant]; exists {
-			return fmt.Errorf("typescript generator: SQL constant name collision %q between %q and %q", constant, previous, query.Name)
-		}
-		constants[constant] = query.Name
 		seenParameters := map[string]string{}
 		for _, parameter := range query.Parameters {
 			field, err := identifier(parameter.Name, false)
@@ -125,6 +120,18 @@ func validate(a *model.AnalysisResult) error {
 				return fmt.Errorf("typescript generator: query %q: expected one result set, got %d", query.Name, len(query.ResultSets))
 			}
 			seenColumns := map[string]string{}
+			if len(query.ResultAliases) != 0 {
+				if len(query.ResultAliases) != len(query.ResultSets[0].Columns) {
+					return fmt.Errorf("typescript generator: query %q: result alias metadata does not match result columns", query.Name)
+				}
+				end, size := 0, utf8.RuneCountInString(query.SQLWithoutDeclarations)
+				for _, span := range query.ResultAliases {
+					if span.Start < end || span.End < span.Start || span.End > size {
+						return fmt.Errorf("typescript generator: query %q: invalid result alias span", query.Name)
+					}
+					end = span.End
+				}
+			}
 			for _, column := range query.ResultSets[0].Columns {
 				field, err := identifier(column.Name, false)
 				if err != nil {
@@ -161,26 +168,43 @@ func tsType(t model.Type) (string, error) {
 	return info.tsType, nil
 }
 
+func resultType(t model.Type) string {
+	base := t.UnwrapOptional()
+	if base.Kind == "Json" || base.Kind == "JsonDocument" {
+		return "JSValue"
+	}
+	typ, _ := tsType(t)
+	return typ
+}
+
 func renderTypeScript(a *model.AnalysisResult) (string, error) {
+	prepared := *a
+	prepared.Queries = append([]model.AnalyzedQuery(nil), a.Queries...)
+	for i, q := range prepared.Queries {
+		prepared.Queries[i] = withResultAliases(q)
+		prepared.Queries[i].SQLWithoutDeclarations = omitDeclarationLines(q.SQL, prepared.Queries[i].SQLWithoutDeclarations)
+		if len(q.Parameters) == 0 && len(q.ResultAliases) > 0 {
+			prepared.Queries[i].SQL = prepared.Queries[i].SQLWithoutDeclarations
+		}
+	}
+	a = &prepared
 	classes := map[string]bool{}
-	needsOptional := false
-	validators := map[string]bool{}
-	needsRawResults := false
-	for _, query := range a.Queries {
-		for _, parameter := range query.Parameters {
-			base := parameter.Type.UnwrapOptional()
-			info := typescriptTypes[base.Kind]
+	optional, jsonResult := false, false
+	for _, q := range a.Queries {
+		for _, p := range q.Parameters {
+			info := typescriptTypes[p.Type.UnwrapOptional().Kind]
 			classes[info.valueClass] = true
-			validators[info.validator] = true
-			if base.Kind == "Timestamp" {
-				classes[info.typeClass] = true
-			}
-			if parameter.Type.IsOptional() {
-				needsOptional = true
+			if p.Type.IsOptional() {
+				optional = true
 				classes[info.typeClass] = true
 			}
 		}
-		needsRawResults = needsRawResults || resultNeedsRaw(query)
+		for _, rs := range q.ResultSets {
+			for _, c := range rs.Columns {
+				kind := c.Type.UnwrapOptional().Kind
+				jsonResult = jsonResult || kind == "Json" || kind == "JsonDocument"
+			}
+		}
 	}
 	imports := make([]string, 0, len(classes))
 	for class := range classes {
@@ -188,259 +212,227 @@ func renderTypeScript(a *model.AnalysisResult) (string, error) {
 	}
 	sort.Strings(imports)
 	var b strings.Builder
-	b.WriteString("// Code generated by sqlc-ydb. DO NOT EDIT.\n")
-	b.WriteString("import type { Query, SQL } from \"@ydbjs/query\";\n")
-	if needsOptional {
-		b.WriteString("import type { Type, Value } from \"@ydbjs/value\";\n")
+	b.WriteString("// Code generated by sqlc-ydb. DO NOT EDIT.\nimport type { Query, SQL } from \"@ydbjs/query\";\n")
+	if jsonResult {
+		b.WriteString("import type { JSValue } from \"@ydbjs/value\";\n")
 	}
-	if len(imports) != 0 {
+	if len(imports) > 0 {
 		b.WriteString("import { " + strings.Join(imports, ", ") + " } from \"@ydbjs/value/primitive\";\n")
 	}
-	if needsOptional {
+	if optional {
 		b.WriteString("import { Optional } from \"@ydbjs/value/optional\";\n")
 	}
-	if len(imports) != 0 || needsOptional {
-		b.WriteByte('\n')
-	}
-	b.WriteString("export type ConfigureQuery = (query: Query) => Query;\n\n")
-	for _, query := range a.Queries {
-		constant := constantName(query.Name)
-		b.WriteString("export const " + constant + " = " + sqlLiteral(query.SQL) + ";\n")
-		if len(query.Parameters) != 0 && query.SQL != query.SQLWithoutDeclarations {
-			b.WriteString("const _" + constant + "_EXEC = " + sqlLiteral(query.SQLWithoutDeclarations) + ";\n")
+	b.WriteString("\nexport type ConfigureQuery = (query: Query) => void;\n\n")
+	for _, q := range a.Queries {
+		if len(q.Parameters) > 1 {
+			b.WriteString("export type " + exportedName(q.Name) + "Params = {\n")
+			for _, p := range q.Parameters {
+				field, _ := identifier(p.Name, false)
+				typ, _ := tsType(p.Type)
+				b.WriteString("  readonly " + field + ": " + typ + ";\n")
+			}
+			b.WriteString("};\n\n")
 		}
-		b.WriteByte('\n')
+		if len(q.ResultSets) > 0 {
+			renderRowType(&b, "export type "+exportedName(q.Name)+"Row", q, false)
+		}
 	}
-	renderInterfaces(&b, a)
-	renderValidationHelpers(&b, validators, needsOptional)
-	if needsRawResults {
-		b.WriteString("type _RawValue = { value?: { case?: string; value?: unknown } };\n")
-		b.WriteString("function _rawValue<T>(value: unknown, name: string, expectedCase: string): T { if (value === null || typeof value !== \"object\") throw new TypeError(`${name} has an unexpected YDB value shape`); const raw = value as _RawValue; if (raw.value?.case !== expectedCase) throw new TypeError(`${name} has an unexpected YDB value shape`); return raw.value.value as T; }\n")
-		b.WriteString("function _rawOptional<T>(value: unknown, name: string, read: (value: unknown) => T): T | null { if (value === null || typeof value !== \"object\") throw new TypeError(`${name} has an unexpected YDB Optional shape`); const raw = value as _RawValue; return raw.value?.case === \"nullFlagValue\" ? null : read(value); }\n\n")
-	}
-	for _, query := range a.Queries {
-		if query.Command == model.One || query.Command == model.Many {
-			renderDecoder(&b, query)
+	for _, q := range a.Queries {
+		if needsWireRow(q) {
+			renderRowType(&b, "type _"+exportedName(q.Name)+"WireRow", q, true)
 		}
 	}
 	b.WriteString("export class Queries {\n  readonly #sql: SQL;\n\n  constructor(sql: SQL) {\n    if (typeof sql !== \"function\") throw new TypeError(\"Queries requires a YDB SQL function\");\n    this.#sql = sql;\n  }\n")
-	for _, query := range a.Queries {
-		if err := renderMethod(&b, query); err != nil {
-			return "", err
-		}
+	for _, q := range a.Queries {
+		renderMethod(&b, q)
 	}
 	b.WriteString("}\n")
 	return b.String(), nil
 }
 
-func renderValidationHelpers(b *strings.Builder, validators map[string]bool, optional bool) {
-	if validators["boolean"] {
-		b.WriteString("function _boolean(value: unknown, name: string): boolean { if (typeof value !== \"boolean\") throw new TypeError(`${name} must be a boolean`); return value; }\n")
+// DECLARE removal leaves whitespace so analyzer source offsets stay stable.
+// Omit only the emptied lines, retaining original blank lines and comments.
+func omitDeclarationLines(original, executable string) string {
+	originalLines, lines := strings.Split(original, "\n"), strings.Split(executable, "\n")
+	if len(originalLines) != len(lines) {
+		return executable
 	}
-	if validators["number"] {
-		b.WriteString("function _number(value: unknown, name: string): number { if (typeof value !== \"number\" || !Number.isFinite(value)) throw new TypeError(`${name} must be a finite number`); return value; }\n")
-	}
-	if validators["float"] {
-		b.WriteString("function _float(value: unknown, name: string): number { if (typeof value !== \"number\" || !Number.isFinite(value)) throw new TypeError(`${name} must be a finite number`); if (!Number.isFinite(Math.fround(value))) throw new RangeError(`${name} is outside YQL Float range`); return value; }\n")
-	}
-	ranges := []struct{ name, min, max string }{
-		{"int8", "-128", "127"}, {"uint8", "0", "255"}, {"int16", "-32768", "32767"}, {"uint16", "0", "65535"},
-		{"int32", "-2147483648", "2147483647"}, {"uint32", "0", "4294967295"},
-	}
-	for _, item := range ranges {
-		if validators[item.name] {
-			fmt.Fprintf(b, "function _%s(value: unknown, name: string): number { if (typeof value !== \"number\" || !Number.isInteger(value) || value < %s || value > %s) throw new RangeError(`${name} is outside YQL %s range`); return value; }\n", item.name, item.min, item.max, strings.ToUpper(item.name[:1])+item.name[1:])
+	kept := make([]string, 0, len(lines))
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "" && strings.TrimSpace(originalLines[i]) != "" {
+			continue
 		}
+		kept = append(kept, line)
 	}
-	for _, item := range []struct{ name, min, max string }{{"int64", "-9223372036854775808n", "9223372036854775807n"}, {"uint64", "0n", "18446744073709551615n"}} {
-		if validators[item.name] {
-			fmt.Fprintf(b, "function _%s(value: unknown, name: string): bigint { if (typeof value !== \"bigint\" || value < %s || value > %s) throw new RangeError(`${name} is outside YQL %s range`); return value; }\n", item.name, item.min, item.max, strings.ToUpper(item.name[:1])+item.name[1:])
-		}
-	}
-	if validators["string"] {
-		b.WriteString("function _string(value: unknown, name: string): string { if (typeof value !== \"string\") throw new TypeError(`${name} must be a string`); return value; }\n")
-	}
-	if validators["bytes"] {
-		b.WriteString("function _bytes(value: unknown, name: string): Uint8Array { if (!(value instanceof Uint8Array)) throw new TypeError(`${name} must be a Uint8Array`); return value; }\n")
-	}
-	if validators["timestamp"] {
-		b.WriteString("function _timestamp(value: unknown, name: string): bigint { if (typeof value !== \"bigint\" || value < 0n || value > 4291747199999999n) throw new RangeError(`${name} is outside YQL Timestamp microsecond range`); return value; }\n")
-	}
-	if validators["json"] {
-		b.WriteString("function _json(value: unknown, name: string): string { if (typeof value !== \"string\") throw new TypeError(`${name} must be JSON text`); try { JSON.parse(value); } catch (error) { throw new TypeError(`${name} must contain valid JSON`, { cause: error }); } return value; }\n")
-	}
-	if optional {
-		b.WriteString("function _optional<T>(value: T | null | undefined, name: string, itemType: Type, makeValue: (item: T) => Value): Value { if (value === undefined) throw new TypeError(`${name} must not be undefined; use null for an empty Optional`); return new Optional(value === null ? null : makeValue(value), itemType); }\n")
-	}
-	if len(validators) != 0 || optional {
-		b.WriteByte('\n')
-	}
+	return strings.Join(kept, "\n")
 }
 
-func renderDecoder(b *strings.Builder, query model.AnalyzedQuery) {
-	decoder := "_decode" + exportedName(query.Name) + "Row"
-	b.WriteString("function " + decoder + "(row: unknown): " + exportedName(query.Name) + "Row {\n")
-	b.WriteString("  if (row === null || typeof row !== \"object\" || Array.isArray(row)) throw new TypeError(" + strconv.Quote(query.Name+": expected an object row") + ");\n")
-	b.WriteString("  const record = row as Record<string, unknown>;\n")
-	for _, column := range query.ResultSets[0].Columns {
-		wireName := column.ResultName()
-		b.WriteString("  if (!Object.hasOwn(row, " + strconv.Quote(wireName) + ")) throw new TypeError(" + strconv.Quote(query.Name+": result row is missing column "+wireName) + ");\n")
+func withResultAliases(q model.AnalyzedQuery) model.AnalyzedQuery {
+	if len(q.ResultAliases) == 0 || len(q.ResultSets) == 0 {
+		return q
 	}
-	b.WriteString("  return {\n")
-	for _, column := range query.ResultSets[0].Columns {
+	q.ResultSets = append([]model.ResultSet(nil), q.ResultSets...)
+	q.ResultSets[0].Columns = append([]model.Column(nil), q.ResultSets[0].Columns...)
+	sql := []rune(q.SQLWithoutDeclarations)
+	for i := len(q.ResultAliases) - 1; i >= 0; i-- {
+		column := &q.ResultSets[0].Columns[i]
 		field, _ := identifier(column.Name, false)
-		wireName := column.ResultName()
-		value := "record[" + strconv.Quote(wireName) + "]"
-		if resultNeedsRaw(query) {
-			value = rawDecodeExpression(column.Type, value, query.Name+"."+wireName)
-		} else {
-			typ, _ := tsType(column.Type)
-			value += " as " + typ
+		if field == column.ResultName() {
+			continue
 		}
-		b.WriteString("    " + field + ": " + value + ",\n")
+		span := q.ResultAliases[i]
+		alias := quoteAlias(field)
+		if span.Start == span.End {
+			alias = " AS " + alias
+		}
+		sql = append(append(append([]rune(nil), sql[:span.Start]...), []rune(alias)...), sql[span.End:]...)
+		column.WireName = field
 	}
-	b.WriteString("  };\n}\n\n")
+	q.SQLWithoutDeclarations = string(sql)
+	q.SQL = string(sql)
+	return q
 }
 
-func renderMethod(b *strings.Builder, query model.AnalyzedQuery) error {
-	method, _ := identifier(query.Name, false)
-	params := ""
-	if len(query.Parameters) == 1 {
-		field, _ := identifier(query.Parameters[0].Name, false)
-		typ, _ := tsType(query.Parameters[0].Type)
-		params = field + ": " + typ
-	} else if len(query.Parameters) > 1 {
-		params = "args: " + exportedName(query.Name) + "Params"
+func quoteAlias(name string) string {
+	lexer := parser.NewYQLLexer(antlr.NewInputStream(name))
+	lexer.RemoveErrorListeners()
+	token := lexer.NextToken()
+	if token.GetTokenType() == parser.YQLLexerID_PLAIN && token.GetText() == name && lexer.NextToken().GetTokenType() == antlr.TokenEOF {
+		return name
 	}
-	if params != "" {
-		params += ", "
-	}
-	params += "configure?: ConfigureQuery"
-	ret := "void"
-	if query.Command == model.One {
-		ret = exportedName(query.Name) + "Row | null"
-	} else if query.Command == model.Many {
-		ret = exportedName(query.Name) + "Row[]"
-	}
-	b.WriteString("\n  async " + method + "(" + params + "): Promise<" + ret + "> {\n")
-	constant := constantName(query.Name)
-	executionConstant := constant
-	if len(query.Parameters) != 0 && query.SQL != query.SQLWithoutDeclarations {
-		executionConstant = "_" + constant + "_EXEC"
-	}
-	rawSuffix := ""
-	if resultNeedsRaw(query) {
-		rawSuffix = ".raw()"
-	}
-	if len(query.Parameters) == 0 {
-		b.WriteString("    let _pending = this.#sql(" + constant + ");\n")
-	} else {
-		b.WriteString("    let _pending = this.#sql(" + executionConstant + ")\n")
-		for _, parameter := range query.Parameters {
-			field, _ := identifier(parameter.Name, false)
-			value := field
-			if len(query.Parameters) > 1 {
-				value = "args." + field
-			}
-			expr, err := bindExpression(parameter.Type, value, parameter.Name)
-			if err != nil {
-				return err
-			}
-			b.WriteString("      .parameter(" + strconv.Quote(parameter.Name) + ", " + expr + ")\n")
-		}
-		b.WriteString("    ;\n")
-	}
-	b.WriteString("    if (configure) _pending = configure(_pending);\n")
-	b.WriteString("    const _resultSets = await _pending" + rawSuffix + ";\n")
-	if query.Command == model.Exec {
-		b.WriteString("    return undefined;\n  }\n")
-		return nil
-	}
-	b.WriteString("    if (!Array.isArray(_resultSets) || !Array.isArray(_resultSets[0])) throw new TypeError(" + strconv.Quote(query.Name+": expected the first YDB result set to be an array") + ");\n")
-	b.WriteString("    const _rows = _resultSets[0];\n")
-	decoder := "_decode" + exportedName(query.Name) + "Row"
-	if query.Command == model.One {
-		b.WriteString("    return _rows.length === 0 ? null : " + decoder + "(_rows[0]);\n")
-	} else {
-		b.WriteString("    return _rows.map(" + decoder + ");\n")
-	}
-	b.WriteString("  }\n")
-	return nil
+	return "`" + strings.ReplaceAll(name, "`", "``") + "`"
 }
 
-func bindExpression(t model.Type, value, originalName string) (string, error) {
-	if t.IsOptional() {
-		if t.Elem == nil {
-			return "", fmt.Errorf("malformed Optional type")
-		}
-		base := t.Elem.UnwrapOptional()
-		info, ok := typescriptTypes[base.Kind]
-		if !ok {
-			return "", fmt.Errorf("unsupported YQL type %q", base.Kind)
-		}
-		inner := valueExpression(info, "item", originalName)
-		return "_optional(" + value + ", " + strconv.Quote(originalName) + ", new " + info.typeClass + "(), (item) => " + inner + ")", nil
+func needsWireRow(q model.AnalyzedQuery) bool {
+	if len(q.ResultSets) == 0 {
+		return false
 	}
-	info, ok := typescriptTypes[t.Kind]
-	if !ok {
-		return "", fmt.Errorf("unsupported YQL type %q", t.Kind)
-	}
-	return valueExpression(info, value, originalName), nil
-}
-
-func valueExpression(info typeInfo, value, name string) string {
-	if info.validator == "timestamp" {
-		return "new Primitive({ value: { case: \"uint64Value\", value: _timestamp(" + value + ", " + strconv.Quote(name) + ") } }, new TimestampType())"
-	}
-	return "new " + info.valueClass + "(_" + info.validator + "(" + value + ", " + strconv.Quote(name) + "))"
-}
-
-func resultNeedsRaw(query model.AnalyzedQuery) bool {
-	for _, resultSet := range query.ResultSets {
-		for _, column := range resultSet.Columns {
-			kind := column.Type.UnwrapOptional().Kind
-			if kind == "Timestamp" || kind == "Json" || kind == "JsonDocument" {
-				return true
-			}
+	for _, c := range q.ResultSets[0].Columns {
+		field, _ := identifier(c.Name, false)
+		if field != c.ResultName() {
+			return true
 		}
 	}
 	return false
 }
 
-func rawDecodeExpression(t model.Type, value, name string) string {
-	if t.IsOptional() && t.Elem != nil {
-		return "_rawOptional(" + value + ", " + strconv.Quote(name) + ", (value) => " + rawDecodeExpression(*t.Elem, "value", name) + ")"
+func renderRowType(b *strings.Builder, name string, q model.AnalyzedQuery, wire bool) {
+	b.WriteString(name + " = {\n")
+	for _, c := range q.ResultSets[0].Columns {
+		field, _ := identifier(c.Name, false)
+		if wire {
+			field = c.ResultName()
+			if !plainProperty(field) {
+				field = strconv.Quote(field)
+			}
+		}
+		b.WriteString("  readonly " + field + ": " + resultType(c.Type) + ";\n")
 	}
-	caseName := map[string]string{
-		"Bool": "boolValue", "Int8": "int32Value", "Uint8": "uint32Value", "Int16": "int32Value", "Uint16": "uint32Value",
-		"Int32": "int32Value", "Uint32": "uint32Value", "Int64": "int64Value", "Uint64": "uint64Value", "Float": "floatValue",
-		"Double": "doubleValue", "Utf8": "textValue", "String": "bytesValue", "Json": "textValue", "JsonDocument": "textValue", "Timestamp": "uint64Value",
-	}[t.Kind]
-	typ, _ := tsType(t)
-	return "_rawValue<" + typ + ">(" + value + ", " + strconv.Quote(name) + ", " + strconv.Quote(caseName) + ")"
+	b.WriteString("};\n\n")
 }
 
-func renderInterfaces(b *strings.Builder, a *model.AnalysisResult) {
-	for _, query := range a.Queries {
-		if len(query.Parameters) > 1 {
-			b.WriteString("export interface " + exportedName(query.Name) + "Params {\n")
-			for _, parameter := range query.Parameters {
-				field, _ := identifier(parameter.Name, false)
-				typ, _ := tsType(parameter.Type)
-				b.WriteString("  readonly " + field + ": " + typ + ";\n")
-			}
-			b.WriteString("}\n\n")
-		}
-		if query.Command == model.One || query.Command == model.Many {
-			b.WriteString("export interface " + exportedName(query.Name) + "Row {\n")
-			for _, column := range query.ResultSets[0].Columns {
-				field, _ := identifier(column.Name, false)
-				typ, _ := tsType(column.Type)
-				b.WriteString("  readonly " + field + ": " + typ + ";\n")
-			}
-			b.WriteString("}\n\n")
+func plainProperty(s string) bool {
+	for i, r := range s {
+		if !(r == '_' || r == '$' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || i > 0 && r >= '0' && r <= '9') {
+			return false
 		}
 	}
+	return s != ""
+}
+
+func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
+	method, _ := identifier(q.Name, false)
+	params := ""
+	if len(q.Parameters) == 1 {
+		p := q.Parameters[0]
+		field, _ := identifier(p.Name, false)
+		typ, _ := tsType(p.Type)
+		params = field + ": " + typ + ", "
+	}
+	if len(q.Parameters) > 1 {
+		params = "args: " + exportedName(q.Name) + "Params, "
+	}
+	ret, generic := "void", ""
+	if q.Command != model.Exec {
+		row := exportedName(q.Name) + "Row"
+		ret = row + "[]"
+		if q.Command == model.One {
+			ret = row + " | null"
+		}
+		if needsWireRow(q) {
+			row = "_" + exportedName(q.Name) + "WireRow"
+		}
+		generic = "<[" + row + "]>"
+	}
+	b.WriteString("\n  async " + method + "(" + params + "configure?: ConfigureQuery): Promise<" + ret + "> {\n")
+	sql := q.SQL
+	if len(q.Parameters) > 0 {
+		sql = q.SQLWithoutDeclarations
+	}
+	b.WriteString("    const stmt = this.#sql" + generic + sqlLiteral(strings.TrimSpace(sql)))
+	for _, p := range q.Parameters {
+		field, _ := identifier(p.Name, false)
+		if len(q.Parameters) > 1 {
+			field = "args." + field
+		}
+		b.WriteString("\n      .parameter(" + strconv.Quote(p.Name) + ", " + bindExpression(p.Type, field) + ")")
+	}
+	b.WriteString(";\n    configure?.(stmt);\n")
+	if q.Command == model.Exec {
+		b.WriteString("    await stmt;\n  }\n")
+		return
+	}
+	b.WriteString("    const [rows] = await stmt;\n")
+	if !needsWireRow(q) {
+		if q.Command == model.One {
+			b.WriteString("\n    return rows[0] ?? null;\n")
+		} else {
+			b.WriteString("\n    return rows;\n")
+		}
+	} else {
+		if q.Command == model.One && len(q.ResultSets[0].Columns) <= 2 {
+			b.WriteString("    const row = rows[0];\n\n    return row === undefined ? null : { ")
+			var fields []string
+			for _, c := range q.ResultSets[0].Columns {
+				field, _ := identifier(c.Name, false)
+				access := "row." + c.ResultName()
+				if !plainProperty(c.ResultName()) {
+					access = "row[" + strconv.Quote(c.ResultName()) + "]"
+				}
+				fields = append(fields, field+": "+access)
+			}
+			b.WriteString(strings.Join(fields, ", ") + " };\n  }\n")
+			return
+		}
+		if q.Command == model.One {
+			b.WriteString("    const row = rows[0];\n\n    return row === undefined ? null : {\n")
+		} else {
+			b.WriteString("\n    return rows.map((row) => ({\n")
+		}
+		for _, c := range q.ResultSets[0].Columns {
+			field, _ := identifier(c.Name, false)
+			access := "row." + c.ResultName()
+			if !plainProperty(c.ResultName()) {
+				access = "row[" + strconv.Quote(c.ResultName()) + "]"
+			}
+			b.WriteString("      " + field + ": " + access + ",\n")
+		}
+		if q.Command == model.One {
+			b.WriteString("    };\n")
+		} else {
+			b.WriteString("    }));\n")
+		}
+	}
+	b.WriteString("  }\n")
+}
+
+func bindExpression(t model.Type, value string) string {
+	info := typescriptTypes[t.UnwrapOptional().Kind]
+	wrapped := "new " + info.valueClass + "(" + value + ")"
+	if t.IsOptional() {
+		return "new Optional(" + value + " === null ? null : " + wrapped + ", new " + info.typeClass + "())"
+	}
+	return wrapped
 }
 
 func sqlLiteral(value string) string {
@@ -480,6 +472,8 @@ func sqlLiteral(value string) string {
 			}
 		case '\r':
 			b.WriteString(`\r`)
+		case '\n':
+			b.WriteString("\n      ")
 		default:
 			if r < 0x20 && r != '\n' && r != '\t' {
 				fmt.Fprintf(&b, "\\x%02x", r)
@@ -554,12 +548,4 @@ func splitWords(value string) []string {
 func exportedName(value string) string {
 	result, _ := identifier(value, true)
 	return result
-}
-
-func constantName(value string) string {
-	words := splitWords(value)
-	for i := range words {
-		words[i] = strings.ToUpper(words[i])
-	}
-	return strings.Join(words, "_") + "_SQL"
 }

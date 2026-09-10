@@ -6,10 +6,6 @@ import ydb as _ydb
 from sqlalchemy import text as _text
 from sqlalchemy.engine import Connection
 
-SQL_LIST_AUTHOR_BOOKS = """-- name\\: ListAuthorBooks \\:many
-SELECT a.id AS author_id, a.name AS author_name, b.title AS book_title
-FROM authors AS a JOIN books AS b ON a.id = b.author_id;"""
-
 
 def _typed(value, typ):
     return (value, typ)
@@ -21,7 +17,10 @@ class Querier:
 
     def list_author_books(self) -> Iterable[_models.ListAuthorBooksRow]:
         parameters = {}
-        result = self._connection.execute(_text(SQL_LIST_AUTHOR_BOOKS), parameters)
+        result = self._connection.execute(_text(
+            ("-- name\\: ListAuthorBooks \\:many\n"
+             "SELECT a.id AS author_id, a.name AS author_name, b.title AS book_title\n"
+             "FROM authors AS a JOIN books AS b ON a.id = b.author_id;")), parameters)
         try:
             rows = result.fetchall()
         finally:

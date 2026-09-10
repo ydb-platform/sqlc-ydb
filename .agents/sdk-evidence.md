@@ -77,9 +77,13 @@ The [JavaScript SDK](https://github.com/ydb-platform/ydb-js-sdk) was inspected a
 `@ydbjs/core` 6.3.1, `@ydbjs/query` 6.3.0 and `@ydbjs/value` 6.0.8, pinned in
 [the shared npm lockfile](../examples/package-lock.json). The query package
 reconstructs declarations from `.parameter()` values. The analyzer supplies
-declaration-free SQL using original ANTLR token spans. The SDK's public `.raw()`
-result mode and primitive value constructors preserve microsecond timestamps
-without conversion through JavaScript `Date`.
+declaration-free SQL using original ANTLR token spans. The maintainer-approved
+[TypeScript examples in PR #4](https://github.com/ydb-platform/sqlc-ydb/pull/4)
+use direct typed tagged templates and the SDK's normal result conversion:
+`Timestamp` becomes `Date`, and JSON becomes parsed `JSValue`. TypeScript generics
+describe those runtime values; they do not control SDK decoding. Timestamp inputs
+use `new Timestamp(date)`. This API has JavaScript's millisecond precision and
+does not preserve JSON source text. See [TypeScript](../docs/typescript.md).
 
 The [PHP SDK](https://github.com/ydb-platform/ydb-php-sdk) is pinned to 1.16.1
 (`5bce112ff6cc4a5eca83147232813cc94a675a50`) in

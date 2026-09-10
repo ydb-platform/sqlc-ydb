@@ -101,13 +101,6 @@ func validate(in *model.AnalysisResult, options Options) error {
 			if (query.Command == model.One || query.Command == model.Many) && parameter.Name == query.Name+"Row" {
 				return fmt.Errorf("%s: parameter %q collides with generated row type", query.Name, parameter.Name)
 			}
-			constantName := "k" + query.Name + "Sql"
-			if options.Runtime == "userver" {
-				constantName = "k" + query.Name + "Query"
-			}
-			if parameter.Name == constantName {
-				return fmt.Errorf("%s: parameter %q collides with generated SQL constant", query.Name, parameter.Name)
-			}
 			seenParams[parameter.Name] = true
 			if _, err := typeInfo(parameter.Type, options.Runtime); err != nil {
 				return fmt.Errorf("%s parameter %s: %w", query.Name, parameter.Name, err)
@@ -318,17 +311,7 @@ func renderSource(in *model.AnalysisResult, options Options) string {
 	if options.Runtime == "ydb" {
 		out.WriteString("\n#include <ydb-cpp-sdk/client/params/params.h>\n#include <ydb-cpp-sdk/client/result/result.h>\n#include <ydb-cpp-sdk/client/types/status/status.h>\n")
 	}
-	out.WriteString("\n#include <stdexcept>\n#include <utility>\n\nnamespace " + options.Namespace + " {\nnamespace {\n\n")
-	for _, query := range in.Queries {
-		if options.Runtime == "ydb" {
-			out.WriteString("const std::string k" + query.Name + "Sql = " + sqlLiteral(query.SQL) + ";\n\n")
-		} else {
-			out.WriteString("const ::userver::ydb::Query k" + query.Name + "Query{\n    " + sqlLiteral(query.SQL) + ",\n")
-			out.WriteString("    ::userver::ydb::Query::NameLiteral{" + strconv.Quote(query.Name) + "},\n")
-			out.WriteString("    ::userver::ydb::Query::LogMode::kNameOnly,\n};\n\n")
-		}
-	}
-	out.WriteString("}  // namespace\n\n")
+	out.WriteString("\n#include <stdexcept>\n#include <utility>\n\nnamespace " + options.Namespace + " {\n\n")
 	for _, query := range in.Queries {
 		if options.Runtime == "ydb" {
 			renderNativeMethod(&out, query, options)
@@ -360,7 +343,7 @@ func renderNativeMethod(out *strings.Builder, query model.AnalyzedQuery, options
 		}
 		out.WriteString("\n            .Build();\n")
 	}
-	out.WriteString("        auto sqlc_result = sqlc_session.ExecuteQuery(\n            k" + query.Name + "Sql,\n            NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()")
+	out.WriteString("        auto sqlc_result = sqlc_session.ExecuteQuery(\n            " + sqlLiteral(query.SQL) + ",\n            NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()")
 	if len(query.Parameters) != 0 {
 		out.WriteString(",\n            sqlc_params")
 	}
@@ -400,7 +383,7 @@ func renderUserverMethod(out *strings.Builder, query model.AnalyzedQuery, option
 		returnType = "std::vector<" + query.Name + "Row>"
 	}
 	out.WriteString(returnType + " Queries::" + query.Name + "(" + methodParameters(query, options.Runtime) + ") const {\n")
-	call := "this->client_.ExecuteQuery(k" + query.Name + "Query"
+	call := "this->client_.ExecuteQuery(\n        ::userver::ydb::Query{\n            " + sqlLiteral(query.SQL) + ",\n            ::userver::ydb::Query::NameLiteral{" + strconv.Quote(query.Name) + "},\n            ::userver::ydb::Query::LogMode::kNameOnly,\n        }"
 	for _, parameter := range query.Parameters {
 		call += ", " + strconv.Quote("$"+parameter.Name) + ", " + parameter.Name
 	}
@@ -459,6 +442,9 @@ func sqlLiteral(sql string) string {
 			for _, value := range []byte(sql[index : index+size]) {
 				parts = append(parts, fmt.Sprintf("\"\\x%02X\"", value))
 			}
+		} else if r == '\n' {
+			flushRaw()
+			parts = append(parts, `"\n"`)
 		} else {
 			raw.WriteString(sql[index : index+size])
 		}
@@ -471,5 +457,5 @@ func sqlLiteral(sql string) string {
 	if len(parts) == 1 && strings.HasPrefix(parts[0], "R\"") {
 		return parts[0]
 	}
-	return "std::string{\n        " + strings.Join(parts, "\n        ") + ",\n        " + strconv.Itoa(len(sql)) + "\n    }"
+	return "std::string{\n                " + strings.Join(parts, "\n                ") + ",\n                " + strconv.Itoa(len(sql)) + "\n            }"
 }

@@ -4,13 +4,6 @@ from typing import Iterable, Optional
 from . import models as _models
 import ydb as _ydb
 
-SQL_COLD_CITIES = """-- name: ColdCities :many
-DECLARE $maximum_temperature AS Int32;
-SELECT city, COUNT(*) AS reading_count, MAX(temperature) AS hottest_temperature
-FROM weather
-GROUP BY city
-HAVING MAX(temperature) < $maximum_temperature;"""
-
 
 def _typed(value, typ):
     return _ydb.TypedValue(value, typ)
@@ -22,7 +15,13 @@ class Querier:
 
     def cold_cities(self, maximum_temperature: int) -> Iterable[_models.ColdCitiesRow]:
         parameters = {"$maximum_temperature": _typed(maximum_temperature, _ydb.PrimitiveType.Int32)}
-        result_sets = self._pool.execute_with_retries(SQL_COLD_CITIES, parameters)
+        result_sets = self._pool.execute_with_retries(
+            ("-- name: ColdCities :many\n"
+             "DECLARE $maximum_temperature AS Int32;\n"
+             "SELECT city, COUNT(*) AS reading_count, MAX(temperature) AS hottest_temperature\n"
+             "FROM weather\n"
+             "GROUP BY city\n"
+             "HAVING MAX(temperature) < $maximum_temperature;"), parameters)
         rows = result_sets[0].rows
         return (_models.ColdCitiesRow(
             city=row["city"],

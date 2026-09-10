@@ -4,10 +4,6 @@ from typing import Iterable, Optional
 from . import models as _models
 import ydb as _ydb
 
-SQL_GET_AUTHOR = """-- name: GetAuthor :one
-DECLARE $author_id AS Uint64;
-SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;"""
-
 
 def _typed(value, typ):
     return _ydb.TypedValue(value, typ)
@@ -19,7 +15,10 @@ class Querier:
 
     def get_author(self, author_id: int) -> Optional[_models.Author]:
         parameters = {"$author_id": _typed(author_id, _ydb.PrimitiveType.Uint64)}
-        result_sets = self._pool.execute_with_retries(SQL_GET_AUTHOR, parameters)
+        result_sets = self._pool.execute_with_retries(
+            ("-- name: GetAuthor :one\n"
+             "DECLARE $author_id AS Uint64;\n"
+             "SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;"), parameters)
         rows = result_sets[0].rows
         if not rows:
             return None

@@ -33,7 +33,7 @@ func TestGenerateRejectsInvalidContracts(t *testing.T) {
 		{"many_two_results", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.Many, ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "value", Type: utf8}}}, {Columns: []model.Column{{Name: "other", Type: utf8}}}}}}}, Options{}, "requires one nonempty result set"},
 		{"method_collision", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Get_User", Command: model.Exec}, {Name: "getUser", Command: model.Exec}}}, Options{}, "method name collision"},
 		{"parameter_collision", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.Exec, Parameters: []model.Parameter{{Name: "a-b", Type: utf8}, {Name: "a_b", Type: utf8}}}}}, Options{}, "parameter name collision"},
-		{"parameter_shadows_sql_constant", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "GetAuthor", Command: model.Exec, Parameters: []model.Parameter{{Name: "get_author_sql", Type: utf8}}}}}, Options{}, "parameter name collision"},
+		{"parameter_shadows_client", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "GetAuthor", Command: model.Exec, Parameters: []model.Parameter{{Name: "client", Type: utf8}}}}}, Options{}, "parameter name collision"},
 		{"field_collision", &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "items", Columns: []model.Column{{Name: "a-b", Type: utf8}, {Name: "a_b", Type: utf8}}}}}}, Options{}, "field name collision"},
 		{"record_collision", &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "get_author_row", Columns: []model.Column{{Name: "id", Type: utf8}}}}}, Queries: []model.AnalyzedQuery{{Name: "get_author", Command: model.One, ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: utf8}}}}}}}, Options{}, "type name collision"},
 		{"invalid_utf8", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.Exec, SQL: string([]byte{0xff})}}}, Options{}, "must be valid UTF-8"},
@@ -58,16 +58,9 @@ func TestJDBCPreparesWithResolvedParameterDeclarations(t *testing.T) {
 		t.Fatal(err)
 	}
 	generated := string(files[len(files)-1].Content)
-	wantReadable := "private val getAuthorSql: String = " + sqlLiteral(querySQL)
-	wantPrepared := "private val getAuthorPreparedSql: String = " + sqlLiteral("DECLARE $author_id AS Uint64;\n"+querySQL)
-	if !strings.Contains(generated, wantReadable) {
-		t.Fatalf("generated Kotlin JDBC API lost declaration-free source SQL:\n%s", generated)
-	}
+	wantPrepared := "client.prepareStatement(" + sqlLiteral("DECLARE $author_id AS Uint64;\n"+querySQL) + ")"
 	if !strings.Contains(generated, wantPrepared) {
 		t.Fatalf("generated Kotlin JDBC API did not declare resolved parameters for driver preparation:\n%s", generated)
-	}
-	if !strings.Contains(generated, "client.prepareStatement(getAuthorPreparedSql)") {
-		t.Fatalf("generated Kotlin JDBC API did not prepare the driver-compatible SQL:\n%s", generated)
 	}
 }
 
@@ -146,9 +139,9 @@ func TestSQLLiteralRoundTripsThroughKotlin(t *testing.T) {
 		writeFile(t, filepath.Join(src, f.Name), f.Content)
 	}
 	var b strings.Builder
-	b.WriteString("package literal\nimport java.lang.reflect.Proxy\nimport java.sql.Connection\nimport java.util.Base64\nfun main() {\n    val client = Proxy.newProxyInstance(Connection::class.java.classLoader, arrayOf(Connection::class.java)) { _, _, _ -> error(\"No SQL execution expected\") } as Connection\n    val queries = Queries(client)\n")
+	b.WriteString("package literal\nimport java.lang.reflect.Proxy\nimport java.sql.Connection\nimport java.util.Base64\nfun main() {\n    var actual = \"\"\n    val client = Proxy.newProxyInstance(Connection::class.java.classLoader, arrayOf(Connection::class.java)) { _, method, args -> check(method.name == \"prepareStatement\"); actual = args!![0] as String; throw java.sql.SQLException(\"captured\") } as Connection\n    val queries = Queries(client)\n")
 	for i, sql := range cases {
-		fmt.Fprintf(&b, "    run { val field = Queries::class.java.getDeclaredField(\"case%02dSql\"); field.isAccessible = true; check(Base64.getEncoder().encodeToString((field.get(queries) as String).toByteArray(Charsets.UTF_8)) == \"%s\") { \"case%02d SQL bytes changed\" } }\n", i, base64.StdEncoding.EncodeToString([]byte(sql)), i)
+		fmt.Fprintf(&b, "    run { try { queries.case%02d(); error(\"No prepare\") } catch (e: java.sql.SQLException) { check(e.message == \"captured\") }; check(Base64.getEncoder().encodeToString(actual.toByteArray(Charsets.UTF_8)) == \"%s\") { \"case%02d SQL bytes changed\" } }\n", i, base64.StdEncoding.EncodeToString([]byte(sql)), i)
 	}
 	b.WriteString("}\n")
 	writeFile(t, filepath.Join(src, "Main.kt"), []byte(b.String()))

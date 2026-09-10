@@ -128,9 +128,9 @@ func sqlLiteral(s string) string {
 		if strings.HasSuffix(encoded, " ") {
 			encoded = strings.TrimSuffix(encoded, " ") + `\s`
 		}
-		b.WriteString(encoded)
+		b.WriteString("            " + encoded)
 	}
-	b.WriteString("\\\n\"\"\"")
+	b.WriteString("\\\n            \"\"\"")
 	return b.String()
 }
 
@@ -227,10 +227,10 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		methods[method] = true
 		row, _ := name(q.Name, true)
 		row += "Row"
-		constant := method + "Sql"
-		preparedConstant := constant
+		sql := sqlLiteral(q.SQL)
+		preparedSQL := sql
 		if o.Runtime != "ydb" && len(q.Parameters) > 0 && q.SQLWithoutDeclarations != "" {
-			preparedConstant = method + "PreparedSql"
+			preparedSQL = sqlLiteral(jdbcSQL(q))
 		}
 		ret := "void"
 		switch q.Command {
@@ -252,7 +252,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		}
 		params := []string{}
 		paramNames := []string{}
-		seen := map[string]bool{"client": true, constant: true, preparedConstant: true, "_params": true, "_query": true, "_connection": true, "_statement": true, "_prepared": true, "_rows": true, "_items": true}
+		seen := map[string]bool{"client": true, "_params": true, "_query": true, "_connection": true, "_statement": true, "_prepared": true, "_rows": true, "_items": true}
 		for _, p := range q.Parameters {
 			n, err := name(p.Name, false)
 			if err != nil {
@@ -268,10 +268,6 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			}
 			params = append(params, typ+" "+n)
 			paramNames = append(paramNames, n)
-		}
-		fmt.Fprintf(&b, "\n    private static final String %s = %s;\n", constant, sqlLiteral(q.SQL))
-		if preparedConstant != constant {
-			fmt.Fprintf(&b, "    private static final String %s = %s;\n", preparedConstant, sqlLiteral(jdbcSQL(q)))
 		}
 		throws := ""
 		if o.Runtime == "jdbc" {
@@ -293,9 +289,9 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			fmt.Fprintf(&b, "        if (%s) throw new IllegalArgumentException(%s);\n", condition, quoted("parameter $"+p.Name+" is outside "+p.Type.UnwrapOptional().Kind+" range"))
 		}
 		if o.Runtime == "ydb" {
-			emitNative(&b, q, paramNames, constant, row)
+			emitNative(&b, q, paramNames, sql, row)
 		} else {
-			emitJDBC(&b, q, paramNames, preparedConstant, row, ret, o.Runtime)
+			emitJDBC(&b, q, paramNames, preparedSQL, row, ret, o.Runtime)
 		}
 		b.WriteString("    }\n")
 	}
@@ -313,13 +309,14 @@ func jdbcSQL(q model.AnalyzedQuery) string {
 	return b.String()
 }
 
-func emitNative(b *strings.Builder, q model.AnalyzedQuery, names []string, constant, row string) {
+func emitNative(b *strings.Builder, q model.AnalyzedQuery, names []string, sql, row string) {
+	sql = strings.ReplaceAll(sql, "\n", "\n        ")
 	b.WriteString("        var _params = Params.create();\n")
 	for i, p := range q.Parameters {
 		fmt.Fprintf(b, "        _params.put(%s, %s);\n", quoted("$"+p.Name), parameterValue(p, names[i]))
 	}
 	b.WriteString("        var _query = client.supplyResult(_session -> QueryReader.readFrom(\n")
-	fmt.Fprintf(b, "                _session.createQuery(%s, TxMode.SERIALIZABLE_RW, _params))).join().getValue();\n", constant)
+	fmt.Fprintf(b, "                _session.createQuery(%s, TxMode.SERIALIZABLE_RW, _params))).join().getValue();\n", sql)
 	if q.Command == model.Exec {
 		return
 	}
@@ -337,7 +334,7 @@ func parameterValue(p model.Parameter, name string) string {
 	return value
 }
 
-func emitJDBC(b *strings.Builder, q model.AnalyzedQuery, names []string, constant, row, ret, runtime string) {
+func emitJDBC(b *strings.Builder, q model.AnalyzedQuery, names []string, sql, row, ret, runtime string) {
 	indent := "        "
 	connection := "client"
 	if runtime == "spring" {
@@ -362,7 +359,10 @@ func emitJDBC(b *strings.Builder, q model.AnalyzedQuery, names []string, constan
 		connection = "_connection"
 		indent += "    "
 	}
-	fmt.Fprintf(b, "%stry (var _prepared = %s.prepareStatement(%s)) {\n", indent, connection, constant)
+	if runtime != "jdbc" {
+		sql = strings.ReplaceAll(sql, "\n", "\n    ")
+	}
+	fmt.Fprintf(b, "%stry (var _prepared = %s.prepareStatement(%s)) {\n", indent, connection, sql)
 	indent += "    "
 	if len(q.Parameters) > 0 {
 		b.WriteString(indent + "var _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement.class);\n")

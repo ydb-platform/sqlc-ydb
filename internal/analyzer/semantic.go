@@ -99,6 +99,7 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		var partials []parser.ISelect_kind_partialContext
 		var cores []*parser.Select_coreContext
 		cores, partials, selectDiagnostics = selectArms(block, selectStatement)
+		query.ResultAliases = resultAliasSpans(cores, parsed.tokens, tree.declares)
 		diagnostics = append(diagnostics, selectDiagnostics...)
 		for i, core := range cores {
 			armRelations, relationDiagnostics := selectRelations(catalog, block, core)
