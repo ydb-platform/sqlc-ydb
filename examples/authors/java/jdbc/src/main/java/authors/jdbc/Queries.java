@@ -15,7 +15,6 @@ public final class Queries {
 
     private static final String getAuthorSql = """
 -- name: GetAuthor :one
-DECLARE $author_id AS Uint64;
 SELECT id, name, bio FROM authors WHERE id = $author_id;\
 """;
 
@@ -57,7 +56,6 @@ SELECT id, name, bio FROM authors ORDER BY name;\
 
     private static final String getAuthorNameSql = """
 -- name: GetAuthorName :one
-DECLARE $author_id AS Uint64;
 SELECT name FROM authors WHERE id = $author_id;\
 """;
 
@@ -75,9 +73,6 @@ SELECT name FROM authors WHERE id = $author_id;\
 
     private static final String createAuthorSql = """
 -- name: CreateAuthor :one
-DECLARE $author_id AS Uint64;
-DECLARE $author_name AS Utf8;
-DECLARE $biography AS Optional<Utf8>;
 INSERT INTO authors (id, name, bio)
 VALUES ($author_id, $author_name, $biography)
 RETURNING id, name, bio;\
@@ -102,9 +97,6 @@ RETURNING id, name, bio;\
 
     private static final String upsertAuthorSql = """
 -- name: UpsertAuthor :exec
-DECLARE $author_id AS Uint64;
-DECLARE $author_name AS Utf8;
-DECLARE $biography AS Optional<Utf8>;
 UPSERT INTO authors (id, name, bio)
 VALUES ($author_id, $author_name, $biography);\
 """;
@@ -121,7 +113,6 @@ VALUES ($author_id, $author_name, $biography);\
 
     private static final String deleteAuthorSql = """
 -- name: DeleteAuthor :exec
-DECLARE $author_id AS Uint64;
 DELETE FROM authors WHERE id = $author_id;\
 """;
 
