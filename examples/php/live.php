@@ -67,11 +67,19 @@ function runAuthors(Table $table): void
         $queries = new Authors\Native\Queries($table);
         $id = '18446744073709551615';
         check($queries->getAuthor($id) === null, 'authors: missing :one row is not null');
-        $created = $queries->createAuthor(new Authors\Native\CreateAuthorParams($id, 'Ada', null));
+        $created = $queries->createAuthor(new Authors\Native\CreateAuthorParams(
+            authorId: $id,
+            authorName: 'Ada',
+            biography: null,
+        ));
         check($created?->id === $id && $created->name === 'Ada' && $created->bio === null, 'authors: create/decode failed');
         check($queries->getAuthorName($id)?->name === 'Ada', 'authors: scalar row failed');
         check($queries->listAuthors()[0]->id === $id, 'authors: :many failed');
-        $queries->upsertAuthor(new Authors\Native\UpsertAuthorParams($id, 'Ada Lovelace', 'programmer'));
+        $queries->upsertAuthor(new Authors\Native\UpsertAuthorParams(
+            authorId: $id,
+            authorName: 'Ada Lovelace',
+            biography: 'programmer',
+        ));
         check($queries->getAuthor($id)?->bio === 'programmer', 'authors: upsert failed');
         $queries->deleteAuthor($id);
         check($queries->getAuthor($id) === null, 'authors: delete failed');
@@ -87,13 +95,30 @@ function runBatch(Table $table): void
         $queries = new Batch\Native\Queries($table);
         $authorId = '18446744073709551615';
         $bookId = '18446744073709551614';
-        $author = $queries->createAuthor(new Batch\Native\CreateAuthorParams($authorId, 'Octavia', '{"born":1947}'));
+        $author = $queries->createAuthor(new Batch\Native\CreateAuthorParams(
+            authorId: $authorId,
+            name: 'Octavia',
+            biography: '{"born":1947}',
+        ));
         check($author?->authorId === $authorId && $author->biography === '{"born":1947}', 'batch: author Json failed');
         $available = 1788957296789123;
-        $book = $queries->createBook(new Batch\Native\CreateBookParams($bookId, $authorId, '978-0', 'novel', 'Kindred', 1979, $available, '["history","science-fiction"]'));
+        $book = $queries->createBook(new Batch\Native\CreateBookParams(
+            bookId: $bookId,
+            authorId: $authorId,
+            isbn: '978-0',
+            bookType: 'novel',
+            title: 'Kindred',
+            year: 1979,
+            available: $available,
+            tags: '["history","science-fiction"]',
+        ));
         check($book?->bookId === $bookId && $book->available === $available && $book->tags === '["history","science-fiction"]', 'batch: Uint64/Timestamp/Json decode failed');
         check($queries->booksByYear(1979)[0]->authorId === $authorId, 'batch: filtered :many failed');
-        $queries->updateBook(new Batch\Native\UpdateBookParams('Kindred (updated)', '{"shelf":"read"}', $bookId));
+        $queries->updateBook(new Batch\Native\UpdateBookParams(
+            title: 'Kindred (updated)',
+            tags: '{"shelf":"read"}',
+            bookId: $bookId,
+        ));
         check($queries->getBiography($authorId)?->biography === '{"born":1947}', 'batch: Optional<Json> decode failed');
         $queries->deleteBook($bookId);
         $queries->deleteBookExecResult($bookId);
@@ -112,12 +137,27 @@ function runBooktest(Table $table): void
         $queries = new Booktest\Native\Queries($table);
         $authorId = '91';
         $bookId = '92';
-        $queries->createAuthor(new Booktest\Native\CreateAuthorParams($authorId, 'Ursula'));
+        $queries->createAuthor(new Booktest\Native\CreateAuthorParams(
+            authorId: $authorId,
+            name: 'Ursula',
+        ));
         $available = 1735787045678123;
-        $queries->createBook(new Booktest\Native\CreateBookParams($bookId, $authorId, 'isbn', 'novel', 'Earthsea', 1968, $available, '["fantasy"]'));
+        $queries->createBook(new Booktest\Native\CreateBookParams(
+            bookId: $bookId,
+            authorId: $authorId,
+            isbn: 'isbn',
+            bookType: 'novel',
+            title: 'Earthsea',
+            publicationYear: 1968,
+            available: $available,
+            tags: '["fantasy"]',
+        ));
         check($queries->getAuthor($authorId)?->name === 'Ursula', 'booktest: author read failed');
         check($queries->getBook($bookId)?->available === $available, 'booktest: Timestamp lost microseconds');
-        check($queries->booksByTitleYear(new Booktest\Native\BooksByTitleYearParams('Earthsea', 1968))[0]->bookId === $bookId, 'booktest: compound parameters failed');
+        check($queries->booksByTitleYear(new Booktest\Native\BooksByTitleYearParams(
+            title: 'Earthsea',
+            publicationYear: 1968,
+        ))[0]->bookId === $bookId, 'booktest: compound parameters failed');
         check($queries->booksByTags('["fantasy"]')[0]->name === 'Ursula', 'booktest: LEFT JOIN/Json failed');
         check($queries->sayHello('YDB')?->greeting === 'hello YDB', 'booktest: scalar expression failed');
         $queries->updateBook(new Booktest\Native\UpdateBookParams(
@@ -131,7 +171,10 @@ function runBooktest(Table $table): void
             isbn: 'new-isbn',
             bookId: $bookId,
         ));
-        $queries->deleteAuthorBeforeYear(new Booktest\Native\DeleteAuthorBeforeYearParams($authorId, 1900));
+        $queries->deleteAuthorBeforeYear(new Booktest\Native\DeleteAuthorBeforeYearParams(
+            publicationYear: 1900,
+            authorId: $authorId,
+        ));
         $queries->deleteBook($bookId);
         check($queries->getBook($bookId) === null, 'booktest: delete failed');
     } finally {
@@ -172,20 +215,45 @@ function runOndeck(Table $table): void
         scheme($table, source('ondeck/schema/0005_drop_column.sql'));
 
         $queries = new Ondeck\Native\Queries($table);
-        $city = $queries->createCity(new Ondeck\Native\CreateCityParams('London', 'london'));
+        $city = $queries->createCity(new Ondeck\Native\CreateCityParams(
+            name: 'London',
+            slug: 'london',
+        ));
         check($city?->slug === 'london' && $queries->getCity('london')?->name === 'London', 'ondeck: city create/read failed');
-        $queries->updateCityName(new Ondeck\Native\UpdateCityNameParams('Greater London', 'london'));
+        $queries->updateCityName(new Ondeck\Native\UpdateCityNameParams(
+            name: 'Greater London',
+            slug: 'london',
+        ));
         check($queries->listCities()[0]->name === 'Greater London', 'ondeck: city update/list failed');
         $createdAt = 1788948672345123;
-        $venue = $queries->createVenue(new Ondeck\Native\CreateVenueParams('7', 'roundhouse', 'Roundhouse', 'london', $createdAt, 'spotify:playlist:1', 'open', '["open"]', '{"genre":"rock"}'));
+        $venue = $queries->createVenue(new Ondeck\Native\CreateVenueParams(
+            id: '7',
+            slug: 'roundhouse',
+            name: 'Roundhouse',
+            city: 'london',
+            createdAt: $createdAt,
+            spotifyPlaylist: 'spotify:playlist:1',
+            status: 'open',
+            statuses: '["open"]',
+            tags: '{"genre":"rock"}',
+        ));
         check($venue?->id === '7', 'ondeck: venue create failed');
-        $loaded = $queries->getVenue(new Ondeck\Native\GetVenueParams('roundhouse', 'london'));
+        $loaded = $queries->getVenue(new Ondeck\Native\GetVenueParams(
+            slug: 'roundhouse',
+            city: 'london',
+        ));
         check($loaded?->createdAt === $createdAt && $loaded->statuses === '["open"]' && $loaded->tags === '{"genre":"rock"}', 'ondeck: optional exact values failed');
         check($queries->listVenues('london')[0]->id === '7', 'ondeck: venue list failed');
         check($queries->venueCountByCity()[0]->venueCount === '1', 'ondeck: grouped COUNT failed');
-        check($queries->updateVenueName(new Ondeck\Native\UpdateVenueNameParams('The Roundhouse', 'roundhouse'))?->id === '7', 'ondeck: update RETURNING failed');
+        check($queries->updateVenueName(new Ondeck\Native\UpdateVenueNameParams(
+            name: 'The Roundhouse',
+            slug: 'roundhouse',
+        ))?->id === '7', 'ondeck: update RETURNING failed');
         $queries->deleteVenue('roundhouse');
-        check($queries->getVenue(new Ondeck\Native\GetVenueParams('roundhouse', 'london')) === null, 'ondeck: venue delete failed');
+        check($queries->getVenue(new Ondeck\Native\GetVenueParams(
+            slug: 'roundhouse',
+            city: 'london',
+        )) === null, 'ondeck: venue delete failed');
     } finally {
         dropTables($table, array_reverse($createdTables));
     }
