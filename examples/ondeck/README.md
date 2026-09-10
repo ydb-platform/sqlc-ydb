@@ -18,5 +18,5 @@ check constraints. `CreateVenue` takes an explicit `Uint64` ID and an
 optional runtime `Timestamp`; status validation stays in the application. The
 new migration column is nullable so the migration is valid for existing rows.
 PostgreSQL `RETURNING` operations are retained, MySQL/SQLite `:execresult` maps
-to `:one ... RETURNING id`, and positional parameters become named `DECLARE`s.
+to `:one ... RETURNING id`, and positional parameters become named YQL parameters.
 The grouped count names its result and groups by `city` instead of an ordinal.

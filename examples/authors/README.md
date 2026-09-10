@@ -8,7 +8,7 @@ a single-column result.
 Compared with [upstream](../README.md), IDs are explicit `Uint64` inputs rather
 than `SERIAL`/auto-increment values. YDB's `INSERT ... RETURNING` supplies the
 created row; there is no `LastInsertId` or `:execresult` contract. `bio` remains
-nullable. Queries use named parameters with YQL `DECLARE` statements.
+nullable. Queries use named parameters whose types are inferred from their uses.
 
 This example covers every built-in language/runtime. Each language's build files
 and executable smoke tests live in its own directory. The other upstream example

@@ -5,5 +5,4 @@ SELECT COUNT(*) AS pilot_count FROM pilots;
 SELECT id, name FROM pilots ORDER BY id LIMIT 5;
 
 -- name: DeletePilot :exec
-DECLARE $pilot_id AS Int32;
 DELETE FROM pilots WHERE id = $pilot_id;

@@ -109,6 +109,7 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 			armTree := collectQueryTree(core)
 			inferFromComparisons(armTree, armRelations, inferred)
 			inferFromInLists(armTree.conds, armRelations, inferred)
+			inferFromExpressionContexts(core, declared, inferred)
 			if i < len(partials) {
 				inferLimitOffset(partials[i], inferred)
 			}
@@ -206,6 +207,66 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		query.ResultSets = []model.ResultSet{{Columns: resultColumns}}
 	}
 	return query, diagnostics
+}
+
+func inferFromExpressionContexts(root antlr.Tree, declared, inferred map[string]model.Type) {
+	descendants(root, func(node antlr.Tree) {
+		if ctx, ok := node.(*parser.Mul_subexprContext); ok {
+			inferFromConcatenation(ctx, declared, inferred)
+		}
+	})
+}
+
+func inferFromConcatenation(concatenation *parser.Mul_subexprContext, declared, inferred map[string]model.Type) {
+	if len(concatenation.AllDOUBLE_PIPE()) == 0 {
+		return
+	}
+	var family model.Type
+	var unknown []parser.IBind_parameterContext
+	for _, operand := range concatenation.AllCon_subexpr() {
+		var binds []parser.IBind_parameterContext
+		var literals []parser.ILiteral_valueContext
+		descendants(operand, func(node antlr.Tree) {
+			switch ctx := node.(type) {
+			case parser.IBind_parameterContext:
+				binds = append(binds, ctx)
+			case parser.ILiteral_valueContext:
+				literals = append(literals, ctx)
+			}
+		})
+		switch {
+		case len(binds) == 1 && len(literals) == 0 && operand.GetText() == binds[0].GetText():
+			name := bindName(binds[0])
+			if typeValue, ok := declared[name]; ok {
+				base := typeValue.UnwrapOptional()
+				if base.Kind == "String" || base.Kind == "Utf8" {
+					if family.Kind == "" {
+						family = base
+					} else if !family.Equal(base) {
+						return
+					}
+				}
+			} else {
+				unknown = append(unknown, binds[0])
+			}
+		case len(literals) == 1 && len(binds) == 0 && operand.GetText() == literals[0].GetText() && literals[0].STRING_VALUE() != nil:
+			typeValue, err := stringLiteralType(literals[0].GetText())
+			if err != nil {
+				return
+			}
+			if family.Kind == "" {
+				family = typeValue
+			} else if !family.Equal(typeValue) {
+				return
+			}
+		}
+	}
+	if family.Kind == "" {
+		return
+	}
+	for _, bind := range unknown {
+		inferParameter(inferred, bindName(bind), family)
+	}
 }
 
 func validateQueryStatements(block queryBlock, tree queryTree) []model.Diagnostic {

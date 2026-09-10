@@ -118,7 +118,8 @@ try {
     check(str_contains($error->getMessage(), 'Uint64'), 'Uint64 range diagnostic is unclear');
 }
 
-check(str_contains(Authors\Native\Queries::GET_AUTHOR_SQL, 'DECLARE $author_id AS Uint64;'), 'original readable SQL constant was not preserved');
+check(!str_contains(Authors\Native\Queries::GET_AUTHOR_SQL, 'DECLARE '), 'generated SQL still contains a parameter declaration');
+check(str_contains(Authors\Native\Queries::GET_AUTHOR_SQL, 'SELECT id, name, bio FROM authors'), 'original readable SQL constant was not preserved');
 check(class_exists('Batch\\Native\\CreateBookParams'), 'typed parameter DTO was not generated');
 check(class_exists('Booktest\\Native\\BooksByTagsRow'), 'LEFT JOIN row DTO was not generated');
 check(class_exists('Jets\\Native\\CountPilotsRow'), 'COUNT row DTO was not generated');

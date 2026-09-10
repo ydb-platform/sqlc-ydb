@@ -134,3 +134,17 @@ SELECT a.id FROM records a JOIN records b ON b.id = $joined WHERE a.label = $lab
 		t.Fatalf("parameters = %#v, want %#v", params, want)
 	}
 }
+
+func TestAnalyzeInfersParameterFromConcatenatedStringLiteral(t *testing.T) {
+	queries := []model.Source{{Name: "query.sql", Text: `-- name: Greeting :one
+SELECT "hello "u || $name AS greeting;`}}
+
+	got, err := Analyze(nil, queries)
+	if err != nil {
+		t.Fatalf("Analyze() error = %v", err)
+	}
+	want := []model.Parameter{{Name: "name", Type: model.Type{Kind: "Utf8"}}}
+	if parameters := got.Queries[0].Parameters; !reflect.DeepEqual(parameters, want) {
+		t.Fatalf("parameters = %#v, want %#v", parameters, want)
+	}
+}

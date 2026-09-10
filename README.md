@@ -100,7 +100,6 @@ sql:
 
 ```sql
 -- name: GetAuthor :one
-DECLARE $author_id AS Uint64;
 SELECT name FROM authors WHERE id = $author_id;
 ```
 
