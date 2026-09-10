@@ -16,10 +16,11 @@ std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
         auto sqlc_params = NYdb::TParamsBuilder()
             .AddParam("$author_id").Uint64(author_id).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(
-            R"sql(-- name: GetAuthor :one
-            DECLARE $author_id AS Uint64;
-            SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;)sql",
+        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+                -- name: GetAuthor :one
+                DECLARE $author_id AS Uint64;
+                SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;
+            )sql",
             NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),
             sqlc_params
         ).GetValueSync();

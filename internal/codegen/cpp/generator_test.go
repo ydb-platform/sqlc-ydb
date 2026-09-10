@@ -184,7 +184,7 @@ struct Query {
 }
 int main() {
   auto query = ` + query + `;
-	return query.text != "SELECT 1;\n            SELECT 2;" || !query.name || query.name->value != "Named";
+	return query.text != "\n            SELECT 1;\n            SELECT 2;\n        " || !query.name || query.name->value != "Named";
 }
 `
 	dir := t.TempDir()
@@ -409,19 +409,19 @@ func TestSQLLiteralUsesOneReadableRawString(t *testing.T) {
 		{
 			"multiline",
 			"-- Привет\nSELECT '\\\"', `name`\nFROM authors;",
-			"R\"sql(-- Привет\n    SELECT '\\\"', `name`\n    FROM authors;)sql\"",
-			"-- Привет\n    SELECT '\\\"', `name`\n    FROM authors;",
+			"R\"sql(\n    -- Привет\n    SELECT '\\\"', `name`\n    FROM authors;\n)sql\"",
+			"\n    -- Привет\n    SELECT '\\\"', `name`\n    FROM authors;\n",
 		},
 		{
 			"delimiter collision",
 			"SELECT ')sql\"', ')sql1\"';",
-			"R\"sql2(SELECT ')sql\"', ')sql1\"';)sql2\"",
-			"SELECT ')sql\"', ')sql1\"';",
+			"R\"sql2(\n    SELECT ')sql\"', ')sql1\"';\n)sql2\"",
+			"\n    SELECT ')sql\"', ')sql1\"';\n",
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			literal := sqlLiteral(tc.sql, "    ")
+			literal := sqlLiteral(tc.sql, "    ", "")
 			if literal != tc.want {
 				t.Fatalf("literal mismatch:\n got: %s\nwant: %s", literal, tc.want)
 			}

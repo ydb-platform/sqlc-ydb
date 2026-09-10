@@ -341,7 +341,7 @@ func renderNativeMethod(out *strings.Builder, query model.AnalyzedQuery, options
 		}
 		out.WriteString("\n            .Build();\n")
 	}
-	out.WriteString("        auto sqlc_result = sqlc_session.ExecuteQuery(\n            " + sqlLiteral(query.SQL, "            ") + ",\n            NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()")
+	out.WriteString("        auto sqlc_result = sqlc_session.ExecuteQuery(" + sqlLiteral(query.SQL, "                ", "            ") + ",\n            NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()")
 	if len(query.Parameters) != 0 {
 		out.WriteString(",\n            sqlc_params")
 	}
@@ -381,7 +381,7 @@ func renderUserverMethod(out *strings.Builder, query model.AnalyzedQuery, option
 		returnType = "std::vector<" + query.Name + "Row>"
 	}
 	out.WriteString(returnType + " Queries::" + query.Name + "(" + methodParameters(query, options.Runtime) + ") const {\n")
-	call := "this->client_.ExecuteQuery(\n        ::userver::ydb::Query{\n            " + sqlLiteral(query.SQL, "            ") + ",\n            ::userver::ydb::Query::Name{" + strconv.Quote(query.Name) + "},\n            ::userver::ydb::Query::LogMode::kNameOnly,\n        }"
+	call := "this->client_.ExecuteQuery(\n        ::userver::ydb::Query{" + sqlLiteral(query.SQL, "            ", "        ") + ",\n            ::userver::ydb::Query::Name{" + strconv.Quote(query.Name) + "},\n            ::userver::ydb::Query::LogMode::kNameOnly,\n        }"
 	for _, parameter := range query.Parameters {
 		call += ", " + strconv.Quote("$"+parameter.Name) + ", " + parameter.Name
 	}
@@ -409,10 +409,10 @@ func writeUserverRow(out *strings.Builder, resultSet model.ResultSet, runtime, i
 	}
 }
 
-func sqlLiteral(sql, indent string) string {
+func sqlLiteral(sql, bodyIndent, closingIndent string) string {
 	delimiter := "sql"
 	for suffix := 0; strings.Contains(sql, ")"+delimiter+"\""); suffix++ {
 		delimiter = "sql" + strconv.Itoa(suffix+1)
 	}
-	return "R\"" + delimiter + "(" + strings.ReplaceAll(sql, "\n", "\n"+indent) + ")" + delimiter + "\""
+	return "R\"" + delimiter + "(\n" + bodyIndent + strings.ReplaceAll(sql, "\n", "\n"+bodyIndent) + "\n" + closingIndent + ")" + delimiter + "\""
 }
