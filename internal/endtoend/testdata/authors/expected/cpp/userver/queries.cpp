@@ -17,7 +17,7 @@ std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
                 R"sqlc(SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;)sqlc",
                 120
             },
-            ::userver::ydb::Query::NameLiteral{"GetAuthor"},
+            ::userver::ydb::Query::Name{"GetAuthor"},
             ::userver::ydb::Query::LogMode::kNameOnly,
         }, "$author_id", author_id);
     auto sqlc_cursor = sqlc_response.GetSingleCursor();

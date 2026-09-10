@@ -133,7 +133,7 @@ func TestGenerateUserverAuthorsAPI(t *testing.T) {
 	}
 	for _, want := range []string{
 		"::userver::ydb::Query{",
-		"::userver::ydb::Query::NameLiteral{\"GetAuthor\"}",
+		"::userver::ydb::Query::Name{\"GetAuthor\"}",
 		"::userver::ydb::Query::LogMode::kNameOnly",
 		"}, \"$author_id\", author_id)",
 		"sqlc_row.Get<std::uint64_t>(\"id\")",
@@ -143,6 +143,61 @@ func TestGenerateUserverAuthorsAPI(t *testing.T) {
 		if !strings.Contains(source, want) {
 			t.Errorf("queries.cpp missing %q:\n%s", want, source)
 		}
+	}
+}
+
+func TestUserverRuntimeQueryConstructor(t *testing.T) {
+	compiler, err := exec.LookPath("clang++")
+	if err != nil {
+		t.Skip("clang++ is unavailable")
+	}
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Named", Command: model.Exec, SQL: "SELECT 'a\x00b';"}}}
+	files, err := Generate(a, Options{Runtime: "userver"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	generated := generatedContent(t, files, "queries.cpp")
+	start := strings.Index(generated, "::userver::ydb::Query{")
+	if start < 0 {
+		t.Fatal("missing Query construction")
+	}
+	end := strings.Index(generated[start:], "\n        }")
+	if end < 0 {
+		t.Fatal("missing Query initializer end")
+	}
+	query := generated[start : start+end+len("\n        }")]
+	// These overloads retain userver's distinction between compile-time literals
+	// and owned strings. A NameLiteral cannot name a std::string statement.
+	program := `#include <optional>
+#include <string>
+#include <utility>
+namespace userver::ydb {
+struct Query {
+  struct Name { std::string value; explicit Name(std::string text): value(std::move(text)) {} };
+  struct NameLiteral { consteval NameLiteral(const char*) {} };
+  struct StringLiteral { consteval StringLiteral(const char*) {} };
+  enum class LogMode { kNameOnly };
+  Query(StringLiteral, NameLiteral, LogMode) {}
+  Query(std::string text, std::optional<Name> name, LogMode): text(std::move(text)), name(std::move(name)) {}
+  std::string text;
+  std::optional<Name> name;
+};
+}
+int main() {
+  auto query = ` + query + `;
+  return query.text != std::string("SELECT 'a\0b';", 13) || !query.name || query.name->value != "Named";
+}
+`
+	dir := t.TempDir()
+	input, binary := filepath.Join(dir, "query.cpp"), filepath.Join(dir, "query")
+	if err := os.WriteFile(input, []byte(program), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command(compiler, "-std=c++20", input, "-o", binary).CombinedOutput(); err != nil {
+		t.Fatalf("compile userver Query constructor: %v\n%s", err, out)
+	}
+	if out, err := exec.Command(binary).CombinedOutput(); err != nil {
+		t.Fatalf("query name or SQL bytes changed: %v\n%s", err, out)
 	}
 }
 
