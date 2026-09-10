@@ -71,14 +71,6 @@ func TestSDKNativeTypes(t *testing.T) {
 	}
 }
 
-func TestAliasQuoting(t *testing.T) {
-	for _, tc := range []struct{ name, want string }{{"bookId", "bookId"}, {"select", "`select`"}, {"имя", "`имя`"}} {
-		if got := quoteAlias(tc.name); got != tc.want {
-			t.Errorf("quoteAlias(%q) = %q, want %q", tc.name, got, tc.want)
-		}
-	}
-}
-
 func TestDeclarationLineFormattingRetainsCommentsAndBlankLines(t *testing.T) {
 	original := "-- name: Q :exec\nDECLARE $id AS Uint64;\n\nDECLARE $name AS Utf8; -- keep\n$local = 1;\nSELECT $id;"
 	executable := "-- name: Q :exec\n   \n\n    -- keep\n$local = 1;\nSELECT $id;"
@@ -88,11 +80,39 @@ func TestDeclarationLineFormattingRetainsCommentsAndBlankLines(t *testing.T) {
 	}
 }
 
-func TestProjectionAliasesAndStableFallbacks(t *testing.T) {
+func TestResultKeysAreNotNormalized(t *testing.T) {
+	keys := []string{"book_id", "bookId", "b.book_id", "default", "имя", "two words"}
+	var columns []model.Column
+	for _, key := range keys {
+		columns = append(columns, model.Column{Name: key, Type: model.Type{Kind: "Utf8"}})
+	}
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Rows", Command: model.Many, SQL: "SELECT 1;", ResultSets: []model.ResultSet{{Columns: columns}}}}}
+	files, err := Generate(a, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := fileContent(t, files, "queries.ts")
+	for _, field := range []string{"book_id", "bookId", `"b.book_id"`, `"default"`, `"имя"`, `"two words"`} {
+		if !strings.Contains(got, "readonly "+field+": string;") {
+			t.Errorf("missing exact result key %s", field)
+		}
+	}
+	for _, unwanted := range []string{"WireRow", "rows.map", " AS "} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("unexpected %s", unwanted)
+		}
+	}
+	a.Queries[0].ResultSets[0].Columns = append(columns, columns[0])
+	if _, err := Generate(a, Options{}); err == nil {
+		t.Fatal("duplicate exact result key accepted")
+	}
+}
+
+func TestProjectionPreservesSQLAndWireNames(t *testing.T) {
 	for _, tc := range []struct{ sql, want string }{
-		{"SELECT display_name FROM authors;", "SELECT display_name AS displayName FROM authors;"},
-		{"SELECT * FROM authors;", "displayName: row.display_name"},
-		{"SELECT display_name FROM authors UNION ALL SELECT display_name FROM authors;", "displayName: row.display_name"},
+		{"SELECT display_name FROM authors;", "SELECT display_name FROM authors;"},
+		{"SELECT * FROM authors;", "readonly display_name: string;"},
+		{"SELECT display_name FROM authors UNION ALL SELECT display_name FROM authors;", "readonly display_name: string;"},
 	} {
 		a, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE authors (id Uint64 NOT NULL, display_name Utf8 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "query.sql", Text: "-- name: List :many\n" + tc.sql}})
 		if err != nil {
@@ -169,8 +189,8 @@ func TestGenerateTypeScript(t *testing.T) {
 		`.parameter("name", new Utf8(args.name))`,
 		`async listAuthors(configure?: ConfigureQuery)`,
 		`configure?.(stmt);`,
-		`return row === undefined ? null : {`,
-		`return rows.map((row) => ({`,
+		`return rows[0] ?? null;`,
+		`return rows;`,
 	} {
 		if !strings.Contains(ts, want) {
 			t.Errorf("queries.ts missing %q\n%s", want, ts)
@@ -180,7 +200,7 @@ func TestGenerateTypeScript(t *testing.T) {
 		`constructor(sql: SQL) {`,
 		`async getAuthor(authorId: bigint, configure?: ConfigureQuery): Promise<GetAuthorRow | null>`,
 		`async upsertAuthor(args: UpsertAuthorParams, configure?: ConfigureQuery): Promise<void>`,
-		`readonly displayName: string;`,
+		`readonly display_name: string;`,
 		`readonly bio: string | null;`,
 	} {
 		if !strings.Contains(ts, want) {
@@ -347,13 +367,13 @@ const queries = new Queries(client);
 let configured = false;
 const row = await queries.getAuthor(18446744073709551615n, (pending) => { configured = pending === calls[0].pending; return pending; });
 if (!configured) throw new Error('configure hook did not receive the bound query');
-if (row.id !== 18446744073709551615n || row.displayName !== 'Ada' || row.bio !== null) throw new Error('decode failed');
+if (row.id !== 18446744073709551615n || row.display_name !== 'Ada' || row.bio !== null) throw new Error('decode failed');
 if (calls[0].text.includes('DECLARE')) throw new Error('wrong SQL variant');
 if (calls[0].params[0][0] !== 'author_id' || calls[0].params[0][1] !== 18446744073709551615n) throw new Error('binding failed');
 for (const [method, name] of [['pending', 'pending'], ['resultSets', 'result_sets'], ['rows_', 'rows'], ['named', 'decode_named_row']]) {
   const row = await queries[method](7n);
   const params = calls.at(-1).params;
-  if (row.displayName !== 'Ada' || params[0][0] !== name || params[0][1] !== 7n) throw new Error('shadowed parameter: ' + name);
+  if (row.display_name !== 'Ada' || params[0][0] !== name || params[0][1] !== 7n) throw new Error('shadowed parameter: ' + name);
 }
 `
 	if err := os.WriteFile(program, []byte(programSource), 0600); err != nil {
@@ -447,7 +467,7 @@ func TestQualifiedProjectionUsesExactWireName(t *testing.T) {
 	ts := fileContent(t, files, "queries.ts")
 	for _, want := range []string{
 		`readonly "b.book_id": bigint;`,
-		`bookId: row["b.book_id"]`,
+		`readonly "b.book_id": bigint;`,
 	} {
 		if !strings.Contains(ts, want) {
 			t.Errorf("queries.ts missing %q\n%s", want, ts)

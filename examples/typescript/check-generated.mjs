@@ -53,10 +53,10 @@ assert.equal(batchProbe.calls[0].parameters.get("tags").value, '{"nested":[true,
 
 const bookProbe = recordingClient([[
   {
-    bookId: 1n,
-    authorId: 2n,
+    book_id: 1n,
+    author_id: 2n,
     isbn: "isbn",
-    bookType: "novel",
+    book_type: "novel",
     title: "title",
     year: 2026,
     available: new Date(1788957296789),
@@ -66,6 +66,6 @@ const bookProbe = recordingClient([[
 const [book] = await new modules[1].Queries(bookProbe.client).booksByYear(2026);
 assert.equal(book.available.getTime(), 1788957296789);
 assert.deepEqual(book.tags, { genre: "novel" });
-assert.match(bookProbe.calls[0].text, /book_id AS bookId/);
+assert.match(bookProbe.calls[0].text, /book_id/);
 
 console.log("Imported generated TypeScript for all five examples against the pinned YDB SDK.");

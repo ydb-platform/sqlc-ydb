@@ -38,10 +38,10 @@ export type ListVenuesRow = {
   readonly city: string;
   readonly status: string;
   readonly statuses: JSValue;
-  readonly spotifyPlaylist: string;
-  readonly songkickId: string | null;
+  readonly spotify_playlist: string;
+  readonly songkick_id: string | null;
   readonly tags: JSValue;
-  readonly createdAt: Date | null;
+  readonly created_at: Date | null;
 };
 
 export type GetVenueParams = {
@@ -56,10 +56,10 @@ export type GetVenueRow = {
   readonly city: string;
   readonly status: string;
   readonly statuses: JSValue;
-  readonly spotifyPlaylist: string;
-  readonly songkickId: string | null;
+  readonly spotify_playlist: string;
+  readonly songkick_id: string | null;
   readonly tags: JSValue;
-  readonly createdAt: Date | null;
+  readonly created_at: Date | null;
 };
 
 export type CreateVenueParams = {
@@ -89,7 +89,7 @@ export type UpdateVenueNameRow = {
 
 export type VenueCountByCityRow = {
   readonly city: string;
-  readonly venueCount: bigint;
+  readonly venue_count: bigint;
 };
 
 export class Queries {
@@ -153,7 +153,7 @@ export class Queries {
 
   async listVenues(city: string, configure?: ConfigureQuery): Promise<ListVenuesRow[]> {
     const stmt = this.#sql<[ListVenuesRow]>`-- name: ListVenues :many
-      SELECT id, slug, name, city, status, statuses, spotify_playlist AS spotifyPlaylist, songkick_id AS songkickId, tags, created_at AS createdAt
+      SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
       FROM venue
       WHERE city = $city
       ORDER BY name;`
@@ -175,7 +175,7 @@ export class Queries {
 
   async getVenue(args: GetVenueParams, configure?: ConfigureQuery): Promise<GetVenueRow | null> {
     const stmt = this.#sql<[GetVenueRow]>`-- name: GetVenue :one
-      SELECT id, slug, name, city, status, statuses, spotify_playlist AS spotifyPlaylist, songkick_id AS songkickId, tags, created_at AS createdAt
+      SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
       FROM venue
       WHERE slug = $slug AND city = $city;`
       .parameter("slug", new Utf8(args.slug))
@@ -242,7 +242,7 @@ export class Queries {
     const stmt = this.#sql<[VenueCountByCityRow]>`-- name: VenueCountByCity :many
       SELECT
           city,
-          COUNT(*) AS venueCount
+          COUNT(*) AS venue_count
       FROM venue
       GROUP BY city
       ORDER BY city;`;

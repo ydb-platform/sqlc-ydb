@@ -57,10 +57,11 @@ parameters accept a named object. `:one` returns the first typed row, or `null`
 when YDB returns no rows. `:many` returns an array, including an empty array for
 no rows. `:exec` resolves to `undefined`. `:execrows` is rejected because the SDK
 does not expose a portable affected-row count. Result types describe the SDK's
-decoded rows; generated code adds no runtime row validators. SELECT projections
-receive camelCase aliases where the analyzer can safely rewrite them. RETURNING
-and projections that cannot be renamed safely use a typed wire row and an inline
-property mapping.
+decoded rows; generated code adds no runtime row validators. Result properties
+use the exact column names returned by YDB, including explicit SQL aliases.
+Names that require quoting are emitted as quoted TypeScript property keys.
+Rows are returned directly from the SDK, with no generated property mapping or
+SQL alias rewriting. Method and input parameter names remain camelCase.
 
 `Int64` and `Uint64` use `bigint`, including the complete Uint64 range. Smaller
 integers, `Float` and `Double` use `number`. YQL `Utf8` is a

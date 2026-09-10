@@ -5,7 +5,7 @@ import { Int32 } from "@ydbjs/value/primitive";
 export type ConfigureQuery = (query: Query) => void;
 
 export type CountPilotsRow = {
-  readonly pilotCount: bigint;
+  readonly pilot_count: bigint;
 };
 
 export type ListPilotsRow = {
@@ -23,7 +23,7 @@ export class Queries {
 
   async countPilots(configure?: ConfigureQuery): Promise<CountPilotsRow | null> {
     const stmt = this.#sql<[CountPilotsRow]>`-- name: CountPilots :one
-      SELECT COUNT(*) AS pilotCount FROM pilots;`;
+      SELECT COUNT(*) AS pilot_count FROM pilots;`;
     configure?.(stmt);
     const [rows] = await stmt;
 

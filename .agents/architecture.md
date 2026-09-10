@@ -38,10 +38,9 @@ JDBC-based Java and Kotlin adapters. This removes only declaration syntax;
 comments, literals and local bindings remain intact. Generators do not
 independently reparse or strip declarations. Parameter names omit the leading
 `$`; their types and result column types must be resolved.
-For explicit single-SELECT projections, `ResultAliases` records safe alias-edit
-spans in declaration-free SQL. TypeScript uses these spans for its public field
-names. Wildcards, UNION and referenced aliases retain their original result keys
-and use field mapping instead. Generators do not rediscover projection syntax.
+TypeScript result properties use `Column.ResultName()` verbatim, including
+qualified names as quoted properties. No SQL alias rewriting or result-key
+conversion is needed for this target.
 `analyzer.Analyze` returns an error whenever its result contains diagnostics.
 
 The language packages in `internal/codegen` produce files from that

@@ -9,9 +9,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/antlr4-go/antlr/v4"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
-	parser "github.com/ydb-platform/yql-parsers/go"
 )
 
 type Options struct {
@@ -120,22 +118,11 @@ func validate(a *model.AnalysisResult) error {
 				return fmt.Errorf("typescript generator: query %q: expected one result set, got %d", query.Name, len(query.ResultSets))
 			}
 			seenColumns := map[string]string{}
-			if len(query.ResultAliases) != 0 {
-				if len(query.ResultAliases) != len(query.ResultSets[0].Columns) {
-					return fmt.Errorf("typescript generator: query %q: result alias metadata does not match result columns", query.Name)
-				}
-				end, size := 0, utf8.RuneCountInString(query.SQLWithoutDeclarations)
-				for _, span := range query.ResultAliases {
-					if span.Start < end || span.End < span.Start || span.End > size {
-						return fmt.Errorf("typescript generator: query %q: invalid result alias span", query.Name)
-					}
-					end = span.End
-				}
-			}
+
 			for _, column := range query.ResultSets[0].Columns {
-				field, err := identifier(column.Name, false)
-				if err != nil {
-					return fmt.Errorf("typescript generator: query %q column %q: %w", query.Name, column.Name, err)
+				field := column.ResultName()
+				if !utf8.ValidString(field) {
+					return fmt.Errorf("typescript generator: query %q: result key is not valid UTF-8", query.Name)
 				}
 				if previous, exists := seenColumns[field]; exists {
 					return fmt.Errorf("typescript generator: query %q: column name collision %q between %q and %q", query.Name, field, previous, column.Name)
@@ -178,16 +165,7 @@ func resultType(t model.Type) string {
 }
 
 func renderTypeScript(a *model.AnalysisResult) (string, error) {
-	prepared := *a
-	prepared.Queries = append([]model.AnalyzedQuery(nil), a.Queries...)
-	for i, q := range prepared.Queries {
-		prepared.Queries[i] = withResultAliases(q)
-		prepared.Queries[i].SQLWithoutDeclarations = omitDeclarationLines(q.SQL, prepared.Queries[i].SQLWithoutDeclarations)
-		if len(q.Parameters) == 0 && len(q.ResultAliases) > 0 {
-			prepared.Queries[i].SQL = prepared.Queries[i].SQLWithoutDeclarations
-		}
-	}
-	a = &prepared
+
 	classes := map[string]bool{}
 	optional, jsonResult := false, false
 	for _, q := range a.Queries {
@@ -234,14 +212,10 @@ func renderTypeScript(a *model.AnalysisResult) (string, error) {
 			b.WriteString("};\n\n")
 		}
 		if len(q.ResultSets) > 0 {
-			renderRowType(&b, "export type "+exportedName(q.Name)+"Row", q, false)
+			renderRowType(&b, "export type "+exportedName(q.Name)+"Row", q)
 		}
 	}
-	for _, q := range a.Queries {
-		if needsWireRow(q) {
-			renderRowType(&b, "type _"+exportedName(q.Name)+"WireRow", q, true)
-		}
-	}
+
 	b.WriteString("export class Queries {\n  readonly #sql: SQL;\n\n  constructor(sql: SQL) {\n    if (typeof sql !== \"function\") throw new TypeError(\"Queries requires a YDB SQL function\");\n    this.#sql = sql;\n  }\n")
 	for _, q := range a.Queries {
 		renderMethod(&b, q)
@@ -267,64 +241,12 @@ func omitDeclarationLines(original, executable string) string {
 	return strings.Join(kept, "\n")
 }
 
-func withResultAliases(q model.AnalyzedQuery) model.AnalyzedQuery {
-	if len(q.ResultAliases) == 0 || len(q.ResultSets) == 0 {
-		return q
-	}
-	q.ResultSets = append([]model.ResultSet(nil), q.ResultSets...)
-	q.ResultSets[0].Columns = append([]model.Column(nil), q.ResultSets[0].Columns...)
-	sql := []rune(q.SQLWithoutDeclarations)
-	for i := len(q.ResultAliases) - 1; i >= 0; i-- {
-		column := &q.ResultSets[0].Columns[i]
-		field, _ := identifier(column.Name, false)
-		if field == column.ResultName() {
-			continue
-		}
-		span := q.ResultAliases[i]
-		alias := quoteAlias(field)
-		if span.Start == span.End {
-			alias = " AS " + alias
-		}
-		sql = append(append(append([]rune(nil), sql[:span.Start]...), []rune(alias)...), sql[span.End:]...)
-		column.WireName = field
-	}
-	q.SQLWithoutDeclarations = string(sql)
-	q.SQL = string(sql)
-	return q
-}
-
-func quoteAlias(name string) string {
-	lexer := parser.NewYQLLexer(antlr.NewInputStream(name))
-	lexer.RemoveErrorListeners()
-	token := lexer.NextToken()
-	if token.GetTokenType() == parser.YQLLexerID_PLAIN && token.GetText() == name && lexer.NextToken().GetTokenType() == antlr.TokenEOF {
-		return name
-	}
-	return "`" + strings.ReplaceAll(name, "`", "``") + "`"
-}
-
-func needsWireRow(q model.AnalyzedQuery) bool {
-	if len(q.ResultSets) == 0 {
-		return false
-	}
-	for _, c := range q.ResultSets[0].Columns {
-		field, _ := identifier(c.Name, false)
-		if field != c.ResultName() {
-			return true
-		}
-	}
-	return false
-}
-
-func renderRowType(b *strings.Builder, name string, q model.AnalyzedQuery, wire bool) {
+func renderRowType(b *strings.Builder, name string, q model.AnalyzedQuery) {
 	b.WriteString(name + " = {\n")
 	for _, c := range q.ResultSets[0].Columns {
-		field, _ := identifier(c.Name, false)
-		if wire {
-			field = c.ResultName()
-			if !plainProperty(field) {
-				field = strconv.Quote(field)
-			}
+		field := c.ResultName()
+		if !plainProperty(field) || reserved[field] {
+			field = strconv.Quote(field)
 		}
 		b.WriteString("  readonly " + field + ": " + resultType(c.Type) + ";\n")
 	}
@@ -359,15 +281,12 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 		if q.Command == model.One {
 			ret = row + " | null"
 		}
-		if needsWireRow(q) {
-			row = "_" + exportedName(q.Name) + "WireRow"
-		}
 		generic = "<[" + row + "]>"
 	}
 	b.WriteString("\n  async " + method + "(" + params + "configure?: ConfigureQuery): Promise<" + ret + "> {\n")
 	sql := q.SQL
 	if len(q.Parameters) > 0 {
-		sql = q.SQLWithoutDeclarations
+		sql = omitDeclarationLines(q.SQL, q.SQLWithoutDeclarations)
 	}
 	b.WriteString("    const stmt = this.#sql" + generic + sqlLiteral(strings.TrimSpace(sql)))
 	for _, p := range q.Parameters {
@@ -383,45 +302,10 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 		return
 	}
 	b.WriteString("    const [rows] = await stmt;\n")
-	if !needsWireRow(q) {
-		if q.Command == model.One {
-			b.WriteString("\n    return rows[0] ?? null;\n")
-		} else {
-			b.WriteString("\n    return rows;\n")
-		}
+	if q.Command == model.One {
+		b.WriteString("\n    return rows[0] ?? null;\n")
 	} else {
-		if q.Command == model.One && len(q.ResultSets[0].Columns) <= 2 {
-			b.WriteString("    const row = rows[0];\n\n    return row === undefined ? null : { ")
-			var fields []string
-			for _, c := range q.ResultSets[0].Columns {
-				field, _ := identifier(c.Name, false)
-				access := "row." + c.ResultName()
-				if !plainProperty(c.ResultName()) {
-					access = "row[" + strconv.Quote(c.ResultName()) + "]"
-				}
-				fields = append(fields, field+": "+access)
-			}
-			b.WriteString(strings.Join(fields, ", ") + " };\n  }\n")
-			return
-		}
-		if q.Command == model.One {
-			b.WriteString("    const row = rows[0];\n\n    return row === undefined ? null : {\n")
-		} else {
-			b.WriteString("\n    return rows.map((row) => ({\n")
-		}
-		for _, c := range q.ResultSets[0].Columns {
-			field, _ := identifier(c.Name, false)
-			access := "row." + c.ResultName()
-			if !plainProperty(c.ResultName()) {
-				access = "row[" + strconv.Quote(c.ResultName()) + "]"
-			}
-			b.WriteString("      " + field + ": " + access + ",\n")
-		}
-		if q.Command == model.One {
-			b.WriteString("    };\n")
-		} else {
-			b.WriteString("    }));\n")
-		}
+		b.WriteString("\n    return rows;\n")
 	}
 	b.WriteString("  }\n")
 }

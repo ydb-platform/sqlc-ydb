@@ -7,16 +7,16 @@ import { Optional } from "@ydbjs/value/optional";
 export type ConfigureQuery = (query: Query) => void;
 
 export type GetAuthorRow = {
-  readonly authorId: bigint;
+  readonly author_id: bigint;
   readonly name: string;
   readonly biography: JSValue;
 };
 
 export type BooksByYearRow = {
-  readonly bookId: bigint;
-  readonly authorId: bigint;
+  readonly book_id: bigint;
+  readonly author_id: bigint;
   readonly isbn: string;
-  readonly bookType: string;
+  readonly book_type: string;
   readonly title: string;
   readonly year: number;
   readonly available: Date;
@@ -30,7 +30,7 @@ export type CreateAuthorParams = {
 };
 
 export type CreateAuthorRow = {
-  readonly authorId: bigint;
+  readonly author_id: bigint;
   readonly name: string;
   readonly biography: JSValue;
 };
@@ -47,10 +47,10 @@ export type CreateBookParams = {
 };
 
 export type CreateBookRow = {
-  readonly bookId: bigint;
-  readonly authorId: bigint;
+  readonly book_id: bigint;
+  readonly author_id: bigint;
   readonly isbn: string;
-  readonly bookType: string;
+  readonly book_type: string;
   readonly title: string;
   readonly year: number;
   readonly available: Date;
@@ -67,23 +67,6 @@ export type GetBiographyRow = {
   readonly biography: JSValue;
 };
 
-type _CreateAuthorWireRow = {
-  readonly author_id: bigint;
-  readonly name: string;
-  readonly biography: JSValue;
-};
-
-type _CreateBookWireRow = {
-  readonly book_id: bigint;
-  readonly author_id: bigint;
-  readonly isbn: string;
-  readonly book_type: string;
-  readonly title: string;
-  readonly year: number;
-  readonly available: Date;
-  readonly tags: JSValue;
-};
-
 export class Queries {
   readonly #sql: SQL;
 
@@ -94,7 +77,7 @@ export class Queries {
 
   async getAuthor(authorId: bigint, configure?: ConfigureQuery): Promise<GetAuthorRow | null> {
     const stmt = this.#sql<[GetAuthorRow]>`-- name: GetAuthor :one
-      SELECT author_id AS authorId, name, biography FROM authors
+      SELECT author_id, name, biography FROM authors
       WHERE author_id = $author_id;`
       .parameter("author_id", new Uint64(authorId));
     configure?.(stmt);
@@ -141,7 +124,7 @@ export class Queries {
 
   async booksByYear(year: number, configure?: ConfigureQuery): Promise<BooksByYearRow[]> {
     const stmt = this.#sql<[BooksByYearRow]>`-- name: BooksByYear :many
-      SELECT book_id AS bookId, author_id AS authorId, isbn, book_type AS bookType, title, year, available, tags
+      SELECT book_id, author_id, isbn, book_type, title, year, available, tags
       FROM books
       WHERE year = $year;`
       .parameter("year", new Int32(year));
@@ -152,7 +135,7 @@ export class Queries {
   }
 
   async createAuthor(args: CreateAuthorParams, configure?: ConfigureQuery): Promise<CreateAuthorRow | null> {
-    const stmt = this.#sql<[_CreateAuthorWireRow]>`-- name: CreateAuthor :one
+    const stmt = this.#sql<[CreateAuthorRow]>`-- name: CreateAuthor :one
       INSERT INTO authors (author_id, name, biography)
       VALUES ($author_id, $name, $biography)
       RETURNING author_id, name, biography;`
@@ -161,17 +144,12 @@ export class Queries {
       .parameter("biography", new Optional(args.biography === null ? null : new Json(args.biography), new JsonType()));
     configure?.(stmt);
     const [rows] = await stmt;
-    const row = rows[0];
 
-    return row === undefined ? null : {
-      authorId: row.author_id,
-      name: row.name,
-      biography: row.biography,
-    };
+    return rows[0] ?? null;
   }
 
   async createBook(args: CreateBookParams, configure?: ConfigureQuery): Promise<CreateBookRow | null> {
-    const stmt = this.#sql<[_CreateBookWireRow]>`-- name: CreateBook :one
+    const stmt = this.#sql<[CreateBookRow]>`-- name: CreateBook :one
       INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)
       VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)
       RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;`
@@ -185,18 +163,8 @@ export class Queries {
       .parameter("tags", new Json(args.tags));
     configure?.(stmt);
     const [rows] = await stmt;
-    const row = rows[0];
 
-    return row === undefined ? null : {
-      bookId: row.book_id,
-      authorId: row.author_id,
-      isbn: row.isbn,
-      bookType: row.book_type,
-      title: row.title,
-      year: row.year,
-      available: row.available,
-      tags: row.tags,
-    };
+    return rows[0] ?? null;
   }
 
   async updateBook(args: UpdateBookParams, configure?: ConfigureQuery): Promise<void> {

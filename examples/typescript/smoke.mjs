@@ -55,20 +55,20 @@ async function runBatch() {
     const queries = new BatchQueries(client);
     const authorId = 18446744073709551615n;
     const bookId = 18446744073709551614n;
-    assert.deepEqual(await queries.createAuthor({ authorId, name: "Octavia", biography: '{"born":1947}' }), { authorId, name: "Octavia", biography: { born: 1947 } });
+    assert.deepEqual(await queries.createAuthor({ authorId, name: "Octavia", biography: '{"born":1947}' }), { author_id: authorId, name: "Octavia", biography: { born: 1947 } });
     const available = new Date(1788957296789);
     const book = await queries.createBook({ bookId, authorId, isbn: "978-0", bookType: "novel", title: "Kindred", year: 1979, available, tags: '["history","science-fiction"]' });
-    assert.equal(book.bookId, bookId);
+    assert.equal(book.book_id, bookId);
     assert.deepEqual(book.available, available);
     assert.deepEqual(book.tags, ["history", "science-fiction"]);
-    assert.equal((await queries.booksByYear(1979))[0].authorId, authorId);
+    assert.equal((await queries.booksByYear(1979))[0].author_id, authorId);
     await queries.updateBook({ title: "Kindred (updated)", tags: '{"shelf":"read"}', bookId });
     assert.deepEqual((await queries.getBiography(authorId)).biography, { born: 1947 });
     await queries.deleteBook(bookId);
     await queries.deleteBookExecResult(bookId);
     await queries.deleteBookNamedFunc(bookId);
     await queries.deleteBookNamedSign(bookId);
-    assert.equal((await queries.getAuthor(authorId)).authorId, authorId);
+    assert.equal((await queries.getAuthor(authorId)).author_id, authorId);
   } finally {
     await dropTables(["books", "authors"]);
   }
@@ -85,8 +85,8 @@ async function runBooktest() {
     await queries.createBook({ bookId, authorId, isbn: "isbn", bookType: "novel", title: "Earthsea", publicationYear: 1968, available, tags: '["fantasy"]' });
     assert.equal((await queries.getAuthor(authorId)).name, "Ursula");
     assert.deepEqual((await queries.getBook(bookId)).available, available);
-    assert.equal((await queries.booksByTitleYear({ title: "Earthsea", publicationYear: 1968 }))[0].bookId, bookId);
-    assert.equal((await queries.booksByTags('["fantasy"]'))[0].name, "Ursula");
+    assert.equal((await queries.booksByTitleYear({ title: "Earthsea", publicationYear: 1968 }))[0].book_id, bookId);
+    assert.equal((await queries.booksByTags('["fantasy"]'))[0]["a.name"], "Ursula");
     assert.deepEqual(await queries.sayHello("YDB"), { greeting: "hello YDB" });
     await queries.updateBook({ bookId, title: "A Wizard of Earthsea", tags: '["classic"]' });
     await queries.updateBookISBN({ bookId, title: "A Wizard of Earthsea", tags: '["classic"]', isbn: "new-isbn" });
@@ -102,11 +102,11 @@ async function runJets() {
   await executeFile("../jets/schema.sql");
   try {
     const queries = new JetsQueries(client);
-    assert.deepEqual(await queries.countPilots(), { pilotCount: 0n });
+    assert.deepEqual(await queries.countPilots(), { pilot_count: 0n });
     await client('UPSERT INTO pilots (id, name) VALUES (1, "Amelia"u), (2, "Bessie"u);');
     assert.deepEqual(await queries.listPilots(), [{ id: 1, name: "Amelia" }, { id: 2, name: "Bessie" }]);
     await queries.deletePilot(1);
-    assert.equal((await queries.countPilots()).pilotCount, 1n);
+    assert.equal((await queries.countPilots()).pilot_count, 1n);
   } finally {
     await dropTables(["pilot_languages", "languages", "jets", "pilots"]);
   }
@@ -125,9 +125,9 @@ async function runOndeck() {
     const createdAt = new Date(1788948672345);
     const venue = await queries.createVenue({ id: 7n, slug: "roundhouse", name: "Roundhouse", city: "london", createdAt, spotifyPlaylist: "spotify:playlist:1", status: "open", statuses: '["open"]', tags: '{"genre":"rock"}' });
     assert.deepEqual(venue, { id: 7n });
-    assert.deepEqual((await queries.getVenue({ slug: "roundhouse", city: "london" })).createdAt, createdAt);
+    assert.deepEqual((await queries.getVenue({ slug: "roundhouse", city: "london" })).created_at, createdAt);
     assert.equal((await queries.listVenues("london"))[0].id, 7n);
-    assert.deepEqual(await queries.venueCountByCity(), [{ city: "london", venueCount: 1n }]);
+    assert.deepEqual(await queries.venueCountByCity(), [{ city: "london", venue_count: 1n }]);
     assert.deepEqual(await queries.updateVenueName({ name: "The Roundhouse", slug: "roundhouse" }), { id: 7n });
     await queries.deleteVenue("roundhouse");
     assert.equal(await queries.getVenue({ slug: "roundhouse", city: "london" }), null);
