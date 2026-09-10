@@ -18,10 +18,16 @@ public final class Queries {
 DECLARE $author_id AS Uint64;
 SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;\
 """;
+    private static final String getAuthorPreparedSql = """
+DECLARE $author_id AS Uint64;
+-- name: GetAuthor :one
+  \s
+SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;\
+""";
 
     public java.util.Optional<GetAuthorRow> getAuthor(long authorId) {
         return client.doReturningWork(_connection -> {
-            try (var _prepared = _connection.prepareStatement(getAuthorSql)) {
+            try (var _prepared = _connection.prepareStatement(getAuthorPreparedSql)) {
                 var _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement.class);
                 _statement.setObject("author_id", PrimitiveValue.newUint64(authorId));
                 try (var _rows = _prepared.executeQuery()) {
