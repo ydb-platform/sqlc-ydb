@@ -18,9 +18,9 @@ func representativeAnalysis() *model.AnalysisResult {
 	json := model.Type{Kind: "Json"}
 	timestamp := model.Type{Kind: "Timestamp"}
 	return &model.AnalysisResult{Queries: []model.AnalyzedQuery{
-		{Name: "CreateBook", Command: model.One, SQL: "DECLARE $id AS Uint64;\nINSERT INTO books (id) VALUES ($id) RETURNING id;", Parameters: []model.Parameter{{Name: "id", Type: u64}}, ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: u64}}}}},
-		{Name: "BooksByYear", Command: model.Many, SQL: "DECLARE $year AS Int32;\nSELECT id, title, tags, available, subtitle FROM books WHERE year = $year;", Parameters: []model.Parameter{{Name: "year", Type: i32}}, ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: u64}, {Name: "title", Type: utf8}, {Name: "tags", Type: json}, {Name: "available", Type: timestamp}, {Name: "subtitle", Type: model.Optional(utf8)}}}}},
-		{Name: "UpdateBook", Command: model.Exec, SQL: "DECLARE $id AS Uint64;\nDECLARE $tags AS Json;\nUPDATE books SET tags = $tags WHERE id = $id;", Parameters: []model.Parameter{{Name: "id", Type: u64}, {Name: "tags", Type: json}}},
+		{Name: "CreateBook", Command: model.One, SQL: "DECLARE $id AS Uint64;\nINSERT INTO books (id) VALUES ($id) RETURNING id;", SQLWithoutDeclarations: "   \nINSERT INTO books (id) VALUES ($id) RETURNING id;", Parameters: []model.Parameter{{Name: "id", Type: u64}}, ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: u64}}}}},
+		{Name: "BooksByYear", Command: model.Many, SQL: "DECLARE $year AS Int32;\nSELECT id, title, tags, available, subtitle FROM books WHERE year = $year;", SQLWithoutDeclarations: "   \nSELECT id, title, tags, available, subtitle FROM books WHERE year = $year;", Parameters: []model.Parameter{{Name: "year", Type: i32}}, ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: u64}, {Name: "title", Type: utf8}, {Name: "tags", Type: json}, {Name: "available", Type: timestamp}, {Name: "subtitle", Type: model.Optional(utf8)}}}}},
+		{Name: "UpdateBook", Command: model.Exec, SQL: "DECLARE $id AS Uint64;\nDECLARE $tags AS Json;\nUPDATE books SET tags = $tags WHERE id = $id;", SQLWithoutDeclarations: "   \n   \nUPDATE books SET tags = $tags WHERE id = $id;", Parameters: []model.Parameter{{Name: "id", Type: u64}, {Name: "tags", Type: json}}},
 	}}
 }
 
@@ -48,9 +48,9 @@ func TestGenerateYDBQuerierUsesNativeQueryClientContract(t *testing.T) {
 		"self.client.query_result_set(CREATE_BOOK)",
 		`.param("$id", id)`,
 		"row.remove_field(0)?.try_into()?",
-		"self.client.query_result_set(BOOKS_BY_YEAR)",
+		".query_result_set(BOOKS_BY_YEAR)",
 		"for mut row in result_set.rows()",
-		"self.client.exec(UPDATE_BOOK)",
+		".exec(UPDATE_BOOK)",
 		`.param("$tags", JsonParam(tags))`,
 	} {
 		if !strings.Contains(queries, want) {
@@ -111,7 +111,7 @@ func TestJsonInputsUseExplicitYDBValues(t *testing.T) {
 
 func TestOptionalJsonInputsUseConstructibleTypedValues(t *testing.T) {
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
-		Name: "CreateAuthor", Command: model.Exec, SQL: "DECLARE $biography AS Optional<Json>; SELECT 1;",
+		Name: "CreateAuthor", Command: model.Exec, SQL: "DECLARE $biography AS Optional<Json>; SELECT 1;", SQLWithoutDeclarations: " SELECT 1;",
 		Parameters: []model.Parameter{{Name: "biography", Type: model.Optional(model.Type{Kind: "Json"})}},
 	}}}
 	files, err := Generate(a, Options{})
@@ -132,7 +132,7 @@ func TestOptionalJsonInputsUseConstructibleTypedValues(t *testing.T) {
 
 func TestTemporalInputsUseExactConstructibleYDBValues(t *testing.T) {
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
-		Name: "StoreTimes", Command: model.Exec, SQL: "SELECT 1;",
+		Name: "StoreTimes", Command: model.Exec, SQL: "SELECT 1;", SQLWithoutDeclarations: "SELECT 1;",
 		Parameters: []model.Parameter{
 			{Name: "available", Type: model.Type{Kind: "Timestamp"}},
 			{Name: "created_at", Type: model.Optional(model.Type{Kind: "Timestamp"})},
@@ -186,6 +186,53 @@ func TestGeneratedRawSQLRoundTripsThroughRustCompiler(t *testing.T) {
 	}
 	if out, err := exec.Command(bin).CombinedOutput(); err != nil {
 		t.Fatalf("round trip: %v\n%s", err, out)
+	}
+}
+
+func TestGeneratedRustIsRustfmtClean(t *testing.T) {
+	files, err := Generate(representativeAnalysis(), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	paths := make([]string, 0, len(files))
+	for _, file := range files {
+		path := filepath.Join(dir, file.Name)
+		if err := os.WriteFile(path, file.Content, 0600); err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, path)
+	}
+	args := append([]string{"--edition", "2024", "--check"}, paths...)
+	if out, err := exec.Command("rustfmt", args...).CombinedOutput(); err != nil {
+		t.Fatalf("generated Rust is not rustfmt-clean: %v\n%s", err, out)
+	}
+}
+
+func TestGeneratedQueriesUseDeclarationFreeSQL(t *testing.T) {
+	files, err := Generate(representativeAnalysis(), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	queries := generatedFile(t, files, "queries.rs")
+	if strings.Contains(queries, "DECLARE") {
+		t.Fatalf("generated Rust query text must omit declarations supplied by typed SDK parameters:\n%s", queries)
+	}
+	if !strings.Contains(queries, "UPDATE books SET tags = $tags WHERE id = $id;") {
+		t.Fatalf("generated Rust query text lost the executable statement:\n%s", queries)
+	}
+	for _, line := range strings.Split(queries, "\n") {
+		if strings.TrimRight(line, " \t") != line {
+			t.Fatalf("generated Rust contains trailing whitespace after removing declarations: %q", line)
+		}
+	}
+}
+
+func TestRejectsMissingDeclarationFreeSQLForParameterizedQuery(t *testing.T) {
+	a := representativeAnalysis()
+	a.Queries[0].SQLWithoutDeclarations = ""
+	if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), "SQL without declarations") {
+		t.Fatalf("missing declaration-free SQL error: %v", err)
 	}
 }
 

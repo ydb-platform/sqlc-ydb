@@ -51,10 +51,13 @@ mismatches, unexpected wire types and no rows for `:one`
 are returned as `ydb::YdbError`; generated code does not substitute
 defaults.
 
-SQL is emitted as readable Rust raw strings. The delimiter grows when the SQL
-contains quote/hash sequences, and control bytes that Rust source cannot hold
-literally are represented with `concat!` and byte escapes. The resulting
-runtime string preserves the analyzed SQL byte for byte.
+SQL is emitted as readable Rust raw strings without `DECLARE` statements because
+the generated typed SDK parameters supply their YQL types. The delimiter grows
+when the SQL contains quote/hash sequences, and control bytes that Rust source
+cannot hold literally are represented with `concat!` and byte escapes. Apart
+from declaration tokens and their whitespace-only placeholder lines, the
+runtime string preserves the analyzed SQL bytes. Generated Rust source passes
+`rustfmt --check` without a formatting rewrite.
 
 The shared examples pin `ydb` 0.18.2 and require Rust 1.88 or newer, matching
 the SDK's published minimum supported Rust version. `:execrows`, container

@@ -3,7 +3,7 @@
 use super::models::*;
 
 pub const GET_AUTHOR: &str = r"-- name: GetAuthor :one
-DECLARE $author_id AS Uint64;
+
 SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;";
 
 pub struct Queries<'a> {
@@ -16,7 +16,9 @@ impl<'a> Queries<'a> {
     }
 
     pub async fn get_author(&mut self, author_id: u64) -> ydb::YdbResult<GetAuthorRow> {
-        let call = self.client.query_result_set(GET_AUTHOR)
+        let call = self
+            .client
+            .query_result_set(GET_AUTHOR)
             .param("$author_id", author_id);
         let result_set = call.await?;
         let mut row = result_set.rows().next().ok_or(ydb::YdbError::NoRows)?;
@@ -26,5 +28,4 @@ impl<'a> Queries<'a> {
             bio: row.remove_field(2)?.try_into()?,
         })
     }
-
 }
