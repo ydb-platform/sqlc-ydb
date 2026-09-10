@@ -77,13 +77,40 @@ func TestGeneratedDatabaseSQLFormatsMultiParameterQueryRowCall(t *testing.T) {
 	}}}
 
 	source := generatedSQLSourceForAnalysis(t, "database/sql", in)
-	want := `err := q.db.QueryRowContext(ctx, queryCreateAuthor,
+	want := `err := q.db.QueryRowContext(
+		ctx,
+		queryCreateAuthor,
 		sql.Named("author_id", arg.AuthorID),
 		sql.Named("author_name", arg.AuthorName),
 		sql.Named("biography", arg.Biography),
-	).Scan(&row.ID, &row.Name, &row.Bio)`
+	).Scan(
+		&row.ID,
+		&row.Name,
+		&row.Bio,
+	)`
 	if !strings.Contains(string(source), want) {
 		t.Fatalf("multi-parameter QueryRowContext call was not formatted readably:\n%s", source)
+	}
+}
+
+func TestGeneratedDatabaseSQLFormatsParameterizedCallsAndScans(t *testing.T) {
+	utf8 := model.Type{Kind: "Utf8"}
+	u64 := model.Type{Kind: "Uint64"}
+	in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{
+		{Name: "DeleteUser", Command: model.Exec, SQL: "DELETE FROM users WHERE id = $id;", Parameters: []model.Parameter{{Name: "id", Type: u64}}},
+		{Name: "FindUsers", Command: model.Many, SQL: "SELECT id, name FROM users WHERE name = $name;", Parameters: []model.Parameter{{Name: "name", Type: utf8}}, ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: u64}, {Name: "name", Type: utf8}}}}},
+		{Name: "CountUsers", Command: model.One, SQL: "SELECT COUNT(*) AS count FROM users;", ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "count", Type: u64}}}}},
+	}}
+	source := string(generatedSQLSourceForAnalysis(t, "database/sql", in))
+	for _, want := range []string{
+		"q.db.ExecContext(\n\t\tctx,\n\t\tqueryDeleteUser,\n\t\tsql.Named(\"id\", arg),\n\t)",
+		"q.db.QueryContext(\n\t\tctx,\n\t\tqueryFindUsers,\n\t\tsql.Named(\"name\", arg),\n\t)",
+		"rows.Scan(\n\t\t\t&row.ID,\n\t\t\t&row.Name,\n\t\t)",
+		"q.db.QueryRowContext(ctx, queryCountUsers).Scan(\n\t\t&row.Count,\n\t)",
+	} {
+		if !strings.Contains(source, want) {
+			t.Fatalf("generated database/sql source misses %q:\n%s", want, source)
+		}
 	}
 }
 
@@ -98,6 +125,41 @@ func TestGeneratedYDBManyUsesNamedColumnScans(t *testing.T) {
 		); err != nil {`
 	if !strings.Contains(string(source), want) {
 		t.Fatalf("native :many rows were not scanned by column name:\n%s", source)
+	}
+}
+
+func TestGeneratedYDBOneUsesNamedColumnScans(t *testing.T) {
+	in := sample()
+	in.Queries = in.Queries[:1]
+	in.Queries[0].ResultSets[0].Columns[1].WireName = "users.bio"
+
+	source := generatedSQLSourceForAnalysis(t, "ydb", in)
+	want := `if err := result.ScanNamed(
+		query.Named("id", &row.ID),
+		query.Named("users.bio", &row.Bio),
+	); err != nil {`
+	if !strings.Contains(string(source), want) {
+		t.Fatalf("native :one row was not scanned by wire name:\n%s", source)
+	}
+}
+
+func TestGeneratedQueryImportsSeparateStandardLibraryAndExternalPackages(t *testing.T) {
+	in := sample()
+	in.Queries[2].Parameters[1].Type = model.Type{Kind: "Json"}
+	for _, runtime := range []string{"database/sql", "ydb"} {
+		source := string(generatedSQLSourceForAnalysis(t, runtime, in))
+		want := "\t\"context\"\n\n\t\"github.com/ydb-platform/ydb-go-sdk/v3"
+		if runtime == "database/sql" {
+			want = "\t\"context\"\n\t\"database/sql\"\n\n\t\"github.com/ydb-platform/ydb-go-sdk/v3"
+		} else {
+			want = "\t\"context\"\n\n\tydb \"github.com/ydb-platform/ydb-go-sdk/v3\""
+		}
+		if !strings.Contains(source, want) {
+			t.Fatalf("%s imports do not separate stdlib and SDK packages:\n%s", runtime, source)
+		}
+		if strings.Contains(source, "import (\n\n") || strings.Contains(source, "\n\n)") {
+			t.Fatalf("%s imports contain an empty group:\n%s", runtime, source)
+		}
 	}
 }
 
@@ -596,15 +658,18 @@ func TestGenerateCompilesYDBJSONAndTimestampParameters(t *testing.T) {
 		}
 	}
 	for _, call := range []string{
-		`table.ValueParam("$tags", types.JSONValue(arg.Tags))`,
-		`table.ValueParam("$biography", types.NullableJSONValue(arg.Biography))`,
-		`table.ValueParam("$document", types.JSONDocumentValue(arg.Document))`,
-		`table.ValueParam("$optional_document", types.NullableJSONDocumentValue(arg.OptionalDocument))`,
+		`sql.Named("tags", types.JSONValue(arg.Tags))`,
+		`sql.Named("biography", types.NullableJSONValue(arg.Biography))`,
+		`sql.Named("document", types.JSONDocumentValue(arg.Document))`,
+		`sql.Named("optional_document", types.NullableJSONDocumentValue(arg.OptionalDocument))`,
 		`sql.Named("available", arg.Available)`,
 	} {
 		if !strings.Contains(source, call) {
 			t.Fatalf("database/sql binding lacks %s:\n%s", call, source)
 		}
+	}
+	if strings.Contains(source, `github.com/ydb-platform/ydb-go-sdk/v3/table`) || strings.Contains(source, `table.ValueParam`) {
+		t.Fatalf("database/sql typed bindings retain the obsolete table wrapper:\n%s", source)
 	}
 }
 
@@ -681,8 +746,8 @@ func TestGenerateCompilesDatabaseSQLDecimalAndUUID(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		"types.DecimalValue(&types.Decimal{Bytes: arg.Amount.Bytes, Precision: 35, Scale: 12})",
-		"types.NullableUUIDTypedValue(arg.ID)",
+		`sql.Named("amount", types.DecimalValue(&types.Decimal{Bytes: arg.Amount.Bytes, Precision: 35, Scale: 12}))`,
+		`sql.Named("id", types.NullableUUIDTypedValue(arg.ID))`,
 	} {
 		if !strings.Contains(source, want) {
 			t.Fatalf("generated database/sql binding lacks %q:\n%s", want, source)

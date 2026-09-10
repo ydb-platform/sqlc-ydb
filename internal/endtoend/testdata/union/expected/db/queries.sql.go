@@ -20,7 +20,10 @@ func (q *Queries) DistinctLabels(ctx context.Context) ([]DistinctLabelsRow, erro
 	items := []DistinctLabelsRow(nil)
 	for rows.Next() {
 		var row DistinctLabelsRow
-		if err := rows.Scan(&row.ID, &row.Label); err != nil {
+		if err := rows.Scan(
+			&row.ID,
+			&row.Label,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, row)
@@ -42,7 +45,10 @@ func (q *Queries) QualifiedMissing(ctx context.Context) ([]QualifiedMissingRow, 
 	items := []QualifiedMissingRow(nil)
 	for rows.Next() {
 		var row QualifiedMissingRow
-		if err := rows.Scan(&row.AID, &row.BID); err != nil {
+		if err := rows.Scan(
+			&row.AID,
+			&row.BID,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, row)
@@ -64,7 +70,10 @@ func (q *Queries) QualifiedNames(ctx context.Context) ([]QualifiedNamesRow, erro
 	items := []QualifiedNamesRow(nil)
 	for rows.Next() {
 		var row QualifiedNamesRow
-		if err := rows.Scan(&row.AID, &row.BID); err != nil {
+		if err := rows.Scan(
+			&row.AID,
+			&row.BID,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, row)
@@ -86,7 +95,10 @@ func (q *Queries) AllLabels(ctx context.Context) ([]AllLabelsRow, error) {
 	items := []AllLabelsRow(nil)
 	for rows.Next() {
 		var row AllLabelsRow
-		if err := rows.Scan(&row.ID, &row.Label); err != nil {
+		if err := rows.Scan(
+			&row.ID,
+			&row.Label,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, row)

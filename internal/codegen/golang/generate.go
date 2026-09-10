@@ -414,10 +414,9 @@ func queryFile(source string, qs []model.AnalyzedQuery, o Options) []byte {
 				parameterImports.add(p.Type)
 			}
 			kind := strings.ToLower(p.Type.UnwrapOptional().Kind)
+			needsSQLNamed = needsSQLNamed || o.Runtime == "database/sql"
 			if kind == "json" || kind == "jsondocument" {
 				needsJSON = true
-			} else if kind != "decimal" && kind != "uuid" {
-				needsSQLNamed = true
 			}
 			needsUUID = needsUUID || (len(q.Parameters) == 1 && hasKind(p.Type, "uuid"))
 			needsTypes = needsTypes ||
@@ -426,36 +425,36 @@ func queryFile(source string, qs []model.AnalyzedQuery, o Options) []byte {
 			needsYDB = needsYDB || o.Runtime == "ydb"
 		}
 	}
+	stdlibImports := []string{"\"context\""}
+	externalImports := []string{}
+	if parameterImports.time {
+		stdlibImports = append(stdlibImports, "\"time\"")
+	}
 	if o.Runtime == "database/sql" {
-		b.WriteString("import (\n\"context\"\n")
-		if parameterImports.time {
-			b.WriteString("\"time\"\n")
-		}
 		if needsSQLNamed {
-			b.WriteString("\"database/sql\"\n")
+			stdlibImports = append(stdlibImports, "\"database/sql\"")
 		}
 		if needsJSON || needsTypes {
-			b.WriteString("\"github.com/ydb-platform/ydb-go-sdk/v3/table\"\n")
-			b.WriteString("\"github.com/ydb-platform/ydb-go-sdk/v3/types\"\n")
+			externalImports = append(externalImports, "\"github.com/ydb-platform/ydb-go-sdk/v3/types\"")
 		}
 		if needsUUID {
-			b.WriteString("\"github.com/google/uuid\"\n")
+			externalImports = append(externalImports, "\"github.com/google/uuid\"")
 		}
 	} else {
-		b.WriteString("import (\n\"context\"\n")
-		if parameterImports.time {
-			b.WriteString("\"time\"\n")
-		}
 		if needsYDB {
-			b.WriteString("ydb \"github.com/ydb-platform/ydb-go-sdk/v3\"\n")
+			externalImports = append(externalImports, "ydb \"github.com/ydb-platform/ydb-go-sdk/v3\"")
 		}
-		b.WriteString("\"github.com/ydb-platform/ydb-go-sdk/v3/query\"\n")
+		externalImports = append(externalImports, "\"github.com/ydb-platform/ydb-go-sdk/v3/query\"")
 		if needsTypes {
-			b.WriteString("\"github.com/ydb-platform/ydb-go-sdk/v3/types\"\n")
+			externalImports = append(externalImports, "\"github.com/ydb-platform/ydb-go-sdk/v3/types\"")
 		}
 		if needsUUID {
-			b.WriteString("\"github.com/google/uuid\"\n")
+			externalImports = append(externalImports, "\"github.com/google/uuid\"")
 		}
+	}
+	b.WriteString("import (\n" + strings.Join(stdlibImports, "\n") + "\n")
+	if len(externalImports) != 0 {
+		b.WriteString("\n" + strings.Join(externalImports, "\n") + "\n")
 	}
 	b.WriteString(")\n\n")
 
@@ -555,57 +554,60 @@ func sqlArgumentList(q model.AnalyzedQuery) []string {
 			if p.Type.IsOptional() {
 				constructor = "types.NullableJSONValue"
 			}
-			x[i] = "table.ValueParam(" + strconv.Quote("$"+p.Name) + ", " + constructor + "(" + value + "))"
+			x[i] = "sql.Named(" + strconv.Quote(p.Name) + ", " + constructor + "(" + value + "))"
 		case "jsondocument":
 			constructor := "types.JSONDocumentValue"
 			if p.Type.IsOptional() {
 				constructor = "types.NullableJSONDocumentValue"
 			}
-			x[i] = "table.ValueParam(" + strconv.Quote("$"+p.Name) + ", " + constructor + "(" + value + "))"
+			x[i] = "sql.Named(" + strconv.Quote(p.Name) + ", " + constructor + "(" + value + "))"
 		case "decimal":
 			precision, scale := decimalArgs(typeValue)
 			decimalValue := "types.Decimal{Bytes: " + value + ".Bytes, Precision: " + precision + ", Scale: " + scale + "}"
 			if p.Type.IsOptional() {
-				x[i] = "table.ValueParam(" + strconv.Quote("$"+p.Name) + ", func() types.Value { if " + value + " == nil { return types.NullableDecimalValue(nil, " + precision + ", " + scale + ") }; return types.NullableDecimalValue(&" + value + ".Bytes, " + precision + ", " + scale + ") }())"
+				x[i] = "sql.Named(" + strconv.Quote(p.Name) + ", func() types.Value { if " + value + " == nil { return types.NullableDecimalValue(nil, " + precision + ", " + scale + ") }; return types.NullableDecimalValue(&" + value + ".Bytes, " + precision + ", " + scale + ") }())"
 			} else {
-				x[i] = "table.ValueParam(" + strconv.Quote("$"+p.Name) + ", types.DecimalValue(&" + decimalValue + "))"
+				x[i] = "sql.Named(" + strconv.Quote(p.Name) + ", types.DecimalValue(&" + decimalValue + "))"
 			}
 		case "uuid":
 			constructor := "types.UuidValue"
 			if p.Type.IsOptional() {
 				constructor = "types.NullableUUIDTypedValue"
 			}
-			x[i] = "table.ValueParam(" + strconv.Quote("$"+p.Name) + ", " + constructor + "(" + value + "))"
+			x[i] = "sql.Named(" + strconv.Quote(p.Name) + ", " + constructor + "(" + value + "))"
 		default:
 			x[i] = "sql.Named(" + strconv.Quote(p.Name) + ", " + value + ")"
 		}
 	}
 	return x
 }
-func sqlArgs(q model.AnalyzedQuery) string {
-	x := sqlArgumentList(q)
-	if len(x) == 0 {
-		return ""
+func generatedCall(name string, fixed, parameters []string) string {
+	if len(parameters) == 0 {
+		return name + "(" + strings.Join(fixed, ", ") + ")"
 	}
-	return ", " + strings.Join(x, ", ")
+	args := append(append([]string(nil), fixed...), parameters...)
+	return name + "(\n" + strings.Join(args, ",\n") + ",\n)"
+}
+func scanCall(name string, destinations []string) string {
+	return name + "(\n" + strings.Join(destinations, ",\n") + ",\n)"
 }
 func writeSQL(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 	writeDecimalValidations(b, q, o)
-	a := sqlArgs(q)
+	parameters := sqlArgumentList(q)
 	switch q.Command {
 	case model.Exec:
-		b.WriteString("_, err := q.db.ExecContext(ctx, " + queryConstName(q.Name) + a + ")\nreturn err\n")
+		call := generatedCall("q.db.ExecContext", []string{"ctx", queryConstName(q.Name)}, parameters)
+		b.WriteString("_, err := " + call + "\nreturn err\n")
 	case model.One:
-		if len(q.Parameters) > 1 {
-			a = ",\n" + strings.Join(sqlArgumentList(q), ",\n") + ",\n"
-		}
-		b.WriteString("var row " + q.Name + "Row\nerr := q.db.QueryRowContext(ctx, " + queryConstName(q.Name) + a + ").Scan(" + scan(q.ResultSets[0]) + ")\nreturn row, err\n")
+		call := generatedCall("q.db.QueryRowContext", []string{"ctx", queryConstName(q.Name)}, parameters)
+		b.WriteString("var row " + q.Name + "Row\nerr := " + scanCall(call+".Scan", scanDestinations(q.ResultSets[0])) + "\nreturn row, err\n")
 	case model.Many:
 		init := "[]" + q.Name + "Row(nil)"
 		if o.EmitEmptySlices {
 			init = "make([]" + q.Name + "Row, 0)"
 		}
-		b.WriteString("rows, err := q.db.QueryContext(ctx, " + queryConstName(q.Name) + a + ")\nif err != nil { return " + init + ", err }; defer rows.Close()\nitems := " + init + "\nfor rows.Next() { var row " + q.Name + "Row\nif err := rows.Scan(" + scan(q.ResultSets[0]) + "); err != nil { return nil, err }; items = append(items, row) }\nreturn items, rows.Err()\n")
+		call := generatedCall("q.db.QueryContext", []string{"ctx", queryConstName(q.Name)}, parameters)
+		b.WriteString("rows, err := " + call + "\nif err != nil { return " + init + ", err }; defer rows.Close()\nitems := " + init + "\nfor rows.Next() { var row " + q.Name + "Row\nif err := " + scanCall("rows.Scan", scanDestinations(q.ResultSets[0])) + "; err != nil { return nil, err }; items = append(items, row) }\nreturn items, rows.Err()\n")
 	}
 }
 func writeYDB(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
@@ -628,7 +630,7 @@ func writeYDB(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 		return
 	}
 	if q.Command == model.One {
-		b.WriteString("result, err := q.db.QueryRow(ctx, " + queryConstName(q.Name) + ", " + opt + ")\nif err != nil { return " + q.Name + "Row{}, err }; var row " + q.Name + "Row\nif err := result.Scan(" + scan(q.ResultSets[0]) + "); err != nil { return " + q.Name + "Row{}, err }; return row, nil\n")
+		b.WriteString("result, err := q.db.QueryRow(ctx, " + queryConstName(q.Name) + ", " + opt + ")\nif err != nil { return " + q.Name + "Row{}, err }; var row " + q.Name + "Row\nif err := result.ScanNamed(\n" + scanNamed(q.ResultSets[0]) + ",\n); err != nil { return " + q.Name + "Row{}, err }; return row, nil\n")
 		return
 	}
 	init := "[]" + q.Name + "Row(nil)"
@@ -680,12 +682,12 @@ func decimalValidationFailure(q model.AnalyzedQuery, o Options) string {
 		return "return err"
 	}
 }
-func scan(rs model.ResultSet) string {
+func scanDestinations(rs model.ResultSet) []string {
 	x := make([]string, len(rs.Columns))
 	for i, c := range rs.Columns {
 		x[i] = "&row." + goName(c.Name)
 	}
-	return strings.Join(x, ", ")
+	return x
 }
 func scanNamed(rs model.ResultSet) string {
 	x := make([]string, len(rs.Columns))

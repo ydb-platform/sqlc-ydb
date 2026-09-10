@@ -4,6 +4,7 @@ package db
 
 import (
 	"context"
+
 	ydb "github.com/ydb-platform/ydb-go-sdk/v3"
 	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 	"github.com/ydb-platform/ydb-go-sdk/v3/types"
@@ -48,7 +49,12 @@ func (q *Queries) BindNativeTypes(ctx context.Context, arg BindNativeTypesParams
 		return BindNativeTypesRow{}, err
 	}
 	var row BindNativeTypesRow
-	if err := result.Scan(&row.Ids, &row.OptionalIds, &row.Amount, &row.ID); err != nil {
+	if err := result.ScanNamed(
+		query.Named("ids", &row.Ids),
+		query.Named("optional_ids", &row.OptionalIds),
+		query.Named("amount", &row.Amount),
+		query.Named("id", &row.ID),
+	); err != nil {
 		return BindNativeTypesRow{}, err
 	}
 	return row, nil

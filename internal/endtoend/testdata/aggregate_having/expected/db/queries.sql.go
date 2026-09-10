@@ -15,7 +15,11 @@ GROUP BY city
 HAVING MAX(temperature) < $maximum_temperature;`
 
 func (q *Queries) ColdCities(ctx context.Context, arg int32) ([]ColdCitiesRow, error) {
-	rows, err := q.db.QueryContext(ctx, queryColdCities, sql.Named("maximum_temperature", arg))
+	rows, err := q.db.QueryContext(
+		ctx,
+		queryColdCities,
+		sql.Named("maximum_temperature", arg),
+	)
 	if err != nil {
 		return []ColdCitiesRow(nil), err
 	}
@@ -23,7 +27,11 @@ func (q *Queries) ColdCities(ctx context.Context, arg int32) ([]ColdCitiesRow, e
 	items := []ColdCitiesRow(nil)
 	for rows.Next() {
 		var row ColdCitiesRow
-		if err := rows.Scan(&row.City, &row.ReadingCount, &row.HottestTemperature); err != nil {
+		if err := rows.Scan(
+			&row.City,
+			&row.ReadingCount,
+			&row.HottestTemperature,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, row)

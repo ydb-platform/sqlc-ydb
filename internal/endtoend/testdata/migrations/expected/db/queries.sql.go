@@ -4,6 +4,7 @@ package db
 
 import (
 	"context"
+
 	ydb "github.com/ydb-platform/ydb-go-sdk/v3"
 	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
@@ -22,7 +23,10 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 		return GetAuthorRow{}, err
 	}
 	var row GetAuthorRow
-	if err := result.Scan(&row.ID, &row.Name); err != nil {
+	if err := result.ScanNamed(
+		query.Named("id", &row.ID),
+		query.Named("name", &row.Name),
+	); err != nil {
 		return GetAuthorRow{}, err
 	}
 	return row, nil
