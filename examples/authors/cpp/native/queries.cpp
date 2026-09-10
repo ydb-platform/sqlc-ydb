@@ -17,12 +17,8 @@ std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
             .AddParam("$author_id").Uint64(author_id).Build()
             .Build();
         auto sqlc_result = sqlc_session.ExecuteQuery(
-            std::string{
-                R"sqlc(-- name: GetAuthor :one)sqlc"
-                "\n"
-                R"sqlc(SELECT id, name, bio FROM authors WHERE id = $author_id;)sqlc",
-                80
-            },
+            R"sql(-- name: GetAuthor :one
+            SELECT id, name, bio FROM authors WHERE id = $author_id;)sql",
             NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),
             sqlc_params
         ).GetValueSync();
@@ -51,12 +47,8 @@ std::vector<ListAuthorsRow> Queries::ListAuthors() const {
     std::optional<NYdb::TResultSet> sqlc_result_set;
     const auto sqlc_status = this->client_.RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
         auto sqlc_result = sqlc_session.ExecuteQuery(
-            std::string{
-                R"sqlc(-- name: ListAuthors :many)sqlc"
-                "\n"
-                R"sqlc(SELECT id, name, bio FROM authors ORDER BY name;)sqlc",
-                75
-            },
+            R"sql(-- name: ListAuthors :many
+            SELECT id, name, bio FROM authors ORDER BY name;)sql",
             NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
         ).GetValueSync();
         if (sqlc_result.IsSuccess() && !sqlc_result.GetResultSets().empty()) {
@@ -88,12 +80,8 @@ std::optional<GetAuthorNameRow> Queries::GetAuthorName(std::uint64_t author_id) 
             .AddParam("$author_id").Uint64(author_id).Build()
             .Build();
         auto sqlc_result = sqlc_session.ExecuteQuery(
-            std::string{
-                R"sqlc(-- name: GetAuthorName :one)sqlc"
-                "\n"
-                R"sqlc(SELECT name FROM authors WHERE id = $author_id;)sqlc",
-                75
-            },
+            R"sql(-- name: GetAuthorName :one
+            SELECT name FROM authors WHERE id = $author_id;)sql",
             NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),
             sqlc_params
         ).GetValueSync();
@@ -125,16 +113,10 @@ std::optional<CreateAuthorRow> Queries::CreateAuthor(std::uint64_t author_id, co
             .AddParam("$biography").OptionalUtf8(biography).Build()
             .Build();
         auto sqlc_result = sqlc_session.ExecuteQuery(
-            std::string{
-                R"sqlc(-- name: CreateAuthor :one)sqlc"
-                "\n"
-                R"sqlc(INSERT INTO authors (id, name, bio))sqlc"
-                "\n"
-                R"sqlc(VALUES ($author_id, $author_name, $biography))sqlc"
-                "\n"
-                R"sqlc(RETURNING id, name, bio;)sqlc",
-                133
-            },
+            R"sql(-- name: CreateAuthor :one
+            INSERT INTO authors (id, name, bio)
+            VALUES ($author_id, $author_name, $biography)
+            RETURNING id, name, bio;)sql",
             NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),
             sqlc_params
         ).GetValueSync();
@@ -167,14 +149,9 @@ void Queries::UpsertAuthor(std::uint64_t author_id, const std::string& author_na
             .AddParam("$biography").OptionalUtf8(biography).Build()
             .Build();
         auto sqlc_result = sqlc_session.ExecuteQuery(
-            std::string{
-                R"sqlc(-- name: UpsertAuthor :exec)sqlc"
-                "\n"
-                R"sqlc(UPSERT INTO authors (id, name, bio))sqlc"
-                "\n"
-                R"sqlc(VALUES ($author_id, $author_name, $biography);)sqlc",
-                110
-            },
+            R"sql(-- name: UpsertAuthor :exec
+            UPSERT INTO authors (id, name, bio)
+            VALUES ($author_id, $author_name, $biography);)sql",
             NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),
             sqlc_params
         ).GetValueSync();
@@ -189,12 +166,8 @@ void Queries::DeleteAuthor(std::uint64_t author_id) const {
             .AddParam("$author_id").Uint64(author_id).Build()
             .Build();
         auto sqlc_result = sqlc_session.ExecuteQuery(
-            std::string{
-                R"sqlc(-- name: DeleteAuthor :exec)sqlc"
-                "\n"
-                R"sqlc(DELETE FROM authors WHERE id = $author_id;)sqlc",
-                70
-            },
+            R"sql(-- name: DeleteAuthor :exec
+            DELETE FROM authors WHERE id = $author_id;)sql",
             NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),
             sqlc_params
         ).GetValueSync();
