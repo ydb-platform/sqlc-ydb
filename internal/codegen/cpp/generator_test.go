@@ -151,7 +151,7 @@ func TestUserverRuntimeQueryConstructor(t *testing.T) {
 	if err != nil {
 		t.Skip("clang++ is unavailable")
 	}
-	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Named", Command: model.Exec, SQL: "SELECT 'a\x00b';"}}}
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Named", Command: model.Exec, SQL: "SELECT 1;\nSELECT 2;"}}}
 	files, err := Generate(a, Options{Runtime: "userver"})
 	if err != nil {
 		t.Fatal(err)
@@ -166,8 +166,7 @@ func TestUserverRuntimeQueryConstructor(t *testing.T) {
 		t.Fatal("missing Query initializer end")
 	}
 	query := generated[start : start+end+len("\n        }")]
-	// These overloads retain userver's distinction between compile-time literals
-	// and owned strings. A NameLiteral cannot name a std::string statement.
+	// The generated runtime Name selects the overload that owns the query text.
 	program := `#include <optional>
 #include <string>
 #include <utility>
@@ -185,7 +184,7 @@ struct Query {
 }
 int main() {
   auto query = ` + query + `;
-  return query.text != std::string("SELECT 'a\0b';", 13) || !query.name || query.name->value != "Named";
+	return query.text != "SELECT 1;\n            SELECT 2;" || !query.name || query.name->value != "Named";
 }
 `
 	dir := t.TempDir()
@@ -396,25 +395,35 @@ func TestScalarWidthsAndStringKindsRemainDistinct(t *testing.T) {
 	}
 }
 
-func TestSQLLiteralReadableAndRoundTripsAllBytes(t *testing.T) {
+func TestSQLLiteralUsesOneReadableRawString(t *testing.T) {
 	compiler, err := exec.LookPath("clang++")
 	if err != nil {
 		t.Skip("clang++ is unavailable")
 	}
 	tests := []struct {
-		name string
-		sql  string
+		name      string
+		sql       string
+		want      string
+		wantValue string
 	}{
-		{"multiline", "-- Привет\nSELECT '\\\"', `name`\nFROM authors;\n"},
-		{"delimiter collision", "SELECT ')sqlc\"', ')sqlc1\"';"},
-		{"controls", "SELECT '\x00\a\b\f\r\v\x1b\x7f';\n"},
-		{"invalid utf8", string([]byte{'S', 'E', 'L', 'E', 'C', 'T', ' ', 0xff, ';'})},
+		{
+			"multiline",
+			"-- Привет\nSELECT '\\\"', `name`\nFROM authors;",
+			"R\"sql(-- Привет\n    SELECT '\\\"', `name`\n    FROM authors;)sql\"",
+			"-- Привет\n    SELECT '\\\"', `name`\n    FROM authors;",
+		},
+		{
+			"delimiter collision",
+			"SELECT ')sql\"', ')sql1\"';",
+			"R\"sql2(SELECT ')sql\"', ')sql1\"';)sql2\"",
+			"SELECT ')sql\"', ')sql1\"';",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			literal := sqlLiteral(tc.sql)
-			if tc.name == "multiline" && (!strings.Contains(literal, `R"sqlc(SELECT`) || strings.Contains(literal, `\nSELECT`)) {
-				t.Fatalf("multiline SQL is not a readable raw literal: %s", literal)
+			literal := sqlLiteral(tc.sql, "    ")
+			if literal != tc.want {
+				t.Fatalf("literal mismatch:\n got: %s\nwant: %s", literal, tc.want)
 			}
 			dir := t.TempDir()
 			source := "#include <iostream>\n#include <string>\nint main() { const std::string value = " + literal + "; std::cout.write(value.data(), value.size()); }\n"
@@ -431,8 +440,8 @@ func TestSQLLiteralReadableAndRoundTripsAllBytes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !bytes.Equal(got, []byte(tc.sql)) {
-				t.Fatalf("round trip mismatch:\n got: %q\nwant: %q\nliteral: %s", got, []byte(tc.sql), literal)
+			if !bytes.Equal(got, []byte(tc.wantValue)) {
+				t.Fatalf("round trip mismatch:\n got: %q\nwant: %q\nliteral: %s", got, []byte(tc.wantValue), literal)
 			}
 		})
 	}

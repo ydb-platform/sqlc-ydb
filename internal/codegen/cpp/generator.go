@@ -3,11 +3,9 @@
 package cpp
 
 import (
-	"bytes"
 	"fmt"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -343,7 +341,7 @@ func renderNativeMethod(out *strings.Builder, query model.AnalyzedQuery, options
 		}
 		out.WriteString("\n            .Build();\n")
 	}
-	out.WriteString("        auto sqlc_result = sqlc_session.ExecuteQuery(\n            " + sqlLiteral(query.SQL) + ",\n            NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()")
+	out.WriteString("        auto sqlc_result = sqlc_session.ExecuteQuery(\n            " + sqlLiteral(query.SQL, "            ") + ",\n            NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()")
 	if len(query.Parameters) != 0 {
 		out.WriteString(",\n            sqlc_params")
 	}
@@ -383,7 +381,7 @@ func renderUserverMethod(out *strings.Builder, query model.AnalyzedQuery, option
 		returnType = "std::vector<" + query.Name + "Row>"
 	}
 	out.WriteString(returnType + " Queries::" + query.Name + "(" + methodParameters(query, options.Runtime) + ") const {\n")
-	call := "this->client_.ExecuteQuery(\n        ::userver::ydb::Query{\n            " + sqlLiteral(query.SQL) + ",\n            ::userver::ydb::Query::Name{" + strconv.Quote(query.Name) + "},\n            ::userver::ydb::Query::LogMode::kNameOnly,\n        }"
+	call := "this->client_.ExecuteQuery(\n        ::userver::ydb::Query{\n            " + sqlLiteral(query.SQL, "            ") + ",\n            ::userver::ydb::Query::Name{" + strconv.Quote(query.Name) + "},\n            ::userver::ydb::Query::LogMode::kNameOnly,\n        }"
 	for _, parameter := range query.Parameters {
 		call += ", " + strconv.Quote("$"+parameter.Name) + ", " + parameter.Name
 	}
@@ -411,51 +409,10 @@ func writeUserverRow(out *strings.Builder, resultSet model.ResultSet, runtime, i
 	}
 }
 
-// sqlLiteral prefers readable raw strings. Bytes that C++ translation phases
-// may rewrite or reject are emitted as isolated hexadecimal string fragments.
-func sqlLiteral(sql string) string {
-	delimiter := "sqlc"
+func sqlLiteral(sql, indent string) string {
+	delimiter := "sql"
 	for suffix := 0; strings.Contains(sql, ")"+delimiter+"\""); suffix++ {
-		delimiter = "sqlc" + strconv.Itoa(suffix+1)
+		delimiter = "sql" + strconv.Itoa(suffix+1)
 	}
-
-	var parts []string
-	var raw bytes.Buffer
-	flushRaw := func() {
-		if raw.Len() == 0 {
-			return
-		}
-		parts = append(parts, "R\""+delimiter+"("+raw.String()+")"+delimiter+"\"")
-		raw.Reset()
-	}
-	for index := 0; index < len(sql); {
-		r, size := utf8.DecodeRuneInString(sql[index:])
-		if r == utf8.RuneError && size == 1 {
-			flushRaw()
-			parts = append(parts, fmt.Sprintf("\"\\x%02X\"", sql[index]))
-			index++
-			continue
-		}
-		unsafe := r == '\r' || r == 0x7f || r == 0xfeff || (r < 0x20 && r != '\n' && r != '\t')
-		if unsafe {
-			flushRaw()
-			for _, value := range []byte(sql[index : index+size]) {
-				parts = append(parts, fmt.Sprintf("\"\\x%02X\"", value))
-			}
-		} else if r == '\n' {
-			flushRaw()
-			parts = append(parts, `"\n"`)
-		} else {
-			raw.WriteString(sql[index : index+size])
-		}
-		index += size
-	}
-	flushRaw()
-	if len(parts) == 0 {
-		return "std::string{}"
-	}
-	if len(parts) == 1 && strings.HasPrefix(parts[0], "R\"") {
-		return parts[0]
-	}
-	return "std::string{\n                " + strings.Join(parts, "\n                ") + ",\n                " + strconv.Itoa(len(sql)) + "\n            }"
+	return "R\"" + delimiter + "(" + strings.ReplaceAll(sql, "\n", "\n"+indent) + ")" + delimiter + "\""
 }
