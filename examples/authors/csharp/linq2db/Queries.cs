@@ -20,13 +20,11 @@ public sealed class Queries
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));
     }
 
-    private const string SqlGetAuthor =
-        "-- name: GetAuthor :one\n" +
-        "SELECT id, name, bio FROM authors WHERE id = $author_id;";
-
     public async Task<GetAuthorRow> GetAuthorAsync(ulong AuthorID, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(GetAuthorRowFrom, SqlGetAuthor, cancellationToken, new DataParameter("$author_id", AuthorID, DataType.UInt64)).ConfigureAwait(false);
+        var rows = await _connection.QueryToListAsync(GetAuthorRowFrom,
+            "-- name: GetAuthor :one\n" +
+            "SELECT id, name, bio FROM authors WHERE id = $author_id;", cancellationToken, new DataParameter("$author_id", AuthorID, DataType.UInt64)).ConfigureAwait(false);
         if (rows.Count == 0)
         {
             throw new InvalidOperationException("query returned no rows");
@@ -40,13 +38,11 @@ public sealed class Queries
         reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)
     );
 
-    private const string SqlListAuthors =
-        "-- name: ListAuthors :many\n" +
-        "SELECT id, name, bio FROM authors ORDER BY name;";
-
     public async Task<IReadOnlyList<ListAuthorsRow>> ListAuthorsAsync(CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(ListAuthorsRowFrom, SqlListAuthors, cancellationToken).ConfigureAwait(false);
+        var rows = await _connection.QueryToListAsync(ListAuthorsRowFrom,
+            "-- name: ListAuthors :many\n" +
+            "SELECT id, name, bio FROM authors ORDER BY name;", cancellationToken).ConfigureAwait(false);
         return rows;
     }
 
@@ -56,13 +52,11 @@ public sealed class Queries
         reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)
     );
 
-    private const string SqlGetAuthorName =
-        "-- name: GetAuthorName :one\n" +
-        "SELECT name FROM authors WHERE id = $author_id;";
-
     public async Task<GetAuthorNameRow> GetAuthorNameAsync(ulong AuthorID, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(GetAuthorNameRowFrom, SqlGetAuthorName, cancellationToken, new DataParameter("$author_id", AuthorID, DataType.UInt64)).ConfigureAwait(false);
+        var rows = await _connection.QueryToListAsync(GetAuthorNameRowFrom,
+            "-- name: GetAuthorName :one\n" +
+            "SELECT name FROM authors WHERE id = $author_id;", cancellationToken, new DataParameter("$author_id", AuthorID, DataType.UInt64)).ConfigureAwait(false);
         if (rows.Count == 0)
         {
             throw new InvalidOperationException("query returned no rows");
@@ -74,15 +68,13 @@ public sealed class Queries
         reader.GetFieldValue<string>(0)
     );
 
-    private const string SqlCreateAuthor =
-        "-- name: CreateAuthor :one\n" +
-        "INSERT INTO authors (id, name, bio)\n" +
-        "VALUES ($author_id, $author_name, $biography)\n" +
-        "RETURNING id, name, bio;";
-
     public async Task<CreateAuthorRow> CreateAuthorAsync(CreateAuthorParams args, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(CreateAuthorRowFrom, SqlCreateAuthor, cancellationToken, new DataParameter("$author_id", args.AuthorID, DataType.UInt64), new DataParameter("$author_name", args.AuthorName, DataType.NVarChar), new DataParameter("$biography", YdbValue.MakeOptionalUtf8(args.Biography), DataType.NVarChar)).ConfigureAwait(false);
+        var rows = await _connection.QueryToListAsync(CreateAuthorRowFrom,
+            "-- name: CreateAuthor :one\n" +
+            "INSERT INTO authors (id, name, bio)\n" +
+            "VALUES ($author_id, $author_name, $biography)\n" +
+            "RETURNING id, name, bio;", cancellationToken, new DataParameter("$author_id", args.AuthorID, DataType.UInt64), new DataParameter("$author_name", args.AuthorName, DataType.NVarChar), new DataParameter("$biography", YdbValue.MakeOptionalUtf8(args.Biography), DataType.NVarChar)).ConfigureAwait(false);
         if (rows.Count == 0)
         {
             throw new InvalidOperationException("query returned no rows");
@@ -96,22 +88,18 @@ public sealed class Queries
         reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)
     );
 
-    private const string SqlUpsertAuthor =
-        "-- name: UpsertAuthor :exec\n" +
-        "UPSERT INTO authors (id, name, bio)\n" +
-        "VALUES ($author_id, $author_name, $biography);";
-
     public async Task UpsertAuthorAsync(UpsertAuthorParams args, CancellationToken cancellationToken = default)
     {
-        await _connection.ExecuteAsync(SqlUpsertAuthor, cancellationToken, new DataParameter("$author_id", args.AuthorID, DataType.UInt64), new DataParameter("$author_name", args.AuthorName, DataType.NVarChar), new DataParameter("$biography", YdbValue.MakeOptionalUtf8(args.Biography), DataType.NVarChar)).ConfigureAwait(false);
+        await _connection.ExecuteAsync(
+            "-- name: UpsertAuthor :exec\n" +
+            "UPSERT INTO authors (id, name, bio)\n" +
+            "VALUES ($author_id, $author_name, $biography);", cancellationToken, new DataParameter("$author_id", args.AuthorID, DataType.UInt64), new DataParameter("$author_name", args.AuthorName, DataType.NVarChar), new DataParameter("$biography", YdbValue.MakeOptionalUtf8(args.Biography), DataType.NVarChar)).ConfigureAwait(false);
     }
-
-    private const string SqlDeleteAuthor =
-        "-- name: DeleteAuthor :exec\n" +
-        "DELETE FROM authors WHERE id = $author_id;";
 
     public async Task DeleteAuthorAsync(ulong AuthorID, CancellationToken cancellationToken = default)
     {
-        await _connection.ExecuteAsync(SqlDeleteAuthor, cancellationToken, new DataParameter("$author_id", AuthorID, DataType.UInt64)).ConfigureAwait(false);
+        await _connection.ExecuteAsync(
+            "-- name: DeleteAuthor :exec\n" +
+            "DELETE FROM authors WHERE id = $author_id;", cancellationToken, new DataParameter("$author_id", AuthorID, DataType.UInt64)).ConfigureAwait(false);
     }
 }

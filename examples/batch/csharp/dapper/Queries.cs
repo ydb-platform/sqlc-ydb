@@ -25,14 +25,12 @@ public sealed class Queries
 
     public Queries WithTransaction(YdbTransaction transaction) => new(_connection, transaction ?? throw new ArgumentNullException(nameof(transaction)));
 
-    private const string SqlGetAuthor =
-        "-- name: GetAuthor :one\n" +
-        "SELECT author_id, name, biography FROM authors\n" +
-        "WHERE author_id = $author_id;";
-
     public async Task<GetAuthorRow> GetAuthorAsync(ulong AuthorID, CancellationToken cancellationToken = default)
     {
-        var command = new CommandDefinition(SqlGetAuthor, new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, AuthorID)), _transaction, cancellationToken: cancellationToken);
+        var command = new CommandDefinition(
+            "-- name: GetAuthor :one\n" +
+            "SELECT author_id, name, biography FROM authors\n" +
+            "WHERE author_id = $author_id;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, AuthorID)), _transaction, cancellationToken: cancellationToken);
         await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
@@ -47,59 +45,49 @@ public sealed class Queries
         reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)
     );
 
-    private const string SqlDeleteBookExecResult =
-        "-- name: DeleteBookExecResult :exec\n" +
-        "DELETE FROM books\n" +
-        "WHERE book_id = $book_id;";
-
     public async Task DeleteBookExecResultAsync(ulong BookID, CancellationToken cancellationToken = default)
     {
-        var command = new CommandDefinition(SqlDeleteBookExecResult, new YdbParameters(new YdbParameter("$book_id", DbType.UInt64, BookID)), _transaction, cancellationToken: cancellationToken);
+        var command = new CommandDefinition(
+            "-- name: DeleteBookExecResult :exec\n" +
+            "DELETE FROM books\n" +
+            "WHERE book_id = $book_id;", new YdbParameters(new YdbParameter("$book_id", DbType.UInt64, BookID)), _transaction, cancellationToken: cancellationToken);
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
-
-    private const string SqlDeleteBook =
-        "-- name: DeleteBook :exec\n" +
-        "DELETE FROM books\n" +
-        "WHERE book_id = $book_id;";
 
     public async Task DeleteBookAsync(ulong BookID, CancellationToken cancellationToken = default)
     {
-        var command = new CommandDefinition(SqlDeleteBook, new YdbParameters(new YdbParameter("$book_id", DbType.UInt64, BookID)), _transaction, cancellationToken: cancellationToken);
+        var command = new CommandDefinition(
+            "-- name: DeleteBook :exec\n" +
+            "DELETE FROM books\n" +
+            "WHERE book_id = $book_id;", new YdbParameters(new YdbParameter("$book_id", DbType.UInt64, BookID)), _transaction, cancellationToken: cancellationToken);
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
-
-    private const string SqlDeleteBookNamedFunc =
-        "-- name: DeleteBookNamedFunc :exec\n" +
-        "DELETE FROM books\n" +
-        "WHERE book_id = $book_id;";
 
     public async Task DeleteBookNamedFuncAsync(ulong BookID, CancellationToken cancellationToken = default)
     {
-        var command = new CommandDefinition(SqlDeleteBookNamedFunc, new YdbParameters(new YdbParameter("$book_id", DbType.UInt64, BookID)), _transaction, cancellationToken: cancellationToken);
+        var command = new CommandDefinition(
+            "-- name: DeleteBookNamedFunc :exec\n" +
+            "DELETE FROM books\n" +
+            "WHERE book_id = $book_id;", new YdbParameters(new YdbParameter("$book_id", DbType.UInt64, BookID)), _transaction, cancellationToken: cancellationToken);
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
-
-    private const string SqlDeleteBookNamedSign =
-        "-- name: DeleteBookNamedSign :exec\n" +
-        "DELETE FROM books\n" +
-        "WHERE book_id = $book_id;";
 
     public async Task DeleteBookNamedSignAsync(ulong BookID, CancellationToken cancellationToken = default)
     {
-        var command = new CommandDefinition(SqlDeleteBookNamedSign, new YdbParameters(new YdbParameter("$book_id", DbType.UInt64, BookID)), _transaction, cancellationToken: cancellationToken);
+        var command = new CommandDefinition(
+            "-- name: DeleteBookNamedSign :exec\n" +
+            "DELETE FROM books\n" +
+            "WHERE book_id = $book_id;", new YdbParameters(new YdbParameter("$book_id", DbType.UInt64, BookID)), _transaction, cancellationToken: cancellationToken);
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
 
-    private const string SqlBooksByYear =
-        "-- name: BooksByYear :many\n" +
-        "SELECT book_id, author_id, isbn, book_type, title, year, available, tags\n" +
-        "FROM books\n" +
-        "WHERE year = $year;";
-
     public async Task<IReadOnlyList<BooksByYearRow>> BooksByYearAsync(int Year, CancellationToken cancellationToken = default)
     {
-        var command = new CommandDefinition(SqlBooksByYear, new YdbParameters(new YdbParameter("$year", DbType.Int32, Year)), _transaction, cancellationToken: cancellationToken);
+        var command = new CommandDefinition(
+            "-- name: BooksByYear :many\n" +
+            "SELECT book_id, author_id, isbn, book_type, title, year, available, tags\n" +
+            "FROM books\n" +
+            "WHERE year = $year;", new YdbParameters(new YdbParameter("$year", DbType.Int32, Year)), _transaction, cancellationToken: cancellationToken);
         await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
         var rows = new List<BooksByYearRow>();
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
@@ -120,15 +108,13 @@ public sealed class Queries
         reader.GetFieldValue<string>(7)
     );
 
-    private const string SqlCreateAuthor =
-        "-- name: CreateAuthor :one\n" +
-        "INSERT INTO authors (author_id, name, biography)\n" +
-        "VALUES ($author_id, $name, $biography)\n" +
-        "RETURNING author_id, name, biography;";
-
     public async Task<CreateAuthorRow> CreateAuthorAsync(CreateAuthorParams args, CancellationToken cancellationToken = default)
     {
-        var command = new CommandDefinition(SqlCreateAuthor, new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, args.AuthorID), new YdbParameter("$name", DbType.String, args.Name), new YdbParameter("$biography", YdbValue.MakeOptionalJson(args.Biography))), _transaction, cancellationToken: cancellationToken);
+        var command = new CommandDefinition(
+            "-- name: CreateAuthor :one\n" +
+            "INSERT INTO authors (author_id, name, biography)\n" +
+            "VALUES ($author_id, $name, $biography)\n" +
+            "RETURNING author_id, name, biography;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, args.AuthorID), new YdbParameter("$name", DbType.String, args.Name), new YdbParameter("$biography", YdbValue.MakeOptionalJson(args.Biography))), _transaction, cancellationToken: cancellationToken);
         await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
@@ -143,15 +129,13 @@ public sealed class Queries
         reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)
     );
 
-    private const string SqlCreateBook =
-        "-- name: CreateBook :one\n" +
-        "INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)\n" +
-        "VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)\n" +
-        "RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;";
-
     public async Task<CreateBookRow> CreateBookAsync(CreateBookParams args, CancellationToken cancellationToken = default)
     {
-        var command = new CommandDefinition(SqlCreateBook, new YdbParameters(new YdbParameter("$book_id", DbType.UInt64, args.BookID), new YdbParameter("$author_id", DbType.UInt64, args.AuthorID), new YdbParameter("$isbn", DbType.String, args.Isbn), new YdbParameter("$book_type", DbType.String, args.BookType), new YdbParameter("$title", DbType.String, args.Title), new YdbParameter("$year", DbType.Int32, args.Year), new YdbParameter("$available", YdbValue.MakeTimestamp(args.Available)), new YdbParameter("$tags", YdbValue.MakeJson(args.Tags))), _transaction, cancellationToken: cancellationToken);
+        var command = new CommandDefinition(
+            "-- name: CreateBook :one\n" +
+            "INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)\n" +
+            "VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)\n" +
+            "RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;", new YdbParameters(new YdbParameter("$book_id", DbType.UInt64, args.BookID), new YdbParameter("$author_id", DbType.UInt64, args.AuthorID), new YdbParameter("$isbn", DbType.String, args.Isbn), new YdbParameter("$book_type", DbType.String, args.BookType), new YdbParameter("$title", DbType.String, args.Title), new YdbParameter("$year", DbType.Int32, args.Year), new YdbParameter("$available", YdbValue.MakeTimestamp(args.Available)), new YdbParameter("$tags", YdbValue.MakeJson(args.Tags))), _transaction, cancellationToken: cancellationToken);
         await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
@@ -171,26 +155,22 @@ public sealed class Queries
         reader.GetFieldValue<string>(7)
     );
 
-    private const string SqlUpdateBook =
-        "-- name: UpdateBook :exec\n" +
-        "UPDATE books\n" +
-        "SET title = $title, tags = $tags\n" +
-        "WHERE book_id = $book_id;";
-
     public async Task UpdateBookAsync(UpdateBookParams args, CancellationToken cancellationToken = default)
     {
-        var command = new CommandDefinition(SqlUpdateBook, new YdbParameters(new YdbParameter("$title", DbType.String, args.Title), new YdbParameter("$tags", YdbValue.MakeJson(args.Tags)), new YdbParameter("$book_id", DbType.UInt64, args.BookID)), _transaction, cancellationToken: cancellationToken);
+        var command = new CommandDefinition(
+            "-- name: UpdateBook :exec\n" +
+            "UPDATE books\n" +
+            "SET title = $title, tags = $tags\n" +
+            "WHERE book_id = $book_id;", new YdbParameters(new YdbParameter("$title", DbType.String, args.Title), new YdbParameter("$tags", YdbValue.MakeJson(args.Tags)), new YdbParameter("$book_id", DbType.UInt64, args.BookID)), _transaction, cancellationToken: cancellationToken);
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
 
-    private const string SqlGetBiography =
-        "-- name: GetBiography :one\n" +
-        "SELECT biography FROM authors\n" +
-        "WHERE author_id = $author_id;";
-
     public async Task<GetBiographyRow> GetBiographyAsync(ulong AuthorID, CancellationToken cancellationToken = default)
     {
-        var command = new CommandDefinition(SqlGetBiography, new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, AuthorID)), _transaction, cancellationToken: cancellationToken);
+        var command = new CommandDefinition(
+            "-- name: GetBiography :one\n" +
+            "SELECT biography FROM authors\n" +
+            "WHERE author_id = $author_id;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, AuthorID)), _transaction, cancellationToken: cancellationToken);
         await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {

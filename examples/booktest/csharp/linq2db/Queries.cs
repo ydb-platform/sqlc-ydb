@@ -20,15 +20,13 @@ public sealed class Queries
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));
     }
 
-    private const string SqlGetAuthor =
-        "-- name: GetAuthor :one\n" +
-        "SELECT author_id, name\n" +
-        "FROM authors\n" +
-        "WHERE author_id = $author_id;";
-
     public async Task<GetAuthorRow> GetAuthorAsync(ulong AuthorID, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(GetAuthorRowFrom, SqlGetAuthor, cancellationToken, new DataParameter("$author_id", AuthorID, DataType.UInt64)).ConfigureAwait(false);
+        var rows = await _connection.QueryToListAsync(GetAuthorRowFrom,
+            "-- name: GetAuthor :one\n" +
+            "SELECT author_id, name\n" +
+            "FROM authors\n" +
+            "WHERE author_id = $author_id;", cancellationToken, new DataParameter("$author_id", AuthorID, DataType.UInt64)).ConfigureAwait(false);
         if (rows.Count == 0)
         {
             throw new InvalidOperationException("query returned no rows");
@@ -41,15 +39,13 @@ public sealed class Queries
         reader.GetFieldValue<string>(1)
     );
 
-    private const string SqlGetBook =
-        "-- name: GetBook :one\n" +
-        "SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags\n" +
-        "FROM books\n" +
-        "WHERE book_id = $book_id;";
-
     public async Task<GetBookRow> GetBookAsync(ulong BookID, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(GetBookRowFrom, SqlGetBook, cancellationToken, new DataParameter("$book_id", BookID, DataType.UInt64)).ConfigureAwait(false);
+        var rows = await _connection.QueryToListAsync(GetBookRowFrom,
+            "-- name: GetBook :one\n" +
+            "SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags\n" +
+            "FROM books\n" +
+            "WHERE book_id = $book_id;", cancellationToken, new DataParameter("$book_id", BookID, DataType.UInt64)).ConfigureAwait(false);
         if (rows.Count == 0)
         {
             throw new InvalidOperationException("query returned no rows");
@@ -68,25 +64,21 @@ public sealed class Queries
         reader.GetFieldValue<string>(7)
     );
 
-    private const string SqlDeleteBook =
-        "-- name: DeleteBook :exec\n" +
-        "DELETE FROM books\n" +
-        "WHERE book_id = $book_id;";
-
     public async Task DeleteBookAsync(ulong BookID, CancellationToken cancellationToken = default)
     {
-        await _connection.ExecuteAsync(SqlDeleteBook, cancellationToken, new DataParameter("$book_id", BookID, DataType.UInt64)).ConfigureAwait(false);
+        await _connection.ExecuteAsync(
+            "-- name: DeleteBook :exec\n" +
+            "DELETE FROM books\n" +
+            "WHERE book_id = $book_id;", cancellationToken, new DataParameter("$book_id", BookID, DataType.UInt64)).ConfigureAwait(false);
     }
-
-    private const string SqlBooksByTitleYear =
-        "-- name: BooksByTitleYear :many\n" +
-        "SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags\n" +
-        "FROM books\n" +
-        "WHERE title = $title AND publication_year = $publication_year;";
 
     public async Task<IReadOnlyList<BooksByTitleYearRow>> BooksByTitleYearAsync(BooksByTitleYearParams args, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(BooksByTitleYearRowFrom, SqlBooksByTitleYear, cancellationToken, new DataParameter("$title", args.Title, DataType.NVarChar), new DataParameter("$publication_year", args.PublicationYear, DataType.Int32)).ConfigureAwait(false);
+        var rows = await _connection.QueryToListAsync(BooksByTitleYearRowFrom,
+            "-- name: BooksByTitleYear :many\n" +
+            "SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags\n" +
+            "FROM books\n" +
+            "WHERE title = $title AND publication_year = $publication_year;", cancellationToken, new DataParameter("$title", args.Title, DataType.NVarChar), new DataParameter("$publication_year", args.PublicationYear, DataType.Int32)).ConfigureAwait(false);
         return rows;
     }
 
@@ -101,25 +93,23 @@ public sealed class Queries
         reader.GetFieldValue<string>(7)
     );
 
-    private const string SqlBooksByTags =
-        "-- name: BooksByTags :many\n" +
-        "DECLARE $tags AS Json;\n" +
-        "SELECT\n" +
-        "    b.book_id,\n" +
-        "    b.title,\n" +
-        "    a.name,\n" +
-        "    b.isbn,\n" +
-        "    b.tags\n" +
-        "FROM books AS b\n" +
-        "LEFT JOIN authors AS a ON b.author_id = a.author_id\n" +
-        "WHERE NOT SetIsDisjoint(\n" +
-        "    ToSet(Yson::ConvertToStringList(b.tags)),\n" +
-        "    Yson::ConvertToStringList($tags)\n" +
-        ");";
-
     public async Task<IReadOnlyList<BooksByTagsRow>> BooksByTagsAsync(string Tags, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(BooksByTagsRowFrom, SqlBooksByTags, cancellationToken, new DataParameter("$tags", YdbValue.MakeJson(Tags), DataType.Json)).ConfigureAwait(false);
+        var rows = await _connection.QueryToListAsync(BooksByTagsRowFrom,
+            "-- name: BooksByTags :many\n" +
+            "DECLARE $tags AS Json;\n" +
+            "SELECT\n" +
+            "    b.book_id,\n" +
+            "    b.title,\n" +
+            "    a.name,\n" +
+            "    b.isbn,\n" +
+            "    b.tags\n" +
+            "FROM books AS b\n" +
+            "LEFT JOIN authors AS a ON b.author_id = a.author_id\n" +
+            "WHERE NOT SetIsDisjoint(\n" +
+            "    ToSet(Yson::ConvertToStringList(b.tags)),\n" +
+            "    Yson::ConvertToStringList($tags)\n" +
+            ");", cancellationToken, new DataParameter("$tags", YdbValue.MakeJson(Tags), DataType.Json)).ConfigureAwait(false);
         return rows;
     }
 
@@ -131,15 +121,13 @@ public sealed class Queries
         reader.GetFieldValue<string>(4)
     );
 
-    private const string SqlCreateAuthor =
-        "-- name: CreateAuthor :one\n" +
-        "INSERT INTO authors (author_id, name)\n" +
-        "VALUES ($author_id, $name)\n" +
-        "RETURNING author_id, name;";
-
     public async Task<CreateAuthorRow> CreateAuthorAsync(CreateAuthorParams args, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(CreateAuthorRowFrom, SqlCreateAuthor, cancellationToken, new DataParameter("$author_id", args.AuthorID, DataType.UInt64), new DataParameter("$name", args.Name, DataType.NVarChar)).ConfigureAwait(false);
+        var rows = await _connection.QueryToListAsync(CreateAuthorRowFrom,
+            "-- name: CreateAuthor :one\n" +
+            "INSERT INTO authors (author_id, name)\n" +
+            "VALUES ($author_id, $name)\n" +
+            "RETURNING author_id, name;", cancellationToken, new DataParameter("$author_id", args.AuthorID, DataType.UInt64), new DataParameter("$name", args.Name, DataType.NVarChar)).ConfigureAwait(false);
         if (rows.Count == 0)
         {
             throw new InvalidOperationException("query returned no rows");
@@ -152,32 +140,30 @@ public sealed class Queries
         reader.GetFieldValue<string>(1)
     );
 
-    private const string SqlCreateBook =
-        "-- name: CreateBook :one\n" +
-        "INSERT INTO books (\n" +
-        "    book_id,\n" +
-        "    author_id,\n" +
-        "    isbn,\n" +
-        "    book_type,\n" +
-        "    title,\n" +
-        "    publication_year,\n" +
-        "    available,\n" +
-        "    tags\n" +
-        ") VALUES (\n" +
-        "    $book_id,\n" +
-        "    $author_id,\n" +
-        "    $isbn,\n" +
-        "    $book_type,\n" +
-        "    $title,\n" +
-        "    $publication_year,\n" +
-        "    $available,\n" +
-        "    $tags\n" +
-        ")\n" +
-        "RETURNING book_id, author_id, isbn, book_type, title, publication_year, available, tags;";
-
     public async Task<CreateBookRow> CreateBookAsync(CreateBookParams args, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(CreateBookRowFrom, SqlCreateBook, cancellationToken, new DataParameter("$book_id", args.BookID, DataType.UInt64), new DataParameter("$author_id", args.AuthorID, DataType.UInt64), new DataParameter("$isbn", args.Isbn, DataType.NVarChar), new DataParameter("$book_type", args.BookType, DataType.NVarChar), new DataParameter("$title", args.Title, DataType.NVarChar), new DataParameter("$publication_year", args.PublicationYear, DataType.Int32), new DataParameter("$available", YdbValue.MakeTimestamp(args.Available), DataType.DateTime2), new DataParameter("$tags", YdbValue.MakeJson(args.Tags), DataType.Json)).ConfigureAwait(false);
+        var rows = await _connection.QueryToListAsync(CreateBookRowFrom,
+            "-- name: CreateBook :one\n" +
+            "INSERT INTO books (\n" +
+            "    book_id,\n" +
+            "    author_id,\n" +
+            "    isbn,\n" +
+            "    book_type,\n" +
+            "    title,\n" +
+            "    publication_year,\n" +
+            "    available,\n" +
+            "    tags\n" +
+            ") VALUES (\n" +
+            "    $book_id,\n" +
+            "    $author_id,\n" +
+            "    $isbn,\n" +
+            "    $book_type,\n" +
+            "    $title,\n" +
+            "    $publication_year,\n" +
+            "    $available,\n" +
+            "    $tags\n" +
+            ")\n" +
+            "RETURNING book_id, author_id, isbn, book_type, title, publication_year, available, tags;", cancellationToken, new DataParameter("$book_id", args.BookID, DataType.UInt64), new DataParameter("$author_id", args.AuthorID, DataType.UInt64), new DataParameter("$isbn", args.Isbn, DataType.NVarChar), new DataParameter("$book_type", args.BookType, DataType.NVarChar), new DataParameter("$title", args.Title, DataType.NVarChar), new DataParameter("$publication_year", args.PublicationYear, DataType.Int32), new DataParameter("$available", YdbValue.MakeTimestamp(args.Available), DataType.DateTime2), new DataParameter("$tags", YdbValue.MakeJson(args.Tags), DataType.Json)).ConfigureAwait(false);
         if (rows.Count == 0)
         {
             throw new InvalidOperationException("query returned no rows");
@@ -196,45 +182,37 @@ public sealed class Queries
         reader.GetFieldValue<string>(7)
     );
 
-    private const string SqlUpdateBook =
-        "-- name: UpdateBook :exec\n" +
-        "UPDATE books\n" +
-        "SET title = $title, tags = $tags\n" +
-        "WHERE book_id = $book_id;";
-
     public async Task UpdateBookAsync(UpdateBookParams args, CancellationToken cancellationToken = default)
     {
-        await _connection.ExecuteAsync(SqlUpdateBook, cancellationToken, new DataParameter("$title", args.Title, DataType.NVarChar), new DataParameter("$tags", YdbValue.MakeJson(args.Tags), DataType.Json), new DataParameter("$book_id", args.BookID, DataType.UInt64)).ConfigureAwait(false);
+        await _connection.ExecuteAsync(
+            "-- name: UpdateBook :exec\n" +
+            "UPDATE books\n" +
+            "SET title = $title, tags = $tags\n" +
+            "WHERE book_id = $book_id;", cancellationToken, new DataParameter("$title", args.Title, DataType.NVarChar), new DataParameter("$tags", YdbValue.MakeJson(args.Tags), DataType.Json), new DataParameter("$book_id", args.BookID, DataType.UInt64)).ConfigureAwait(false);
     }
-
-    private const string SqlUpdateBookISBN =
-        "-- name: UpdateBookISBN :exec\n" +
-        "UPDATE books\n" +
-        "SET title = $title, tags = $tags, isbn = $isbn\n" +
-        "WHERE book_id = $book_id;";
 
     public async Task UpdateBookISBNAsync(UpdateBookISBNParams args, CancellationToken cancellationToken = default)
     {
-        await _connection.ExecuteAsync(SqlUpdateBookISBN, cancellationToken, new DataParameter("$title", args.Title, DataType.NVarChar), new DataParameter("$tags", YdbValue.MakeJson(args.Tags), DataType.Json), new DataParameter("$isbn", args.Isbn, DataType.NVarChar), new DataParameter("$book_id", args.BookID, DataType.UInt64)).ConfigureAwait(false);
+        await _connection.ExecuteAsync(
+            "-- name: UpdateBookISBN :exec\n" +
+            "UPDATE books\n" +
+            "SET title = $title, tags = $tags, isbn = $isbn\n" +
+            "WHERE book_id = $book_id;", cancellationToken, new DataParameter("$title", args.Title, DataType.NVarChar), new DataParameter("$tags", YdbValue.MakeJson(args.Tags), DataType.Json), new DataParameter("$isbn", args.Isbn, DataType.NVarChar), new DataParameter("$book_id", args.BookID, DataType.UInt64)).ConfigureAwait(false);
     }
-
-    private const string SqlDeleteAuthorBeforeYear =
-        "-- name: DeleteAuthorBeforeYear :exec\n" +
-        "DELETE FROM books\n" +
-        "WHERE publication_year < $publication_year AND author_id = $author_id;";
 
     public async Task DeleteAuthorBeforeYearAsync(DeleteAuthorBeforeYearParams args, CancellationToken cancellationToken = default)
     {
-        await _connection.ExecuteAsync(SqlDeleteAuthorBeforeYear, cancellationToken, new DataParameter("$publication_year", args.PublicationYear, DataType.Int32), new DataParameter("$author_id", args.AuthorID, DataType.UInt64)).ConfigureAwait(false);
+        await _connection.ExecuteAsync(
+            "-- name: DeleteAuthorBeforeYear :exec\n" +
+            "DELETE FROM books\n" +
+            "WHERE publication_year < $publication_year AND author_id = $author_id;", cancellationToken, new DataParameter("$publication_year", args.PublicationYear, DataType.Int32), new DataParameter("$author_id", args.AuthorID, DataType.UInt64)).ConfigureAwait(false);
     }
-
-    private const string SqlSayHello =
-        "-- name: SayHello :one\n" +
-        "SELECT \"hello \"u || $name AS greeting;";
 
     public async Task<SayHelloRow> SayHelloAsync(string Name, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(SayHelloRowFrom, SqlSayHello, cancellationToken, new DataParameter("$name", Name, DataType.NVarChar)).ConfigureAwait(false);
+        var rows = await _connection.QueryToListAsync(SayHelloRowFrom,
+            "-- name: SayHello :one\n" +
+            "SELECT \"hello \"u || $name AS greeting;", cancellationToken, new DataParameter("$name", Name, DataType.NVarChar)).ConfigureAwait(false);
         if (rows.Count == 0)
         {
             throw new InvalidOperationException("query returned no rows");

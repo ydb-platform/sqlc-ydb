@@ -20,15 +20,13 @@ public sealed class Queries
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));
     }
 
-    private const string SqlListCities =
-        "-- name: ListCities :many\n" +
-        "SELECT slug, name\n" +
-        "FROM city\n" +
-        "ORDER BY name;";
-
     public async Task<IReadOnlyList<ListCitiesRow>> ListCitiesAsync(CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(ListCitiesRowFrom, SqlListCities, cancellationToken).ConfigureAwait(false);
+        var rows = await _connection.QueryToListAsync(ListCitiesRowFrom,
+            "-- name: ListCities :many\n" +
+            "SELECT slug, name\n" +
+            "FROM city\n" +
+            "ORDER BY name;", cancellationToken).ConfigureAwait(false);
         return rows;
     }
 
@@ -37,15 +35,13 @@ public sealed class Queries
         reader.GetFieldValue<string>(1)
     );
 
-    private const string SqlGetCity =
-        "-- name: GetCity :one\n" +
-        "SELECT slug, name\n" +
-        "FROM city\n" +
-        "WHERE slug = $slug;";
-
     public async Task<GetCityRow> GetCityAsync(string Slug, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(GetCityRowFrom, SqlGetCity, cancellationToken, new DataParameter("$slug", Slug, DataType.NVarChar)).ConfigureAwait(false);
+        var rows = await _connection.QueryToListAsync(GetCityRowFrom,
+            "-- name: GetCity :one\n" +
+            "SELECT slug, name\n" +
+            "FROM city\n" +
+            "WHERE slug = $slug;", cancellationToken, new DataParameter("$slug", Slug, DataType.NVarChar)).ConfigureAwait(false);
         if (rows.Count == 0)
         {
             throw new InvalidOperationException("query returned no rows");
@@ -58,19 +54,17 @@ public sealed class Queries
         reader.GetFieldValue<string>(1)
     );
 
-    private const string SqlCreateCity =
-        "-- name: CreateCity :one\n" +
-        "INSERT INTO city (\n" +
-        "    name,\n" +
-        "    slug\n" +
-        ") VALUES (\n" +
-        "    $name,\n" +
-        "    $slug\n" +
-        ") RETURNING slug, name;";
-
     public async Task<CreateCityRow> CreateCityAsync(CreateCityParams args, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(CreateCityRowFrom, SqlCreateCity, cancellationToken, new DataParameter("$name", args.Name, DataType.NVarChar), new DataParameter("$slug", args.Slug, DataType.NVarChar)).ConfigureAwait(false);
+        var rows = await _connection.QueryToListAsync(CreateCityRowFrom,
+            "-- name: CreateCity :one\n" +
+            "INSERT INTO city (\n" +
+            "    name,\n" +
+            "    slug\n" +
+            ") VALUES (\n" +
+            "    $name,\n" +
+            "    $slug\n" +
+            ") RETURNING slug, name;", cancellationToken, new DataParameter("$name", args.Name, DataType.NVarChar), new DataParameter("$slug", args.Slug, DataType.NVarChar)).ConfigureAwait(false);
         if (rows.Count == 0)
         {
             throw new InvalidOperationException("query returned no rows");
@@ -83,27 +77,23 @@ public sealed class Queries
         reader.GetFieldValue<string>(1)
     );
 
-    private const string SqlUpdateCityName =
-        "-- name: UpdateCityName :exec\n" +
-        "UPDATE city\n" +
-        "SET name = $name\n" +
-        "WHERE slug = $slug;";
-
     public async Task UpdateCityNameAsync(UpdateCityNameParams args, CancellationToken cancellationToken = default)
     {
-        await _connection.ExecuteAsync(SqlUpdateCityName, cancellationToken, new DataParameter("$name", args.Name, DataType.NVarChar), new DataParameter("$slug", args.Slug, DataType.NVarChar)).ConfigureAwait(false);
+        await _connection.ExecuteAsync(
+            "-- name: UpdateCityName :exec\n" +
+            "UPDATE city\n" +
+            "SET name = $name\n" +
+            "WHERE slug = $slug;", cancellationToken, new DataParameter("$name", args.Name, DataType.NVarChar), new DataParameter("$slug", args.Slug, DataType.NVarChar)).ConfigureAwait(false);
     }
-
-    private const string SqlListVenues =
-        "-- name: ListVenues :many\n" +
-        "SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n" +
-        "FROM venue\n" +
-        "WHERE city = $city\n" +
-        "ORDER BY name;";
 
     public async Task<IReadOnlyList<ListVenuesRow>> ListVenuesAsync(string City, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(ListVenuesRowFrom, SqlListVenues, cancellationToken, new DataParameter("$city", City, DataType.NVarChar)).ConfigureAwait(false);
+        var rows = await _connection.QueryToListAsync(ListVenuesRowFrom,
+            "-- name: ListVenues :many\n" +
+            "SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n" +
+            "FROM venue\n" +
+            "WHERE city = $city\n" +
+            "ORDER BY name;", cancellationToken, new DataParameter("$city", City, DataType.NVarChar)).ConfigureAwait(false);
         return rows;
     }
 
@@ -120,25 +110,21 @@ public sealed class Queries
         reader.IsDBNull(9) ? null : reader.GetFieldValue<DateTime>(9)
     );
 
-    private const string SqlDeleteVenue =
-        "-- name: DeleteVenue :exec\n" +
-        "DELETE FROM venue\n" +
-        "WHERE slug = $slug AND slug = $slug;";
-
     public async Task DeleteVenueAsync(string Slug, CancellationToken cancellationToken = default)
     {
-        await _connection.ExecuteAsync(SqlDeleteVenue, cancellationToken, new DataParameter("$slug", Slug, DataType.NVarChar)).ConfigureAwait(false);
+        await _connection.ExecuteAsync(
+            "-- name: DeleteVenue :exec\n" +
+            "DELETE FROM venue\n" +
+            "WHERE slug = $slug AND slug = $slug;", cancellationToken, new DataParameter("$slug", Slug, DataType.NVarChar)).ConfigureAwait(false);
     }
-
-    private const string SqlGetVenue =
-        "-- name: GetVenue :one\n" +
-        "SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n" +
-        "FROM venue\n" +
-        "WHERE slug = $slug AND city = $city;";
 
     public async Task<GetVenueRow> GetVenueAsync(GetVenueParams args, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(GetVenueRowFrom, SqlGetVenue, cancellationToken, new DataParameter("$slug", args.Slug, DataType.NVarChar), new DataParameter("$city", args.City, DataType.NVarChar)).ConfigureAwait(false);
+        var rows = await _connection.QueryToListAsync(GetVenueRowFrom,
+            "-- name: GetVenue :one\n" +
+            "SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n" +
+            "FROM venue\n" +
+            "WHERE slug = $slug AND city = $city;", cancellationToken, new DataParameter("$slug", args.Slug, DataType.NVarChar), new DataParameter("$city", args.City, DataType.NVarChar)).ConfigureAwait(false);
         if (rows.Count == 0)
         {
             throw new InvalidOperationException("query returned no rows");
@@ -159,33 +145,31 @@ public sealed class Queries
         reader.IsDBNull(9) ? null : reader.GetFieldValue<DateTime>(9)
     );
 
-    private const string SqlCreateVenue =
-        "-- name: CreateVenue :one\n" +
-        "INSERT INTO venue (\n" +
-        "    id,\n" +
-        "    slug,\n" +
-        "    name,\n" +
-        "    city,\n" +
-        "    created_at,\n" +
-        "    spotify_playlist,\n" +
-        "    status,\n" +
-        "    statuses,\n" +
-        "    tags\n" +
-        ") VALUES (\n" +
-        "    $id,\n" +
-        "    $slug,\n" +
-        "    $name,\n" +
-        "    $city,\n" +
-        "    $created_at,\n" +
-        "    $spotify_playlist,\n" +
-        "    $status,\n" +
-        "    $statuses,\n" +
-        "    $tags\n" +
-        ") RETURNING id;";
-
     public async Task<CreateVenueRow> CreateVenueAsync(CreateVenueParams args, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(CreateVenueRowFrom, SqlCreateVenue, cancellationToken, new DataParameter("$id", args.ID, DataType.UInt64), new DataParameter("$slug", args.Slug, DataType.NVarChar), new DataParameter("$name", args.Name, DataType.NVarChar), new DataParameter("$city", args.City, DataType.NVarChar), new DataParameter("$created_at", YdbValue.MakeOptionalTimestamp(args.CreatedAt), DataType.DateTime2), new DataParameter("$spotify_playlist", args.SpotifyPlaylist, DataType.NVarChar), new DataParameter("$status", args.Status, DataType.NVarChar), new DataParameter("$statuses", YdbValue.MakeOptionalJson(args.Statuses), DataType.Json), new DataParameter("$tags", YdbValue.MakeOptionalJson(args.Tags), DataType.Json)).ConfigureAwait(false);
+        var rows = await _connection.QueryToListAsync(CreateVenueRowFrom,
+            "-- name: CreateVenue :one\n" +
+            "INSERT INTO venue (\n" +
+            "    id,\n" +
+            "    slug,\n" +
+            "    name,\n" +
+            "    city,\n" +
+            "    created_at,\n" +
+            "    spotify_playlist,\n" +
+            "    status,\n" +
+            "    statuses,\n" +
+            "    tags\n" +
+            ") VALUES (\n" +
+            "    $id,\n" +
+            "    $slug,\n" +
+            "    $name,\n" +
+            "    $city,\n" +
+            "    $created_at,\n" +
+            "    $spotify_playlist,\n" +
+            "    $status,\n" +
+            "    $statuses,\n" +
+            "    $tags\n" +
+            ") RETURNING id;", cancellationToken, new DataParameter("$id", args.ID, DataType.UInt64), new DataParameter("$slug", args.Slug, DataType.NVarChar), new DataParameter("$name", args.Name, DataType.NVarChar), new DataParameter("$city", args.City, DataType.NVarChar), new DataParameter("$created_at", YdbValue.MakeOptionalTimestamp(args.CreatedAt), DataType.DateTime2), new DataParameter("$spotify_playlist", args.SpotifyPlaylist, DataType.NVarChar), new DataParameter("$status", args.Status, DataType.NVarChar), new DataParameter("$statuses", YdbValue.MakeOptionalJson(args.Statuses), DataType.Json), new DataParameter("$tags", YdbValue.MakeOptionalJson(args.Tags), DataType.Json)).ConfigureAwait(false);
         if (rows.Count == 0)
         {
             throw new InvalidOperationException("query returned no rows");
@@ -197,16 +181,14 @@ public sealed class Queries
         reader.GetFieldValue<ulong>(0)
     );
 
-    private const string SqlUpdateVenueName =
-        "-- name: UpdateVenueName :one\n" +
-        "UPDATE venue\n" +
-        "SET name = $name\n" +
-        "WHERE slug = $slug\n" +
-        "RETURNING id;";
-
     public async Task<UpdateVenueNameRow> UpdateVenueNameAsync(UpdateVenueNameParams args, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(UpdateVenueNameRowFrom, SqlUpdateVenueName, cancellationToken, new DataParameter("$name", args.Name, DataType.NVarChar), new DataParameter("$slug", args.Slug, DataType.NVarChar)).ConfigureAwait(false);
+        var rows = await _connection.QueryToListAsync(UpdateVenueNameRowFrom,
+            "-- name: UpdateVenueName :one\n" +
+            "UPDATE venue\n" +
+            "SET name = $name\n" +
+            "WHERE slug = $slug\n" +
+            "RETURNING id;", cancellationToken, new DataParameter("$name", args.Name, DataType.NVarChar), new DataParameter("$slug", args.Slug, DataType.NVarChar)).ConfigureAwait(false);
         if (rows.Count == 0)
         {
             throw new InvalidOperationException("query returned no rows");
@@ -218,18 +200,16 @@ public sealed class Queries
         reader.GetFieldValue<ulong>(0)
     );
 
-    private const string SqlVenueCountByCity =
-        "-- name: VenueCountByCity :many\n" +
-        "SELECT\n" +
-        "    city,\n" +
-        "    COUNT(*) AS venue_count\n" +
-        "FROM venue\n" +
-        "GROUP BY city\n" +
-        "ORDER BY city;";
-
     public async Task<IReadOnlyList<VenueCountByCityRow>> VenueCountByCityAsync(CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(VenueCountByCityRowFrom, SqlVenueCountByCity, cancellationToken).ConfigureAwait(false);
+        var rows = await _connection.QueryToListAsync(VenueCountByCityRowFrom,
+            "-- name: VenueCountByCity :many\n" +
+            "SELECT\n" +
+            "    city,\n" +
+            "    COUNT(*) AS venue_count\n" +
+            "FROM venue\n" +
+            "GROUP BY city\n" +
+            "ORDER BY city;", cancellationToken).ConfigureAwait(false);
         return rows;
     }
 
