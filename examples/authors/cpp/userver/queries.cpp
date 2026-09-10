@@ -8,9 +8,10 @@ namespace authors::userver {
 
 std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
     auto sqlc_response = this->client_.ExecuteQuery(
-        ::userver::ydb::Query{
-            R"sql(-- name: GetAuthor :one
-            SELECT id, name, bio FROM authors WHERE id = $author_id;)sql",
+        ::userver::ydb::Query{R"sql(
+            -- name: GetAuthor :one
+            SELECT id, name, bio FROM authors WHERE id = $author_id;
+        )sql",
             ::userver::ydb::Query::Name{"GetAuthor"},
             ::userver::ydb::Query::LogMode::kNameOnly,
         }, "$author_id", author_id);
@@ -28,9 +29,10 @@ std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
 
 std::vector<ListAuthorsRow> Queries::ListAuthors() const {
     auto sqlc_response = this->client_.ExecuteQuery(
-        ::userver::ydb::Query{
-            R"sql(-- name: ListAuthors :many
-            SELECT id, name, bio FROM authors ORDER BY name;)sql",
+        ::userver::ydb::Query{R"sql(
+            -- name: ListAuthors :many
+            SELECT id, name, bio FROM authors ORDER BY name;
+        )sql",
             ::userver::ydb::Query::Name{"ListAuthors"},
             ::userver::ydb::Query::LogMode::kNameOnly,
         });
@@ -49,9 +51,10 @@ std::vector<ListAuthorsRow> Queries::ListAuthors() const {
 
 std::optional<GetAuthorNameRow> Queries::GetAuthorName(std::uint64_t author_id) const {
     auto sqlc_response = this->client_.ExecuteQuery(
-        ::userver::ydb::Query{
-            R"sql(-- name: GetAuthorName :one
-            SELECT name FROM authors WHERE id = $author_id;)sql",
+        ::userver::ydb::Query{R"sql(
+            -- name: GetAuthorName :one
+            SELECT name FROM authors WHERE id = $author_id;
+        )sql",
             ::userver::ydb::Query::Name{"GetAuthorName"},
             ::userver::ydb::Query::LogMode::kNameOnly,
         }, "$author_id", author_id);
@@ -67,11 +70,12 @@ std::optional<GetAuthorNameRow> Queries::GetAuthorName(std::uint64_t author_id) 
 
 std::optional<CreateAuthorRow> Queries::CreateAuthor(std::uint64_t author_id, const ::userver::ydb::Utf8& author_name, const std::optional<::userver::ydb::Utf8>& biography) const {
     auto sqlc_response = this->client_.ExecuteQuery(
-        ::userver::ydb::Query{
-            R"sql(-- name: CreateAuthor :one
+        ::userver::ydb::Query{R"sql(
+            -- name: CreateAuthor :one
             INSERT INTO authors (id, name, bio)
             VALUES ($author_id, $author_name, $biography)
-            RETURNING id, name, bio;)sql",
+            RETURNING id, name, bio;
+        )sql",
             ::userver::ydb::Query::Name{"CreateAuthor"},
             ::userver::ydb::Query::LogMode::kNameOnly,
         }, "$author_id", author_id, "$author_name", author_name, "$biography", biography);
@@ -89,10 +93,11 @@ std::optional<CreateAuthorRow> Queries::CreateAuthor(std::uint64_t author_id, co
 
 void Queries::UpsertAuthor(std::uint64_t author_id, const ::userver::ydb::Utf8& author_name, const std::optional<::userver::ydb::Utf8>& biography) const {
     static_cast<void>(this->client_.ExecuteQuery(
-        ::userver::ydb::Query{
-            R"sql(-- name: UpsertAuthor :exec
+        ::userver::ydb::Query{R"sql(
+            -- name: UpsertAuthor :exec
             UPSERT INTO authors (id, name, bio)
-            VALUES ($author_id, $author_name, $biography);)sql",
+            VALUES ($author_id, $author_name, $biography);
+        )sql",
             ::userver::ydb::Query::Name{"UpsertAuthor"},
             ::userver::ydb::Query::LogMode::kNameOnly,
         }, "$author_id", author_id, "$author_name", author_name, "$biography", biography));
@@ -100,9 +105,10 @@ void Queries::UpsertAuthor(std::uint64_t author_id, const ::userver::ydb::Utf8& 
 
 void Queries::DeleteAuthor(std::uint64_t author_id) const {
     static_cast<void>(this->client_.ExecuteQuery(
-        ::userver::ydb::Query{
-            R"sql(-- name: DeleteAuthor :exec
-            DELETE FROM authors WHERE id = $author_id;)sql",
+        ::userver::ydb::Query{R"sql(
+            -- name: DeleteAuthor :exec
+            DELETE FROM authors WHERE id = $author_id;
+        )sql",
             ::userver::ydb::Query::Name{"DeleteAuthor"},
             ::userver::ydb::Query::LogMode::kNameOnly,
         }, "$author_id", author_id));
