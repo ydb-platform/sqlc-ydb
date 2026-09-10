@@ -169,7 +169,7 @@ order directly with YDB, independently of generated code. Run it sequentially
 with the runtime suites after installing the pinned Python dependencies:
 
 ```sh
-YDB_CONNECTION_STRING=grpc://localhost:2136/local SQLC_YDB_TEST_PYTHON=python3 \
+YDB_CONNECTION_STRING=grpc://localhost:2136/local \
   go test -p 1 -count=1 -timeout=180s ./internal/endtoend -run TestLiveYDBSemanticTypes -v
 ```
 
@@ -197,8 +197,8 @@ The test image and its CMake packaging workaround are in
 YDB_CONNECTION_STRING=grpc://localhost:2136/local go test -p 1 -count=1 -timeout=180s ./internal/codegen/golang -run TestLiveYDB -v
 ```
 
-For Python live generator tests, install the pinned example requirements in a
-virtual environment, then set `SQLC_YDB_TEST_PYTHON` to its interpreter and run
+For Python live generator tests, install the pinned example requirements for
+`python3`, then run
 `go test -p 1 ./internal/codegen/python -run TestLiveYDBGeneratedRuntimes -v` with the
 same DSN.
 

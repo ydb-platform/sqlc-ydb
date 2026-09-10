@@ -106,7 +106,6 @@ jobs:
           --health-retries=30
     env:
       YDB_CONNECTION_STRING: grpc://localhost:2136/local
-      SQLC_YDB_TEST_PYTHON: python3
       CARGO_BUILD_JOBS: 1
     steps:
       - uses: actions/checkout@v4

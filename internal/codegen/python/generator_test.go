@@ -544,9 +544,9 @@ assert [connection.cur.params['$' + name][0] for name in ('ydb', 'models', 'text
 }
 
 func TestLiveYDBGeneratedRuntimes(t *testing.T) {
-	dsn, py := os.Getenv("YDB_CONNECTION_STRING"), os.Getenv("SQLC_YDB_TEST_PYTHON")
-	if dsn == "" || py == "" {
-		t.Skip("set YDB_CONNECTION_STRING and SQLC_YDB_TEST_PYTHON to run live YDB adapter validation")
+	dsn := os.Getenv("YDB_CONNECTION_STRING")
+	if dsn == "" {
+		t.Skip("set YDB_CONNECTION_STRING to run live YDB adapter validation")
 	}
 	table := "sqlc_python_live_" + fmt.Sprint(time.Now().UnixNano())
 	a := liveAnalysis(table)
@@ -609,7 +609,7 @@ finally:
 	script = strings.ReplaceAll(script, paths["sqlalchemy"], filepath.Join(root, "sa_generated"))
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, py, "-c", script)
+	cmd := exec.CommandContext(ctx, "python3", "-c", script)
 	cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(root, "pycache"))
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("live YDB validation failed: %v\n%s", err, out)

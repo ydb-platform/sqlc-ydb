@@ -18,9 +18,9 @@ import (
 // Verify server column names, order and full types independently of renderers.
 // Run only against an explicitly supplied disposable test database.
 func TestLiveYDBSemanticTypes(t *testing.T) {
-	dsn, python := os.Getenv("YDB_CONNECTION_STRING"), os.Getenv("SQLC_YDB_TEST_PYTHON")
-	if dsn == "" || python == "" {
-		t.Skip("set YDB_CONNECTION_STRING and SQLC_YDB_TEST_PYTHON for live semantic validation")
+	dsn := os.Getenv("YDB_CONNECTION_STRING")
+	if dsn == "" {
+		t.Skip("set YDB_CONNECTION_STRING for live semantic validation")
 	}
 	table := fmt.Sprintf("sqlc_semantic_%d", time.Now().UnixNano())
 	schema := "CREATE TABLE " + table + " (id Uint64 NOT NULL, flag Bool NOT NULL, n Int32 NOT NULL, f Float NOT NULL, maybe Int32, label Utf8, stamp Timestamp NOT NULL, amount Decimal(22,9), PRIMARY KEY(id));"
@@ -111,7 +111,7 @@ assert not errors, "\n".join(errors)
 `
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, python, "-c", script)
+	cmd := exec.CommandContext(ctx, "python3", "-c", script)
 	cmd.Stdin = bytes.NewReader(payload)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
