@@ -21,9 +21,7 @@ FROM profiles
 WHERE score >= $minimum_score;`
 
 func (q *Queries) NormalizeProfiles(ctx context.Context, arg NormalizeProfilesParams) ([]NormalizeProfilesRow, error) {
-	rows, err := q.db.QueryContext(
-		ctx,
-		queryNormalizeProfiles,
+	rows, err := q.db.QueryContext(ctx, queryNormalizeProfiles,
 		sql.Named("fallback", arg.Fallback),
 		sql.Named("minimum_score", arg.MinimumScore),
 		sql.Named("use_nickname", arg.UseNickname),

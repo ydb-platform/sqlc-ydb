@@ -77,9 +77,7 @@ func TestGeneratedDatabaseSQLFormatsMultiParameterQueryRowCall(t *testing.T) {
 	}}}
 
 	source := generatedSQLSourceForAnalysis(t, "database/sql", in)
-	want := `err := q.db.QueryRowContext(
-		ctx,
-		queryCreateAuthor,
+	want := `err := q.db.QueryRowContext(ctx, queryCreateAuthor,
 		sql.Named("author_id", arg.AuthorID),
 		sql.Named("author_name", arg.AuthorName),
 		sql.Named("biography", arg.Biography),
@@ -103,8 +101,8 @@ func TestGeneratedDatabaseSQLFormatsParameterizedCallsAndScans(t *testing.T) {
 	}}
 	source := string(generatedSQLSourceForAnalysis(t, "database/sql", in))
 	for _, want := range []string{
-		"q.db.ExecContext(\n\t\tctx,\n\t\tqueryDeleteUser,\n\t\tsql.Named(\"id\", arg),\n\t)",
-		"q.db.QueryContext(\n\t\tctx,\n\t\tqueryFindUsers,\n\t\tsql.Named(\"name\", arg),\n\t)",
+		"q.db.ExecContext(ctx, queryDeleteUser,\n\t\tsql.Named(\"id\", arg),\n\t)",
+		"q.db.QueryContext(ctx, queryFindUsers,\n\t\tsql.Named(\"name\", arg),\n\t)",
 		"rows.Scan(\n\t\t\t&row.ID,\n\t\t\t&row.Name,\n\t\t)",
 		"q.db.QueryRowContext(ctx, queryCountUsers).Scan(\n\t\t&row.Count,\n\t)",
 	} {

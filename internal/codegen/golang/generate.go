@@ -585,8 +585,7 @@ func generatedCall(name string, fixed, parameters []string) string {
 	if len(parameters) == 0 {
 		return name + "(" + strings.Join(fixed, ", ") + ")"
 	}
-	args := append(append([]string(nil), fixed...), parameters...)
-	return name + "(\n" + strings.Join(args, ",\n") + ",\n)"
+	return name + "(" + strings.Join(fixed, ", ") + ",\n" + strings.Join(parameters, ",\n") + ",\n)"
 }
 func scanCall(name string, destinations []string) string {
 	return name + "(\n" + strings.Join(destinations, ",\n") + ",\n)"

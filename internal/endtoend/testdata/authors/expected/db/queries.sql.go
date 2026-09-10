@@ -13,9 +13,7 @@ const queryGetAuthor = "-- name: GetAuthor :one\n" +
 
 func (q *Queries) GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, error) {
 	var row GetAuthorRow
-	err := q.db.QueryRowContext(
-		ctx,
-		queryGetAuthor,
+	err := q.db.QueryRowContext(ctx, queryGetAuthor,
 		sql.Named("author_id", arg),
 	).Scan(
 		&row.ID,
