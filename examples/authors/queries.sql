@@ -8,9 +8,9 @@ SELECT id, name, bio FROM authors ORDER BY name;
 SELECT name FROM authors WHERE id = $author_id;
 
 -- name: CreateAuthor :one
-INSERT INTO authors (id, name, bio)
+INSERT INTO `authors` (`id`, `name`, `bio`)
 VALUES ($author_id, $author_name, $biography)
-RETURNING id, name, bio;
+RETURNING `id`, `name`, `bio`;
 
 -- name: UpsertAuthor :exec
 UPSERT INTO authors (id, name, bio)

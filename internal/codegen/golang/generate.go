@@ -532,8 +532,7 @@ func sqlLiteral(sql string) string {
 			lines[i] = "\t\t\t" + line
 		}
 		body := "\n" + strings.Join(lines, "\n") + "\n\t\t"
-		body = strings.ReplaceAll(body, "`", "` + \"`\" + `")
-		return "`" + body + "`"
+		return rawSQLLiteral(body)
 	}
 
 	// Quoted lines preserve SQL that Go raw strings cannot represent.
@@ -548,6 +547,29 @@ func sqlLiteral(sql string) string {
 		return `""`
 	}
 	return strings.Join(lines, " +\n")
+}
+
+func rawSQLLiteral(body string) string {
+	var literal strings.Builder
+	literal.WriteByte('`')
+	for {
+		start := strings.IndexByte(body, '`')
+		if start < 0 {
+			literal.WriteString(body)
+			break
+		}
+		literal.WriteString(body[:start])
+		length := 1
+		if end := strings.IndexByte(body[start+1:], '`'); end >= 0 {
+			length = end + 2
+		}
+		literal.WriteString("` + ")
+		literal.WriteString(strconv.Quote(body[start : start+length]))
+		literal.WriteString(" + `")
+		body = body[start+length:]
+	}
+	literal.WriteByte('`')
+	return literal.String()
 }
 
 func querySQL(q model.AnalyzedQuery) string {
@@ -627,6 +649,12 @@ func generatedCall(name string, fixed, parameters []string) string {
 	}
 	return name + "(" + strings.Join(fixed, ", ") + separator + strings.Join(parameters, ",\n") + ",\n)"
 }
+func ydbCall(name, sql, options string) string {
+	if strings.HasPrefix(sql, "`") {
+		return name + "(ctx, " + sql + ", " + options + ",\n)"
+	}
+	return name + "(ctx, " + sql + ", " + options + ")"
+}
 func scanCall(name string, destinations []string) string {
 	return name + "(\n" + strings.Join(destinations, ",\n") + ",\n)"
 }
@@ -665,18 +693,18 @@ func writeYDB(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 		opt = "callOptions..."
 	}
 	if q.Command == model.Exec {
-		b.WriteString("return q.db.Exec(ctx, " + querySQL(q) + ", " + opt + ")\n")
+		b.WriteString("return " + ydbCall("q.db.Exec", querySQL(q), opt) + "\n")
 		return
 	}
 	if q.Command == model.One {
-		b.WriteString("result, err := q.db.QueryRow(ctx, " + querySQL(q) + ", " + opt + ")\nif err != nil { return " + q.Name + "Row{}, err }\n\nvar row " + q.Name + "Row\nif err := result.ScanNamed(\n" + scanNamed(q.ResultSets[0]) + ",\n); err != nil { return " + q.Name + "Row{}, err }\n\nreturn row, nil\n")
+		b.WriteString("result, err := " + ydbCall("q.db.QueryRow", querySQL(q), opt) + "\nif err != nil { return " + q.Name + "Row{}, err }\n\nvar row " + q.Name + "Row\nif err := result.ScanNamed(\n" + scanNamed(q.ResultSets[0]) + ",\n); err != nil { return " + q.Name + "Row{}, err }\n\nreturn row, nil\n")
 		return
 	}
 	init := "[]" + q.Name + "Row(nil)"
 	if o.EmitEmptySlices {
 		init = "make([]" + q.Name + "Row, 0)"
 	}
-	b.WriteString("result, err := q.db.Query(ctx, " + querySQL(q) + ", " + opt + ")\n")
+	b.WriteString("result, err := " + ydbCall("q.db.Query", querySQL(q), opt) + "\n")
 	b.WriteString("if err != nil { return " + init + ", err }\n")
 	b.WriteString("defer result.Close(ctx)\n\n")
 	b.WriteString("resultSet, err := result.NextResultSet(ctx)\n")

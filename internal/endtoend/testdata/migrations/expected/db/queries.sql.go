@@ -20,7 +20,8 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 			-- name: GetAuthor :one
 
 			SELECT * FROM authors WHERE id = $id;
-		`, callOptions...)
+		`, callOptions...,
+	)
 	if err != nil {
 		return GetAuthorRow{}, err
 	}

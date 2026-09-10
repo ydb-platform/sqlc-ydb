@@ -78,9 +78,9 @@ export class Queries {
 
   async createAuthor(args: CreateAuthorParams, configure?: ConfigureQuery): Promise<CreateAuthorRow | null> {
     const stmt = this.#sql<[CreateAuthorRow]>`-- name: CreateAuthor :one
-      INSERT INTO authors (id, name, bio)
+      INSERT INTO \`authors\` (\`id\`, \`name\`, \`bio\`)
       VALUES ($author_id, $author_name, $biography)
-      RETURNING id, name, bio;`
+      RETURNING \`id\`, \`name\`, \`bio\`;`
       .parameter("author_id", new Uint64(args.authorId))
       .parameter("author_name", new Utf8(args.authorName))
       .parameter("biography", new Optional(args.biography === null ? null : new Utf8(args.biography), new Utf8Type()));

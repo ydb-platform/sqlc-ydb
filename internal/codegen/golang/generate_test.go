@@ -35,7 +35,7 @@ func TestGeneratedSQLUsesRawBlocksWhenRepresentable(t *testing.T) {
 		raw              bool
 	}{
 		{"-- name: GetUser :one\nDECLARE $id AS Uint64;\nSELECT id, bio FROM users WHERE id = $id;", "`\n\t\t\t-- name: GetUser :one\n", true},
-		{"-- name: GetUser :one\nSELECT `id`, `bio` FROM `my/tbl`\nWHERE name = 'Автор' AND path = 'C:\\data';", "SELECT `+\"`\"+`id`+\"`\"+`, `+\"`\"+`bio`+\"`\"+` FROM `+\"`\"+`my/tbl`+\"`\"+`", true},
+		{"-- name: GetUser :one\nSELECT `id`, `bio` FROM `my/tbl`\nWHERE name = 'Автор' AND path = 'C:\\data';", "SELECT `+\"`id`\"+`, `+\"`bio`\"+` FROM `+\"`my/tbl`\"+`", true},
 		{"-- name: GetUser :one\r\nSELECT id, bio FROM users;\r\n", "\"-- name: GetUser :one\\r\\n\"+\n", false},
 		{"-- name: GetUser :one\nSELECT '\x00' FROM users;", "\"-- name: GetUser :one\\n\"+\n", false},
 	} {
@@ -44,7 +44,7 @@ func TestGeneratedSQLUsesRawBlocksWhenRepresentable(t *testing.T) {
 			if !strings.Contains(string(source), tc.wantLiteral) {
 				t.Fatalf("%s SQL is not a readable multiline literal:\n%s", runtime, source)
 			}
-			if strings.Contains(tc.sql, "`id`") && !strings.Contains(string(source), "`+\"`\"+`id`+\"`\"+`") {
+			if strings.Contains(tc.sql, "`id`") && !strings.Contains(string(source), "`+\"`id`\"+`") {
 				t.Fatalf("backtick identifier was not embedded in the raw SQL block:\n%s", source)
 			}
 			wantSQL := tc.sql
@@ -137,7 +137,7 @@ func TestGeneratedYDBManyValidatesOneResultSet(t *testing.T) {
 	in.Queries = in.Queries[1:2]
 
 	source := string(generatedSQLSourceForAnalysis(t, "ydb", in))
-	want := "result, err := q.db.Query(ctx, `\n\t\t\tSELECT `+\"`\"+`id`+\"`\"+`, `+\"`\"+`name`+\"`\"+` FROM `+\"`\"+`users`+\"`\"+`;\n\t\t`, opts...)" + `
+	want := "result, err := q.db.Query(ctx, `\n\t\t\tSELECT `+\"`id`\"+`, `+\"`name`\"+` FROM `+\"`users`\"+`;\n\t\t`, opts...,\n\t)" + `
 	if err != nil {
 		return []ListUsersRow(nil), err
 	}

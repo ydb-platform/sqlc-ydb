@@ -24,7 +24,8 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 			SELECT author_id, name
 			FROM authors
 			WHERE author_id = $author_id;
-		`, callOptions...)
+		`, callOptions...,
+	)
 	if err != nil {
 		return GetAuthorRow{}, err
 	}
@@ -52,7 +53,8 @@ func (q *Queries) GetBook(ctx context.Context, arg uint64, opts ...query.Execute
 			SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
 			FROM books
 			WHERE book_id = $book_id;
-		`, callOptions...)
+		`, callOptions...,
+	)
 	if err != nil {
 		return GetBookRow{}, err
 	}
@@ -85,7 +87,8 @@ func (q *Queries) DeleteBook(ctx context.Context, arg uint64, opts ...query.Exec
 			-- name: DeleteBook :exec
 			DELETE FROM books
 			WHERE book_id = $book_id;
-		`, callOptions...)
+		`, callOptions...,
+	)
 }
 
 func (q *Queries) BooksByTitleYear(ctx context.Context, arg BooksByTitleYearParams, opts ...query.ExecuteOption) ([]BooksByTitleYearRow, error) {
@@ -101,7 +104,8 @@ func (q *Queries) BooksByTitleYear(ctx context.Context, arg BooksByTitleYearPara
 			SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
 			FROM books
 			WHERE title = $title AND publication_year = $publication_year;
-		`, callOptions...)
+		`, callOptions...,
+	)
 	if err != nil {
 		return make([]BooksByTitleYearRow, 0), err
 	}
@@ -170,7 +174,8 @@ func (q *Queries) BooksByTags(ctx context.Context, arg string, opts ...query.Exe
 			    ToSet(Yson::ConvertToStringList(b.tags)),
 			    Yson::ConvertToStringList($tags)
 			);
-		`, callOptions...)
+		`, callOptions...,
+	)
 	if err != nil {
 		return make([]BooksByTagsRow, 0), err
 	}
@@ -227,7 +232,8 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts
 			INSERT INTO authors (author_id, name)
 			VALUES ($author_id, $name)
 			RETURNING author_id, name;
-		`, callOptions...)
+		`, callOptions...,
+	)
 	if err != nil {
 		return CreateAuthorRow{}, err
 	}
@@ -279,7 +285,8 @@ func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams, opts ...
 			    $tags
 			)
 			RETURNING book_id, author_id, isbn, book_type, title, publication_year, available, tags;
-		`, callOptions...)
+		`, callOptions...,
+	)
 	if err != nil {
 		return CreateBookRow{}, err
 	}
@@ -315,7 +322,8 @@ func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams, opts ...
 			UPDATE books
 			SET title = $title, tags = $tags
 			WHERE book_id = $book_id;
-		`, callOptions...)
+		`, callOptions...,
+	)
 }
 
 func (q *Queries) UpdateBookISBN(ctx context.Context, arg UpdateBookISBNParams, opts ...query.ExecuteOption) error {
@@ -333,7 +341,8 @@ func (q *Queries) UpdateBookISBN(ctx context.Context, arg UpdateBookISBNParams, 
 			UPDATE books
 			SET title = $title, tags = $tags, isbn = $isbn
 			WHERE book_id = $book_id;
-		`, callOptions...)
+		`, callOptions...,
+	)
 }
 
 func (q *Queries) DeleteAuthorBeforeYear(ctx context.Context, arg DeleteAuthorBeforeYearParams, opts ...query.ExecuteOption) error {
@@ -348,7 +357,8 @@ func (q *Queries) DeleteAuthorBeforeYear(ctx context.Context, arg DeleteAuthorBe
 			-- name: DeleteAuthorBeforeYear :exec
 			DELETE FROM books
 			WHERE publication_year < $publication_year AND author_id = $author_id;
-		`, callOptions...)
+		`, callOptions...,
+	)
 }
 
 func (q *Queries) SayHello(ctx context.Context, arg string, opts ...query.ExecuteOption) (SayHelloRow, error) {
@@ -361,7 +371,8 @@ func (q *Queries) SayHello(ctx context.Context, arg string, opts ...query.Execut
 	result, err := q.db.QueryRow(ctx, `
 			-- name: SayHello :one
 			SELECT "hello "u || $name AS greeting;
-		`, callOptions...)
+		`, callOptions...,
+	)
 	if err != nil {
 		return SayHelloRow{}, err
 	}

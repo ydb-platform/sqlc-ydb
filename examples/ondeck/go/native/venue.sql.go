@@ -25,7 +25,8 @@ func (q *Queries) ListVenues(ctx context.Context, arg string, opts ...query.Exec
 			FROM venue
 			WHERE city = $city
 			ORDER BY name;
-		`, callOptions...)
+		`, callOptions...,
+	)
 	if err != nil {
 		return []ListVenuesRow(nil), err
 	}
@@ -85,7 +86,8 @@ func (q *Queries) DeleteVenue(ctx context.Context, arg string, opts ...query.Exe
 			-- name: DeleteVenue :exec
 			DELETE FROM venue
 			WHERE slug = $slug AND slug = $slug;
-		`, callOptions...)
+		`, callOptions...,
+	)
 }
 
 func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams, opts ...query.ExecuteOption) (GetVenueRow, error) {
@@ -101,7 +103,8 @@ func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams, opts ...quer
 			SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
 			FROM venue
 			WHERE slug = $slug AND city = $city;
-		`, callOptions...)
+		`, callOptions...,
+	)
 	if err != nil {
 		return GetVenueRow{}, err
 	}
@@ -163,7 +166,8 @@ func (q *Queries) CreateVenue(ctx context.Context, arg CreateVenueParams, opts .
 			    $statuses,
 			    $tags
 			) RETURNING id;
-		`, callOptions...)
+		`, callOptions...,
+	)
 	if err != nil {
 		return CreateVenueRow{}, err
 	}
@@ -192,7 +196,8 @@ func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams
 			SET name = $name
 			WHERE slug = $slug
 			RETURNING id;
-		`, callOptions...)
+		`, callOptions...,
+	)
 	if err != nil {
 		return UpdateVenueNameRow{}, err
 	}
@@ -216,7 +221,8 @@ func (q *Queries) VenueCountByCity(ctx context.Context, opts ...query.ExecuteOpt
 			FROM venue
 			GROUP BY city
 			ORDER BY city;
-		`, opts...)
+		`, opts...,
+	)
 	if err != nil {
 		return []VenueCountByCityRow(nil), err
 	}

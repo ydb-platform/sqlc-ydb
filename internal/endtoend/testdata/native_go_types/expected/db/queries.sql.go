@@ -46,7 +46,8 @@ func (q *Queries) BindNativeTypes(ctx context.Context, arg BindNativeTypesParams
 
 
 			SELECT $ids AS ids, $optional_ids AS optional_ids, $amount AS amount, $id AS id;
-		`, callOptions...)
+		`, callOptions...,
+	)
 	if err != nil {
 		return BindNativeTypesRow{}, err
 	}

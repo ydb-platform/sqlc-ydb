@@ -18,7 +18,8 @@ func (q *Queries) ListCities(ctx context.Context, opts ...query.ExecuteOption) (
 			SELECT slug, name
 			FROM city
 			ORDER BY name;
-		`, opts...)
+		`, opts...,
+	)
 	if err != nil {
 		return []ListCitiesRow(nil), err
 	}
@@ -71,7 +72,8 @@ func (q *Queries) GetCity(ctx context.Context, arg string, opts ...query.Execute
 			SELECT slug, name
 			FROM city
 			WHERE slug = $slug;
-		`, callOptions...)
+		`, callOptions...,
+	)
 	if err != nil {
 		return GetCityRow{}, err
 	}
@@ -104,7 +106,8 @@ func (q *Queries) CreateCity(ctx context.Context, arg CreateCityParams, opts ...
 			    $name,
 			    $slug
 			) RETURNING slug, name;
-		`, callOptions...)
+		`, callOptions...,
+	)
 	if err != nil {
 		return CreateCityRow{}, err
 	}
@@ -133,5 +136,6 @@ func (q *Queries) UpdateCityName(ctx context.Context, arg UpdateCityNameParams, 
 			UPDATE city
 			SET name = $name
 			WHERE slug = $slug;
-		`, callOptions...)
+		`, callOptions...,
+	)
 }

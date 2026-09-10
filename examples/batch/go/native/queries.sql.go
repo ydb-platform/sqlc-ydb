@@ -23,7 +23,8 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 			-- name: GetAuthor :one
 			SELECT author_id, name, biography FROM authors
 			WHERE author_id = $author_id;
-		`, callOptions...)
+		`, callOptions...,
+	)
 	if err != nil {
 		return GetAuthorRow{}, err
 	}
@@ -51,7 +52,8 @@ func (q *Queries) DeleteBookExecResult(ctx context.Context, arg uint64, opts ...
 			-- name: DeleteBookExecResult :exec
 			DELETE FROM books
 			WHERE book_id = $book_id;
-		`, callOptions...)
+		`, callOptions...,
+	)
 }
 
 func (q *Queries) DeleteBook(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error {
@@ -65,7 +67,8 @@ func (q *Queries) DeleteBook(ctx context.Context, arg uint64, opts ...query.Exec
 			-- name: DeleteBook :exec
 			DELETE FROM books
 			WHERE book_id = $book_id;
-		`, callOptions...)
+		`, callOptions...,
+	)
 }
 
 func (q *Queries) DeleteBookNamedFunc(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error {
@@ -79,7 +82,8 @@ func (q *Queries) DeleteBookNamedFunc(ctx context.Context, arg uint64, opts ...q
 			-- name: DeleteBookNamedFunc :exec
 			DELETE FROM books
 			WHERE book_id = $book_id;
-		`, callOptions...)
+		`, callOptions...,
+	)
 }
 
 func (q *Queries) DeleteBookNamedSign(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error {
@@ -93,7 +97,8 @@ func (q *Queries) DeleteBookNamedSign(ctx context.Context, arg uint64, opts ...q
 			-- name: DeleteBookNamedSign :exec
 			DELETE FROM books
 			WHERE book_id = $book_id;
-		`, callOptions...)
+		`, callOptions...,
+	)
 }
 
 func (q *Queries) BooksByYear(ctx context.Context, arg int32, opts ...query.ExecuteOption) ([]BooksByYearRow, error) {
@@ -108,7 +113,8 @@ func (q *Queries) BooksByYear(ctx context.Context, arg int32, opts ...query.Exec
 			SELECT book_id, author_id, isbn, book_type, title, year, available, tags
 			FROM books
 			WHERE year = $year;
-		`, callOptions...)
+		`, callOptions...,
+	)
 	if err != nil {
 		return []BooksByYearRow(nil), err
 	}
@@ -169,7 +175,8 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts
 			INSERT INTO authors (author_id, name, biography)
 			VALUES ($author_id, $name, $biography)
 			RETURNING author_id, name, biography;
-		`, callOptions...)
+		`, callOptions...,
+	)
 	if err != nil {
 		return CreateAuthorRow{}, err
 	}
@@ -205,7 +212,8 @@ func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams, opts ...
 			INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)
 			VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)
 			RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;
-		`, callOptions...)
+		`, callOptions...,
+	)
 	if err != nil {
 		return CreateBookRow{}, err
 	}
@@ -241,7 +249,8 @@ func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams, opts ...
 			UPDATE books
 			SET title = $title, tags = $tags
 			WHERE book_id = $book_id;
-		`, callOptions...)
+		`, callOptions...,
+	)
 }
 
 func (q *Queries) GetBiography(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetBiographyRow, error) {
@@ -255,7 +264,8 @@ func (q *Queries) GetBiography(ctx context.Context, arg uint64, opts ...query.Ex
 			-- name: GetBiography :one
 			SELECT biography FROM authors
 			WHERE author_id = $author_id;
-		`, callOptions...)
+		`, callOptions...,
+	)
 	if err != nil {
 		return GetBiographyRow{}, err
 	}

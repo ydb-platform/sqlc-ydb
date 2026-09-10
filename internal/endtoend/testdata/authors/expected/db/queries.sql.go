@@ -12,7 +12,7 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, erro
 	err := q.db.QueryRowContext(ctx, `
 			-- name: GetAuthor :one
 
-			SELECT `+"`"+`id`+"`"+`, `+"`"+`name`+"`"+`, `+"`"+`bio`+"`"+` FROM `+"`"+`authors`+"`"+` WHERE `+"`"+`id`+"`"+` = $author_id;
+			SELECT `+"`id`"+`, `+"`name`"+`, `+"`bio`"+` FROM `+"`authors`"+` WHERE `+"`id`"+` = $author_id;
 		`, sql.Named("author_id", arg),
 	).Scan(
 		&row.ID,

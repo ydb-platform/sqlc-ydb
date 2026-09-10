@@ -61,9 +61,9 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (Cre
 	var row CreateAuthorRow
 	err := q.db.QueryRowContext(ctx, `
 			-- name: CreateAuthor :one
-			INSERT INTO authors (id, name, bio)
+			INSERT INTO `+"`authors`"+` (`+"`id`"+`, `+"`name`"+`, `+"`bio`"+`)
 			VALUES ($author_id, $author_name, $biography)
-			RETURNING id, name, bio;
+			RETURNING `+"`id`"+`, `+"`name`"+`, `+"`bio`"+`;
 		`, sql.Named("author_id", arg.AuthorID),
 		sql.Named("author_name", arg.AuthorName),
 		sql.Named("biography", arg.Biography),
