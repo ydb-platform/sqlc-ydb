@@ -2,50 +2,6 @@
 
 use super::models::*;
 
-pub const GET_AUTHOR: &str = r"-- name: GetAuthor :one
-SELECT author_id, name, biography FROM authors
-WHERE author_id = $author_id;";
-
-pub const DELETE_BOOK_EXEC_RESULT: &str = r"-- name: DeleteBookExecResult :exec
-DELETE FROM books
-WHERE book_id = $book_id;";
-
-pub const DELETE_BOOK: &str = r"-- name: DeleteBook :exec
-DELETE FROM books
-WHERE book_id = $book_id;";
-
-pub const DELETE_BOOK_NAMED_FUNC: &str = r"-- name: DeleteBookNamedFunc :exec
-DELETE FROM books
-WHERE book_id = $book_id;";
-
-pub const DELETE_BOOK_NAMED_SIGN: &str = r"-- name: DeleteBookNamedSign :exec
-DELETE FROM books
-WHERE book_id = $book_id;";
-
-pub const BOOKS_BY_YEAR: &str = r"-- name: BooksByYear :many
-SELECT book_id, author_id, isbn, book_type, title, year, available, tags
-FROM books
-WHERE year = $year;";
-
-pub const CREATE_AUTHOR: &str = r"-- name: CreateAuthor :one
-INSERT INTO authors (author_id, name, biography)
-VALUES ($author_id, $name, $biography)
-RETURNING author_id, name, biography;";
-
-pub const CREATE_BOOK: &str = r"-- name: CreateBook :one
-INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)
-VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)
-RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;";
-
-pub const UPDATE_BOOK: &str = r"-- name: UpdateBook :exec
-UPDATE books
-SET title = $title, tags = $tags
-WHERE book_id = $book_id;";
-
-pub const GET_BIOGRAPHY: &str = r"-- name: GetBiography :one
-SELECT biography FROM authors
-WHERE author_id = $author_id;";
-
 #[derive(Default)]
 struct JsonParam(String);
 
@@ -81,7 +37,11 @@ impl<'a> Queries<'a> {
     pub async fn get_author(&mut self, author_id: u64) -> ydb::YdbResult<GetAuthorRow> {
         let call = self
             .client
-            .query_result_set(GET_AUTHOR)
+            .query_result_set(concat!(
+                concat!(r"-- name: GetAuthor :one", "\x0a"),
+                concat!(r"SELECT author_id, name, biography FROM authors", "\x0a"),
+                r"WHERE author_id = $author_id;",
+            ))
             .param("$author_id", author_id);
         let result_set = call.await?;
         let mut row = result_set.rows().next().ok_or(ydb::YdbError::NoRows)?;
@@ -95,20 +55,35 @@ impl<'a> Queries<'a> {
     pub async fn delete_book_exec_result(&mut self, book_id: u64) -> ydb::YdbResult<()> {
         let call = self
             .client
-            .exec(DELETE_BOOK_EXEC_RESULT)
+            .exec(concat!(
+                concat!(r"-- name: DeleteBookExecResult :exec", "\x0a"),
+                concat!(r"DELETE FROM books", "\x0a"),
+                r"WHERE book_id = $book_id;",
+            ))
             .param("$book_id", book_id);
         call.await
     }
 
     pub async fn delete_book(&mut self, book_id: u64) -> ydb::YdbResult<()> {
-        let call = self.client.exec(DELETE_BOOK).param("$book_id", book_id);
+        let call = self
+            .client
+            .exec(concat!(
+                concat!(r"-- name: DeleteBook :exec", "\x0a"),
+                concat!(r"DELETE FROM books", "\x0a"),
+                r"WHERE book_id = $book_id;",
+            ))
+            .param("$book_id", book_id);
         call.await
     }
 
     pub async fn delete_book_named_func(&mut self, book_id: u64) -> ydb::YdbResult<()> {
         let call = self
             .client
-            .exec(DELETE_BOOK_NAMED_FUNC)
+            .exec(concat!(
+                concat!(r"-- name: DeleteBookNamedFunc :exec", "\x0a"),
+                concat!(r"DELETE FROM books", "\x0a"),
+                r"WHERE book_id = $book_id;",
+            ))
             .param("$book_id", book_id);
         call.await
     }
@@ -116,7 +91,11 @@ impl<'a> Queries<'a> {
     pub async fn delete_book_named_sign(&mut self, book_id: u64) -> ydb::YdbResult<()> {
         let call = self
             .client
-            .exec(DELETE_BOOK_NAMED_SIGN)
+            .exec(concat!(
+                concat!(r"-- name: DeleteBookNamedSign :exec", "\x0a"),
+                concat!(r"DELETE FROM books", "\x0a"),
+                r"WHERE book_id = $book_id;",
+            ))
             .param("$book_id", book_id);
         call.await
     }
@@ -124,7 +103,12 @@ impl<'a> Queries<'a> {
     pub async fn books_by_year(&mut self, year: i32) -> ydb::YdbResult<Vec<BooksByYearRow>> {
         let call = self
             .client
-            .query_result_set(BOOKS_BY_YEAR)
+            .query_result_set(concat!(
+                concat!(r"-- name: BooksByYear :many", "\x0a"),
+                concat!(r"SELECT book_id, author_id, isbn, book_type, title, year, available, tags", "\x0a"),
+                concat!(r"FROM books", "\x0a"),
+                r"WHERE year = $year;",
+            ))
             .param("$year", year);
         let result_set = call.await?;
         let mut rows = Vec::new();
@@ -151,7 +135,12 @@ impl<'a> Queries<'a> {
     ) -> ydb::YdbResult<CreateAuthorRow> {
         let call = self
             .client
-            .query_result_set(CREATE_AUTHOR)
+            .query_result_set(concat!(
+                concat!(r"-- name: CreateAuthor :one", "\x0a"),
+                concat!(r"INSERT INTO authors (author_id, name, biography)", "\x0a"),
+                concat!(r"VALUES ($author_id, $name, $biography)", "\x0a"),
+                r"RETURNING author_id, name, biography;",
+            ))
             .param("$author_id", author_id)
             .param("$name", name)
             .param("$biography", biography.map(JsonParam));
@@ -177,7 +166,12 @@ impl<'a> Queries<'a> {
     ) -> ydb::YdbResult<CreateBookRow> {
         let call = self
             .client
-            .query_result_set(CREATE_BOOK)
+            .query_result_set(concat!(
+                concat!(r"-- name: CreateBook :one", "\x0a"),
+                concat!(r"INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)", "\x0a"),
+                concat!(r"VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)", "\x0a"),
+                r"RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;",
+            ))
             .param("$book_id", book_id)
             .param("$author_id", author_id)
             .param("$isbn", isbn)
@@ -208,7 +202,12 @@ impl<'a> Queries<'a> {
     ) -> ydb::YdbResult<()> {
         let call = self
             .client
-            .exec(UPDATE_BOOK)
+            .exec(concat!(
+                concat!(r"-- name: UpdateBook :exec", "\x0a"),
+                concat!(r"UPDATE books", "\x0a"),
+                concat!(r"SET title = $title, tags = $tags", "\x0a"),
+                r"WHERE book_id = $book_id;",
+            ))
             .param("$title", title)
             .param("$tags", JsonParam(tags))
             .param("$book_id", book_id);
@@ -218,7 +217,11 @@ impl<'a> Queries<'a> {
     pub async fn get_biography(&mut self, author_id: u64) -> ydb::YdbResult<GetBiographyRow> {
         let call = self
             .client
-            .query_result_set(GET_BIOGRAPHY)
+            .query_result_set(concat!(
+                concat!(r"-- name: GetBiography :one", "\x0a"),
+                concat!(r"SELECT biography FROM authors", "\x0a"),
+                r"WHERE author_id = $author_id;",
+            ))
             .param("$author_id", author_id);
         let result_set = call.await?;
         let mut row = result_set.rows().next().ok_or(ydb::YdbError::NoRows)?;

@@ -2,27 +2,6 @@
 
 use super::models::*;
 
-pub const GET_AUTHOR: &str = r"-- name: GetAuthor :one
-SELECT id, name, bio FROM authors WHERE id = $author_id;";
-
-pub const LIST_AUTHORS: &str = r"-- name: ListAuthors :many
-SELECT id, name, bio FROM authors ORDER BY name;";
-
-pub const GET_AUTHOR_NAME: &str = r"-- name: GetAuthorName :one
-SELECT name FROM authors WHERE id = $author_id;";
-
-pub const CREATE_AUTHOR: &str = r"-- name: CreateAuthor :one
-INSERT INTO authors (id, name, bio)
-VALUES ($author_id, $author_name, $biography)
-RETURNING id, name, bio;";
-
-pub const UPSERT_AUTHOR: &str = r"-- name: UpsertAuthor :exec
-UPSERT INTO authors (id, name, bio)
-VALUES ($author_id, $author_name, $biography);";
-
-pub const DELETE_AUTHOR: &str = r"-- name: DeleteAuthor :exec
-DELETE FROM authors WHERE id = $author_id;";
-
 pub struct Queries<'a> {
     client: &'a mut ydb::QueryClient,
 }
@@ -35,7 +14,10 @@ impl<'a> Queries<'a> {
     pub async fn get_author(&mut self, author_id: u64) -> ydb::YdbResult<GetAuthorRow> {
         let call = self
             .client
-            .query_result_set(GET_AUTHOR)
+            .query_result_set(concat!(
+                concat!(r"-- name: GetAuthor :one", "\x0a"),
+                r"SELECT id, name, bio FROM authors WHERE id = $author_id;",
+            ))
             .param("$author_id", author_id);
         let result_set = call.await?;
         let mut row = result_set.rows().next().ok_or(ydb::YdbError::NoRows)?;
@@ -47,7 +29,12 @@ impl<'a> Queries<'a> {
     }
 
     pub async fn list_authors(&mut self) -> ydb::YdbResult<Vec<ListAuthorsRow>> {
-        let call = self.client.query_result_set(LIST_AUTHORS);
+        let call = self
+            .client
+            .query_result_set(concat!(
+                concat!(r"-- name: ListAuthors :many", "\x0a"),
+                r"SELECT id, name, bio FROM authors ORDER BY name;",
+            ));
         let result_set = call.await?;
         let mut rows = Vec::new();
         for mut row in result_set.rows() {
@@ -63,7 +50,10 @@ impl<'a> Queries<'a> {
     pub async fn get_author_name(&mut self, author_id: u64) -> ydb::YdbResult<GetAuthorNameRow> {
         let call = self
             .client
-            .query_result_set(GET_AUTHOR_NAME)
+            .query_result_set(concat!(
+                concat!(r"-- name: GetAuthorName :one", "\x0a"),
+                r"SELECT name FROM authors WHERE id = $author_id;",
+            ))
             .param("$author_id", author_id);
         let result_set = call.await?;
         let mut row = result_set.rows().next().ok_or(ydb::YdbError::NoRows)?;
@@ -80,7 +70,12 @@ impl<'a> Queries<'a> {
     ) -> ydb::YdbResult<CreateAuthorRow> {
         let call = self
             .client
-            .query_result_set(CREATE_AUTHOR)
+            .query_result_set(concat!(
+                concat!(r"-- name: CreateAuthor :one", "\x0a"),
+                concat!(r"INSERT INTO authors (id, name, bio)", "\x0a"),
+                concat!(r"VALUES ($author_id, $author_name, $biography)", "\x0a"),
+                r"RETURNING id, name, bio;",
+            ))
             .param("$author_id", author_id)
             .param("$author_name", author_name)
             .param("$biography", biography);
@@ -101,7 +96,11 @@ impl<'a> Queries<'a> {
     ) -> ydb::YdbResult<()> {
         let call = self
             .client
-            .exec(UPSERT_AUTHOR)
+            .exec(concat!(
+                concat!(r"-- name: UpsertAuthor :exec", "\x0a"),
+                concat!(r"UPSERT INTO authors (id, name, bio)", "\x0a"),
+                r"VALUES ($author_id, $author_name, $biography);",
+            ))
             .param("$author_id", author_id)
             .param("$author_name", author_name)
             .param("$biography", biography);
@@ -111,7 +110,10 @@ impl<'a> Queries<'a> {
     pub async fn delete_author(&mut self, author_id: u64) -> ydb::YdbResult<()> {
         let call = self
             .client
-            .exec(DELETE_AUTHOR)
+            .exec(concat!(
+                concat!(r"-- name: DeleteAuthor :exec", "\x0a"),
+                r"DELETE FROM authors WHERE id = $author_id;",
+            ))
             .param("$author_id", author_id);
         call.await
     }

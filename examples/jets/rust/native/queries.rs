@@ -2,15 +2,6 @@
 
 use super::models::*;
 
-pub const COUNT_PILOTS: &str = r"-- name: CountPilots :one
-SELECT COUNT(*) AS pilot_count FROM pilots;";
-
-pub const LIST_PILOTS: &str = r"-- name: ListPilots :many
-SELECT id, name FROM pilots ORDER BY id LIMIT 5;";
-
-pub const DELETE_PILOT: &str = r"-- name: DeletePilot :exec
-DELETE FROM pilots WHERE id = $pilot_id;";
-
 pub struct Queries<'a> {
     client: &'a mut ydb::QueryClient,
 }
@@ -21,7 +12,12 @@ impl<'a> Queries<'a> {
     }
 
     pub async fn count_pilots(&mut self) -> ydb::YdbResult<CountPilotsRow> {
-        let call = self.client.query_result_set(COUNT_PILOTS);
+        let call = self
+            .client
+            .query_result_set(concat!(
+                concat!(r"-- name: CountPilots :one", "\x0a"),
+                r"SELECT COUNT(*) AS pilot_count FROM pilots;",
+            ));
         let result_set = call.await?;
         let mut row = result_set.rows().next().ok_or(ydb::YdbError::NoRows)?;
         Ok(CountPilotsRow {
@@ -30,7 +26,12 @@ impl<'a> Queries<'a> {
     }
 
     pub async fn list_pilots(&mut self) -> ydb::YdbResult<Vec<ListPilotsRow>> {
-        let call = self.client.query_result_set(LIST_PILOTS);
+        let call = self
+            .client
+            .query_result_set(concat!(
+                concat!(r"-- name: ListPilots :many", "\x0a"),
+                r"SELECT id, name FROM pilots ORDER BY id LIMIT 5;",
+            ));
         let result_set = call.await?;
         let mut rows = Vec::new();
         for mut row in result_set.rows() {
@@ -43,7 +44,13 @@ impl<'a> Queries<'a> {
     }
 
     pub async fn delete_pilot(&mut self, pilot_id: i32) -> ydb::YdbResult<()> {
-        let call = self.client.exec(DELETE_PILOT).param("$pilot_id", pilot_id);
+        let call = self
+            .client
+            .exec(concat!(
+                concat!(r"-- name: DeletePilot :exec", "\x0a"),
+                r"DELETE FROM pilots WHERE id = $pilot_id;",
+            ))
+            .param("$pilot_id", pilot_id);
         call.await
     }
 }
