@@ -9,16 +9,20 @@ import (
 
 func (q *Queries) CountPilots(ctx context.Context) (CountPilotsRow, error) {
 	var row CountPilotsRow
-	err := q.db.QueryRowContext(ctx, "-- name: CountPilots :one\n"+
-		"SELECT COUNT(*) AS pilot_count FROM pilots;").Scan(
+	err := q.db.QueryRowContext(ctx, `
+			-- name: CountPilots :one
+			SELECT COUNT(*) AS pilot_count FROM pilots;
+		`).Scan(
 		&row.PilotCount,
 	)
 	return row, err
 }
 
 func (q *Queries) ListPilots(ctx context.Context) ([]ListPilotsRow, error) {
-	rows, err := q.db.QueryContext(ctx, "-- name: ListPilots :many\n"+
-		"SELECT id, name FROM pilots ORDER BY id LIMIT 5;")
+	rows, err := q.db.QueryContext(ctx, `
+			-- name: ListPilots :many
+			SELECT id, name FROM pilots ORDER BY id LIMIT 5;
+		`)
 	if err != nil {
 		return []ListPilotsRow(nil), err
 	}
@@ -38,9 +42,10 @@ func (q *Queries) ListPilots(ctx context.Context) ([]ListPilotsRow, error) {
 }
 
 func (q *Queries) DeletePilot(ctx context.Context, arg int32) error {
-	_, err := q.db.ExecContext(ctx, "-- name: DeletePilot :exec\n"+
-		"DELETE FROM pilots WHERE id = $pilot_id;",
-		sql.Named("pilot_id", arg),
+	_, err := q.db.ExecContext(ctx, `
+			-- name: DeletePilot :exec
+			DELETE FROM pilots WHERE id = $pilot_id;
+		`, sql.Named("pilot_id", arg),
 	)
 	return err
 }

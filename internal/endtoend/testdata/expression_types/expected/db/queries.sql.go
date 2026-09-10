@@ -8,19 +8,20 @@ import (
 )
 
 func (q *Queries) NormalizeProfiles(ctx context.Context, arg NormalizeProfilesParams) ([]NormalizeProfilesRow, error) {
-	rows, err := q.db.QueryContext(ctx, "-- name: NormalizeProfiles :many\n"+
-		"\n"+
-		"\n"+
-		"\n"+
-		"SELECT\n"+
-		"    CASE WHEN $use_nickname THEN nickname ELSE $fallback END AS display_name,\n"+
-		"    CAST(score AS Int64) AS score64,\n"+
-		"    COALESCE(nickname, $fallback) AS normalized_name,\n"+
-		"    LENGTH(COALESCE(nickname, $fallback)) AS normalized_length,\n"+
-		"    ABS(score) AS absolute_score\n"+
-		"FROM profiles\n"+
-		"WHERE score >= $minimum_score;",
-		sql.Named("fallback", arg.Fallback),
+	rows, err := q.db.QueryContext(ctx, `
+			-- name: NormalizeProfiles :many
+
+
+
+			SELECT
+			    CASE WHEN $use_nickname THEN nickname ELSE $fallback END AS display_name,
+			    CAST(score AS Int64) AS score64,
+			    COALESCE(nickname, $fallback) AS normalized_name,
+			    LENGTH(COALESCE(nickname, $fallback)) AS normalized_length,
+			    ABS(score) AS absolute_score
+			FROM profiles
+			WHERE score >= $minimum_score;
+		`, sql.Named("fallback", arg.Fallback),
 		sql.Named("minimum_score", arg.MinimumScore),
 		sql.Named("use_nickname", arg.UseNickname),
 	)

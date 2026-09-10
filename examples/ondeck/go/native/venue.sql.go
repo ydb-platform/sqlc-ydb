@@ -19,11 +19,13 @@ func (q *Queries) ListVenues(ctx context.Context, arg string, opts ...query.Exec
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.Query(ctx, "-- name: ListVenues :many\n"+
-		"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n"+
-		"FROM venue\n"+
-		"WHERE city = $city\n"+
-		"ORDER BY name;", callOptions...)
+	result, err := q.db.Query(ctx, `
+			-- name: ListVenues :many
+			SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
+			FROM venue
+			WHERE city = $city
+			ORDER BY name;
+		`, callOptions...)
 	if err != nil {
 		return []ListVenuesRow(nil), err
 	}
@@ -79,9 +81,11 @@ func (q *Queries) DeleteVenue(ctx context.Context, arg string, opts ...query.Exe
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx, "-- name: DeleteVenue :exec\n"+
-		"DELETE FROM venue\n"+
-		"WHERE slug = $slug AND slug = $slug;", callOptions...)
+	return q.db.Exec(ctx, `
+			-- name: DeleteVenue :exec
+			DELETE FROM venue
+			WHERE slug = $slug AND slug = $slug;
+		`, callOptions...)
 }
 
 func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams, opts ...query.ExecuteOption) (GetVenueRow, error) {
@@ -92,10 +96,12 @@ func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams, opts ...quer
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx, "-- name: GetVenue :one\n"+
-		"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n"+
-		"FROM venue\n"+
-		"WHERE slug = $slug AND city = $city;", callOptions...)
+	result, err := q.db.QueryRow(ctx, `
+			-- name: GetVenue :one
+			SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
+			FROM venue
+			WHERE slug = $slug AND city = $city;
+		`, callOptions...)
 	if err != nil {
 		return GetVenueRow{}, err
 	}
@@ -134,28 +140,30 @@ func (q *Queries) CreateVenue(ctx context.Context, arg CreateVenueParams, opts .
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx, "-- name: CreateVenue :one\n"+
-		"INSERT INTO venue (\n"+
-		"    id,\n"+
-		"    slug,\n"+
-		"    name,\n"+
-		"    city,\n"+
-		"    created_at,\n"+
-		"    spotify_playlist,\n"+
-		"    status,\n"+
-		"    statuses,\n"+
-		"    tags\n"+
-		") VALUES (\n"+
-		"    $id,\n"+
-		"    $slug,\n"+
-		"    $name,\n"+
-		"    $city,\n"+
-		"    $created_at,\n"+
-		"    $spotify_playlist,\n"+
-		"    $status,\n"+
-		"    $statuses,\n"+
-		"    $tags\n"+
-		") RETURNING id;", callOptions...)
+	result, err := q.db.QueryRow(ctx, `
+			-- name: CreateVenue :one
+			INSERT INTO venue (
+			    id,
+			    slug,
+			    name,
+			    city,
+			    created_at,
+			    spotify_playlist,
+			    status,
+			    statuses,
+			    tags
+			) VALUES (
+			    $id,
+			    $slug,
+			    $name,
+			    $city,
+			    $created_at,
+			    $spotify_playlist,
+			    $status,
+			    $statuses,
+			    $tags
+			) RETURNING id;
+		`, callOptions...)
 	if err != nil {
 		return CreateVenueRow{}, err
 	}
@@ -178,11 +186,13 @@ func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx, "-- name: UpdateVenueName :one\n"+
-		"UPDATE venue\n"+
-		"SET name = $name\n"+
-		"WHERE slug = $slug\n"+
-		"RETURNING id;", callOptions...)
+	result, err := q.db.QueryRow(ctx, `
+			-- name: UpdateVenueName :one
+			UPDATE venue
+			SET name = $name
+			WHERE slug = $slug
+			RETURNING id;
+		`, callOptions...)
 	if err != nil {
 		return UpdateVenueNameRow{}, err
 	}
@@ -198,13 +208,15 @@ func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams
 }
 
 func (q *Queries) VenueCountByCity(ctx context.Context, opts ...query.ExecuteOption) ([]VenueCountByCityRow, error) {
-	result, err := q.db.Query(ctx, "-- name: VenueCountByCity :many\n"+
-		"SELECT\n"+
-		"    city,\n"+
-		"    COUNT(*) AS venue_count\n"+
-		"FROM venue\n"+
-		"GROUP BY city\n"+
-		"ORDER BY city;", opts...)
+	result, err := q.db.Query(ctx, `
+			-- name: VenueCountByCity :many
+			SELECT
+			    city,
+			    COUNT(*) AS venue_count
+			FROM venue
+			GROUP BY city
+			ORDER BY city;
+		`, opts...)
 	if err != nil {
 		return []VenueCountByCityRow(nil), err
 	}

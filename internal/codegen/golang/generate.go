@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -509,7 +510,33 @@ func cleanWhitespaceOnlyLines(sql string) string {
 }
 
 func sqlLiteral(sql string) string {
-	// Quoted lines let gofmt indent the expression without changing SQL bytes.
+	if sql == "" {
+		return `""`
+	}
+	raw := utf8.ValidString(sql) && !strings.Contains(sql, "\r")
+	if raw {
+		for _, r := range sql {
+			if r == 0x7f || r == 0xfeff || r < 0x20 && r != '\n' && r != '\t' {
+				raw = false
+				break
+			}
+		}
+	}
+	if raw {
+		lines := strings.Split(sql, "\n")
+		for i, line := range lines {
+			if strings.TrimSpace(line) == "" {
+				lines[i] = ""
+				continue
+			}
+			lines[i] = "\t\t\t" + line
+		}
+		body := "\n" + strings.Join(lines, "\n") + "\n\t\t"
+		body = strings.ReplaceAll(body, "`", "` + \"`\" + `")
+		return "`" + body + "`"
+	}
+
+	// Quoted lines preserve SQL that Go raw strings cannot represent.
 	lines := strings.SplitAfter(sql, "\n")
 	if lines[len(lines)-1] == "" {
 		lines = lines[:len(lines)-1]
@@ -594,7 +621,11 @@ func generatedCall(name string, fixed, parameters []string) string {
 	if len(parameters) == 0 {
 		return name + "(" + strings.Join(fixed, ", ") + ")"
 	}
-	return name + "(" + strings.Join(fixed, ", ") + ",\n" + strings.Join(parameters, ",\n") + ",\n)"
+	separator := ",\n"
+	if strings.HasPrefix(fixed[len(fixed)-1], "`") {
+		separator = ", "
+	}
+	return name + "(" + strings.Join(fixed, ", ") + separator + strings.Join(parameters, ",\n") + ",\n)"
 }
 func scanCall(name string, destinations []string) string {
 	return name + "(\n" + strings.Join(destinations, ",\n") + ",\n)"

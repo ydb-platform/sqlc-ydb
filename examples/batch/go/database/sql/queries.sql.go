@@ -11,10 +11,11 @@ import (
 
 func (q *Queries) GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, error) {
 	var row GetAuthorRow
-	err := q.db.QueryRowContext(ctx, "-- name: GetAuthor :one\n"+
-		"SELECT author_id, name, biography FROM authors\n"+
-		"WHERE author_id = $author_id;",
-		sql.Named("author_id", arg),
+	err := q.db.QueryRowContext(ctx, `
+			-- name: GetAuthor :one
+			SELECT author_id, name, biography FROM authors
+			WHERE author_id = $author_id;
+		`, sql.Named("author_id", arg),
 	).Scan(
 		&row.AuthorID,
 		&row.Name,
@@ -24,47 +25,52 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, erro
 }
 
 func (q *Queries) DeleteBookExecResult(ctx context.Context, arg uint64) error {
-	_, err := q.db.ExecContext(ctx, "-- name: DeleteBookExecResult :exec\n"+
-		"DELETE FROM books\n"+
-		"WHERE book_id = $book_id;",
-		sql.Named("book_id", arg),
+	_, err := q.db.ExecContext(ctx, `
+			-- name: DeleteBookExecResult :exec
+			DELETE FROM books
+			WHERE book_id = $book_id;
+		`, sql.Named("book_id", arg),
 	)
 	return err
 }
 
 func (q *Queries) DeleteBook(ctx context.Context, arg uint64) error {
-	_, err := q.db.ExecContext(ctx, "-- name: DeleteBook :exec\n"+
-		"DELETE FROM books\n"+
-		"WHERE book_id = $book_id;",
-		sql.Named("book_id", arg),
+	_, err := q.db.ExecContext(ctx, `
+			-- name: DeleteBook :exec
+			DELETE FROM books
+			WHERE book_id = $book_id;
+		`, sql.Named("book_id", arg),
 	)
 	return err
 }
 
 func (q *Queries) DeleteBookNamedFunc(ctx context.Context, arg uint64) error {
-	_, err := q.db.ExecContext(ctx, "-- name: DeleteBookNamedFunc :exec\n"+
-		"DELETE FROM books\n"+
-		"WHERE book_id = $book_id;",
-		sql.Named("book_id", arg),
+	_, err := q.db.ExecContext(ctx, `
+			-- name: DeleteBookNamedFunc :exec
+			DELETE FROM books
+			WHERE book_id = $book_id;
+		`, sql.Named("book_id", arg),
 	)
 	return err
 }
 
 func (q *Queries) DeleteBookNamedSign(ctx context.Context, arg uint64) error {
-	_, err := q.db.ExecContext(ctx, "-- name: DeleteBookNamedSign :exec\n"+
-		"DELETE FROM books\n"+
-		"WHERE book_id = $book_id;",
-		sql.Named("book_id", arg),
+	_, err := q.db.ExecContext(ctx, `
+			-- name: DeleteBookNamedSign :exec
+			DELETE FROM books
+			WHERE book_id = $book_id;
+		`, sql.Named("book_id", arg),
 	)
 	return err
 }
 
 func (q *Queries) BooksByYear(ctx context.Context, arg int32) ([]BooksByYearRow, error) {
-	rows, err := q.db.QueryContext(ctx, "-- name: BooksByYear :many\n"+
-		"SELECT book_id, author_id, isbn, book_type, title, year, available, tags\n"+
-		"FROM books\n"+
-		"WHERE year = $year;",
-		sql.Named("year", arg),
+	rows, err := q.db.QueryContext(ctx, `
+			-- name: BooksByYear :many
+			SELECT book_id, author_id, isbn, book_type, title, year, available, tags
+			FROM books
+			WHERE year = $year;
+		`, sql.Named("year", arg),
 	)
 	if err != nil {
 		return []BooksByYearRow(nil), err
@@ -92,11 +98,12 @@ func (q *Queries) BooksByYear(ctx context.Context, arg int32) ([]BooksByYearRow,
 
 func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (CreateAuthorRow, error) {
 	var row CreateAuthorRow
-	err := q.db.QueryRowContext(ctx, "-- name: CreateAuthor :one\n"+
-		"INSERT INTO authors (author_id, name, biography)\n"+
-		"VALUES ($author_id, $name, $biography)\n"+
-		"RETURNING author_id, name, biography;",
-		sql.Named("author_id", arg.AuthorID),
+	err := q.db.QueryRowContext(ctx, `
+			-- name: CreateAuthor :one
+			INSERT INTO authors (author_id, name, biography)
+			VALUES ($author_id, $name, $biography)
+			RETURNING author_id, name, biography;
+		`, sql.Named("author_id", arg.AuthorID),
 		sql.Named("name", arg.Name),
 		sql.Named("biography", types.NullableJSONValue(arg.Biography)),
 	).Scan(
@@ -109,11 +116,12 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (Cre
 
 func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams) (CreateBookRow, error) {
 	var row CreateBookRow
-	err := q.db.QueryRowContext(ctx, "-- name: CreateBook :one\n"+
-		"INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)\n"+
-		"VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)\n"+
-		"RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;",
-		sql.Named("book_id", arg.BookID),
+	err := q.db.QueryRowContext(ctx, `
+			-- name: CreateBook :one
+			INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)
+			VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)
+			RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;
+		`, sql.Named("book_id", arg.BookID),
 		sql.Named("author_id", arg.AuthorID),
 		sql.Named("isbn", arg.Isbn),
 		sql.Named("book_type", arg.BookType),
@@ -135,11 +143,12 @@ func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams) (CreateB
 }
 
 func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams) error {
-	_, err := q.db.ExecContext(ctx, "-- name: UpdateBook :exec\n"+
-		"UPDATE books\n"+
-		"SET title = $title, tags = $tags\n"+
-		"WHERE book_id = $book_id;",
-		sql.Named("title", arg.Title),
+	_, err := q.db.ExecContext(ctx, `
+			-- name: UpdateBook :exec
+			UPDATE books
+			SET title = $title, tags = $tags
+			WHERE book_id = $book_id;
+		`, sql.Named("title", arg.Title),
 		sql.Named("tags", types.JSONValue(arg.Tags)),
 		sql.Named("book_id", arg.BookID),
 	)
@@ -148,10 +157,11 @@ func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams) error {
 
 func (q *Queries) GetBiography(ctx context.Context, arg uint64) (GetBiographyRow, error) {
 	var row GetBiographyRow
-	err := q.db.QueryRowContext(ctx, "-- name: GetBiography :one\n"+
-		"SELECT biography FROM authors\n"+
-		"WHERE author_id = $author_id;",
-		sql.Named("author_id", arg),
+	err := q.db.QueryRowContext(ctx, `
+			-- name: GetBiography :one
+			SELECT biography FROM authors
+			WHERE author_id = $author_id;
+		`, sql.Named("author_id", arg),
 	).Scan(
 		&row.Biography,
 	)

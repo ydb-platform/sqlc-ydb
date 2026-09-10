@@ -13,10 +13,12 @@ import (
 )
 
 func (q *Queries) ListCities(ctx context.Context, opts ...query.ExecuteOption) ([]ListCitiesRow, error) {
-	result, err := q.db.Query(ctx, "-- name: ListCities :many\n"+
-		"SELECT slug, name\n"+
-		"FROM city\n"+
-		"ORDER BY name;", opts...)
+	result, err := q.db.Query(ctx, `
+			-- name: ListCities :many
+			SELECT slug, name
+			FROM city
+			ORDER BY name;
+		`, opts...)
 	if err != nil {
 		return []ListCitiesRow(nil), err
 	}
@@ -64,10 +66,12 @@ func (q *Queries) GetCity(ctx context.Context, arg string, opts ...query.Execute
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx, "-- name: GetCity :one\n"+
-		"SELECT slug, name\n"+
-		"FROM city\n"+
-		"WHERE slug = $slug;", callOptions...)
+	result, err := q.db.QueryRow(ctx, `
+			-- name: GetCity :one
+			SELECT slug, name
+			FROM city
+			WHERE slug = $slug;
+		`, callOptions...)
 	if err != nil {
 		return GetCityRow{}, err
 	}
@@ -91,14 +95,16 @@ func (q *Queries) CreateCity(ctx context.Context, arg CreateCityParams, opts ...
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx, "-- name: CreateCity :one\n"+
-		"INSERT INTO city (\n"+
-		"    name,\n"+
-		"    slug\n"+
-		") VALUES (\n"+
-		"    $name,\n"+
-		"    $slug\n"+
-		") RETURNING slug, name;", callOptions...)
+	result, err := q.db.QueryRow(ctx, `
+			-- name: CreateCity :one
+			INSERT INTO city (
+			    name,
+			    slug
+			) VALUES (
+			    $name,
+			    $slug
+			) RETURNING slug, name;
+		`, callOptions...)
 	if err != nil {
 		return CreateCityRow{}, err
 	}
@@ -122,8 +128,10 @@ func (q *Queries) UpdateCityName(ctx context.Context, arg UpdateCityNameParams, 
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx, "-- name: UpdateCityName :exec\n"+
-		"UPDATE city\n"+
-		"SET name = $name\n"+
-		"WHERE slug = $slug;", callOptions...)
+	return q.db.Exec(ctx, `
+			-- name: UpdateCityName :exec
+			UPDATE city
+			SET name = $name
+			WHERE slug = $slug;
+		`, callOptions...)
 }
