@@ -154,11 +154,11 @@ func renderQueries(in *model.AnalysisResult) string {
 		variant := temporalVariant(kind)
 		fmt.Fprintf(&b, "struct %sParam(std::time::SystemTime);\n\nimpl Default for %sParam {\n    fn default() -> Self {\n        Self(std::time::SystemTime::UNIX_EPOCH)\n    }\n}\n\nimpl From<%sParam> for ydb::Value {\n    fn from(value: %sParam) -> Self {\n        ydb::Value::%s(value.0)\n    }\n}\n\n", variant, variant, variant, variant, variant)
 	}
-	b.WriteString("pub struct Queries<'a> {\n    client: &'a mut ydb::QueryClient,\n}\n\n")
+	b.WriteString("pub struct Queries<'a, E: ydb::QueryExecutor> {\n    client: &'a mut E,\n}\n\n")
 	if len(in.Queries) > 0 {
 		b.WriteString("#[bon::bon]\n")
 	}
-	b.WriteString("impl<'a> Queries<'a> {\n    pub fn new(client: &'a mut ydb::QueryClient) -> Self {\n        Self { client }\n    }\n")
+	b.WriteString("impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {\n    pub fn new(client: &'a mut E) -> Self {\n        Self { client }\n    }\n")
 	for _, q := range in.Queries {
 		b.WriteByte('\n')
 		renderMethod(&b, q)

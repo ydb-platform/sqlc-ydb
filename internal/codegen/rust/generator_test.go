@@ -43,8 +43,8 @@ func TestGenerateYDBQuerierUsesNativeQueryClientContract(t *testing.T) {
 	queries := generatedFile(t, files, "queries.rs")
 	for _, want := range []string{
 		"use super::models::*;",
-		"pub struct Queries<'a>",
-		"client: &'a mut ydb::QueryClient",
+		"pub struct Queries<'a, E: ydb::QueryExecutor>",
+		"client: &'a mut E",
 		"// -- name: CreateBook :one",
 		".query_row(r\"INSERT INTO books (id) VALUES ($id) RETURNING id;\")",
 		`.param("$id", id)`,
@@ -361,7 +361,13 @@ func TestGeneratedRustCompilesAgainstPinnedSDK(t *testing.T) {
 		t.Fatal(err)
 	}
 	consumer := `use generated_check::queries::Queries;
-async fn check(q: &mut Queries<'_>) -> ydb::YdbResult<()> {
+async fn check(q: &mut Queries<'_, ydb::QueryClient>) -> ydb::YdbResult<()> {
+    q.create_book().id(1).call().await?;
+    q.update_book().id(1).tags("[]").call().await?;
+    Ok(())
+}
+async fn check_tx(tx: &mut ydb::Transaction) -> ydb::YdbResult<()> {
+    let mut q = Queries::new(tx);
     q.create_book().id(1).call().await?;
     q.update_book().id(1).tags("[]").call().await?;
     Ok(())

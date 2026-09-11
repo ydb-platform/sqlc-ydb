@@ -4,7 +4,8 @@ The built-in Rust target generates asynchronous code for the official
 [`ydb`](https://crates.io/crates/ydb) crate. The supported runtime value is
 `ydb`; omitting `runtime` selects it.
 
-Generated `Queries` borrows a caller-owned mutable `ydb::QueryClient`. The
+Generated `Queries<E>` borrows a caller-owned mutable `E: ydb::QueryExecutor`,
+which can be a `ydb::QueryClient` or a `ydb::Transaction`. The
 application owns the YDB client and creates the query client:
 
 ```rust
@@ -18,11 +19,32 @@ let mut queries = generated::queries::Queries::new(&mut query_client);
 Each generated method executes one statement through the Query Service API.
 `:exec` uses `QueryClient::exec`; `:one` uses `query_row`, and `:many` uses
 `query_result_set`. `:one` returns the first row, matching the sqlc contract;
-it reports `YdbError::NoRows` for an empty result. These one-shot SDK operations acquire their own session,
-choose the server-side transaction mode, drain the response, and apply the
-SDK retry policy. A generated method does not start or accept an interactive
-transaction. Applications that need several statements in one atomic
-transaction should keep that transaction orchestration in application code.
+it reports `YdbError::NoRows` for an empty result. With a `QueryClient`, methods
+use the SDK's one-shot operations and retry policy. With a `Transaction`, all
+methods execute in that transaction. Generated code does not begin, commit,
+roll back, or retry transactions; the caller controls their lifetime.
+
+Use `retry_tx` to execute several generated queries atomically:
+
+```rust
+query_client
+    .retry_tx(ydb::closure!(async |tx| {
+        let mut queries = generated::queries::Queries::new(tx);
+        let author = queries.create_author()
+            .author_id(1).name("Ada").biography(None).call().await?;
+        queries.create_book()
+            .book_id(1).author_id(author.author_id)
+            .isbn("isbn-1").book_type("FICTION").title("Typed Rust")
+            .year(2026).available(std::time::SystemTime::UNIX_EPOCH)
+            .tags("[]").call().await?;
+        Ok(())
+    }))
+    .await?;
+```
+
+This example uses the `batch` schema. The SDK commits on callback success and
+rolls back on failure. A retry runs the entire callback again, so keep external
+side effects outside it.
 
 The generated API maps the YQL types used by the bundled examples as follows:
 

@@ -43,31 +43,39 @@ async fn authors_smoke(client: &mut ydb::QueryClient) -> ydb::YdbResult<()> {
 async fn batch_smoke(client: &mut ydb::QueryClient) -> ydb::YdbResult<()> {
     exec(client, include_str!("../../batch/schema.sql")).await?;
     let result = async {
-        let mut queries = batch::queries::Queries::new(client);
-        let author = queries
-            .create_author()
-            .author_id(1)
-            .name("Ada")
-            .biography(None)
-            .call()
-            .await?;
-        assert_eq!(author.biography, None);
-
         let available = SystemTime::UNIX_EPOCH
             + Duration::from_secs(1_700_000_000)
             + Duration::from_micros(123_456);
-        let book = queries
-            .create_book()
-            .book_id(1)
-            .author_id(1)
-            .isbn("isbn-1")
-            .book_type("FICTION")
-            .title("Typed Rust")
-            .year(2026)
-            .available(available)
-            .tags("[\"rust\"]")
-            .call()
-            .await?;
+        let book = client
+            .retry_tx(ydb::closure!(async |tx| {
+                let mut queries = batch::queries::Queries::new(tx);
+                let author = queries
+                    .create_author()
+                    .author_id(1)
+                    .name("Ada")
+                    .biography(None)
+                    .call()
+                    .await?;
+                assert_eq!(author.biography, None);
+
+                let book = queries
+                    .create_book()
+                    .book_id(1)
+                    .author_id(1)
+                    .isbn("isbn-1")
+                    .book_type("FICTION")
+                    .title("Typed Rust")
+                    .year(2026)
+                    .available(available)
+                    .tags("[\"rust\"]")
+                    .call()
+                    .await?;
+                Ok(book)
+            }))
+            .await
+            .map_err(|err| ydb::YdbError::Custom(err.to_string()))?;
+        let mut queries = batch::queries::Queries::new(client);
+        assert_eq!(queries.author().author_id(1).call().await?.name, "Ada");
         assert_eq!(book.book_id, 1);
         assert_eq!(book.tags, "[\"rust\"]");
         assert_eq!(book.available, available);
@@ -83,6 +91,27 @@ async fn batch_smoke(client: &mut ydb::QueryClient) -> ydb::YdbResult<()> {
             queries.books_by_year().year(2026).call().await?[0].title,
             "Updated"
         );
+        let failed = client
+            .retry_tx(ydb::closure!(async |tx| {
+                let mut queries = batch::queries::Queries::new(tx);
+                queries
+                    .create_author()
+                    .author_id(2)
+                    .name("Rolled back")
+                    .biography(None)
+                    .call()
+                    .await?;
+                queries.delete_book().book_id(1).call().await?;
+                Err::<(), _>(ydb::YdbError::Custom("abort transaction".into()).into())
+            }))
+            .await;
+        assert!(failed.is_err());
+        let mut queries = batch::queries::Queries::new(client);
+        assert!(matches!(
+            queries.author().author_id(2).call().await,
+            Err(ydb::YdbError::NoRows)
+        ));
+        assert_eq!(queries.books_by_year().year(2026).call().await?.len(), 1);
         Ok::<(), ydb::YdbError>(())
     }
     .await;
