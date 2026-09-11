@@ -28,6 +28,7 @@ final class Queries
     {
         $parameters = [
         ];
+
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 SELECT slug, name
@@ -35,9 +36,11 @@ final class Queries
                 ORDER BY name;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
+
         $rows = $this->decodeRows(
             $result,
             'ListCities',
@@ -50,6 +53,7 @@ final class Queries
                 YdbValueCodec::utf8($items->offsetGet(1), 'ListCities.name'),
             ),
         );
+
         return $rows;
     }
 
@@ -59,6 +63,7 @@ final class Queries
         $parameters = [
             '$slug' => YdbValueCodec::typedUtf8($slug, 'slug'),
         ];
+
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 SELECT slug, name
@@ -66,9 +71,11 @@ final class Queries
                 WHERE slug = $slug;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
+
         $rows = $this->decodeRows(
             $result,
             'GetCity',
@@ -81,6 +88,7 @@ final class Queries
                 YdbValueCodec::utf8($items->offsetGet(1), 'GetCity.name'),
             ),
         );
+
         return $rows[0] ?? null;
     }
 
@@ -91,6 +99,7 @@ final class Queries
             '$name' => YdbValueCodec::typedUtf8($params->name, 'name'),
             '$slug' => YdbValueCodec::typedUtf8($params->slug, 'slug'),
         ];
+
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 INSERT INTO city (
@@ -102,9 +111,11 @@ final class Queries
                 ) RETURNING slug, name;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
+
         $rows = $this->decodeRows(
             $result,
             'CreateCity',
@@ -117,6 +128,7 @@ final class Queries
                 YdbValueCodec::utf8($items->offsetGet(1), 'CreateCity.name'),
             ),
         );
+
         return $rows[0] ?? null;
     }
 
@@ -127,13 +139,15 @@ final class Queries
             '$name' => YdbValueCodec::typedUtf8($params->name, 'name'),
             '$slug' => YdbValueCodec::typedUtf8($params->slug, 'slug'),
         ];
-        $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+
+        $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 UPDATE city
                 SET name = $name
                 WHERE slug = $slug;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
@@ -146,6 +160,7 @@ final class Queries
         $parameters = [
             '$city' => YdbValueCodec::typedUtf8($city, 'city'),
         ];
+
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
@@ -154,9 +169,11 @@ final class Queries
                 ORDER BY name;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
+
         $rows = $this->decodeRows(
             $result,
             'ListVenues',
@@ -185,6 +202,7 @@ final class Queries
                 YdbValueCodec::optionalTimestamp($items->offsetGet(9), 'ListVenues.created_at'),
             ),
         );
+
         return $rows;
     }
 
@@ -194,12 +212,14 @@ final class Queries
         $parameters = [
             '$slug' => YdbValueCodec::typedUtf8($slug, 'slug'),
         ];
-        $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+
+        $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 DELETE FROM venue
                 WHERE slug = $slug AND slug = $slug;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
@@ -212,6 +232,7 @@ final class Queries
             '$slug' => YdbValueCodec::typedUtf8($params->slug, 'slug'),
             '$city' => YdbValueCodec::typedUtf8($params->city, 'city'),
         ];
+
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
@@ -219,9 +240,11 @@ final class Queries
                 WHERE slug = $slug AND city = $city;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
+
         $rows = $this->decodeRows(
             $result,
             'GetVenue',
@@ -250,6 +273,7 @@ final class Queries
                 YdbValueCodec::optionalTimestamp($items->offsetGet(9), 'GetVenue.created_at'),
             ),
         );
+
         return $rows[0] ?? null;
     }
 
@@ -267,6 +291,7 @@ final class Queries
             '$statuses' => YdbValueCodec::typedOptionalJson($params->statuses, 'statuses'),
             '$tags' => YdbValueCodec::typedOptionalJson($params->tags, 'tags'),
         ];
+
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 INSERT INTO venue (
@@ -292,9 +317,11 @@ final class Queries
                 ) RETURNING id;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
+
         $rows = $this->decodeRows(
             $result,
             'CreateVenue',
@@ -305,6 +332,7 @@ final class Queries
                 YdbValueCodec::uint64($items->offsetGet(0), 'CreateVenue.id'),
             ),
         );
+
         return $rows[0] ?? null;
     }
 
@@ -315,6 +343,7 @@ final class Queries
             '$name' => YdbValueCodec::typedUtf8($params->name, 'name'),
             '$slug' => YdbValueCodec::typedUtf8($params->slug, 'slug'),
         ];
+
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 UPDATE venue
@@ -323,9 +352,11 @@ final class Queries
                 RETURNING id;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
+
         $rows = $this->decodeRows(
             $result,
             'UpdateVenueName',
@@ -336,6 +367,7 @@ final class Queries
                 YdbValueCodec::uint64($items->offsetGet(0), 'UpdateVenueName.id'),
             ),
         );
+
         return $rows[0] ?? null;
     }
 
@@ -345,6 +377,7 @@ final class Queries
     {
         $parameters = [
         ];
+
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 SELECT
@@ -355,9 +388,11 @@ final class Queries
                 ORDER BY city;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
+
         $rows = $this->decodeRows(
             $result,
             'VenueCountByCity',
@@ -370,6 +405,7 @@ final class Queries
                 YdbValueCodec::uint64($items->offsetGet(1), 'VenueCountByCity.venue_count'),
             ),
         );
+
         return $rows;
     }
 
@@ -384,6 +420,10 @@ final class Queries
             throw new UnexpectedValueException(sprintf('%s: expected one YDB result set, got %d', $query, count($sets)));
         }
         $set = $sets->offsetGet(0);
+        if ($set->getTruncated()) {
+            throw new UnexpectedValueException($query . ': YDB result is truncated; use a bounded query or pagination');
+        }
+
         $columns = $set->getColumns();
         if (count($columns) !== count($expectedColumns)) {
             throw new UnexpectedValueException(sprintf('%s: expected %d result columns, got %d', $query, count($expectedColumns), count($columns)));

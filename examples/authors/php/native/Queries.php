@@ -28,14 +28,17 @@ final class Queries
         $parameters = [
             '$author_id' => YdbValueCodec::typedUint64($authorId, 'author_id'),
         ];
+
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 SELECT id, name, bio FROM authors WHERE id = $author_id;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
+
         $rows = $this->decodeRows(
             $result,
             'GetAuthor',
@@ -50,6 +53,7 @@ final class Queries
                 YdbValueCodec::optionalUtf8($items->offsetGet(2), 'GetAuthor.bio'),
             ),
         );
+
         return $rows[0] ?? null;
     }
 
@@ -59,14 +63,17 @@ final class Queries
     {
         $parameters = [
         ];
+
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 SELECT id, name, bio FROM authors ORDER BY name;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
+
         $rows = $this->decodeRows(
             $result,
             'ListAuthors',
@@ -81,6 +88,7 @@ final class Queries
                 YdbValueCodec::optionalUtf8($items->offsetGet(2), 'ListAuthors.bio'),
             ),
         );
+
         return $rows;
     }
 
@@ -90,14 +98,17 @@ final class Queries
         $parameters = [
             '$author_id' => YdbValueCodec::typedUint64($authorId, 'author_id'),
         ];
+
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 SELECT name FROM authors WHERE id = $author_id;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
+
         $rows = $this->decodeRows(
             $result,
             'GetAuthorName',
@@ -108,6 +119,7 @@ final class Queries
                 YdbValueCodec::utf8($items->offsetGet(0), 'GetAuthorName.name'),
             ),
         );
+
         return $rows[0] ?? null;
     }
 
@@ -119,6 +131,7 @@ final class Queries
             '$author_name' => YdbValueCodec::typedUtf8($params->authorName, 'author_name'),
             '$biography' => YdbValueCodec::typedOptionalUtf8($params->biography, 'biography'),
         ];
+
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 INSERT INTO `authors` (`id`, `name`, `bio`)
@@ -126,9 +139,11 @@ final class Queries
                 RETURNING `id`, `name`, `bio`;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
+
         $rows = $this->decodeRows(
             $result,
             'CreateAuthor',
@@ -143,6 +158,7 @@ final class Queries
                 YdbValueCodec::optionalUtf8($items->offsetGet(2), 'CreateAuthor.bio'),
             ),
         );
+
         return $rows[0] ?? null;
     }
 
@@ -154,12 +170,14 @@ final class Queries
             '$author_name' => YdbValueCodec::typedUtf8($params->authorName, 'author_name'),
             '$biography' => YdbValueCodec::typedOptionalUtf8($params->biography, 'biography'),
         ];
-        $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+
+        $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 UPSERT INTO authors (id, name, bio)
                 VALUES ($author_id, $author_name, $biography);
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
@@ -171,11 +189,13 @@ final class Queries
         $parameters = [
             '$author_id' => YdbValueCodec::typedUint64($authorId, 'author_id'),
         ];
-        $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+
+        $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 DELETE FROM authors WHERE id = $author_id;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
@@ -192,6 +212,10 @@ final class Queries
             throw new UnexpectedValueException(sprintf('%s: expected one YDB result set, got %d', $query, count($sets)));
         }
         $set = $sets->offsetGet(0);
+        if ($set->getTruncated()) {
+            throw new UnexpectedValueException($query . ': YDB result is truncated; use a bounded query or pagination');
+        }
+
         $columns = $set->getColumns();
         if (count($columns) !== count($expectedColumns)) {
             throw new UnexpectedValueException(sprintf('%s: expected %d result columns, got %d', $query, count($expectedColumns), count($columns)));

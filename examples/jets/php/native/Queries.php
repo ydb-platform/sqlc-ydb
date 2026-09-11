@@ -27,14 +27,17 @@ final class Queries
     {
         $parameters = [
         ];
+
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 SELECT COUNT(*) AS pilot_count FROM pilots;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
+
         $rows = $this->decodeRows(
             $result,
             'CountPilots',
@@ -45,6 +48,7 @@ final class Queries
                 YdbValueCodec::uint64($items->offsetGet(0), 'CountPilots.pilot_count'),
             ),
         );
+
         return $rows[0] ?? null;
     }
 
@@ -54,14 +58,17 @@ final class Queries
     {
         $parameters = [
         ];
+
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 SELECT id, name FROM pilots ORDER BY id LIMIT 5;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
+
         $rows = $this->decodeRows(
             $result,
             'ListPilots',
@@ -74,6 +81,7 @@ final class Queries
                 YdbValueCodec::utf8($items->offsetGet(1), 'ListPilots.name'),
             ),
         );
+
         return $rows;
     }
 
@@ -83,11 +91,13 @@ final class Queries
         $parameters = [
             '$pilot_id' => YdbValueCodec::typedInt32($pilotId, 'pilot_id'),
         ];
-        $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+
+        $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 DELETE FROM pilots WHERE id = $pilot_id;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
@@ -104,6 +114,10 @@ final class Queries
             throw new UnexpectedValueException(sprintf('%s: expected one YDB result set, got %d', $query, count($sets)));
         }
         $set = $sets->offsetGet(0);
+        if ($set->getTruncated()) {
+            throw new UnexpectedValueException($query . ': YDB result is truncated; use a bounded query or pagination');
+        }
+
         $columns = $set->getColumns();
         if (count($columns) !== count($expectedColumns)) {
             throw new UnexpectedValueException(sprintf('%s: expected %d result columns, got %d', $query, count($expectedColumns), count($columns)));

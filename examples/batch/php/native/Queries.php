@@ -28,15 +28,18 @@ final class Queries
         $parameters = [
             '$author_id' => YdbValueCodec::typedUint64($authorId, 'author_id'),
         ];
+
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 SELECT author_id, name, biography FROM authors
                 WHERE author_id = $author_id;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
+
         $rows = $this->decodeRows(
             $result,
             'GetAuthor',
@@ -51,6 +54,7 @@ final class Queries
                 YdbValueCodec::optionalJson($items->offsetGet(2), 'GetAuthor.biography'),
             ),
         );
+
         return $rows[0] ?? null;
     }
 
@@ -60,12 +64,14 @@ final class Queries
         $parameters = [
             '$book_id' => YdbValueCodec::typedUint64($bookId, 'book_id'),
         ];
-        $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+
+        $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 DELETE FROM books
                 WHERE book_id = $book_id;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
@@ -77,12 +83,14 @@ final class Queries
         $parameters = [
             '$book_id' => YdbValueCodec::typedUint64($bookId, 'book_id'),
         ];
-        $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+
+        $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 DELETE FROM books
                 WHERE book_id = $book_id;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
@@ -94,12 +102,14 @@ final class Queries
         $parameters = [
             '$book_id' => YdbValueCodec::typedUint64($bookId, 'book_id'),
         ];
-        $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+
+        $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 DELETE FROM books
                 WHERE book_id = $book_id;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
@@ -111,12 +121,14 @@ final class Queries
         $parameters = [
             '$book_id' => YdbValueCodec::typedUint64($bookId, 'book_id'),
         ];
-        $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+
+        $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 DELETE FROM books
                 WHERE book_id = $book_id;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
@@ -129,6 +141,7 @@ final class Queries
         $parameters = [
             '$year' => YdbValueCodec::typedInt32($year, 'year'),
         ];
+
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 SELECT book_id, author_id, isbn, book_type, title, year, available, tags
@@ -136,9 +149,11 @@ final class Queries
                 WHERE year = $year;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
+
         $rows = $this->decodeRows(
             $result,
             'BooksByYear',
@@ -163,6 +178,7 @@ final class Queries
                 YdbValueCodec::json($items->offsetGet(7), 'BooksByYear.tags'),
             ),
         );
+
         return $rows;
     }
 
@@ -174,6 +190,7 @@ final class Queries
             '$name' => YdbValueCodec::typedUtf8($params->name, 'name'),
             '$biography' => YdbValueCodec::typedOptionalJson($params->biography, 'biography'),
         ];
+
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 INSERT INTO authors (author_id, name, biography)
@@ -181,9 +198,11 @@ final class Queries
                 RETURNING author_id, name, biography;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
+
         $rows = $this->decodeRows(
             $result,
             'CreateAuthor',
@@ -198,6 +217,7 @@ final class Queries
                 YdbValueCodec::optionalJson($items->offsetGet(2), 'CreateAuthor.biography'),
             ),
         );
+
         return $rows[0] ?? null;
     }
 
@@ -214,6 +234,7 @@ final class Queries
             '$available' => YdbValueCodec::typedTimestamp($params->available, 'available'),
             '$tags' => YdbValueCodec::typedJson($params->tags, 'tags'),
         ];
+
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)
@@ -221,9 +242,11 @@ final class Queries
                 RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
+
         $rows = $this->decodeRows(
             $result,
             'CreateBook',
@@ -248,6 +271,7 @@ final class Queries
                 YdbValueCodec::json($items->offsetGet(7), 'CreateBook.tags'),
             ),
         );
+
         return $rows[0] ?? null;
     }
 
@@ -259,13 +283,15 @@ final class Queries
             '$tags' => YdbValueCodec::typedJson($params->tags, 'tags'),
             '$book_id' => YdbValueCodec::typedUint64($params->bookId, 'book_id'),
         ];
-        $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+
+        $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 UPDATE books
                 SET title = $title, tags = $tags
                 WHERE book_id = $book_id;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
@@ -277,15 +303,18 @@ final class Queries
         $parameters = [
             '$author_id' => YdbValueCodec::typedUint64($authorId, 'author_id'),
         ];
+
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 SELECT biography FROM authors
                 WHERE author_id = $author_id;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
+
         $rows = $this->decodeRows(
             $result,
             'GetBiography',
@@ -296,6 +325,7 @@ final class Queries
                 YdbValueCodec::optionalJson($items->offsetGet(0), 'GetBiography.biography'),
             ),
         );
+
         return $rows[0] ?? null;
     }
 
@@ -310,6 +340,10 @@ final class Queries
             throw new UnexpectedValueException(sprintf('%s: expected one YDB result set, got %d', $query, count($sets)));
         }
         $set = $sets->offsetGet(0);
+        if ($set->getTruncated()) {
+            throw new UnexpectedValueException($query . ': YDB result is truncated; use a bounded query or pagination');
+        }
+
         $columns = $set->getColumns();
         if (count($columns) !== count($expectedColumns)) {
             throw new UnexpectedValueException(sprintf('%s: expected %d result columns, got %d', $query, count($expectedColumns), count($columns)));
