@@ -27,3 +27,9 @@ Dapper 2.1.79. Runtime packages belong to generated projects.
 The linq2db profile was removed: the SQL-first wrapper added no useful LINQ API.
 Timestamp normalization remains Local -> UTC and Unspecified -> UTC before
 constructing typed YdbValue values.
+
+Dapper formatting uses multiline C# raw SQL literals with collision-safe quote
+delimiters and escaped fallback for control/normalized newline characters. A
+.NET runtime regression compares SQL bytes. CommandDefinition arguments and
+explicit YdbParameter bindings are separate readable blocks. Optional
+commandTimeout (seconds) follows CancellationToken to preserve positional calls.

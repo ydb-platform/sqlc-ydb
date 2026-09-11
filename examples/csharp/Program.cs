@@ -223,7 +223,7 @@ internal static class Program
         const ulong id = ulong.MaxValue;
         var created = await queries.CreateAuthorAsync(new AuthorsDapper.CreateAuthorParams(id, "Ada", null), cancellationToken);
         await queries.UpsertAuthorAsync(new AuthorsDapper.UpsertAuthorParams(id, "Ada Lovelace", "programmer"), cancellationToken);
-        var fetched = await queries.GetAuthorAsync(id, cancellationToken);
+        var fetched = await queries.GetAuthorAsync(id, cancellationToken, commandTimeout: 10);
         if (created.ID != id || created.Bio is not null || fetched.Name != "Ada Lovelace" || fetched.Bio != "programmer" || (await queries.ListAuthorsAsync(cancellationToken)).Single().ID != id)
             throw new InvalidOperationException("authors Dapper CRUD mapping changed");
         await using (var transaction = (YdbTransaction)await connection.BeginTransactionAsync(cancellationToken))

@@ -81,3 +81,10 @@ connection. The caller must also keep the transaction active; the SDK checks
 active-transaction state during execution. Wrappers never commit or dispose a
 caller-owned transaction. Single SQL arguments use camelCase; record properties
 remain PascalCase.
+
+Dapper methods accept an optional `commandTimeout` in seconds, passed to
+`CommandDefinition`. Null retains the Dapper/connection default. It follows the
+existing cancellationToken argument so positional cancellation calls remain valid.
+SQL uses C# multiline raw strings; SQL with control characters or line endings
+that C# would normalize retains escaped literals. Parameters are built separately
+with explicit YDB types.

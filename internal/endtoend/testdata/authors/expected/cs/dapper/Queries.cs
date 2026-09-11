@@ -31,11 +31,22 @@ public sealed class Queries
     public Queries WithTransaction(YdbTransaction transaction) => new(_connection, transaction ?? throw new ArgumentNullException(nameof(transaction)));
 
     // -- name: GetAuthor :one
-    public async Task<GetAuthorRow> GetAuthorAsync(ulong authorId, CancellationToken cancellationToken = default)
+    public async Task<GetAuthorRow> GetAuthorAsync(ulong authorId, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$author_id", DbType.UInt64, authorId)
+        );
+
         var command = new CommandDefinition(
-            "DECLARE $author_id AS Uint64;\n" +
-            "SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, authorId)), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            DECLARE $author_id AS Uint64;
+            SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         return await _connection.QueryFirstAsync<GetAuthorRow>(command).ConfigureAwait(false);
     }
 

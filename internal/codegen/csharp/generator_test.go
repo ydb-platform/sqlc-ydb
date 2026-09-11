@@ -70,7 +70,7 @@ func TestGenerateUsesConcreteModernYdbAdoSurface(t *testing.T) {
 func TestGenerateDapperProfileUsesDapperExecutionAndTypedYdbParameters(t *testing.T) {
 	_, queries := generatedRuntime(t, authorsAnalysis(), "dapper")
 	for _, want := range []string{
-		"using Dapper;", "new CommandDefinition(" + sqlLiteral(authorsAnalysis().Queries[0].SQL), "_connection.QueryFirstAsync<GetAuthorRow>(command)",
+		"using Dapper;", "commandText: " + dapperSQLLiteral(authorsAnalysis().Queries[0].SQL), "_connection.QueryFirstAsync<GetAuthorRow>(command)",
 		"_connection.ExecuteAsync(command)", "SqlMapper.IDynamicParameters", "command.Parameters.Add(parameter)",
 		"new YdbParameter(\"$biography\", YdbValue.MakeOptionalUtf8(args.Biography))",
 	} {
@@ -461,5 +461,31 @@ func TestLocalParameterNames(t *testing.T) {
 func TestRejectsRemovedLinq2DBRuntime(t *testing.T) {
 	if _, err := Generate(authorsAnalysis(), Options{Runtime: "linq2db"}); err == nil {
 		t.Fatal("removed runtime accepted")
+	}
+}
+
+func TestDapperRawLiteralRuntime(t *testing.T) {
+	dotnet := os.Getenv("SQLC_YDB_CSHARP_DOTNET")
+	if dotnet == "" {
+		t.Skip("set SQLC_YDB_CSHARP_DOTNET")
+	}
+	samples := []string{"SELECT 1;", "SELECT \"\"\"\";\n\t-- конец\n", "\n  SELECT 1;\n\n", "SELECT 1;\r\n", "SELECT '\x00';", ""}
+	var program strings.Builder
+	program.WriteString("using System; using System.Text; class Program { static void Main() {\n")
+	for _, sql := range samples {
+		fmt.Fprintf(&program, "if (Convert.ToBase64String(Encoding.UTF8.GetBytes(%s)) != %q) throw new Exception(\"SQL changed\");\n", dapperSQLLiteral(sql), base64.StdEncoding.EncodeToString([]byte(sql)))
+	}
+	program.WriteString("} }")
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Program.cs"), []byte(program.String()), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "literal.csproj"), []byte(`<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(dotnet, "run", "--project", "literal.csproj")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("%v\n%s", err, out)
 	}
 }

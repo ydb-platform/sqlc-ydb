@@ -7,6 +7,8 @@ the version and moves these entries into a numbered section at release time.
 
 ### Added
 
+- Dapper helpers expose per-call command timeout and readable multiline SQL/parameter blocks.
+
 - C++ Json and Timestamp bindings, with native/userver generation for all five example families.
 
 - C++ native and userver helpers accept SDK execution policies and caller-owned

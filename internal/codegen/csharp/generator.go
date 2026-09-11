@@ -339,8 +339,13 @@ func writeDapperMethod(b *bytes.Buffer, q model.AnalyzedQuery) {
 	} else if q.Command == model.Many {
 		ret = "Task<IReadOnlyList<" + name + "Row>>"
 	}
-	fmt.Fprintf(b, "\n    // %s\n    public async %s %sAsync(%sCancellationToken cancellationToken = default)\n    {\n", model.QueryAnnotation(q), ret, name, methodParameters(q))
-	fmt.Fprintf(b, "        var command = new CommandDefinition(%s, %s, _transaction, cancellationToken: cancellationToken);\n", sqlLiteral(model.WithoutQueryAnnotation(q.SQL)), dapperParameters(q))
+	fmt.Fprintf(b, "\n    // %s\n    public async %s %sAsync(%sCancellationToken cancellationToken = default, int? commandTimeout = null)\n    {\n", model.QueryAnnotation(q), ret, name, methodParameters(q))
+	parameters := "null"
+	if len(q.Parameters) > 0 {
+		parameters = "parameters"
+		fmt.Fprintf(b, "        var parameters = %s;\n\n", dapperParameters(q))
+	}
+	fmt.Fprintf(b, "        var command = new CommandDefinition(\n            commandText: %s,\n            parameters: %s,\n            transaction: _transaction,\n            commandTimeout: commandTimeout,\n            cancellationToken: cancellationToken);\n\n", dapperSQLLiteral(model.WithoutQueryAnnotation(q.SQL)), parameters)
 	switch q.Command {
 	case model.Exec:
 		b.WriteString("        await _connection.ExecuteAsync(command).ConfigureAwait(false);\n")
@@ -357,14 +362,14 @@ func dapperParameters(q model.AnalyzedQuery) string {
 		return "null"
 	}
 	var b strings.Builder
-	b.WriteString("new YdbParameters(")
+	b.WriteString("new YdbParameters(\n")
 	for i, p := range q.Parameters {
 		if i > 0 {
-			b.WriteString(", ")
+			b.WriteString(",\n")
 		}
-		b.WriteString(ydbParameterExpression(q, p))
+		b.WriteString("            " + ydbParameterExpression(q, p))
 	}
-	b.WriteByte(')')
+	b.WriteString("\n        )")
 	return b.String()
 }
 
@@ -474,7 +479,7 @@ func localParameterName(name string) string {
 	}
 	n = string(runes)
 	switch n {
-	case "command", "reader", "rows", "row", "cancellationToken", "args":
+	case "command", "reader", "rows", "row", "cancellationToken", "commandTimeout", "parameters", "args":
 		return n + "Value"
 	}
 	if csKeywords[n] {
@@ -612,3 +617,17 @@ func namespace(s string) bool {
 }
 
 var csKeywords = map[string]bool{"abstract": true, "as": true, "base": true, "bool": true, "break": true, "byte": true, "case": true, "catch": true, "char": true, "checked": true, "class": true, "const": true, "continue": true, "decimal": true, "default": true, "delegate": true, "do": true, "double": true, "else": true, "enum": true, "event": true, "explicit": true, "extern": true, "false": true, "finally": true, "fixed": true, "float": true, "for": true, "foreach": true, "goto": true, "if": true, "implicit": true, "in": true, "int": true, "interface": true, "internal": true, "is": true, "lock": true, "long": true, "namespace": true, "new": true, "null": true, "object": true, "operator": true, "out": true, "override": true, "params": true, "private": true, "protected": true, "public": true, "readonly": true, "ref": true, "return": true, "sbyte": true, "sealed": true, "short": true, "sizeof": true, "stackalloc": true, "static": true, "string": true, "struct": true, "switch": true, "this": true, "throw": true, "true": true, "try": true, "typeof": true, "uint": true, "ulong": true, "unchecked": true, "unsafe": true, "ushort": true, "using": true, "virtual": true, "void": true, "volatile": true, "while": true}
+
+func dapperSQLLiteral(sql string) string {
+	// C# normalizes source line endings; use escaped strings when that would change SQL bytes.
+	for _, r := range sql {
+		if r == '\r' || (r < 32 && r != '\n' && r != '\t') || r == '\u0085' || r == '\u2028' || r == '\u2029' {
+			return sqlLiteral(sql)
+		}
+	}
+	delimiter := "\"\"\""
+	for strings.Contains(sql, delimiter) {
+		delimiter += "\""
+	}
+	return delimiter + "\n            " + strings.ReplaceAll(sql, "\n", "\n            ") + "\n            " + delimiter
+}
