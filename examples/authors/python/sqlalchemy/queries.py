@@ -15,11 +15,11 @@ class Querier:
     def __init__(self, connection: Connection):
         self._connection = connection
 
+    # -- name: GetAuthor :one
     def get_author(self, author_id: int) -> Optional[_models.Author]:
         parameters = {"author_id": _typed(author_id, _ydb.PrimitiveType.Uint64)}
         result = self._connection.execute(_text(
-            ("-- name\\: GetAuthor \\:one\n"
-             "SELECT id, name, bio FROM authors WHERE id = :author_id;")), parameters)
+            ("SELECT id, name, bio FROM authors WHERE id = :author_id;")), parameters)
         try:
             rows = result.fetchall()
         finally:
@@ -33,11 +33,11 @@ class Querier:
             bio=row._mapping["bio"],
         )
 
+    # -- name: ListAuthors :many
     def list_authors(self) -> Iterable[_models.Author]:
         parameters = {}
         result = self._connection.execute(_text(
-            ("-- name\\: ListAuthors \\:many\n"
-             "SELECT id, name, bio FROM authors ORDER BY name;")), parameters)
+            ("SELECT id, name, bio FROM authors ORDER BY name;")), parameters)
         try:
             rows = result.fetchall()
         finally:
@@ -48,11 +48,11 @@ class Querier:
             bio=row._mapping["bio"],
         ) for row in rows)
 
+    # -- name: GetAuthorName :one
     def get_author_name(self, author_id: int) -> Optional[_models.GetAuthorNameRow]:
         parameters = {"author_id": _typed(author_id, _ydb.PrimitiveType.Uint64)}
         result = self._connection.execute(_text(
-            ("-- name\\: GetAuthorName \\:one\n"
-             "SELECT name FROM authors WHERE id = :author_id;")), parameters)
+            ("SELECT name FROM authors WHERE id = :author_id;")), parameters)
         try:
             rows = result.fetchall()
         finally:
@@ -64,11 +64,11 @@ class Querier:
             name=row._mapping["name"],
         )
 
+    # -- name: CreateAuthor :one
     def create_author(self, author_id: int, author_name: str, biography: Optional[str]) -> Optional[_models.Author]:
         parameters = {"author_id": _typed(author_id, _ydb.PrimitiveType.Uint64),"author_name": _typed(author_name, _ydb.PrimitiveType.Utf8),"biography": _typed(biography, _ydb.OptionalType(_ydb.PrimitiveType.Utf8))}
         result = self._connection.execute(_text(
-            ("-- name\\: CreateAuthor \\:one\n"
-             "INSERT INTO `authors` (`id`, `name`, `bio`)\n"
+            ("INSERT INTO `authors` (`id`, `name`, `bio`)\n"
              "VALUES (:author_id, :author_name, :biography)\n"
              "RETURNING `id`, `name`, `bio`;")), parameters)
         try:
@@ -84,19 +84,19 @@ class Querier:
             bio=row._mapping["bio"],
         )
 
+    # -- name: UpsertAuthor :exec
     def upsert_author(self, author_id: int, author_name: str, biography: Optional[str]) -> None:
         parameters = {"author_id": _typed(author_id, _ydb.PrimitiveType.Uint64),"author_name": _typed(author_name, _ydb.PrimitiveType.Utf8),"biography": _typed(biography, _ydb.OptionalType(_ydb.PrimitiveType.Utf8))}
         result = self._connection.execute(_text(
-            ("-- name\\: UpsertAuthor \\:exec\n"
-             "UPSERT INTO authors (id, name, bio)\n"
+            ("UPSERT INTO authors (id, name, bio)\n"
              "VALUES (:author_id, :author_name, :biography);")), parameters)
         result.close()
         return None
 
+    # -- name: DeleteAuthor :exec
     def delete_author(self, author_id: int) -> None:
         parameters = {"author_id": _typed(author_id, _ydb.PrimitiveType.Uint64)}
         result = self._connection.execute(_text(
-            ("-- name\\: DeleteAuthor \\:exec\n"
-             "DELETE FROM authors WHERE id = :author_id;")), parameters)
+            ("DELETE FROM authors WHERE id = :author_id;")), parameters)
         result.close()
         return None
