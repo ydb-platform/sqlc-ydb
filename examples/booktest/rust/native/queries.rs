@@ -80,8 +80,7 @@ impl<'a> Queries<'a> {
         title: String,
         publication_year: i32,
     ) -> ydb::YdbResult<Vec<BooksByTitleYearRow>> {
-        self
-            .client
+        self.client
             .query_result_set(
                 r"
                  SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags

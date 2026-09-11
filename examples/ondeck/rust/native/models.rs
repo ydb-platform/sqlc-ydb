@@ -51,6 +51,7 @@ pub struct CreateVenueRow {
     pub id: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct UpdateVenueNameRow {
     pub id: u64,
 }

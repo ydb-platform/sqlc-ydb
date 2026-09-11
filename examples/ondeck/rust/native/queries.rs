@@ -115,8 +115,7 @@ impl<'a> Queries<'a> {
 
     // -- name: ListVenues :many
     pub async fn list_venues(&mut self, city: String) -> ydb::YdbResult<Vec<ListVenuesRow>> {
-        self
-            .client
+        self.client
             .query_result_set(
                 r"
                  SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
