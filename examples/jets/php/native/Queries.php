@@ -10,12 +10,18 @@ use Closure;
 use UnexpectedValueException;
 use Ydb\Table\ExecuteQueryResult;
 use Ydb\Type\PrimitiveTypeId;
+use YdbPlatform\Ydb\Retry\RetryParams;
 use YdbPlatform\Ydb\Session;
 use YdbPlatform\Ydb\Table;
 
 final class Queries
 {
-    public function __construct(private readonly Table $table)
+    public function __construct(
+        private readonly Table $table,
+        private readonly bool $idempotent = false,
+        private readonly ?Closure $configure = null,
+        private readonly ?RetryParams $retryParams = null,
+    )
     {
         if (PHP_INT_SIZE !== 8) {
             throw new \LogicException('sqlc-ydb generated PHP code requires a 64-bit PHP runtime');
@@ -35,8 +41,12 @@ final class Queries
                 ->parameters($parameters)
                 ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
+            if ($this->configure !== null) {
+                ($this->configure)($query);
+            }
+
             return (new YdbRawExecutor($this->table))->execute($session, $query);
-        }, false);
+        }, $this->idempotent, $this->retryParams);
 
         $rows = $this->decodeRows(
             $result,
@@ -66,8 +76,12 @@ final class Queries
                 ->parameters($parameters)
                 ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
+            if ($this->configure !== null) {
+                ($this->configure)($query);
+            }
+
             return (new YdbRawExecutor($this->table))->execute($session, $query);
-        }, false);
+        }, $this->idempotent, $this->retryParams);
 
         $rows = $this->decodeRows(
             $result,
@@ -99,8 +113,12 @@ final class Queries
                 ->parameters($parameters)
                 ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
+            if ($this->configure !== null) {
+                ($this->configure)($query);
+            }
+
             return (new YdbRawExecutor($this->table))->execute($session, $query);
-        }, false);
+        }, $this->idempotent, $this->retryParams);
     }
 
     /**
