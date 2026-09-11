@@ -58,11 +58,8 @@ fully interchangeable with upstream sqlc.
 | Additional tooling | No `analyze`, `parse`, `fmt`, `completion`, `vet`, `verify`, `push` or `createdb`; no database-assisted analysis or cloud workflow. |
 | Engines and generators | YDB and built-in generators; no PostgreSQL/MySQL/SQLite backends or external plugin protocol. |
 
-The comparison follows upstream's [CLI](https://docs.sqlc.dev/en/latest/reference/cli.html),
-[configuration](https://docs.sqlc.dev/en/latest/reference/config.html),
-[annotations](https://docs.sqlc.dev/en/latest/reference/query-annotations.html)
-and [macros](https://docs.sqlc.dev/en/latest/reference/macros.html).
-The [compatibility contract](docs/compatibility.md) defines the supported subset.
+The comparison follows upstream's [CLI](https://docs.sqlc.dev/en/latest/reference/cli.html), [configuration](https://docs.sqlc.dev/en/latest/reference/config.html), [annotations](https://docs.sqlc.dev/en/latest/reference/query-annotations.html)
+and [macros](https://docs.sqlc.dev/en/latest/reference/macros.html). The [compatibility contract](docs/compatibility.md) defines the supported subset.
 
 ### Known limitations
 
