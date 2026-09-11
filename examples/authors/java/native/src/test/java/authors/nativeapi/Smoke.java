@@ -6,7 +6,9 @@ import java.util.List;
 
 import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.query.QueryClient;
+import tech.ydb.query.QueryTransaction;
 import tech.ydb.query.tools.SessionRetryContext;
+import tech.ydb.common.transaction.TxMode;
 
 /** Run from examples/authors; the smoke creates and drops its authors table. */
 public final class Smoke {
@@ -25,9 +27,12 @@ public final class Smoke {
              QueryClient client = QueryClient.newClient(transport).build()) {
             SessionRetryContext retry = SessionRetryContext.create(client).build();
             createSchema(retry, schema);
-            Queries queries = new Queries(retry);
             try {
-                exercise(queries);
+                retry.supplyResult(session -> {
+                    QueryTransaction tx = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+                    exercise(new Queries(tx));
+                    return tx.commit();
+                }).join().getStatus().expectSuccess();
             } finally {
                 dropSchema(retry);
             }
