@@ -10,7 +10,8 @@ import (
 // -- name: ColdCities :many
 func (q *Queries) ColdCities(ctx context.Context, arg int32) ([]ColdCitiesRow, error) {
 	rows, err := q.db.QueryContext(ctx,
-		"SELECT city, COUNT(*) AS reading_count, MAX(temperature) AS hottest_temperature "+
+		""+
+			"SELECT city, COUNT(*) AS reading_count, MAX(temperature) AS hottest_temperature "+
 			"FROM weather "+
 			"GROUP BY city "+
 			"HAVING MAX(temperature) < $maximum_temperature;",

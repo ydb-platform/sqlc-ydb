@@ -21,7 +21,8 @@ func (q *Queries) ListVenues(ctx context.Context, arg string, opts ...query.Exec
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.Query(ctx,
-		"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at "+
+		""+
+			"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at "+
 			"FROM venue "+
 			"WHERE city = $city "+
 			"ORDER BY name;",
@@ -82,7 +83,8 @@ func (q *Queries) DeleteVenue(ctx context.Context, arg string, opts ...query.Exe
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	return q.db.Exec(ctx,
-		"DELETE FROM venue "+
+		""+
+			"DELETE FROM venue "+
 			"WHERE slug = $slug AND slug = $slug;",
 		callOptions...,
 	)
@@ -98,7 +100,8 @@ func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams, opts ...quer
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx,
-		"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at "+
+		""+
+			"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at "+
 			"FROM venue "+
 			"WHERE slug = $slug AND city = $city;",
 		callOptions...,
@@ -143,7 +146,8 @@ func (q *Queries) CreateVenue(ctx context.Context, arg CreateVenueParams, opts .
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx,
-		"INSERT INTO venue ( "+
+		""+
+			"INSERT INTO venue ( "+
 			"id, "+
 			"slug, "+
 			"name, "+
@@ -190,7 +194,8 @@ func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx,
-		"UPDATE venue "+
+		""+
+			"UPDATE venue "+
 			"SET name = $name "+
 			"WHERE slug = $slug "+
 			"RETURNING id;",
@@ -213,7 +218,8 @@ func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams
 // -- name: VenueCountByCity :many
 func (q *Queries) VenueCountByCity(ctx context.Context, opts ...query.ExecuteOption) ([]VenueCountByCityRow, error) {
 	result, err := q.db.Query(ctx,
-		"SELECT "+
+		""+
+			"SELECT "+
 			"city, "+
 			"COUNT(*) AS venue_count "+
 			"FROM venue "+

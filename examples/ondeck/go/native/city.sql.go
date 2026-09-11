@@ -15,7 +15,8 @@ import (
 // -- name: ListCities :many
 func (q *Queries) ListCities(ctx context.Context, opts ...query.ExecuteOption) ([]ListCitiesRow, error) {
 	result, err := q.db.Query(ctx,
-		"SELECT slug, name "+
+		""+
+			"SELECT slug, name "+
 			"FROM city "+
 			"ORDER BY name;",
 		opts...,
@@ -67,7 +68,8 @@ func (q *Queries) GetCity(ctx context.Context, arg string, opts ...query.Execute
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx,
-		"SELECT slug, name "+
+		""+
+			"SELECT slug, name "+
 			"FROM city "+
 			"WHERE slug = $slug;",
 		callOptions...,
@@ -97,7 +99,8 @@ func (q *Queries) CreateCity(ctx context.Context, arg CreateCityParams, opts ...
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx,
-		"INSERT INTO city ( "+
+		""+
+			"INSERT INTO city ( "+
 			"name, "+
 			"slug "+
 			") VALUES ( "+
@@ -131,7 +134,8 @@ func (q *Queries) UpdateCityName(ctx context.Context, arg UpdateCityNameParams, 
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	return q.db.Exec(ctx,
-		"UPDATE city "+
+		""+
+			"UPDATE city "+
 			"SET name = $name "+
 			"WHERE slug = $slug;",
 		callOptions...,

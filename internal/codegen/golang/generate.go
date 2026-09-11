@@ -534,6 +534,7 @@ func sqlLiteral(sql string) string {
 	if len(compact) == 0 {
 		return `""`
 	}
+	compact = append([]string{`""`}, compact...)
 	return strings.Join(compact, " +\n")
 }
 

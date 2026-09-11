@@ -10,7 +10,8 @@ import (
 // -- name: NormalizeProfiles :many
 func (q *Queries) NormalizeProfiles(ctx context.Context, arg NormalizeProfilesParams) ([]NormalizeProfilesRow, error) {
 	rows, err := q.db.QueryContext(ctx,
-		"SELECT "+
+		""+
+			"SELECT "+
 			"CASE WHEN $use_nickname THEN nickname ELSE $fallback END AS display_name, "+
 			"CAST(score AS Int64) AS score64, "+
 			"COALESCE(nickname, $fallback) AS normalized_name, "+

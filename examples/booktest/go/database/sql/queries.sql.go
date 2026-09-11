@@ -13,7 +13,8 @@ import (
 func (q *Queries) GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, error) {
 	var row GetAuthorRow
 	err := q.db.QueryRowContext(ctx,
-		"SELECT author_id, name "+
+		""+
+			"SELECT author_id, name "+
 			"FROM authors "+
 			"WHERE author_id = $author_id;",
 		sql.Named("author_id", arg),
@@ -29,7 +30,8 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, erro
 func (q *Queries) GetBook(ctx context.Context, arg uint64) (GetBookRow, error) {
 	var row GetBookRow
 	err := q.db.QueryRowContext(ctx,
-		"SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags "+
+		""+
+			"SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags "+
 			"FROM books "+
 			"WHERE book_id = $book_id;",
 		sql.Named("book_id", arg),
@@ -50,7 +52,8 @@ func (q *Queries) GetBook(ctx context.Context, arg uint64) (GetBookRow, error) {
 // -- name: DeleteBook :exec
 func (q *Queries) DeleteBook(ctx context.Context, arg uint64) error {
 	_, err := q.db.ExecContext(ctx,
-		"DELETE FROM books "+
+		""+
+			"DELETE FROM books "+
 			"WHERE book_id = $book_id;",
 		sql.Named("book_id", arg),
 	)
@@ -61,7 +64,8 @@ func (q *Queries) DeleteBook(ctx context.Context, arg uint64) error {
 // -- name: BooksByTitleYear :many
 func (q *Queries) BooksByTitleYear(ctx context.Context, arg BooksByTitleYearParams) ([]BooksByTitleYearRow, error) {
 	rows, err := q.db.QueryContext(ctx,
-		"SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags "+
+		""+
+			"SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags "+
 			"FROM books "+
 			"WHERE title = $title AND publication_year = $publication_year;",
 		sql.Named("title", arg.Title),
@@ -100,7 +104,8 @@ func (q *Queries) BooksByTitleYear(ctx context.Context, arg BooksByTitleYearPara
 // -- name: BooksByTags :many
 func (q *Queries) BooksByTags(ctx context.Context, arg string) ([]BooksByTagsRow, error) {
 	rows, err := q.db.QueryContext(ctx,
-		"SELECT "+
+		""+
+			"SELECT "+
 			"b.book_id, "+
 			"b.title, "+
 			"a.name, "+
@@ -145,7 +150,8 @@ func (q *Queries) BooksByTags(ctx context.Context, arg string) ([]BooksByTagsRow
 func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (CreateAuthorRow, error) {
 	var row CreateAuthorRow
 	err := q.db.QueryRowContext(ctx,
-		"INSERT INTO authors (author_id, name) "+
+		""+
+			"INSERT INTO authors (author_id, name) "+
 			"VALUES ($author_id, $name) "+
 			"RETURNING author_id, name;",
 		sql.Named("author_id", arg.AuthorID),
@@ -162,7 +168,8 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (Cre
 func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams) (CreateBookRow, error) {
 	var row CreateBookRow
 	err := q.db.QueryRowContext(ctx,
-		"INSERT INTO books ( "+
+		""+
+			"INSERT INTO books ( "+
 			"book_id, "+
 			"author_id, "+
 			"isbn, "+
@@ -207,7 +214,8 @@ func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams) (CreateB
 // -- name: UpdateBook :exec
 func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams) error {
 	_, err := q.db.ExecContext(ctx,
-		"UPDATE books "+
+		""+
+			"UPDATE books "+
 			"SET title = $title, tags = $tags "+
 			"WHERE book_id = $book_id;",
 		sql.Named("title", arg.Title),
@@ -221,7 +229,8 @@ func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams) error {
 // -- name: UpdateBookISBN :exec
 func (q *Queries) UpdateBookISBN(ctx context.Context, arg UpdateBookISBNParams) error {
 	_, err := q.db.ExecContext(ctx,
-		"UPDATE books "+
+		""+
+			"UPDATE books "+
 			"SET title = $title, tags = $tags, isbn = $isbn "+
 			"WHERE book_id = $book_id;",
 		sql.Named("title", arg.Title),
@@ -236,7 +245,8 @@ func (q *Queries) UpdateBookISBN(ctx context.Context, arg UpdateBookISBNParams) 
 // -- name: DeleteAuthorBeforeYear :exec
 func (q *Queries) DeleteAuthorBeforeYear(ctx context.Context, arg DeleteAuthorBeforeYearParams) error {
 	_, err := q.db.ExecContext(ctx,
-		"DELETE FROM books "+
+		""+
+			"DELETE FROM books "+
 			"WHERE publication_year < $publication_year AND author_id = $author_id;",
 		sql.Named("publication_year", arg.PublicationYear),
 		sql.Named("author_id", arg.AuthorID),
@@ -249,7 +259,8 @@ func (q *Queries) DeleteAuthorBeforeYear(ctx context.Context, arg DeleteAuthorBe
 func (q *Queries) SayHello(ctx context.Context, arg string) (SayHelloRow, error) {
 	var row SayHelloRow
 	err := q.db.QueryRowContext(ctx,
-		"SELECT \"hello \"u || $name AS greeting;",
+		""+
+			"SELECT \"hello \"u || $name AS greeting;",
 		sql.Named("name", arg),
 	).Scan(
 		&row.Greeting,

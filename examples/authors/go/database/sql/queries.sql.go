@@ -11,7 +11,8 @@ import (
 func (q *Queries) GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, error) {
 	var row GetAuthorRow
 	err := q.db.QueryRowContext(ctx,
-		"SELECT id, name, bio FROM authors WHERE id = $author_id;",
+		""+
+			"SELECT id, name, bio FROM authors WHERE id = $author_id;",
 		sql.Named("author_id", arg),
 	).Scan(
 		&row.ID,
@@ -25,7 +26,8 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, erro
 // -- name: ListAuthors :many
 func (q *Queries) ListAuthors(ctx context.Context) ([]ListAuthorsRow, error) {
 	rows, err := q.db.QueryContext(ctx,
-		"SELECT id, name, bio FROM authors ORDER BY name;",
+		""+
+			"SELECT id, name, bio FROM authors ORDER BY name;",
 	)
 	if err != nil {
 		return nil, err
@@ -56,7 +58,8 @@ func (q *Queries) ListAuthors(ctx context.Context) ([]ListAuthorsRow, error) {
 func (q *Queries) GetAuthorName(ctx context.Context, arg uint64) (GetAuthorNameRow, error) {
 	var row GetAuthorNameRow
 	err := q.db.QueryRowContext(ctx,
-		"SELECT name FROM authors WHERE id = $author_id;",
+		""+
+			"SELECT name FROM authors WHERE id = $author_id;",
 		sql.Named("author_id", arg),
 	).Scan(
 		&row.Name,
@@ -69,7 +72,8 @@ func (q *Queries) GetAuthorName(ctx context.Context, arg uint64) (GetAuthorNameR
 func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (CreateAuthorRow, error) {
 	var row CreateAuthorRow
 	err := q.db.QueryRowContext(ctx,
-		"INSERT INTO `authors` (`id`, `name`, `bio`) "+
+		""+
+			"INSERT INTO `authors` (`id`, `name`, `bio`) "+
 			"VALUES ($author_id, $author_name, $biography) "+
 			"RETURNING `id`, `name`, `bio`;",
 		sql.Named("author_id", arg.AuthorID),
@@ -87,7 +91,8 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (Cre
 // -- name: UpsertAuthor :exec
 func (q *Queries) UpsertAuthor(ctx context.Context, arg UpsertAuthorParams) error {
 	_, err := q.db.ExecContext(ctx,
-		"UPSERT INTO authors (id, name, bio) "+
+		""+
+			"UPSERT INTO authors (id, name, bio) "+
 			"VALUES ($author_id, $author_name, $biography);",
 		sql.Named("author_id", arg.AuthorID),
 		sql.Named("author_name", arg.AuthorName),
@@ -100,7 +105,8 @@ func (q *Queries) UpsertAuthor(ctx context.Context, arg UpsertAuthorParams) erro
 // -- name: DeleteAuthor :exec
 func (q *Queries) DeleteAuthor(ctx context.Context, arg uint64) error {
 	_, err := q.db.ExecContext(ctx,
-		"DELETE FROM authors WHERE id = $author_id;",
+		""+
+			"DELETE FROM authors WHERE id = $author_id;",
 		sql.Named("author_id", arg),
 	)
 

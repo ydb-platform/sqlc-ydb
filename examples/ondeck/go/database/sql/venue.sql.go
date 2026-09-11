@@ -12,7 +12,8 @@ import (
 // -- name: ListVenues :many
 func (q *Queries) ListVenues(ctx context.Context, arg string) ([]ListVenuesRow, error) {
 	rows, err := q.db.QueryContext(ctx,
-		"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at "+
+		""+
+			"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at "+
 			"FROM venue "+
 			"WHERE city = $city "+
 			"ORDER BY name;",
@@ -53,7 +54,8 @@ func (q *Queries) ListVenues(ctx context.Context, arg string) ([]ListVenuesRow, 
 // -- name: DeleteVenue :exec
 func (q *Queries) DeleteVenue(ctx context.Context, arg string) error {
 	_, err := q.db.ExecContext(ctx,
-		"DELETE FROM venue "+
+		""+
+			"DELETE FROM venue "+
 			"WHERE slug = $slug AND slug = $slug;",
 		sql.Named("slug", arg),
 	)
@@ -65,7 +67,8 @@ func (q *Queries) DeleteVenue(ctx context.Context, arg string) error {
 func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams) (GetVenueRow, error) {
 	var row GetVenueRow
 	err := q.db.QueryRowContext(ctx,
-		"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at "+
+		""+
+			"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at "+
 			"FROM venue "+
 			"WHERE slug = $slug AND city = $city;",
 		sql.Named("slug", arg.Slug),
@@ -90,7 +93,8 @@ func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams) (GetVenueRow
 func (q *Queries) CreateVenue(ctx context.Context, arg CreateVenueParams) (CreateVenueRow, error) {
 	var row CreateVenueRow
 	err := q.db.QueryRowContext(ctx,
-		"INSERT INTO venue ( "+
+		""+
+			"INSERT INTO venue ( "+
 			"id, "+
 			"slug, "+
 			"name, "+
@@ -131,7 +135,8 @@ func (q *Queries) CreateVenue(ctx context.Context, arg CreateVenueParams) (Creat
 func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams) (UpdateVenueNameRow, error) {
 	var row UpdateVenueNameRow
 	err := q.db.QueryRowContext(ctx,
-		"UPDATE venue "+
+		""+
+			"UPDATE venue "+
 			"SET name = $name "+
 			"WHERE slug = $slug "+
 			"RETURNING id;",
@@ -147,7 +152,8 @@ func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams
 // -- name: VenueCountByCity :many
 func (q *Queries) VenueCountByCity(ctx context.Context) ([]VenueCountByCityRow, error) {
 	rows, err := q.db.QueryContext(ctx,
-		"SELECT "+
+		""+
+			"SELECT "+
 			"city, "+
 			"COUNT(*) AS venue_count "+
 			"FROM venue "+

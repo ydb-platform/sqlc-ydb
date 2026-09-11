@@ -10,7 +10,8 @@ import (
 // -- name: ListCities :many
 func (q *Queries) ListCities(ctx context.Context) ([]ListCitiesRow, error) {
 	rows, err := q.db.QueryContext(ctx,
-		"SELECT slug, name "+
+		""+
+			"SELECT slug, name "+
 			"FROM city "+
 			"ORDER BY name;",
 	)
@@ -42,7 +43,8 @@ func (q *Queries) ListCities(ctx context.Context) ([]ListCitiesRow, error) {
 func (q *Queries) GetCity(ctx context.Context, arg string) (GetCityRow, error) {
 	var row GetCityRow
 	err := q.db.QueryRowContext(ctx,
-		"SELECT slug, name "+
+		""+
+			"SELECT slug, name "+
 			"FROM city "+
 			"WHERE slug = $slug;",
 		sql.Named("slug", arg),
@@ -58,7 +60,8 @@ func (q *Queries) GetCity(ctx context.Context, arg string) (GetCityRow, error) {
 func (q *Queries) CreateCity(ctx context.Context, arg CreateCityParams) (CreateCityRow, error) {
 	var row CreateCityRow
 	err := q.db.QueryRowContext(ctx,
-		"INSERT INTO city ( "+
+		""+
+			"INSERT INTO city ( "+
 			"name, "+
 			"slug "+
 			") VALUES ( "+
@@ -78,7 +81,8 @@ func (q *Queries) CreateCity(ctx context.Context, arg CreateCityParams) (CreateC
 // -- name: UpdateCityName :exec
 func (q *Queries) UpdateCityName(ctx context.Context, arg UpdateCityNameParams) error {
 	_, err := q.db.ExecContext(ctx,
-		"UPDATE city "+
+		""+
+			"UPDATE city "+
 			"SET name = $name "+
 			"WHERE slug = $slug;",
 		sql.Named("name", arg.Name),

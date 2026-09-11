@@ -21,7 +21,8 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx,
-		"SELECT author_id, name "+
+		""+
+			"SELECT author_id, name "+
 			"FROM authors "+
 			"WHERE author_id = $author_id;",
 		callOptions...,
@@ -50,7 +51,8 @@ func (q *Queries) GetBook(ctx context.Context, arg uint64, opts ...query.Execute
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx,
-		"SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags "+
+		""+
+			"SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags "+
 			"FROM books "+
 			"WHERE book_id = $book_id;",
 		callOptions...,
@@ -85,7 +87,8 @@ func (q *Queries) DeleteBook(ctx context.Context, arg uint64, opts ...query.Exec
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	return q.db.Exec(ctx,
-		"DELETE FROM books "+
+		""+
+			"DELETE FROM books "+
 			"WHERE book_id = $book_id;",
 		callOptions...,
 	)
@@ -101,7 +104,8 @@ func (q *Queries) BooksByTitleYear(ctx context.Context, arg BooksByTitleYearPara
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.Query(ctx,
-		"SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags "+
+		""+
+			"SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags "+
 			"FROM books "+
 			"WHERE title = $title AND publication_year = $publication_year;",
 		callOptions...,
@@ -159,7 +163,8 @@ func (q *Queries) BooksByTags(ctx context.Context, arg string, opts ...query.Exe
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.Query(ctx,
-		"SELECT "+
+		""+
+			"SELECT "+
 			"b.book_id, "+
 			"b.title, "+
 			"a.name, "+
@@ -224,7 +229,8 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx,
-		"INSERT INTO authors (author_id, name) "+
+		""+
+			"INSERT INTO authors (author_id, name) "+
 			"VALUES ($author_id, $name) "+
 			"RETURNING author_id, name;",
 		callOptions...,
@@ -260,7 +266,8 @@ func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams, opts ...
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx,
-		"INSERT INTO books ( "+
+		""+
+			"INSERT INTO books ( "+
 			"book_id, "+
 			"author_id, "+
 			"isbn, "+
@@ -314,7 +321,8 @@ func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams, opts ...
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	return q.db.Exec(ctx,
-		"UPDATE books "+
+		""+
+			"UPDATE books "+
 			"SET title = $title, tags = $tags "+
 			"WHERE book_id = $book_id;",
 		callOptions...,
@@ -333,7 +341,8 @@ func (q *Queries) UpdateBookISBN(ctx context.Context, arg UpdateBookISBNParams, 
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	return q.db.Exec(ctx,
-		"UPDATE books "+
+		""+
+			"UPDATE books "+
 			"SET title = $title, tags = $tags, isbn = $isbn "+
 			"WHERE book_id = $book_id;",
 		callOptions...,
@@ -350,7 +359,8 @@ func (q *Queries) DeleteAuthorBeforeYear(ctx context.Context, arg DeleteAuthorBe
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	return q.db.Exec(ctx,
-		"DELETE FROM books "+
+		""+
+			"DELETE FROM books "+
 			"WHERE publication_year < $publication_year AND author_id = $author_id;",
 		callOptions...,
 	)
@@ -365,7 +375,8 @@ func (q *Queries) SayHello(ctx context.Context, arg string, opts ...query.Execut
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx,
-		"SELECT \"hello \"u || $name AS greeting;",
+		""+
+			"SELECT \"hello \"u || $name AS greeting;",
 		callOptions...,
 	)
 	if err != nil {

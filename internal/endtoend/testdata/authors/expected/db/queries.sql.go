@@ -11,7 +11,8 @@ import (
 func (q *Queries) GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, error) {
 	var row GetAuthorRow
 	err := q.db.QueryRowContext(ctx,
-		"SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;",
+		""+
+			"SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;",
 		sql.Named("author_id", arg),
 	).Scan(
 		&row.ID,
