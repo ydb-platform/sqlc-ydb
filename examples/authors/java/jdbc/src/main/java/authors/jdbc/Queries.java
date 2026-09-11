@@ -13,13 +13,12 @@ public final class Queries {
         this.client = java.util.Objects.requireNonNull(client);
     }
 
-    private static final String getAuthorSql = """
--- name: GetAuthor :one
-SELECT id, name, bio FROM authors WHERE id = $author_id;\
-""";
-
+    // -- name: GetAuthor :one
     public java.util.Optional<GetAuthorRow> getAuthor(long authorId) throws java.sql.SQLException {
-        try (var _prepared = client.prepareStatement(getAuthorSql)) {
+        try (var _prepared = client.prepareStatement("""
+            DECLARE $author_id AS Uint64;
+            SELECT id, name, bio FROM authors WHERE id = $author_id;\
+            """)) {
             var _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement.class);
             _statement.setObject("author_id", PrimitiveValue.newUint64(authorId));
             try (var _rows = _prepared.executeQuery()) {
@@ -33,13 +32,11 @@ SELECT id, name, bio FROM authors WHERE id = $author_id;\
         }
     }
 
-    private static final String listAuthorsSql = """
--- name: ListAuthors :many
-SELECT id, name, bio FROM authors ORDER BY name;\
-""";
-
+    // -- name: ListAuthors :many
     public java.util.List<ListAuthorsRow> listAuthors() throws java.sql.SQLException {
-        try (var _prepared = client.prepareStatement(listAuthorsSql)) {
+        try (var _prepared = client.prepareStatement("""
+            SELECT id, name, bio FROM authors ORDER BY name;\
+            """)) {
             try (var _rows = _prepared.executeQuery()) {
                 var _items = new java.util.ArrayList<ListAuthorsRow>();
                 while (_rows.next()) {
@@ -54,13 +51,12 @@ SELECT id, name, bio FROM authors ORDER BY name;\
         }
     }
 
-    private static final String getAuthorNameSql = """
--- name: GetAuthorName :one
-SELECT name FROM authors WHERE id = $author_id;\
-""";
-
+    // -- name: GetAuthorName :one
     public java.util.Optional<GetAuthorNameRow> getAuthorName(long authorId) throws java.sql.SQLException {
-        try (var _prepared = client.prepareStatement(getAuthorNameSql)) {
+        try (var _prepared = client.prepareStatement("""
+            DECLARE $author_id AS Uint64;
+            SELECT name FROM authors WHERE id = $author_id;\
+            """)) {
             var _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement.class);
             _statement.setObject("author_id", PrimitiveValue.newUint64(authorId));
             try (var _rows = _prepared.executeQuery()) {
@@ -71,15 +67,16 @@ SELECT name FROM authors WHERE id = $author_id;\
         }
     }
 
-    private static final String createAuthorSql = """
--- name: CreateAuthor :one
-INSERT INTO authors (id, name, bio)
-VALUES ($author_id, $author_name, $biography)
-RETURNING id, name, bio;\
-""";
-
+    // -- name: CreateAuthor :one
     public java.util.Optional<CreateAuthorRow> createAuthor(long authorId, String authorName, String biography) throws java.sql.SQLException {
-        try (var _prepared = client.prepareStatement(createAuthorSql)) {
+        try (var _prepared = client.prepareStatement("""
+            DECLARE $author_id AS Uint64;
+            DECLARE $author_name AS Utf8;
+            DECLARE $biography AS Optional<Utf8>;
+            INSERT INTO `authors` (`id`, `name`, `bio`)
+            VALUES ($author_id, $author_name, $biography)
+            RETURNING `id`, `name`, `bio`;\
+            """)) {
             var _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement.class);
             _statement.setObject("author_id", PrimitiveValue.newUint64(authorId));
             _statement.setObject("author_name", PrimitiveValue.newText(authorName));
@@ -95,14 +92,15 @@ RETURNING id, name, bio;\
         }
     }
 
-    private static final String upsertAuthorSql = """
--- name: UpsertAuthor :exec
-UPSERT INTO authors (id, name, bio)
-VALUES ($author_id, $author_name, $biography);\
-""";
-
+    // -- name: UpsertAuthor :exec
     public void upsertAuthor(long authorId, String authorName, String biography) throws java.sql.SQLException {
-        try (var _prepared = client.prepareStatement(upsertAuthorSql)) {
+        try (var _prepared = client.prepareStatement("""
+            DECLARE $author_id AS Uint64;
+            DECLARE $author_name AS Utf8;
+            DECLARE $biography AS Optional<Utf8>;
+            UPSERT INTO authors (id, name, bio)
+            VALUES ($author_id, $author_name, $biography);\
+            """)) {
             var _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement.class);
             _statement.setObject("author_id", PrimitiveValue.newUint64(authorId));
             _statement.setObject("author_name", PrimitiveValue.newText(authorName));
@@ -111,13 +109,12 @@ VALUES ($author_id, $author_name, $biography);\
         }
     }
 
-    private static final String deleteAuthorSql = """
--- name: DeleteAuthor :exec
-DELETE FROM authors WHERE id = $author_id;\
-""";
-
+    // -- name: DeleteAuthor :exec
     public void deleteAuthor(long authorId) throws java.sql.SQLException {
-        try (var _prepared = client.prepareStatement(deleteAuthorSql)) {
+        try (var _prepared = client.prepareStatement("""
+            DECLARE $author_id AS Uint64;
+            DELETE FROM authors WHERE id = $author_id;\
+            """)) {
             var _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement.class);
             _statement.setObject("author_id", PrimitiveValue.newUint64(authorId));
             _prepared.execute();
