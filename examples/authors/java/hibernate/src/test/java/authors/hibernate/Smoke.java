@@ -8,6 +8,7 @@ import org.hibernate.Session;
 import org.hibernate.SessionFactory;
 import org.hibernate.cfg.AvailableSettings;
 import org.hibernate.cfg.Configuration;
+
 import tech.ydb.hibernate.dialect.YdbDialect;
 import tech.ydb.jdbc.YdbDriver;
 
@@ -27,46 +28,49 @@ public final class Smoke {
                 .setProperty(AvailableSettings.DRIVER, YdbDriver.class.getName())
                 .setProperty(AvailableSettings.DIALECT, YdbDialect.class.getName())
                 .setProperty(AvailableSettings.URL, jdbcUrl)
-                .buildSessionFactory();
-             Session session = factory.openSession()) {
-            session.doWork(connection -> { try (var statement = connection.createStatement()) { statement.execute(schema); } });
-            try {
+                .addAnnotatedClass(Authors.class)
+                .buildSessionFactory()) {
+            try (Session session = factory.openSession()) {
                 session.beginTransaction();
-                try {
-                    exercise(new Queries(session));
-                    session.getTransaction().commit();
-                } catch (RuntimeException | Error e) {
-                    if (session.getTransaction().isActive()) {
-                        try {
-                            session.getTransaction().rollback();
-                        } catch (RuntimeException rollbackError) {
-                            e.addSuppressed(rollbackError);
-                        }
-                    }
-                    throw e;
-                }
+                session.createNativeMutationQuery(schema).executeUpdate();
+                session.getTransaction().commit();
+            }
+
+            try (Session session = factory.openSession()) {
+                session.beginTransaction();
+                exercise(new Queries(session));
+                session.getTransaction().commit();
             } finally {
-                session.doWork(connection -> { try (var statement = connection.createStatement()) { statement.execute("DROP TABLE authors;"); } });
+                try (Session session = factory.openSession()) {
+                    session.beginTransaction();
+                    session.createNativeMutationQuery("DROP TABLE authors;").executeUpdate();
+                    session.getTransaction().commit();
+                }
             }
         }
     }
 
     private static void exercise(Queries queries) {
-        queries.upsertAuthor(MAX_UINT64, "Unsigned", null);
-        GetAuthorRow emptyBio = queries.getAuthor(MAX_UINT64).orElseThrow();
+        queries.createAuthor(MAX_UINT64, "Unsigned", null);
+        Authors emptyBio = queries.getAuthor(MAX_UINT64).orElseThrow();
         check(emptyBio.id() == MAX_UINT64 && "Unsigned".equals(emptyBio.name()) && emptyBio.bio() == null,
                 "nullable Hibernate row");
-        check("Unsigned".equals(queries.getAuthorName(MAX_UINT64).orElseThrow().name()), "Hibernate name");
+        check("Unsigned".equals(queries.getAuthorName(MAX_UINT64).orElseThrow()), "Hibernate name");
 
-        queries.upsertAuthor(MAX_UINT64, "Unsigned", "Biography");
+        emptyBio.setBio("Biography");
+        queries.updateAuthor(emptyBio);
+
         check("Biography".equals(queries.getAuthor(MAX_UINT64).orElseThrow().bio()), "non-null Hibernate bio");
-        queries.upsertAuthor(SECOND_ID, "Second", null);
-        List<ListAuthorsRow> rows = queries.listAuthors();
-        check(rows.stream().anyMatch(row -> row.id() == MAX_UINT64), "Hibernate list result");
+        queries.createAuthor(SECOND_ID, "Second", null);
+        List<Authors> rows = queries.listAuthors();
 
-        queries.deleteAuthor(SECOND_ID);
+        check(rows.size() == 2, "Hibernate list result");
+
+        queries.deleteAuthorById(SECOND_ID);
         check(queries.getAuthor(SECOND_ID).isEmpty(), "Hibernate delete result");
-        queries.deleteAuthor(MAX_UINT64);
+        queries.deleteAuthor(emptyBio);
+
+        check(queries.listAuthors().isEmpty(), "Hibernate list result");
     }
 
     private static String readSchema() throws Exception {
