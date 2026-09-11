@@ -5,8 +5,8 @@
 
 #include <cstdint>
 #include <optional>
-#include <string>
 #include <vector>
+#include <string>
 
 #include <ydb-cpp-sdk/client/query/client.h>
 
@@ -14,8 +14,15 @@ namespace authors::native {
 
 class Queries final {
 public:
-    explicit Queries(NYdb::NQuery::TQueryClient& client) noexcept : client_(&client), transaction_(nullptr) {}
-    explicit Queries(NYdb::NQuery::TTransaction& transaction) noexcept : client_(nullptr), transaction_(&transaction) {}
+    explicit Queries(NYdb::NQuery::TQueryClient& client,
+        const NYdb::NRetry::TRetryOperationSettings& retry_settings = {},
+        const NYdb::NQuery::TTxSettings& tx_settings = NYdb::NQuery::TTxSettings::SerializableRW(),
+        const NYdb::NQuery::TExecuteQuerySettings& execute_settings = {})
+        : client_(&client), transaction_(nullptr), retry_settings_(retry_settings),
+          tx_settings_(tx_settings), execute_settings_(execute_settings) {}
+    explicit Queries(NYdb::NQuery::TTransaction& transaction,
+        const NYdb::NQuery::TExecuteQuerySettings& execute_settings = {})
+        : client_(nullptr), transaction_(&transaction), execute_settings_(execute_settings) {}
 
     std::optional<GetAuthorRow> GetAuthor(std::uint64_t author_id) const;
     std::vector<ListAuthorsRow> ListAuthors() const;
@@ -27,6 +34,9 @@ public:
 private:
     NYdb::NQuery::TQueryClient* client_;
     NYdb::NQuery::TTransaction* transaction_;
+    NYdb::NRetry::TRetryOperationSettings retry_settings_;
+    NYdb::NQuery::TTxSettings tx_settings_{NYdb::NQuery::TTxSettings::SerializableRW()};
+    NYdb::NQuery::TExecuteQuerySettings execute_settings_;
 };
 
 }  // namespace authors::native
