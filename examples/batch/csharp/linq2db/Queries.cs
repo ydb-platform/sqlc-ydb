@@ -20,17 +20,22 @@ public sealed class Queries
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));
     }
 
+    private static DateTime NormalizeTimestamp(DateTime value) =>
+        value.Kind == DateTimeKind.Local ? value.ToUniversalTime() : DateTime.SpecifyKind(value, DateTimeKind.Utc);
+
+    private static DateTime? NormalizeTimestamp(DateTime? value) =>
+        value.HasValue ? NormalizeTimestamp(value.Value) : null;
+
     // -- name: GetAuthor :one
-    public async Task<GetAuthorRow> GetAuthorAsync(ulong AuthorID, CancellationToken cancellationToken = default)
+    public async Task<GetAuthorRow> GetAuthorAsync(ulong authorId, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(GetAuthorRowFrom,
+        await foreach (var row in _connection.QueryToAsyncEnumerable(GetAuthorRowFrom,
             "SELECT author_id, name, biography FROM authors\n" +
-            "WHERE author_id = $author_id;", cancellationToken, new DataParameter("$author_id", AuthorID, DataType.UInt64)).ConfigureAwait(false);
-        if (rows.Count == 0)
+            "WHERE author_id = $author_id;", new DataParameter("$author_id", authorId, DataType.UInt64)).WithCancellation(cancellationToken).ConfigureAwait(false))
         {
-            throw new InvalidOperationException("query returned no rows");
+            return row;
         }
-        return rows[0];
+        throw new InvalidOperationException("query returned no rows");
     }
 
     private static GetAuthorRow GetAuthorRowFrom(DbDataReader reader) => new(
@@ -40,45 +45,44 @@ public sealed class Queries
     );
 
     // -- name: DeleteBookExecResult :exec
-    public async Task DeleteBookExecResultAsync(ulong BookID, CancellationToken cancellationToken = default)
+    public async Task DeleteBookExecResultAsync(ulong bookId, CancellationToken cancellationToken = default)
     {
         await _connection.ExecuteAsync(
             "DELETE FROM books\n" +
-            "WHERE book_id = $book_id;", cancellationToken, new DataParameter("$book_id", BookID, DataType.UInt64)).ConfigureAwait(false);
+            "WHERE book_id = $book_id;", cancellationToken, new DataParameter("$book_id", bookId, DataType.UInt64)).ConfigureAwait(false);
     }
 
     // -- name: DeleteBook :exec
-    public async Task DeleteBookAsync(ulong BookID, CancellationToken cancellationToken = default)
+    public async Task DeleteBookAsync(ulong bookId, CancellationToken cancellationToken = default)
     {
         await _connection.ExecuteAsync(
             "DELETE FROM books\n" +
-            "WHERE book_id = $book_id;", cancellationToken, new DataParameter("$book_id", BookID, DataType.UInt64)).ConfigureAwait(false);
+            "WHERE book_id = $book_id;", cancellationToken, new DataParameter("$book_id", bookId, DataType.UInt64)).ConfigureAwait(false);
     }
 
     // -- name: DeleteBookNamedFunc :exec
-    public async Task DeleteBookNamedFuncAsync(ulong BookID, CancellationToken cancellationToken = default)
+    public async Task DeleteBookNamedFuncAsync(ulong bookId, CancellationToken cancellationToken = default)
     {
         await _connection.ExecuteAsync(
             "DELETE FROM books\n" +
-            "WHERE book_id = $book_id;", cancellationToken, new DataParameter("$book_id", BookID, DataType.UInt64)).ConfigureAwait(false);
+            "WHERE book_id = $book_id;", cancellationToken, new DataParameter("$book_id", bookId, DataType.UInt64)).ConfigureAwait(false);
     }
 
     // -- name: DeleteBookNamedSign :exec
-    public async Task DeleteBookNamedSignAsync(ulong BookID, CancellationToken cancellationToken = default)
+    public async Task DeleteBookNamedSignAsync(ulong bookId, CancellationToken cancellationToken = default)
     {
         await _connection.ExecuteAsync(
             "DELETE FROM books\n" +
-            "WHERE book_id = $book_id;", cancellationToken, new DataParameter("$book_id", BookID, DataType.UInt64)).ConfigureAwait(false);
+            "WHERE book_id = $book_id;", cancellationToken, new DataParameter("$book_id", bookId, DataType.UInt64)).ConfigureAwait(false);
     }
 
     // -- name: BooksByYear :many
-    public async Task<IReadOnlyList<BooksByYearRow>> BooksByYearAsync(int Year, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<BooksByYearRow>> BooksByYearAsync(int year, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(BooksByYearRowFrom,
+        return await _connection.QueryToListAsync(BooksByYearRowFrom,
             "SELECT book_id, author_id, isbn, book_type, title, year, available, tags\n" +
             "FROM books\n" +
-            "WHERE year = $year;", cancellationToken, new DataParameter("$year", Year, DataType.Int32)).ConfigureAwait(false);
-        return rows;
+            "WHERE year = $year;", cancellationToken, new DataParameter("$year", year, DataType.Int32)).ConfigureAwait(false);
     }
 
     private static BooksByYearRow BooksByYearRowFrom(DbDataReader reader) => new(
@@ -95,15 +99,14 @@ public sealed class Queries
     // -- name: CreateAuthor :one
     public async Task<CreateAuthorRow> CreateAuthorAsync(CreateAuthorParams args, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(CreateAuthorRowFrom,
+        await foreach (var row in _connection.QueryToAsyncEnumerable(CreateAuthorRowFrom,
             "INSERT INTO authors (author_id, name, biography)\n" +
             "VALUES ($author_id, $name, $biography)\n" +
-            "RETURNING author_id, name, biography;", cancellationToken, new DataParameter("$author_id", args.AuthorID, DataType.UInt64), new DataParameter("$name", args.Name, DataType.NVarChar), new DataParameter("$biography", YdbValue.MakeOptionalJson(args.Biography), DataType.Json)).ConfigureAwait(false);
-        if (rows.Count == 0)
+            "RETURNING author_id, name, biography;", new DataParameter("$author_id", args.AuthorID, DataType.UInt64), new DataParameter("$name", args.Name, DataType.NVarChar), new DataParameter("$biography", YdbValue.MakeOptionalJson(args.Biography), DataType.Json)).WithCancellation(cancellationToken).ConfigureAwait(false))
         {
-            throw new InvalidOperationException("query returned no rows");
+            return row;
         }
-        return rows[0];
+        throw new InvalidOperationException("query returned no rows");
     }
 
     private static CreateAuthorRow CreateAuthorRowFrom(DbDataReader reader) => new(
@@ -115,15 +118,14 @@ public sealed class Queries
     // -- name: CreateBook :one
     public async Task<CreateBookRow> CreateBookAsync(CreateBookParams args, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(CreateBookRowFrom,
+        await foreach (var row in _connection.QueryToAsyncEnumerable(CreateBookRowFrom,
             "INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)\n" +
             "VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)\n" +
-            "RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;", cancellationToken, new DataParameter("$book_id", args.BookID, DataType.UInt64), new DataParameter("$author_id", args.AuthorID, DataType.UInt64), new DataParameter("$isbn", args.Isbn, DataType.NVarChar), new DataParameter("$book_type", args.BookType, DataType.NVarChar), new DataParameter("$title", args.Title, DataType.NVarChar), new DataParameter("$year", args.Year, DataType.Int32), new DataParameter("$available", YdbValue.MakeTimestamp(args.Available), DataType.DateTime2), new DataParameter("$tags", YdbValue.MakeJson(args.Tags), DataType.Json)).ConfigureAwait(false);
-        if (rows.Count == 0)
+            "RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;", new DataParameter("$book_id", args.BookID, DataType.UInt64), new DataParameter("$author_id", args.AuthorID, DataType.UInt64), new DataParameter("$isbn", args.Isbn, DataType.NVarChar), new DataParameter("$book_type", args.BookType, DataType.NVarChar), new DataParameter("$title", args.Title, DataType.NVarChar), new DataParameter("$year", args.Year, DataType.Int32), new DataParameter("$available", YdbValue.MakeTimestamp(NormalizeTimestamp(args.Available)), DataType.DateTime2), new DataParameter("$tags", YdbValue.MakeJson(args.Tags), DataType.Json)).WithCancellation(cancellationToken).ConfigureAwait(false))
         {
-            throw new InvalidOperationException("query returned no rows");
+            return row;
         }
-        return rows[0];
+        throw new InvalidOperationException("query returned no rows");
     }
 
     private static CreateBookRow CreateBookRowFrom(DbDataReader reader) => new(
@@ -147,16 +149,15 @@ public sealed class Queries
     }
 
     // -- name: GetBiography :one
-    public async Task<GetBiographyRow> GetBiographyAsync(ulong AuthorID, CancellationToken cancellationToken = default)
+    public async Task<GetBiographyRow> GetBiographyAsync(ulong authorId, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(GetBiographyRowFrom,
+        await foreach (var row in _connection.QueryToAsyncEnumerable(GetBiographyRowFrom,
             "SELECT biography FROM authors\n" +
-            "WHERE author_id = $author_id;", cancellationToken, new DataParameter("$author_id", AuthorID, DataType.UInt64)).ConfigureAwait(false);
-        if (rows.Count == 0)
+            "WHERE author_id = $author_id;", new DataParameter("$author_id", authorId, DataType.UInt64)).WithCancellation(cancellationToken).ConfigureAwait(false))
         {
-            throw new InvalidOperationException("query returned no rows");
+            return row;
         }
-        return rows[0];
+        throw new InvalidOperationException("query returned no rows");
     }
 
     private static GetBiographyRow GetBiographyRowFrom(DbDataReader reader) => new(

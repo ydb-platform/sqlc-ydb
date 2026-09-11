@@ -20,16 +20,20 @@ public sealed class Queries
     public Queries(YdbConnection connection, YdbTransaction? transaction = null)
     {
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+        if (transaction is not null && !ReferenceEquals(transaction.Connection, connection))
+        {
+            throw new ArgumentException("Transaction must belong to the supplied connection.", nameof(transaction));
+        }
         _transaction = transaction;
     }
 
     public Queries WithTransaction(YdbTransaction transaction) => new(_connection, transaction ?? throw new ArgumentNullException(nameof(transaction)));
 
     // -- name: GetAuthor :one
-    public async Task<GetAuthorRow> GetAuthorAsync(ulong AuthorID, CancellationToken cancellationToken = default)
+    public async Task<GetAuthorRow> GetAuthorAsync(ulong authorId, CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
-            "SELECT id, name, bio FROM authors WHERE id = $author_id;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, AuthorID)), _transaction, cancellationToken: cancellationToken);
+            "SELECT id, name, bio FROM authors WHERE id = $author_id;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, authorId)), _transaction, cancellationToken: cancellationToken);
         await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
@@ -65,10 +69,10 @@ public sealed class Queries
     );
 
     // -- name: GetAuthorName :one
-    public async Task<GetAuthorNameRow> GetAuthorNameAsync(ulong AuthorID, CancellationToken cancellationToken = default)
+    public async Task<GetAuthorNameRow> GetAuthorNameAsync(ulong authorId, CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
-            "SELECT name FROM authors WHERE id = $author_id;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, AuthorID)), _transaction, cancellationToken: cancellationToken);
+            "SELECT name FROM authors WHERE id = $author_id;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, authorId)), _transaction, cancellationToken: cancellationToken);
         await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
@@ -112,10 +116,10 @@ public sealed class Queries
     }
 
     // -- name: DeleteAuthor :exec
-    public async Task DeleteAuthorAsync(ulong AuthorID, CancellationToken cancellationToken = default)
+    public async Task DeleteAuthorAsync(ulong authorId, CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
-            "DELETE FROM authors WHERE id = $author_id;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, AuthorID)), _transaction, cancellationToken: cancellationToken);
+            "DELETE FROM authors WHERE id = $author_id;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, authorId)), _transaction, cancellationToken: cancellationToken);
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
 

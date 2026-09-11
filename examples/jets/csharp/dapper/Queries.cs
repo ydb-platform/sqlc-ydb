@@ -20,6 +20,10 @@ public sealed class Queries
     public Queries(YdbConnection connection, YdbTransaction? transaction = null)
     {
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+        if (transaction is not null && !ReferenceEquals(transaction.Connection, connection))
+        {
+            throw new ArgumentException("Transaction must belong to the supplied connection.", nameof(transaction));
+        }
         _transaction = transaction;
     }
 
@@ -62,10 +66,10 @@ public sealed class Queries
     );
 
     // -- name: DeletePilot :exec
-    public async Task DeletePilotAsync(int PilotID, CancellationToken cancellationToken = default)
+    public async Task DeletePilotAsync(int pilotId, CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
-            "DELETE FROM pilots WHERE id = $pilot_id;", new YdbParameters(new YdbParameter("$pilot_id", DbType.Int32, PilotID)), _transaction, cancellationToken: cancellationToken);
+            "DELETE FROM pilots WHERE id = $pilot_id;", new YdbParameters(new YdbParameter("$pilot_id", DbType.Int32, pilotId)), _transaction, cancellationToken: cancellationToken);
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
 

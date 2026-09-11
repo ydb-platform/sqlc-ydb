@@ -20,18 +20,28 @@ public sealed class Queries
     public Queries(YdbConnection connection, YdbTransaction? transaction = null)
     {
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+        if (transaction is not null && !ReferenceEquals(transaction.Connection, connection))
+        {
+            throw new ArgumentException("Transaction must belong to the supplied connection.", nameof(transaction));
+        }
         _transaction = transaction;
     }
 
     public Queries WithTransaction(YdbTransaction transaction) => new(_connection, transaction ?? throw new ArgumentNullException(nameof(transaction)));
 
+    private static DateTime NormalizeTimestamp(DateTime value) =>
+        value.Kind == DateTimeKind.Local ? value.ToUniversalTime() : DateTime.SpecifyKind(value, DateTimeKind.Utc);
+
+    private static DateTime? NormalizeTimestamp(DateTime? value) =>
+        value.HasValue ? NormalizeTimestamp(value.Value) : null;
+
     // -- name: GetAuthor :one
-    public async Task<GetAuthorRow> GetAuthorAsync(ulong AuthorID, CancellationToken cancellationToken = default)
+    public async Task<GetAuthorRow> GetAuthorAsync(ulong authorId, CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
             "SELECT author_id, name\n" +
             "FROM authors\n" +
-            "WHERE author_id = $author_id;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, AuthorID)), _transaction, cancellationToken: cancellationToken);
+            "WHERE author_id = $author_id;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, authorId)), _transaction, cancellationToken: cancellationToken);
         await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
@@ -46,12 +56,12 @@ public sealed class Queries
     );
 
     // -- name: GetBook :one
-    public async Task<GetBookRow> GetBookAsync(ulong BookID, CancellationToken cancellationToken = default)
+    public async Task<GetBookRow> GetBookAsync(ulong bookId, CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
             "SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags\n" +
             "FROM books\n" +
-            "WHERE book_id = $book_id;", new YdbParameters(new YdbParameter("$book_id", DbType.UInt64, BookID)), _transaction, cancellationToken: cancellationToken);
+            "WHERE book_id = $book_id;", new YdbParameters(new YdbParameter("$book_id", DbType.UInt64, bookId)), _transaction, cancellationToken: cancellationToken);
         await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
@@ -72,11 +82,11 @@ public sealed class Queries
     );
 
     // -- name: DeleteBook :exec
-    public async Task DeleteBookAsync(ulong BookID, CancellationToken cancellationToken = default)
+    public async Task DeleteBookAsync(ulong bookId, CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
             "DELETE FROM books\n" +
-            "WHERE book_id = $book_id;", new YdbParameters(new YdbParameter("$book_id", DbType.UInt64, BookID)), _transaction, cancellationToken: cancellationToken);
+            "WHERE book_id = $book_id;", new YdbParameters(new YdbParameter("$book_id", DbType.UInt64, bookId)), _transaction, cancellationToken: cancellationToken);
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
 
@@ -108,7 +118,7 @@ public sealed class Queries
     );
 
     // -- name: BooksByTags :many
-    public async Task<IReadOnlyList<BooksByTagsRow>> BooksByTagsAsync(string Tags, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<BooksByTagsRow>> BooksByTagsAsync(string tags, CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
             "DECLARE $tags AS Json;\n" +
@@ -123,7 +133,7 @@ public sealed class Queries
             "WHERE NOT SetIsDisjoint(\n" +
             "    ToSet(Yson::ConvertToStringList(b.tags)),\n" +
             "    Yson::ConvertToStringList($tags)\n" +
-            ");", new YdbParameters(new YdbParameter("$tags", YdbValue.MakeJson(Tags))), _transaction, cancellationToken: cancellationToken);
+            ");", new YdbParameters(new YdbParameter("$tags", YdbValue.MakeJson(tags))), _transaction, cancellationToken: cancellationToken);
         await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
         var rows = new List<BooksByTagsRow>();
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
@@ -184,7 +194,7 @@ public sealed class Queries
             "    $available,\n" +
             "    $tags\n" +
             ")\n" +
-            "RETURNING book_id, author_id, isbn, book_type, title, publication_year, available, tags;", new YdbParameters(new YdbParameter("$book_id", DbType.UInt64, args.BookID), new YdbParameter("$author_id", DbType.UInt64, args.AuthorID), new YdbParameter("$isbn", DbType.String, args.Isbn), new YdbParameter("$book_type", DbType.String, args.BookType), new YdbParameter("$title", DbType.String, args.Title), new YdbParameter("$publication_year", DbType.Int32, args.PublicationYear), new YdbParameter("$available", YdbValue.MakeTimestamp(args.Available)), new YdbParameter("$tags", YdbValue.MakeJson(args.Tags))), _transaction, cancellationToken: cancellationToken);
+            "RETURNING book_id, author_id, isbn, book_type, title, publication_year, available, tags;", new YdbParameters(new YdbParameter("$book_id", DbType.UInt64, args.BookID), new YdbParameter("$author_id", DbType.UInt64, args.AuthorID), new YdbParameter("$isbn", DbType.String, args.Isbn), new YdbParameter("$book_type", DbType.String, args.BookType), new YdbParameter("$title", DbType.String, args.Title), new YdbParameter("$publication_year", DbType.Int32, args.PublicationYear), new YdbParameter("$available", YdbValue.MakeTimestamp(NormalizeTimestamp(args.Available))), new YdbParameter("$tags", YdbValue.MakeJson(args.Tags))), _transaction, cancellationToken: cancellationToken);
         await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
@@ -234,10 +244,10 @@ public sealed class Queries
     }
 
     // -- name: SayHello :one
-    public async Task<SayHelloRow> SayHelloAsync(string Name, CancellationToken cancellationToken = default)
+    public async Task<SayHelloRow> SayHelloAsync(string name, CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
-            "SELECT \"hello \"u || $name AS greeting;", new YdbParameters(new YdbParameter("$name", DbType.String, Name)), _transaction, cancellationToken: cancellationToken);
+            "SELECT \"hello \"u || $name AS greeting;", new YdbParameters(new YdbParameter("$name", DbType.String, name)), _transaction, cancellationToken: cancellationToken);
         await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {

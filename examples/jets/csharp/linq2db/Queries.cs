@@ -23,13 +23,12 @@ public sealed class Queries
     // -- name: CountPilots :one
     public async Task<CountPilotsRow> CountPilotsAsync(CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(CountPilotsRowFrom,
-            "SELECT COUNT(*) AS pilot_count FROM pilots;", cancellationToken).ConfigureAwait(false);
-        if (rows.Count == 0)
+        await foreach (var row in _connection.QueryToAsyncEnumerable(CountPilotsRowFrom,
+            "SELECT COUNT(*) AS pilot_count FROM pilots;").WithCancellation(cancellationToken).ConfigureAwait(false))
         {
-            throw new InvalidOperationException("query returned no rows");
+            return row;
         }
-        return rows[0];
+        throw new InvalidOperationException("query returned no rows");
     }
 
     private static CountPilotsRow CountPilotsRowFrom(DbDataReader reader) => new(
@@ -39,9 +38,8 @@ public sealed class Queries
     // -- name: ListPilots :many
     public async Task<IReadOnlyList<ListPilotsRow>> ListPilotsAsync(CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(ListPilotsRowFrom,
+        return await _connection.QueryToListAsync(ListPilotsRowFrom,
             "SELECT id, name FROM pilots ORDER BY id LIMIT 5;", cancellationToken).ConfigureAwait(false);
-        return rows;
     }
 
     private static ListPilotsRow ListPilotsRowFrom(DbDataReader reader) => new(
@@ -50,9 +48,9 @@ public sealed class Queries
     );
 
     // -- name: DeletePilot :exec
-    public async Task DeletePilotAsync(int PilotID, CancellationToken cancellationToken = default)
+    public async Task DeletePilotAsync(int pilotId, CancellationToken cancellationToken = default)
     {
         await _connection.ExecuteAsync(
-            "DELETE FROM pilots WHERE id = $pilot_id;", cancellationToken, new DataParameter("$pilot_id", PilotID, DataType.Int32)).ConfigureAwait(false);
+            "DELETE FROM pilots WHERE id = $pilot_id;", cancellationToken, new DataParameter("$pilot_id", pilotId, DataType.Int32)).ConfigureAwait(false);
     }
 }
