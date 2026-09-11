@@ -36,6 +36,11 @@ internal static class Program
 
     public static async Task<int> Main(string[] args)
     {
+        if (args.Length == 1 && args[0] == "contracts")
+        {
+            CheckTimestampContracts();
+            return 0;
+        }
         if (args.Length != 1 || (args[0] != "dapper" && args[0] != "linq2db"))
         {
             Console.Error.WriteLine("usage: GeneratedProfiles <dapper|linq2db>");
@@ -56,6 +61,32 @@ internal static class Program
         else
             await ExerciseLinq2DBAsync(connection, timeout.Token);
         return 0;
+    }
+
+    private static void CheckTimestampContracts()
+    {
+        var utc = new DateTime(2026, 9, 11, 12, 34, 56, DateTimeKind.Utc).AddTicks(123450);
+        foreach (var type in new[] { typeof(BatchDapper.Queries), typeof(BatchLinq2DB.Queries) })
+        {
+            var normalize = type.GetMethod("NormalizeTimestamp",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static,
+                null, new[] { typeof(DateTime) }, null)!;
+            foreach (var input in new[] { utc, utc.ToLocalTime(), DateTime.SpecifyKind(utc, DateTimeKind.Unspecified) })
+            {
+                var actual = (DateTime)normalize.Invoke(null, new object[] { input })!;
+                if (actual.Kind != DateTimeKind.Utc || actual.Ticks != utc.Ticks)
+                    throw new InvalidOperationException($"{type}: Timestamp normalization changed the instant");
+                var wire = Ydb.Sdk.Value.YdbValue.MakeTimestamp(actual).GetTimestamp();
+                if (wire.Ticks != utc.Ticks)
+                    throw new InvalidOperationException($"{type}: Timestamp wire conversion changed microseconds");
+            }
+            var optional = type.GetMethod("NormalizeTimestamp",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static,
+                null, new[] { typeof(DateTime?) }, null)!;
+            if (optional.Invoke(null, new object?[] { null }) is not null)
+                throw new InvalidOperationException("Optional Timestamp lost null");
+        }
+        Console.WriteLine("Timestamp contracts passed");
     }
 
     private static async Task ExerciseDapperAsync(YdbConnection connection, CancellationToken cancellationToken)
@@ -175,6 +206,15 @@ internal static class Program
             throw new InvalidOperationException("authors Dapper CRUD mapping changed");
         await using (var transaction = (YdbTransaction)await connection.BeginTransactionAsync(cancellationToken))
         {
+            await using var otherConnection = new YdbConnection(connection.ConnectionString);
+            try
+            {
+                _ = new AuthorsDapper.Queries(otherConnection, transaction);
+                throw new InvalidOperationException("foreign transaction was accepted");
+            }
+            catch (ArgumentException error) when (error.ParamName == "transaction")
+            {
+            }
             var transactional = queries.WithTransaction(transaction);
             await transactional.UpsertAuthorAsync(new AuthorsDapper.UpsertAuthorParams(id, "transaction", null), cancellationToken);
             if ((await transactional.GetAuthorAsync(id, cancellationToken)).Name != "transaction")

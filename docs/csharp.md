@@ -53,7 +53,8 @@ var queries = new Queries(db);
 
 For a transaction, the caller creates the `DataConnection` with
 `YdbTools.CreateDataConnection(ydbTransaction)`. Generated code uses linq2db's
-raw-SQL `QueryToListAsync` and `ExecuteAsync` APIs plus explicit
+raw-SQL `QueryToAsyncEnumerable` for `:one`, `QueryToListAsync` for `:many`,
+and `ExecuteAsync` APIs plus explicit
 `DataParameter` types. It neither creates nor disposes the data connection or
 transaction.
 
@@ -78,3 +79,13 @@ The shared example project targets `net8.0` and pins `Ydb.Sdk` 0.35.0,
 Dapper 2.1.79, and linq2db 6.4.0. Runtime packages belong to the generated
 application. See the [shared C# examples](../examples/csharp/README.md) for
 build and usage entry points.
+
+Timestamp parameters normalize Local values to UTC. Unspecified values are
+interpreted as UTC, matching the linq2db YDB provider. Optional nulls remain null.
+The normalization occurs before constructing a typed YdbValue in every profile.
+
+ADO.NET and Dapper constructors reject transactions belonging to another
+connection. The caller must also keep the transaction active; the SDK checks
+active-transaction state during execution. Wrappers never commit or dispose a
+caller-owned transaction. Single SQL arguments use camelCase; record properties
+remain PascalCase.

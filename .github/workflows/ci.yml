@@ -75,6 +75,10 @@ jobs:
         run: mvn -B -f examples/authors/kotlin/pom.xml test-compile
       - name: Compile all Dapper and linq2db examples
         run: dotnet build examples/csharp/GeneratedProfiles.csproj
+      - name: Check generated C# timestamp contracts
+        env:
+          TZ: Europe/Moscow
+        run: dotnet run --project examples/csharp/GeneratedProfiles.csproj --no-build -- contracts
       - name: Install TypeScript example dependencies
         working-directory: examples
         run: npm ci --ignore-scripts

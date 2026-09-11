@@ -21,16 +21,15 @@ public sealed class Queries
     }
 
     // -- name: GetAuthor :one
-    public async Task<GetAuthorRow> GetAuthorAsync(ulong AuthorID, CancellationToken cancellationToken = default)
+    public async Task<GetAuthorRow> GetAuthorAsync(ulong authorId, CancellationToken cancellationToken = default)
     {
-        var rows = await _connection.QueryToListAsync(GetAuthorRowFrom,
+        await foreach (var row in _connection.QueryToAsyncEnumerable(GetAuthorRowFrom,
             "DECLARE $author_id AS Uint64;\n" +
-            "SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;", cancellationToken, new DataParameter("$author_id", AuthorID, DataType.UInt64)).ConfigureAwait(false);
-        if (rows.Count == 0)
+            "SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;", new DataParameter("$author_id", authorId, DataType.UInt64)).WithCancellation(cancellationToken).ConfigureAwait(false))
         {
-            throw new InvalidOperationException("query returned no rows");
+            return row;
         }
-        return rows[0];
+        throw new InvalidOperationException("query returned no rows");
     }
 
     private static GetAuthorRow GetAuthorRowFrom(DbDataReader reader) => new(

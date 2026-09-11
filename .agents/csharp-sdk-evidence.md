@@ -22,3 +22,10 @@ connection or transaction. Its own build pins `Ydb.Sdk` `0.35.0`.
 The shared example compile project targets `net8.0` and pins `Ydb.Sdk`
 `0.35.0`, Dapper `2.1.79`, and linq2db `6.4.0`. Runtime packages belong to
 generated projects, never to sqlc-ydb's Go module.
+
+On 2026-09-11, linq2db 6.4.0 `CommandInfo.QueryToAsyncEnumerable` was checked:
+it forwards enumerator cancellation and owns its reader with `await using`,
+including early enumeration exit. Generated `:one` returns the first mapped row
+without building a list. `YdbDataProvider.SetParameter` normalizes Local timestamps
+to UTC and treats Unspecified as UTC; generated typed YdbValue bindings now apply
+the same normalization before bypassing provider inference.

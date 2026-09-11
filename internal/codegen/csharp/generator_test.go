@@ -55,7 +55,7 @@ func TestGenerateUsesConcreteModernYdbAdoSurface(t *testing.T) {
 	}
 	for _, want := range []string{
 		"using Ydb.Sdk.Ado;", "private readonly YdbConnection _connection;", "private readonly YdbTransaction? _transaction;", "WithTransaction(YdbTransaction transaction)",
-		"new YdbCommand(" + sqlLiteral(authorsAnalysis().Queries[0].SQL) + ", _connection) { Transaction = _transaction }", "new YdbParameter(\"$author_id\", DbType.UInt64, AuthorID)",
+		"new YdbCommand(" + sqlLiteral(authorsAnalysis().Queries[0].SQL) + ", _connection) { Transaction = _transaction }", "new YdbParameter(\"$author_id\", DbType.UInt64, authorId)",
 		"using Ydb.Sdk.Value;", "new YdbParameter(\"$biography\", YdbValue.MakeOptionalUtf8(args.Biography))", "ExecuteReaderAsync(cancellationToken)", "ReadAsync(cancellationToken)", "reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)",
 	} {
 		if !strings.Contains(queries, want) {
@@ -84,7 +84,7 @@ func TestGenerateLinq2DBProfileUsesOfficialYdbDataConnection(t *testing.T) {
 	_, queries := generatedRuntime(t, authorsAnalysis(), "linq2db")
 	for _, want := range []string{
 		"using LinqToDB;", "using LinqToDB.Data;", "private readonly DataConnection _connection;",
-		"_connection.QueryToListAsync(GetAuthorRowFrom," + sqlLiteral(authorsAnalysis().Queries[0].SQL) + ", cancellationToken",
+		"_connection.QueryToAsyncEnumerable(GetAuthorRowFrom," + sqlLiteral(authorsAnalysis().Queries[0].SQL),
 		"_connection.ExecuteAsync(" + sqlLiteral(authorsAnalysis().Queries[2].SQL) + ", cancellationToken",
 		"new DataParameter(\"$biography\", YdbValue.MakeOptionalUtf8(args.Biography), DataType.NVarChar)",
 	} {
@@ -113,7 +113,7 @@ func TestJsonAndTimestampUseRealSDKTypesInEveryRuntime(t *testing.T) {
 					t.Errorf("Models.cs missing %q:\n%s", want, models)
 				}
 			}
-			for _, want := range []string{"YdbValue.MakeJson(args.Json)", "YdbValue.MakeOptionalTimestamp(args.When)"} {
+			for _, want := range []string{"YdbValue.MakeJson(args.Json)", "YdbValue.MakeOptionalTimestamp(NormalizeTimestamp(args.When))"} {
 				if !strings.Contains(queries, want) {
 					t.Errorf("Queries.cs missing %q:\n%s", want, queries)
 				}
@@ -465,5 +465,13 @@ internal static class Program
 	run.Dir, run.Env = dir, dotnetEnv(dir)
 	if out, err := run.CombinedOutput(); err != nil {
 		t.Fatalf("optional wire-type runtime: %v\n%s", err, out)
+	}
+}
+
+func TestLocalParameterNames(t *testing.T) {
+	for input, want := range map[string]string{"author_id": "authorId", "id": "id", "event": "@event", "command": "commandValue", "cancellation_token": "cancellationTokenValue"} {
+		if got := localParameterName(input); got != want {
+			t.Errorf("%s: got %s, want %s", input, got, want)
+		}
 	}
 }
