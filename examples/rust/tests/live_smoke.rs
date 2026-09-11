@@ -13,18 +13,26 @@ async fn authors_smoke(client: &mut ydb::QueryClient) -> ydb::YdbResult<()> {
     let result = async {
         let mut queries = authors::queries::Queries::new(client);
         let created = queries
-            .create_author(u64::MAX, "Автор".into(), None)
+            .create_author()
+            .author_id(u64::MAX)
+            .author_name("Автор")
+            .biography(None)
+            .call()
             .await?;
         assert_eq!(created.name, "Автор");
         assert_eq!(created.bio, None);
 
         queries
-            .upsert_author(u64::MAX, "Автор".into(), Some("Биография".into()))
+            .upsert_author()
+            .author_id(u64::MAX)
+            .author_name("Автор")
+            .biography(Some(String::from("Биография")))
+            .call()
             .await?;
-        let author = queries.get_author(u64::MAX).await?;
+        let author = queries.author().author_id(u64::MAX).call().await?;
         assert_eq!(author.bio.as_deref(), Some("Биография"));
-        assert_eq!(queries.list_authors().await?.len(), 1);
-        queries.delete_author(u64::MAX).await?;
+        assert_eq!(queries.list_authors().call().await?.len(), 1);
+        queries.delete_author().author_id(u64::MAX).call().await?;
         Ok::<(), ydb::YdbError>(())
     }
     .await;
@@ -36,32 +44,45 @@ async fn batch_smoke(client: &mut ydb::QueryClient) -> ydb::YdbResult<()> {
     exec(client, include_str!("../../batch/schema.sql")).await?;
     let result = async {
         let mut queries = batch::queries::Queries::new(client);
-        let author = queries.create_author(1, "Ada".into(), None).await?;
+        let author = queries
+            .create_author()
+            .author_id(1)
+            .name("Ada")
+            .biography(None)
+            .call()
+            .await?;
         assert_eq!(author.biography, None);
 
         let available = SystemTime::UNIX_EPOCH
             + Duration::from_secs(1_700_000_000)
             + Duration::from_micros(123_456);
         let book = queries
-            .create_book(
-                1,
-                1,
-                "isbn-1".into(),
-                "FICTION".into(),
-                "Typed Rust".into(),
-                2026,
-                available,
-                "[\"rust\"]".into(),
-            )
+            .create_book()
+            .book_id(1)
+            .author_id(1)
+            .isbn("isbn-1")
+            .book_type("FICTION")
+            .title("Typed Rust")
+            .year(2026)
+            .available(available)
+            .tags("[\"rust\"]")
+            .call()
             .await?;
         assert_eq!(book.book_id, 1);
         assert_eq!(book.tags, "[\"rust\"]");
         assert_eq!(book.available, available);
-        assert_eq!(queries.books_by_year(2026).await?.len(), 1);
+        assert_eq!(queries.books_by_year().year(2026).call().await?.len(), 1);
         queries
-            .update_book("Updated".into(), "[\"ydb\"]".into(), 1)
+            .update_book()
+            .title("Updated")
+            .tags("[\"ydb\"]")
+            .book_id(1)
+            .call()
             .await?;
-        assert_eq!(queries.books_by_year(2026).await?[0].title, "Updated");
+        assert_eq!(
+            queries.books_by_year().year(2026).call().await?[0].title,
+            "Updated"
+        );
         Ok::<(), ydb::YdbError>(())
     }
     .await;
@@ -75,25 +96,33 @@ async fn booktest_smoke(client: &mut ydb::QueryClient) -> ydb::YdbResult<()> {
         let mut queries = booktest::queries::Queries::new(client);
         let available = SystemTime::UNIX_EPOCH + Duration::from_secs(1_710_000_000);
         queries
-            .create_book(
-                7,
-                404,
-                "isbn-7".into(),
-                "REFERENCE".into(),
-                "Orphaned Book".into(),
-                2024,
-                available,
-                "[\"join\"]".into(),
-            )
+            .create_book()
+            .book_id(7)
+            .author_id(404)
+            .isbn("isbn-7")
+            .book_type("REFERENCE")
+            .title("Orphaned Book")
+            .publication_year(2024)
+            .available(available)
+            .tags("[\"join\"]")
+            .call()
             .await?;
-        let rows = queries.books_by_tags("[\"join\"]".into()).await?;
+        let rows = queries.books_by_tags().tags("[\"join\"]").call().await?;
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].name, None);
-        assert_eq!(queries.say_hello("YDB".into()).await?.greeting, "hello YDB");
+        assert_eq!(
+            queries.say_hello().name("YDB").call().await?.greeting,
+            "hello YDB"
+        );
         queries
-            .update_book_isbn("Updated".into(), "[]".into(), "isbn-new".into(), 7)
+            .update_book_isbn()
+            .title("Updated")
+            .tags("[]")
+            .isbn("isbn-new")
+            .book_id(7)
+            .call()
             .await?;
-        assert_eq!(queries.get_book(7).await?.isbn, "isbn-new");
+        assert_eq!(queries.book().book_id(7).call().await?.isbn, "isbn-new");
         Ok::<(), ydb::YdbError>(())
     }
     .await;
@@ -110,10 +139,10 @@ async fn jets_smoke(client: &mut ydb::QueryClient) -> ydb::YdbResult<()> {
     .await?;
     let result = async {
         let mut queries = jets::queries::Queries::new(client);
-        assert_eq!(queries.count_pilots().await?.pilot_count, 2);
-        assert_eq!(queries.list_pilots().await?.len(), 2);
-        queries.delete_pilot(1).await?;
-        assert_eq!(queries.count_pilots().await?.pilot_count, 1);
+        assert_eq!(queries.count_pilots().call().await?.pilot_count, 2);
+        assert_eq!(queries.list_pilots().call().await?.len(), 2);
+        queries.delete_pilot().pilot_id(1).call().await?;
+        assert_eq!(queries.count_pilots().call().await?.pilot_count, 1);
         Ok::<(), ydb::YdbError>(())
     }
     .await;
@@ -138,39 +167,48 @@ async fn ondeck_smoke(client: &mut ydb::QueryClient) -> ydb::YdbResult<()> {
     let result = async {
         let mut queries = ondeck::queries::Queries::new(client);
         let city = queries
-            .create_city("Moscow".into(), "moscow".into())
+            .create_city()
+            .name("Moscow")
+            .slug("moscow")
+            .call()
             .await?;
         assert_eq!(city.slug, "moscow");
         let created_at = SystemTime::UNIX_EPOCH
             + Duration::from_secs(1_720_000_000)
             + Duration::from_micros(654_321);
         let venue = queries
-            .create_venue(
-                1,
-                "club".into(),
-                "Club".into(),
-                "moscow".into(),
-                Some(created_at),
-                "playlist".into(),
-                "open".into(),
-                None,
-                Some("[\"music\"]".into()),
-            )
+            .create_venue()
+            .id(1)
+            .slug("club")
+            .name("Club")
+            .city("moscow")
+            .created_at(created_at)
+            .spotify_playlist("playlist")
+            .status("open")
+            .statuses(None)
+            .tags(Some(String::from("[\"music\"]")))
+            .call()
             .await?;
         assert_eq!(venue.id, 1);
-        let loaded = queries.get_venue("club".into(), "moscow".into()).await?;
+        let loaded = queries.venue().slug("club").city("moscow").call().await?;
         assert_eq!(loaded.created_at, Some(created_at));
         assert_eq!(loaded.statuses, None);
         assert_eq!(loaded.tags.as_deref(), Some("[\"music\"]"));
-        assert_eq!(queries.venue_count_by_city().await?[0].venue_count, 1);
+        assert_eq!(
+            queries.venue_count_by_city().call().await?[0].venue_count,
+            1
+        );
         assert_eq!(
             queries
-                .update_venue_name("Renamed".into(), "club".into())
+                .update_venue_name()
+                .name("Renamed")
+                .slug("club")
+                .call()
                 .await?
                 .id,
             1
         );
-        queries.delete_venue("club".into()).await?;
+        queries.delete_venue().slug("club").call().await?;
         Ok::<(), ydb::YdbError>(())
     }
     .await;

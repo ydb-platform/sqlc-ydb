@@ -6,12 +6,14 @@ pub struct Queries<'a> {
     client: &'a mut ydb::QueryClient,
 }
 
+#[bon::bon]
 impl<'a> Queries<'a> {
     pub fn new(client: &'a mut ydb::QueryClient) -> Self {
         Self { client }
     }
 
     // -- name: GetAuthor :one
+    #[builder(on(String, into))]
     pub async fn author(&mut self, author_id: u64) -> ydb::YdbResult<GetAuthorRow> {
         let mut row = self
             .client

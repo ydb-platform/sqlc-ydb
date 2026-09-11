@@ -6,6 +6,7 @@ rust-version = "1.88"
 publish = false
 
 [dependencies]
+bon = "=3.10.1"
 ydb = "=0.18.2"
 
 [dev-dependencies]

@@ -69,3 +69,17 @@ types, decimal values, UUID values, and other unmapped YQL types produce a
 generation error.
 Query names that normalize to `new` are rejected because `Queries::new` is the
 generated constructor; choose a different query annotation name.
+
+All query methods use type-safe `bon` builders, including parameterless queries.
+Add `bon = "3.10.1"` to the consuming crate's dependencies.
+
+```rust
+let author = queries.author().author_id(1).call().await?;
+let authors = queries.list_authors().call().await?;
+```
+
+Every SQL parameter must be set before `.call()` is available. String setters
+accept `Into<String>` (including `&str`); numeric setters retain concrete types.
+Optional setters accept `Into<Option<T>>`: pass `None`, `Some(value)`, or a `T`
+value directly. Conversion applies to the whole option, so `None` needs no type
+annotation. Nullable parameters must still be explicitly set, including nulls.

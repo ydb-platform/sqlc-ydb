@@ -1985,6 +1985,7 @@ dependencies = [
 name = "sqlc-ydb-rust-examples"
 version = "0.0.0"
 dependencies = [
+ "bon",
  "tokio",
  "ydb",
 ]

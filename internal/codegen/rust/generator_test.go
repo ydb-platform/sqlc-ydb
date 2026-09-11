@@ -133,7 +133,7 @@ func TestGetPrefixAndMultilineSQLMatchApprovedRustStyle(t *testing.T) {
 	}
 	queries := generatedFile(t, files, "queries.rs")
 	for _, want := range []string{
-		"// -- name: GetAuthor :one\n    pub async fn author(",
+		"// -- name: GetAuthor :one\n    #[builder(on(String, into))]\n    pub async fn author(",
 		".query_row(\n                r\"\n                 INSERT INTO authors (id, name)\n                 VALUES ($id, $name)\n                 RETURNING id, name;\",\n            )",
 	} {
 		if !strings.Contains(queries, want) {
@@ -356,13 +356,34 @@ func TestGeneratedRustCompilesAgainstPinnedSDK(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	cargo := "[package]\nname = \"generated-check\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n[dependencies]\nydb = \"=0.18.2\"\n"
+	cargo := "[package]\nname = \"generated-check\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n[dependencies]\nydb = \"=0.18.2\"\nbon = \"=3.10.1\"\n"
 	if err := os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte(cargo), 0600); err != nil {
+		t.Fatal(err)
+	}
+	consumer := `use generated_check::queries::Queries;
+async fn check(q: &mut Queries<'_>) -> ydb::YdbResult<()> {
+    q.create_book().id(1).call().await?;
+    q.update_book().id(1).tags("[]").call().await?;
+    Ok(())
+}
+fn main() {}
+`
+	mainPath := filepath.Join(dir, "src", "main.rs")
+	if err := os.WriteFile(mainPath, []byte(consumer), 0600); err != nil {
 		t.Fatal(err)
 	}
 	cmd := exec.Command("cargo", "check", "--quiet")
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("generated Rust does not compile against ydb 0.18.2: %v\n%s", err, out)
+	}
+	incomplete := strings.Replace(consumer, ".create_book().id(1).call()", ".create_book().call()", 1)
+	if err := os.WriteFile(mainPath, []byte(incomplete), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cmd = exec.Command("cargo", "check", "--quiet")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "IsComplete") {
+		t.Fatalf("missing required parameter must fail the builder completeness check: %v\n%s", err, out)
 	}
 }
