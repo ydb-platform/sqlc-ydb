@@ -38,11 +38,11 @@ impl<'a> Queries<'a> {
     pub async fn list_cities(&mut self) -> ydb::YdbResult<Vec<ListCitiesRow>> {
         let result_set = self
             .client
-            .query_result_set(
-                r"SELECT slug, name
-FROM city
-ORDER BY name;",
-            )
+            .query_result_set(r"
+                SELECT slug, name
+                FROM city
+                ORDER BY name;
+            ")
             .await?;
         let mut rows = Vec::new();
         for mut row in result_set.rows() {
@@ -58,11 +58,11 @@ ORDER BY name;",
     pub async fn city(&mut self, slug: String) -> ydb::YdbResult<GetCityRow> {
         let mut row = self
             .client
-            .query_row(
-                r"SELECT slug, name
-FROM city
-WHERE slug = $slug;",
-            )
+            .query_row(r"
+                SELECT slug, name
+                FROM city
+                WHERE slug = $slug;
+            ")
             .param("$slug", slug)
             .await?;
         Ok(GetCityRow {
@@ -79,15 +79,15 @@ WHERE slug = $slug;",
     ) -> ydb::YdbResult<CreateCityRow> {
         let mut row = self
             .client
-            .query_row(
-                r"INSERT INTO city (
-    name,
-    slug
-) VALUES (
-    $name,
-    $slug
-) RETURNING slug, name;",
-            )
+            .query_row(r"
+                INSERT INTO city (
+                    name,
+                    slug
+                ) VALUES (
+                    $name,
+                    $slug
+                ) RETURNING slug, name;
+            ")
             .param("$name", name)
             .param("$slug", slug)
             .await?;
@@ -100,11 +100,11 @@ WHERE slug = $slug;",
     // -- name: UpdateCityName :exec
     pub async fn update_city_name(&mut self, name: String, slug: String) -> ydb::YdbResult<()> {
         self.client
-            .exec(
-                r"UPDATE city
-SET name = $name
-WHERE slug = $slug;",
-            )
+            .exec(r"
+                UPDATE city
+                SET name = $name
+                WHERE slug = $slug;
+            ")
             .param("$name", name)
             .param("$slug", slug)
             .await
@@ -140,10 +140,10 @@ ORDER BY name;")
     // -- name: DeleteVenue :exec
     pub async fn delete_venue(&mut self, slug: String) -> ydb::YdbResult<()> {
         self.client
-            .exec(
-                r"DELETE FROM venue
-WHERE slug = $slug AND slug = $slug;",
-            )
+            .exec(r"
+                DELETE FROM venue
+                WHERE slug = $slug AND slug = $slug;
+            ")
             .param("$slug", slug)
             .await
     }
@@ -186,29 +186,29 @@ WHERE slug = $slug AND city = $city;")
     ) -> ydb::YdbResult<CreateVenueRow> {
         let mut row = self
             .client
-            .query_row(
-                r"INSERT INTO venue (
-    id,
-    slug,
-    name,
-    city,
-    created_at,
-    spotify_playlist,
-    status,
-    statuses,
-    tags
-) VALUES (
-    $id,
-    $slug,
-    $name,
-    $city,
-    $created_at,
-    $spotify_playlist,
-    $status,
-    $statuses,
-    $tags
-) RETURNING id;",
-            )
+            .query_row(r"
+                INSERT INTO venue (
+                    id,
+                    slug,
+                    name,
+                    city,
+                    created_at,
+                    spotify_playlist,
+                    status,
+                    statuses,
+                    tags
+                ) VALUES (
+                    $id,
+                    $slug,
+                    $name,
+                    $city,
+                    $created_at,
+                    $spotify_playlist,
+                    $status,
+                    $statuses,
+                    $tags
+                ) RETURNING id;
+            ")
             .param("$id", id)
             .param("$slug", slug)
             .param("$name", name)
@@ -232,12 +232,12 @@ WHERE slug = $slug AND city = $city;")
     ) -> ydb::YdbResult<UpdateVenueNameRow> {
         let mut row = self
             .client
-            .query_row(
-                r"UPDATE venue
-SET name = $name
-WHERE slug = $slug
-RETURNING id;",
-            )
+            .query_row(r"
+                UPDATE venue
+                SET name = $name
+                WHERE slug = $slug
+                RETURNING id;
+            ")
             .param("$name", name)
             .param("$slug", slug)
             .await?;
@@ -250,14 +250,14 @@ RETURNING id;",
     pub async fn venue_count_by_city(&mut self) -> ydb::YdbResult<Vec<VenueCountByCityRow>> {
         let result_set = self
             .client
-            .query_result_set(
-                r"SELECT
-    city,
-    COUNT(*) AS venue_count
-FROM venue
-GROUP BY city
-ORDER BY city;",
-            )
+            .query_result_set(r"
+                SELECT
+                    city,
+                    COUNT(*) AS venue_count
+                FROM venue
+                GROUP BY city
+                ORDER BY city;
+            ")
             .await?;
         let mut rows = Vec::new();
         for mut row in result_set.rows() {
