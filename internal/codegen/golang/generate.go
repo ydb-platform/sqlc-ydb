@@ -622,11 +622,14 @@ func sqlArgumentList(q model.AnalyzedQuery) []string {
 	return x
 }
 func generatedCall(name, sql string, parameters []string) string {
-	arguments := append([]string{sql}, parameters...)
-	return name + "(ctx,\n" + strings.Join(arguments, ",\n") + ",\n)"
+	call := name + "(ctx, " + sql
+	if len(parameters) != 0 {
+		call += ",\n" + strings.Join(parameters, ",\n")
+	}
+	return call + ",\n)"
 }
 func ydbCall(name, sql, options string) string {
-	return name + "(ctx,\n" + sql + ",\n" + options + ",\n)"
+	return name + "(ctx, " + sql + ",\n" + options + ",\n)"
 }
 func scanCall(name string, destinations []string) string {
 	return name + "(\n" + strings.Join(destinations, ",\n") + ",\n)"

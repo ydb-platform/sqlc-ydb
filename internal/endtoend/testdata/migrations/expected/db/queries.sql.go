@@ -17,9 +17,8 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx,
-		""+
-			"SELECT * FROM authors WHERE id = $id;",
+	result, err := q.db.QueryRow(ctx, ""+
+		"SELECT * FROM authors WHERE id = $id;",
 		callOptions...,
 	)
 	if err != nil {

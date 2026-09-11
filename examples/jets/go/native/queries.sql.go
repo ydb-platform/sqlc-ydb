@@ -14,9 +14,8 @@ import (
 
 // -- name: CountPilots :one
 func (q *Queries) CountPilots(ctx context.Context, opts ...query.ExecuteOption) (CountPilotsRow, error) {
-	result, err := q.db.QueryRow(ctx,
-		""+
-			"SELECT COUNT(*) AS pilot_count FROM pilots;",
+	result, err := q.db.QueryRow(ctx, ""+
+		"SELECT COUNT(*) AS pilot_count FROM pilots;",
 		opts...,
 	)
 	if err != nil {
@@ -35,9 +34,8 @@ func (q *Queries) CountPilots(ctx context.Context, opts ...query.ExecuteOption) 
 
 // -- name: ListPilots :many
 func (q *Queries) ListPilots(ctx context.Context, opts ...query.ExecuteOption) ([]ListPilotsRow, error) {
-	result, err := q.db.Query(ctx,
-		""+
-			"SELECT id, name FROM pilots ORDER BY id LIMIT 5;",
+	result, err := q.db.Query(ctx, ""+
+		"SELECT id, name FROM pilots ORDER BY id LIMIT 5;",
 		opts...,
 	)
 	if err != nil {
@@ -86,9 +84,8 @@ func (q *Queries) DeletePilot(ctx context.Context, arg int32, opts ...query.Exec
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx,
-		""+
-			"DELETE FROM pilots WHERE id = $pilot_id;",
+	return q.db.Exec(ctx, ""+
+		"DELETE FROM pilots WHERE id = $pilot_id;",
 		callOptions...,
 	)
 }

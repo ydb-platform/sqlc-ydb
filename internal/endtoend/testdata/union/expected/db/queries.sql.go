@@ -8,11 +8,10 @@ import (
 
 // -- name: DistinctLabels :many
 func (q *Queries) DistinctLabels(ctx context.Context) ([]DistinctLabelsRow, error) {
-	rows, err := q.db.QueryContext(ctx,
-		""+
-			"SELECT id, label FROM local_labels "+
-			"UNION "+
-			"SELECT id, label FROM imported_labels;",
+	rows, err := q.db.QueryContext(ctx, ""+
+		"SELECT id, label FROM local_labels "+
+		"UNION "+
+		"SELECT id, label FROM imported_labels;",
 	)
 	if err != nil {
 		return nil, err
@@ -40,11 +39,10 @@ func (q *Queries) DistinctLabels(ctx context.Context) ([]DistinctLabelsRow, erro
 
 // -- name: QualifiedMissing :many
 func (q *Queries) QualifiedMissing(ctx context.Context) ([]QualifiedMissingRow, error) {
-	rows, err := q.db.QueryContext(ctx,
-		""+
-			"SELECT a.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id "+
-			"UNION ALL "+
-			"SELECT b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id;",
+	rows, err := q.db.QueryContext(ctx, ""+
+		"SELECT a.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id "+
+		"UNION ALL "+
+		"SELECT b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id;",
 	)
 	if err != nil {
 		return nil, err
@@ -72,11 +70,10 @@ func (q *Queries) QualifiedMissing(ctx context.Context) ([]QualifiedMissingRow, 
 
 // -- name: QualifiedNames :many
 func (q *Queries) QualifiedNames(ctx context.Context) ([]QualifiedNamesRow, error) {
-	rows, err := q.db.QueryContext(ctx,
-		""+
-			"SELECT a.id, b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id "+
-			"UNION ALL "+
-			"SELECT a.id, b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id;",
+	rows, err := q.db.QueryContext(ctx, ""+
+		"SELECT a.id, b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id "+
+		"UNION ALL "+
+		"SELECT a.id, b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id;",
 	)
 	if err != nil {
 		return nil, err
@@ -104,11 +101,10 @@ func (q *Queries) QualifiedNames(ctx context.Context) ([]QualifiedNamesRow, erro
 
 // -- name: AllLabels :many
 func (q *Queries) AllLabels(ctx context.Context) ([]AllLabelsRow, error) {
-	rows, err := q.db.QueryContext(ctx,
-		""+
-			"SELECT id, label FROM local_labels "+
-			"UNION ALL "+
-			"SELECT id, label FROM imported_labels;",
+	rows, err := q.db.QueryContext(ctx, ""+
+		"SELECT id, label FROM local_labels "+
+		"UNION ALL "+
+		"SELECT id, label FROM imported_labels;",
 	)
 	if err != nil {
 		return nil, err

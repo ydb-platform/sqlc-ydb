@@ -10,9 +10,8 @@ import (
 // -- name: CountPilots :one
 func (q *Queries) CountPilots(ctx context.Context) (CountPilotsRow, error) {
 	var row CountPilotsRow
-	err := q.db.QueryRowContext(ctx,
-		""+
-			"SELECT COUNT(*) AS pilot_count FROM pilots;",
+	err := q.db.QueryRowContext(ctx, ""+
+		"SELECT COUNT(*) AS pilot_count FROM pilots;",
 	).Scan(
 		&row.PilotCount,
 	)
@@ -22,9 +21,8 @@ func (q *Queries) CountPilots(ctx context.Context) (CountPilotsRow, error) {
 
 // -- name: ListPilots :many
 func (q *Queries) ListPilots(ctx context.Context) ([]ListPilotsRow, error) {
-	rows, err := q.db.QueryContext(ctx,
-		""+
-			"SELECT id, name FROM pilots ORDER BY id LIMIT 5;",
+	rows, err := q.db.QueryContext(ctx, ""+
+		"SELECT id, name FROM pilots ORDER BY id LIMIT 5;",
 	)
 	if err != nil {
 		return nil, err
@@ -52,9 +50,8 @@ func (q *Queries) ListPilots(ctx context.Context) ([]ListPilotsRow, error) {
 
 // -- name: DeletePilot :exec
 func (q *Queries) DeletePilot(ctx context.Context, arg int32) error {
-	_, err := q.db.ExecContext(ctx,
-		""+
-			"DELETE FROM pilots WHERE id = $pilot_id;",
+	_, err := q.db.ExecContext(ctx, ""+
+		"DELETE FROM pilots WHERE id = $pilot_id;",
 		sql.Named("pilot_id", arg),
 	)
 

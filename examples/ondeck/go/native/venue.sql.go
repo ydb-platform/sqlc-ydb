@@ -20,12 +20,11 @@ func (q *Queries) ListVenues(ctx context.Context, arg string, opts ...query.Exec
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.Query(ctx,
-		""+
-			"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at "+
-			"FROM venue "+
-			"WHERE city = $city "+
-			"ORDER BY name;",
+	result, err := q.db.Query(ctx, ""+
+		"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at "+
+		"FROM venue "+
+		"WHERE city = $city "+
+		"ORDER BY name;",
 		callOptions...,
 	)
 	if err != nil {
@@ -82,10 +81,9 @@ func (q *Queries) DeleteVenue(ctx context.Context, arg string, opts ...query.Exe
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx,
-		""+
-			"DELETE FROM venue "+
-			"WHERE slug = $slug AND slug = $slug;",
+	return q.db.Exec(ctx, ""+
+		"DELETE FROM venue "+
+		"WHERE slug = $slug AND slug = $slug;",
 		callOptions...,
 	)
 }
@@ -99,11 +97,10 @@ func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams, opts ...quer
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx,
-		""+
-			"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at "+
-			"FROM venue "+
-			"WHERE slug = $slug AND city = $city;",
+	result, err := q.db.QueryRow(ctx, ""+
+		"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at "+
+		"FROM venue "+
+		"WHERE slug = $slug AND city = $city;",
 		callOptions...,
 	)
 	if err != nil {
@@ -145,29 +142,28 @@ func (q *Queries) CreateVenue(ctx context.Context, arg CreateVenueParams, opts .
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx,
-		""+
-			"INSERT INTO venue ( "+
-			"id, "+
-			"slug, "+
-			"name, "+
-			"city, "+
-			"created_at, "+
-			"spotify_playlist, "+
-			"status, "+
-			"statuses, "+
-			"tags "+
-			") VALUES ( "+
-			"$id, "+
-			"$slug, "+
-			"$name, "+
-			"$city, "+
-			"$created_at, "+
-			"$spotify_playlist, "+
-			"$status, "+
-			"$statuses, "+
-			"$tags "+
-			") RETURNING id;",
+	result, err := q.db.QueryRow(ctx, ""+
+		"INSERT INTO venue ( "+
+		"id, "+
+		"slug, "+
+		"name, "+
+		"city, "+
+		"created_at, "+
+		"spotify_playlist, "+
+		"status, "+
+		"statuses, "+
+		"tags "+
+		") VALUES ( "+
+		"$id, "+
+		"$slug, "+
+		"$name, "+
+		"$city, "+
+		"$created_at, "+
+		"$spotify_playlist, "+
+		"$status, "+
+		"$statuses, "+
+		"$tags "+
+		") RETURNING id;",
 		callOptions...,
 	)
 	if err != nil {
@@ -193,12 +189,11 @@ func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx,
-		""+
-			"UPDATE venue "+
-			"SET name = $name "+
-			"WHERE slug = $slug "+
-			"RETURNING id;",
+	result, err := q.db.QueryRow(ctx, ""+
+		"UPDATE venue "+
+		"SET name = $name "+
+		"WHERE slug = $slug "+
+		"RETURNING id;",
 		callOptions...,
 	)
 	if err != nil {
@@ -217,14 +212,13 @@ func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams
 
 // -- name: VenueCountByCity :many
 func (q *Queries) VenueCountByCity(ctx context.Context, opts ...query.ExecuteOption) ([]VenueCountByCityRow, error) {
-	result, err := q.db.Query(ctx,
-		""+
-			"SELECT "+
-			"city, "+
-			"COUNT(*) AS venue_count "+
-			"FROM venue "+
-			"GROUP BY city "+
-			"ORDER BY city;",
+	result, err := q.db.Query(ctx, ""+
+		"SELECT "+
+		"city, "+
+		"COUNT(*) AS venue_count "+
+		"FROM venue "+
+		"GROUP BY city "+
+		"ORDER BY city;",
 		opts...,
 	)
 	if err != nil {

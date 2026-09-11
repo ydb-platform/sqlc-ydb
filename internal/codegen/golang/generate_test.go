@@ -56,7 +56,7 @@ func TestGeneratedSQLUsesQuotedLinesAndPreservesText(t *testing.T) {
 func TestGeneratedSQLAlignsMultilineQuotedLines(t *testing.T) {
 	for _, runtime := range []string{"database/sql", "ydb"} {
 		source := string(generatedSQLSource(t, runtime, "SELECT id, bio\nFROM users;"))
-		want := "\t\t\"\"+\n\t\t\t\"SELECT id, bio \"+\n\t\t\t\"FROM users;\","
+		want := "(ctx, \"\"+\n\t\t\"SELECT id, bio \"+\n\t\t\"FROM users;\","
 		if !strings.Contains(source, want) {
 			t.Fatalf("%s multiline SQL literals are not aligned after gofmt:\n%s", runtime, source)
 		}
@@ -66,7 +66,7 @@ func TestGeneratedSQLAlignsMultilineQuotedLines(t *testing.T) {
 func TestGeneratedSQLPrefixesSingleLineWithEmptyLiteral(t *testing.T) {
 	for _, runtime := range []string{"database/sql", "ydb"} {
 		source := string(generatedSQLSource(t, runtime, "SELECT id, bio FROM users;"))
-		want := "\t\t\"\"+\n\t\t\t\"SELECT id, bio FROM users;\","
+		want := "(ctx, \"\"+\n\t\t\"SELECT id, bio FROM users;\","
 		if !strings.Contains(source, want) {
 			t.Fatalf("%s single-line SQL does not start on its own aligned line:\n%s", runtime, source)
 		}
@@ -97,9 +97,8 @@ func TestGeneratedDatabaseSQLFormatsMultiParameterQueryRowCall(t *testing.T) {
 	}}}
 
 	source := generatedSQLSourceForAnalysis(t, "database/sql", in)
-	want := "err := q.db.QueryRowContext(ctx,\n" +
-		"\t\t\"\"+\n" +
-		"\t\t\t\"INSERT INTO authors VALUES ($author_id, $author_name, $biography) RETURNING id, name, bio;\",\n" +
+	want := "err := q.db.QueryRowContext(ctx, \"\"+\n" +
+		"\t\t\"INSERT INTO authors VALUES ($author_id, $author_name, $biography) RETURNING id, name, bio;\",\n" +
 		"\t\tsql.Named(\"author_id\", arg.AuthorID),\n" +
 		"\t\tsql.Named(\"author_name\", arg.AuthorName),\n" +
 		"\t\tsql.Named(\"biography\", arg.Biography),\n" +
@@ -123,10 +122,10 @@ func TestGeneratedDatabaseSQLFormatsParameterizedCallsAndScans(t *testing.T) {
 	}}
 	source := string(generatedSQLSourceForAnalysis(t, "database/sql", in))
 	for _, want := range []string{
-		"q.db.ExecContext(ctx,\n\t\t\"\"+\n\t\t\t\"DELETE FROM users WHERE id = $id;\",\n\t\tsql.Named(\"id\", arg),\n\t)\n\n\treturn err",
-		"q.db.QueryContext(ctx,\n\t\t\"\"+\n\t\t\t\"SELECT id, name FROM users WHERE name = $name;\",\n\t\tsql.Named(\"name\", arg),\n\t)",
+		"q.db.ExecContext(ctx, \"\"+\n\t\t\"DELETE FROM users WHERE id = $id;\",\n\t\tsql.Named(\"id\", arg),\n\t)\n\n\treturn err",
+		"q.db.QueryContext(ctx, \"\"+\n\t\t\"SELECT id, name FROM users WHERE name = $name;\",\n\t\tsql.Named(\"name\", arg),\n\t)",
 		"rows.Scan(\n\t\t\t&row.ID,\n\t\t\t&row.Name,\n\t\t)",
-		"q.db.QueryRowContext(ctx,\n\t\t\"\"+\n\t\t\t\"SELECT COUNT(*) AS count FROM users;\",\n\t).Scan(\n\t\t&row.Count,\n\t)\n\n\treturn row, err",
+		"q.db.QueryRowContext(ctx, \"\"+\n\t\t\"SELECT COUNT(*) AS count FROM users;\",\n\t).Scan(\n\t\t&row.Count,\n\t)\n\n\treturn row, err",
 		"\tdefer rows.Close()\n\n\titems := []FindUsersRow(nil)",
 		"\n\t}\n\n\tif err := rows.Err(); err != nil {",
 		"\n\t}\n\n\treturn items, nil",
@@ -156,7 +155,7 @@ func TestGeneratedYDBManyValidatesOneResultSet(t *testing.T) {
 	in.Queries = in.Queries[1:2]
 
 	source := string(generatedSQLSourceForAnalysis(t, "ydb", in))
-	want := "result, err := q.db.Query(ctx,\n\t\t\"\"+\n\t\t\t\"SELECT `id`, `name` FROM `users`;\",\n\t\topts...,\n\t)" + `
+	want := "result, err := q.db.Query(ctx, \"\"+\n\t\t\"SELECT `id`, `name` FROM `users`;\",\n\t\topts...,\n\t)" + `
 	if err != nil {
 		return nil, err
 	}
@@ -1052,11 +1051,11 @@ func TestNativeOptionsAreForwardedAndCannotReplaceTypedArguments(t *testing.T) {
 	}
 	for _, want := range []string{
 		"func (q *Queries) Ping(ctx context.Context, opts ...query.ExecuteOption) error",
-		"return q.db.Exec(ctx,\n\t\t\"\",\n\t\topts...,\n\t)",
+		"return q.db.Exec(ctx, \"\",\n\t\topts...,\n\t)",
 		"func (q *Queries) Put(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error",
 		"callOptions := append([]query.ExecuteOption(nil), opts...)",
 		"callOptions = append(callOptions, query.WithParameters(parameters.Build()))",
-		"return q.db.Exec(ctx,\n\t\t\"\",\n\t\tcallOptions...,\n\t)",
+		"return q.db.Exec(ctx, \"\",\n\t\tcallOptions...,\n\t)",
 	} {
 		if !strings.Contains(source, want) {
 			t.Fatalf("native option forwarding lacks %q:\n%s", want, source)

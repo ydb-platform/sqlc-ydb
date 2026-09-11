@@ -20,10 +20,9 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx,
-		""+
-			"SELECT author_id, name, biography FROM authors "+
-			"WHERE author_id = $author_id;",
+	result, err := q.db.QueryRow(ctx, ""+
+		"SELECT author_id, name, biography FROM authors "+
+		"WHERE author_id = $author_id;",
 		callOptions...,
 	)
 	if err != nil {
@@ -50,10 +49,9 @@ func (q *Queries) DeleteBookExecResult(ctx context.Context, arg uint64, opts ...
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx,
-		""+
-			"DELETE FROM books "+
-			"WHERE book_id = $book_id;",
+	return q.db.Exec(ctx, ""+
+		"DELETE FROM books "+
+		"WHERE book_id = $book_id;",
 		callOptions...,
 	)
 }
@@ -66,10 +64,9 @@ func (q *Queries) DeleteBook(ctx context.Context, arg uint64, opts ...query.Exec
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx,
-		""+
-			"DELETE FROM books "+
-			"WHERE book_id = $book_id;",
+	return q.db.Exec(ctx, ""+
+		"DELETE FROM books "+
+		"WHERE book_id = $book_id;",
 		callOptions...,
 	)
 }
@@ -82,10 +79,9 @@ func (q *Queries) DeleteBookNamedFunc(ctx context.Context, arg uint64, opts ...q
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx,
-		""+
-			"DELETE FROM books "+
-			"WHERE book_id = $book_id;",
+	return q.db.Exec(ctx, ""+
+		"DELETE FROM books "+
+		"WHERE book_id = $book_id;",
 		callOptions...,
 	)
 }
@@ -98,10 +94,9 @@ func (q *Queries) DeleteBookNamedSign(ctx context.Context, arg uint64, opts ...q
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx,
-		""+
-			"DELETE FROM books "+
-			"WHERE book_id = $book_id;",
+	return q.db.Exec(ctx, ""+
+		"DELETE FROM books "+
+		"WHERE book_id = $book_id;",
 		callOptions...,
 	)
 }
@@ -114,11 +109,10 @@ func (q *Queries) BooksByYear(ctx context.Context, arg int32, opts ...query.Exec
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.Query(ctx,
-		""+
-			"SELECT book_id, author_id, isbn, book_type, title, year, available, tags "+
-			"FROM books "+
-			"WHERE year = $year;",
+	result, err := q.db.Query(ctx, ""+
+		"SELECT book_id, author_id, isbn, book_type, title, year, available, tags "+
+		"FROM books "+
+		"WHERE year = $year;",
 		callOptions...,
 	)
 	if err != nil {
@@ -175,11 +169,10 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx,
-		""+
-			"INSERT INTO authors (author_id, name, biography) "+
-			"VALUES ($author_id, $name, $biography) "+
-			"RETURNING author_id, name, biography;",
+	result, err := q.db.QueryRow(ctx, ""+
+		"INSERT INTO authors (author_id, name, biography) "+
+		"VALUES ($author_id, $name, $biography) "+
+		"RETURNING author_id, name, biography;",
 		callOptions...,
 	)
 	if err != nil {
@@ -213,11 +206,10 @@ func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams, opts ...
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx,
-		""+
-			"INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags) "+
-			"VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags) "+
-			"RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;",
+	result, err := q.db.QueryRow(ctx, ""+
+		"INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags) "+
+		"VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags) "+
+		"RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;",
 		callOptions...,
 	)
 	if err != nil {
@@ -251,11 +243,10 @@ func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams, opts ...
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx,
-		""+
-			"UPDATE books "+
-			"SET title = $title, tags = $tags "+
-			"WHERE book_id = $book_id;",
+	return q.db.Exec(ctx, ""+
+		"UPDATE books "+
+		"SET title = $title, tags = $tags "+
+		"WHERE book_id = $book_id;",
 		callOptions...,
 	)
 }
@@ -268,10 +259,9 @@ func (q *Queries) GetBiography(ctx context.Context, arg uint64, opts ...query.Ex
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx,
-		""+
-			"SELECT biography FROM authors "+
-			"WHERE author_id = $author_id;",
+	result, err := q.db.QueryRow(ctx, ""+
+		"SELECT biography FROM authors "+
+		"WHERE author_id = $author_id;",
 		callOptions...,
 	)
 	if err != nil {
