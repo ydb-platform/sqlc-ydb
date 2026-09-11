@@ -206,7 +206,14 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 	var b strings.Builder
 	b.WriteString(header)
 	if o.Runtime == "ydb" {
-		b.WriteString("import tech.ydb.query.QueryTransaction;\nimport tech.ydb.query.tools.QueryReader;\nimport tech.ydb.table.query.Params;\n")
+		b.WriteString("import tech.ydb.query.QueryTransaction;\n")
+		for _, q := range a.Queries {
+			if q.Command != model.Exec {
+				b.WriteString("import tech.ydb.query.tools.QueryReader;\n")
+				break
+			}
+		}
+		b.WriteString("import tech.ydb.table.query.Params;\n")
 	}
 	needsValues, needsOptional := false, false
 	for _, q := range a.Queries {
@@ -363,16 +370,17 @@ func jdbcSQL(q model.AnalyzedQuery) (string, []int) {
 }
 
 func emitNative(b *strings.Builder, q model.AnalyzedQuery, names []string, sql, row string) {
-	sql = strings.ReplaceAll(sql, "\n", "\n        ")
 	b.WriteString("        var _params = Params.create();\n")
 	for i, p := range q.Parameters {
 		fmt.Fprintf(b, "        _params.put(%s, %s);\n", quoted("$"+p.Name), parameterValue(p, names[i]))
 	}
-	b.WriteString("        var _query = QueryReader.readFrom(\n")
-	fmt.Fprintf(b, "                client.createQuery(%s, _params)).join().getValue();\n", sql)
 	if q.Command == model.Exec {
+		fmt.Fprintf(b, "        client.createQuery(%s, _params).execute().join().getStatus().expectSuccess();\n", sql)
 		return
 	}
+	sql = strings.ReplaceAll(sql, "\n", "\n        ")
+	b.WriteString("        var _query = QueryReader.readFrom(\n")
+	fmt.Fprintf(b, "                client.createQuery(%s, _params)).join().getValue();\n", sql)
 	b.WriteString("        if (_query.getResultSetCount() != 1) throw new IllegalStateException(\"Expected one result set\");\n        var _rows = _query.getResultSet(0);\n")
 	emitRows(b, q, row, "        ", true)
 }

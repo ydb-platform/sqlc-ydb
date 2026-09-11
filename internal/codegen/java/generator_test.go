@@ -420,3 +420,14 @@ func TestNullableJavaGettersAndTextBinding(t *testing.T) {
 		}
 	}
 }
+
+func TestNativeExecDoesNotMaterializeResults(t *testing.T) {
+	files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Delete", Command: model.Exec, SQL: "DELETE FROM authors;"}}}, Options{Package: "authors", Runtime: "ydb"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := string(files[len(files)-1].Content)
+	if strings.Contains(output, "QueryReader") || !strings.Contains(output, ".execute().join().getStatus().expectSuccess();") {
+		t.Fatalf("native exec must execute without collecting results and check status:\n%s", output)
+	}
+}

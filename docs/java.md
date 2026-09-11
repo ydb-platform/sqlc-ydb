@@ -40,6 +40,8 @@ Published dependencies are pinned to YDB SDK BOM `2.4.11` and JDBC `2.4.1`.
 
 The native constructor receives a borrowed `tech.ydb.query.QueryTransaction`.
 The application owns retry, commit, rollback and the transaction lifecycle.
+Native `:exec` methods call `createQuery(...).execute()` and check the returned
+status; only methods returning rows use `QueryReader`.
 The JDBC constructor receives a borrowed `java.sql.Connection`; statements and
 result sets are method-owned and the connection remains application-owned.
 
