@@ -22,6 +22,7 @@ final class Queries
         }
     }
 
+    // -- name: GetAuthor :one
     public function getAuthor(string $authorId): ?GetAuthorRow
     {
         $parameters = [
@@ -29,7 +30,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: GetAuthor :one
                 SELECT author_id, name, biography FROM authors
                 WHERE author_id = $author_id;
                 SQLC_YDB_YQL)
@@ -54,6 +54,7 @@ final class Queries
         return $rows[0] ?? null;
     }
 
+    // -- name: DeleteBookExecResult :exec
     public function deleteBookExecResult(string $bookId): void
     {
         $parameters = [
@@ -61,7 +62,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: DeleteBookExecResult :exec
                 DELETE FROM books
                 WHERE book_id = $book_id;
                 SQLC_YDB_YQL)
@@ -71,6 +71,7 @@ final class Queries
         }, false);
     }
 
+    // -- name: DeleteBook :exec
     public function deleteBook(string $bookId): void
     {
         $parameters = [
@@ -78,7 +79,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: DeleteBook :exec
                 DELETE FROM books
                 WHERE book_id = $book_id;
                 SQLC_YDB_YQL)
@@ -88,6 +88,7 @@ final class Queries
         }, false);
     }
 
+    // -- name: DeleteBookNamedFunc :exec
     public function deleteBookNamedFunc(string $bookId): void
     {
         $parameters = [
@@ -95,7 +96,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: DeleteBookNamedFunc :exec
                 DELETE FROM books
                 WHERE book_id = $book_id;
                 SQLC_YDB_YQL)
@@ -105,6 +105,7 @@ final class Queries
         }, false);
     }
 
+    // -- name: DeleteBookNamedSign :exec
     public function deleteBookNamedSign(string $bookId): void
     {
         $parameters = [
@@ -112,7 +113,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: DeleteBookNamedSign :exec
                 DELETE FROM books
                 WHERE book_id = $book_id;
                 SQLC_YDB_YQL)
@@ -123,6 +123,7 @@ final class Queries
     }
 
     /** @return list<BooksByYearRow> */
+    // -- name: BooksByYear :many
     public function booksByYear(int $year): array
     {
         $parameters = [
@@ -130,7 +131,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: BooksByYear :many
                 SELECT book_id, author_id, isbn, book_type, title, year, available, tags
                 FROM books
                 WHERE year = $year;
@@ -166,6 +166,7 @@ final class Queries
         return $rows;
     }
 
+    // -- name: CreateAuthor :one
     public function createAuthor(CreateAuthorParams $params): ?CreateAuthorRow
     {
         $parameters = [
@@ -175,7 +176,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: CreateAuthor :one
                 INSERT INTO authors (author_id, name, biography)
                 VALUES ($author_id, $name, $biography)
                 RETURNING author_id, name, biography;
@@ -201,6 +201,7 @@ final class Queries
         return $rows[0] ?? null;
     }
 
+    // -- name: CreateBook :one
     public function createBook(CreateBookParams $params): ?CreateBookRow
     {
         $parameters = [
@@ -215,7 +216,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: CreateBook :one
                 INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)
                 VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)
                 RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;
@@ -251,6 +251,7 @@ final class Queries
         return $rows[0] ?? null;
     }
 
+    // -- name: UpdateBook :exec
     public function updateBook(UpdateBookParams $params): void
     {
         $parameters = [
@@ -260,7 +261,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: UpdateBook :exec
                 UPDATE books
                 SET title = $title, tags = $tags
                 WHERE book_id = $book_id;
@@ -271,6 +271,7 @@ final class Queries
         }, false);
     }
 
+    // -- name: GetBiography :one
     public function getBiography(string $authorId): ?GetBiographyRow
     {
         $parameters = [
@@ -278,7 +279,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: GetBiography :one
                 SELECT biography FROM authors
                 WHERE author_id = $author_id;
                 SQLC_YDB_YQL)

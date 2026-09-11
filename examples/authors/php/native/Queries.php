@@ -22,6 +22,7 @@ final class Queries
         }
     }
 
+    // -- name: GetAuthor :one
     public function getAuthor(string $authorId): ?GetAuthorRow
     {
         $parameters = [
@@ -29,7 +30,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: GetAuthor :one
                 SELECT id, name, bio FROM authors WHERE id = $author_id;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
@@ -54,13 +54,13 @@ final class Queries
     }
 
     /** @return list<ListAuthorsRow> */
+    // -- name: ListAuthors :many
     public function listAuthors(): array
     {
         $parameters = [
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: ListAuthors :many
                 SELECT id, name, bio FROM authors ORDER BY name;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
@@ -84,6 +84,7 @@ final class Queries
         return $rows;
     }
 
+    // -- name: GetAuthorName :one
     public function getAuthorName(string $authorId): ?GetAuthorNameRow
     {
         $parameters = [
@@ -91,7 +92,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: GetAuthorName :one
                 SELECT name FROM authors WHERE id = $author_id;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
@@ -111,6 +111,7 @@ final class Queries
         return $rows[0] ?? null;
     }
 
+    // -- name: CreateAuthor :one
     public function createAuthor(CreateAuthorParams $params): ?CreateAuthorRow
     {
         $parameters = [
@@ -120,7 +121,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: CreateAuthor :one
                 INSERT INTO `authors` (`id`, `name`, `bio`)
                 VALUES ($author_id, $author_name, $biography)
                 RETURNING `id`, `name`, `bio`;
@@ -146,6 +146,7 @@ final class Queries
         return $rows[0] ?? null;
     }
 
+    // -- name: UpsertAuthor :exec
     public function upsertAuthor(UpsertAuthorParams $params): void
     {
         $parameters = [
@@ -155,7 +156,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: UpsertAuthor :exec
                 UPSERT INTO authors (id, name, bio)
                 VALUES ($author_id, $author_name, $biography);
                 SQLC_YDB_YQL)
@@ -165,6 +165,7 @@ final class Queries
         }, false);
     }
 
+    // -- name: DeleteAuthor :exec
     public function deleteAuthor(string $authorId): void
     {
         $parameters = [
@@ -172,7 +173,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: DeleteAuthor :exec
                 DELETE FROM authors WHERE id = $author_id;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)

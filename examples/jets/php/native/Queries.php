@@ -22,13 +22,13 @@ final class Queries
         }
     }
 
+    // -- name: CountPilots :one
     public function countPilots(): ?CountPilotsRow
     {
         $parameters = [
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: CountPilots :one
                 SELECT COUNT(*) AS pilot_count FROM pilots;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
@@ -49,13 +49,13 @@ final class Queries
     }
 
     /** @return list<ListPilotsRow> */
+    // -- name: ListPilots :many
     public function listPilots(): array
     {
         $parameters = [
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: ListPilots :many
                 SELECT id, name FROM pilots ORDER BY id LIMIT 5;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
@@ -77,6 +77,7 @@ final class Queries
         return $rows;
     }
 
+    // -- name: DeletePilot :exec
     public function deletePilot(int $pilotId): void
     {
         $parameters = [
@@ -84,7 +85,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: DeletePilot :exec
                 DELETE FROM pilots WHERE id = $pilot_id;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)

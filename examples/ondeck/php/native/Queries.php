@@ -23,13 +23,13 @@ final class Queries
     }
 
     /** @return list<ListCitiesRow> */
+    // -- name: ListCities :many
     public function listCities(): array
     {
         $parameters = [
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: ListCities :many
                 SELECT slug, name
                 FROM city
                 ORDER BY name;
@@ -53,6 +53,7 @@ final class Queries
         return $rows;
     }
 
+    // -- name: GetCity :one
     public function getCity(string $slug): ?GetCityRow
     {
         $parameters = [
@@ -60,7 +61,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: GetCity :one
                 SELECT slug, name
                 FROM city
                 WHERE slug = $slug;
@@ -84,6 +84,7 @@ final class Queries
         return $rows[0] ?? null;
     }
 
+    // -- name: CreateCity :one
     public function createCity(CreateCityParams $params): ?CreateCityRow
     {
         $parameters = [
@@ -92,7 +93,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: CreateCity :one
                 INSERT INTO city (
                     name,
                     slug
@@ -120,6 +120,7 @@ final class Queries
         return $rows[0] ?? null;
     }
 
+    // -- name: UpdateCityName :exec
     public function updateCityName(UpdateCityNameParams $params): void
     {
         $parameters = [
@@ -128,7 +129,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: UpdateCityName :exec
                 UPDATE city
                 SET name = $name
                 WHERE slug = $slug;
@@ -140,6 +140,7 @@ final class Queries
     }
 
     /** @return list<ListVenuesRow> */
+    // -- name: ListVenues :many
     public function listVenues(string $city): array
     {
         $parameters = [
@@ -147,7 +148,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: ListVenues :many
                 SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
                 FROM venue
                 WHERE city = $city
@@ -188,6 +188,7 @@ final class Queries
         return $rows;
     }
 
+    // -- name: DeleteVenue :exec
     public function deleteVenue(string $slug): void
     {
         $parameters = [
@@ -195,7 +196,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: DeleteVenue :exec
                 DELETE FROM venue
                 WHERE slug = $slug AND slug = $slug;
                 SQLC_YDB_YQL)
@@ -205,6 +205,7 @@ final class Queries
         }, false);
     }
 
+    // -- name: GetVenue :one
     public function getVenue(GetVenueParams $params): ?GetVenueRow
     {
         $parameters = [
@@ -213,7 +214,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: GetVenue :one
                 SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
                 FROM venue
                 WHERE slug = $slug AND city = $city;
@@ -253,6 +253,7 @@ final class Queries
         return $rows[0] ?? null;
     }
 
+    // -- name: CreateVenue :one
     public function createVenue(CreateVenueParams $params): ?CreateVenueRow
     {
         $parameters = [
@@ -268,7 +269,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: CreateVenue :one
                 INSERT INTO venue (
                     id,
                     slug,
@@ -308,6 +308,7 @@ final class Queries
         return $rows[0] ?? null;
     }
 
+    // -- name: UpdateVenueName :one
     public function updateVenueName(UpdateVenueNameParams $params): ?UpdateVenueNameRow
     {
         $parameters = [
@@ -316,7 +317,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: UpdateVenueName :one
                 UPDATE venue
                 SET name = $name
                 WHERE slug = $slug
@@ -340,13 +340,13 @@ final class Queries
     }
 
     /** @return list<VenueCountByCityRow> */
+    // -- name: VenueCountByCity :many
     public function venueCountByCity(): array
     {
         $parameters = [
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: VenueCountByCity :many
                 SELECT
                     city,
                     COUNT(*) AS venue_count
