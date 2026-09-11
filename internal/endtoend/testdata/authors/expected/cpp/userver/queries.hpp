@@ -5,7 +5,6 @@
 
 #include <cstdint>
 #include <optional>
-#include <string>
 #include <vector>
 
 #include <userver/ydb/table.hpp>
@@ -15,14 +14,20 @@ namespace authors::userver {
 
 class Queries final {
 public:
-    explicit Queries(::userver::ydb::TableClient& client) noexcept : client_(&client), transaction_(nullptr) {}
-    explicit Queries(::userver::ydb::TxActor& transaction) noexcept : client_(nullptr), transaction_(&transaction) {}
+    explicit Queries(::userver::ydb::TableClient& client,
+        const ::userver::ydb::OperationSettings& operation_settings = {})
+        : client_(&client), transaction_(nullptr), operation_settings_(operation_settings) {}
+    explicit Queries(::userver::ydb::TxActor& transaction,
+        const ::userver::ydb::ExecuteSettings& execute_settings = {})
+        : client_(nullptr), transaction_(&transaction), execute_settings_(execute_settings) {}
 
     std::optional<GetAuthorRow> GetAuthor(std::uint64_t author_id) const;
 
 private:
     ::userver::ydb::TableClient* client_;
     ::userver::ydb::TxActor* transaction_;
+    ::userver::ydb::OperationSettings operation_settings_;
+    ::userver::ydb::ExecuteSettings execute_settings_;
 };
 
 }  // namespace authors::userver

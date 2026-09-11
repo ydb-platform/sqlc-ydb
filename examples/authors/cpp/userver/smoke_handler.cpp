@@ -2,6 +2,7 @@
 
 #include "queries.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <fstream>
 #include <limits>
@@ -63,7 +64,23 @@ std::string SmokeHandler::HandleRequest(server::http::HttpRequest&, server::requ
         std::optional<ydb::Utf8>{ydb::Utf8{"present"}}
     );
     queries.UpsertAuthor(kMaxId - 1, ydb::Utf8{"optional null"}, std::nullopt);
-    const auto max_author = queries.GetAuthor(kMaxId);
+    const auto created = queries.CreateAuthor(kMaxId - 3, ydb::Utf8{"created"}, ydb::Utf8{"returning"});
+    const auto created_null = queries.CreateAuthor(kMaxId - 4, ydb::Utf8{"created null"}, std::nullopt);
+    if (!created || created->id != kMaxId - 3 || created->name.GetUnderlying() != "created" || !created->bio ||
+        created->bio->GetUnderlying() != "returning" || !created_null || created_null->id != kMaxId - 4 ||
+        created_null->name.GetUnderlying() != "created null" || created_null->bio) {
+        throw std::runtime_error("userver INSERT RETURNING mapping failed");
+    }
+    queries.DeleteAuthor(kMaxId - 3);
+    queries.DeleteAuthor(kMaxId - 4);
+
+    ydb::OperationSettings read_settings;
+    read_settings.retries = 2;
+    read_settings.client_timeout_ms = std::chrono::seconds{10};
+    read_settings.tx_mode = ydb::TransactionMode::kSnapshotRO;
+    read_settings.is_idempotent = true;
+    ::authors::userver::Queries reads{*client_, read_settings};
+    const auto max_author = reads.GetAuthor(kMaxId);
     const auto null_author = queries.GetAuthor(kMaxId - 1);
     const auto missing_author = queries.GetAuthor(kMaxId - 2);
     const auto name = queries.GetAuthorName(kMaxId);
@@ -72,13 +89,14 @@ std::string SmokeHandler::HandleRequest(server::http::HttpRequest&, server::requ
         name->name.GetUnderlying() != "userver") {
         throw std::runtime_error("userver generated adapter returned unexpected boundary values");
     }
-    const auto row_count = queries.ListAuthors().size();
+    const auto row_count = reads.ListAuthors().size();
     if (row_count != 2) {
         throw std::runtime_error("userver generated adapter returned an unexpected row count");
     }
 
     client_->RetryTx("sqlc-generated-helpers", {}, [&](ydb::TxActor& transaction) {
-        ::authors::userver::Queries transactional_queries{transaction};
+        ::authors::userver::Queries transactional_queries{transaction,
+            ydb::ExecuteSettings{.client_timeout_ms = std::chrono::seconds{10}}};
         transactional_queries.UpsertAuthor(kMaxId - 2, ydb::Utf8{"rolled back"}, std::nullopt);
         if (!transactional_queries.GetAuthor(kMaxId - 2)) {
             throw std::runtime_error("userver generated adapter did not share the transaction");

@@ -100,7 +100,20 @@ int main() {
         queries.UpsertAuthor(kMaxId, "C++ SDK", std::optional<std::string>{"present"});
         queries.UpsertAuthor(kMaxId - 1, "optional null", std::nullopt);
 
-        const auto max_author = queries.GetAuthor(kMaxId);
+        const auto created = queries.CreateAuthor(kMaxId - 3, "created", std::optional<std::string>{"returning"});
+        const auto created_null = queries.CreateAuthor(kMaxId - 4, "created null", std::nullopt);
+        if (!created || created->id != kMaxId - 3 || created->name != "created" || created->bio != "returning" ||
+            !created_null || created_null->id != kMaxId - 4 || created_null->name != "created null" || created_null->bio) {
+            throw std::runtime_error("native INSERT RETURNING mapping failed");
+        }
+        queries.DeleteAuthor(kMaxId - 3);
+        queries.DeleteAuthor(kMaxId - 4);
+
+        authors::native::Queries reads{client,
+            NYdb::NRetry::TRetryOperationSettings().Idempotent(true).MaxRetries(2),
+            NYdb::NQuery::TTxSettings::SnapshotRO(),
+            NYdb::NQuery::TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(10))};
+        const auto max_author = reads.GetAuthor(kMaxId);
         const auto null_author = queries.GetAuthor(kMaxId - 1);
         const auto missing_author = queries.GetAuthor(kMaxId - 2);
         const auto name = queries.GetAuthorName(kMaxId);
@@ -108,7 +121,7 @@ int main() {
             !null_author || null_author->bio || missing_author || !name || name->name != "C++ SDK") {
             throw std::runtime_error("native C++ generated adapter returned unexpected boundary values");
         }
-        const auto authors = queries.ListAuthors();
+        const auto authors = reads.ListAuthors();
         if (authors.size() != 2) {
             throw std::runtime_error("native C++ generated adapter returned an unexpected row count");
         }
@@ -119,7 +132,8 @@ int main() {
         auto begin_result = session.BeginTransaction(NYdb::NQuery::TTxSettings::SerializableRW()).GetValueSync();
         NYdb::NStatusHelpers::ThrowOnError(begin_result);
         auto transaction = begin_result.GetTransaction();
-        authors::native::Queries transactional_queries{transaction};
+        authors::native::Queries transactional_queries{transaction,
+            NYdb::NQuery::TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(10))};
         transactional_queries.UpsertAuthor(kMaxId - 2, "rolled back", std::nullopt);
         if (!transactional_queries.GetAuthor(kMaxId - 2)) {
             throw std::runtime_error("native C++ generated adapter did not share the transaction");

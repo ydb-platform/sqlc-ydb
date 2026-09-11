@@ -78,8 +78,8 @@ func TestGenerateNativeYDBAuthorsAPI(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		"explicit Queries(NYdb::NQuery::TQueryClient& client) noexcept",
-		"explicit Queries(NYdb::NQuery::TTransaction& transaction) noexcept",
+		"explicit Queries(NYdb::NQuery::TQueryClient& client,",
+		"explicit Queries(NYdb::NQuery::TTransaction& transaction,",
 		"std::optional<GetAuthorRow> GetAuthor(std::uint64_t author_id) const;",
 		"std::vector<ListAuthorsRow> ListAuthors() const;",
 		"void UpsertAuthor(std::uint64_t author_id, const std::string& author_name, const std::optional<std::string>& biography) const;",
@@ -95,7 +95,7 @@ func TestGenerateNativeYDBAuthorsAPI(t *testing.T) {
 		"client_->RetryQuerySync",
 		"NYdb::NQuery::TTxControl::Tx(*this->transaction_)",
 		"NYdb::NStatusHelpers::ThrowOnError(sqlc_status);",
-		"NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()",
+		"NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()",
 		".AddParam(\"$author_id\").Uint64(author_id).Build()",
 		".AddParam(\"$author_name\").Utf8(author_name).Build()",
 		".AddParam(\"$biography\").OptionalUtf8(biography).Build()",
@@ -126,8 +126,8 @@ func TestGenerateUserverAuthorsAPI(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		"explicit Queries(::userver::ydb::TableClient& client) noexcept",
-		"explicit Queries(::userver::ydb::TxActor& transaction) noexcept",
+		"explicit Queries(::userver::ydb::TableClient& client,",
+		"explicit Queries(::userver::ydb::TxActor& transaction,",
 		"void UpsertAuthor(std::uint64_t author_id, const ::userver::ydb::Utf8& author_name, const std::optional<::userver::ydb::Utf8>& biography) const;",
 		"::userver::ydb::TableClient* client_;",
 		"::userver::ydb::TxActor* transaction_;",
@@ -141,7 +141,7 @@ func TestGenerateUserverAuthorsAPI(t *testing.T) {
 		"::userver::ydb::Query::Name{\"GetAuthor\"}",
 		"::userver::ydb::Query::LogMode::kNameOnly",
 		"this->transaction_->Execute(",
-		"ExecuteQuery(sqlc_query, \"$author_id\", author_id)",
+		"ExecuteQuery(this->operation_settings_, sqlc_query, \"$author_id\", author_id)",
 		"sqlc_row.Get<std::uint64_t>(\"id\")",
 		"sqlc_row.Get<::userver::ydb::Utf8>(\"name\")",
 		"sqlc_row.Get<std::optional<::userver::ydb::Utf8>>(\"bio\")",
@@ -452,5 +452,37 @@ func TestSQLLiteralUsesOneReadableRawString(t *testing.T) {
 				t.Fatalf("round trip mismatch:\n got: %q\nwant: %q\nliteral: %s", got, []byte(tc.wantValue), literal)
 			}
 		})
+	}
+}
+
+func TestSettingsAndHeaderHygiene(t *testing.T) {
+	for _, runtime := range []string{"ydb", "userver"} {
+		files, err := Generate(authorsAnalysis(), Options{Runtime: runtime})
+		if err != nil {
+			t.Fatal(err)
+		}
+		source := generatedContent(t, files, "queries.cpp")
+		if !strings.Contains(source, "this->execute_settings_") {
+			t.Errorf("%s: missing execution settings", runtime)
+		}
+		if runtime == "ydb" {
+			for _, want := range []string{"}, this->retry_settings_)", "GetResultSets().size() != 1"} {
+				if !strings.Contains(source, want) {
+					t.Errorf("native: missing %s", want)
+				}
+			}
+		} else {
+			if strings.Contains(source, "#include <utility>") {
+				t.Error("unused userver utility include")
+			}
+			for _, name := range []string{"models.hpp", "queries.hpp"} {
+				if strings.Contains(generatedContent(t, files, name), "#include <string>") {
+					t.Errorf("unused string include in %s", name)
+				}
+			}
+		}
+	}
+	if err := validateIdent("a__b"); err == nil {
+		t.Error("C++ reserved double underscore accepted")
 	}
 }

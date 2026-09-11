@@ -21,11 +21,41 @@ Use `runtime: userver` for the userver adapter. The configuration layer also acc
 
 ## Ownership and transactions
 
-`Queries` stores a non-owning pointer to the runtime executor. The caller must keep the supplied client or transaction actor alive longer than the generated `Queries` object. The native driver and userver component remain caller-owned as well.
+`Queries` stores copied execution settings and a non-owning pointer to the runtime executor. The caller must keep the supplied client or transaction actor alive longer than the generated `Queries` object. The native driver and userver component remain caller-owned as well.
 
-Construct native `Queries` with `TQueryClient&` for standalone calls. Every method then calls `RetryQuerySync`, obtains a retry-managed `TSession`, and executes one query with `BeginTx(SerializableRW()).CommitTx()`. Every retry attempt rebuilds the parameter object. Construct it with `TTransaction&` to run several generated methods in that caller-owned transaction; methods use `TTxControl::Tx(transaction)` and never commit, roll back or retry it.
+Construct native `Queries` with `TQueryClient&` for standalone calls. Every method then calls `RetryQuerySync`, obtains a retry-managed `TSession`, and executes one query with `BeginTx(tx_settings).CommitTx()`. The constructor accepts `TRetryOperationSettings`, `TTxSettings`, and `TExecuteQuerySettings`; defaults retain SDK retry settings (idempotency disabled) and `SerializableRW`. Every retry attempt rebuilds the parameter object. Construct it with `TTransaction&` to run several generated methods in that caller-owned transaction; methods use `TTxControl::Tx(transaction)` and never commit, roll back or retry it. That constructor accepts only `TExecuteQuerySettings`: transaction mode and whole-transaction retries belong to the caller.
 
-Construct userver `Queries` with `TableClient&` for standalone calls through `TableClient::ExecuteQuery`. To run several generated methods atomically, create `Queries` from the `TxActor&` supplied to `TableClient::RetryTx`. The callback controls commit or rollback through its returned `TxAction`; a retry repeats the whole callback.
+Construct userver `Queries` with `TableClient&` for standalone calls through `TableClient::ExecuteQuery`. Its constructor accepts `OperationSettings`, including retries, timeout, transaction mode, and idempotency. Default settings preserve userver configuration/defaults and `is_idempotent=false`. To run several generated methods atomically, create `Queries` from the `TxActor&` supplied to `TableClient::RetryTx`. The callback controls commit or rollback through its returned `TxAction`; a retry repeats the whole callback. The transaction constructor accepts `ExecuteSettings` for the per-request timeout; transaction retry and mode settings are supplied to `RetryTx`.
+
+Use separate helper objects when reads and writes need different policies:
+
+```cpp
+authors::native::Queries reads{client,
+    NYdb::NRetry::TRetryOperationSettings().Idempotent(true).MaxRetries(3),
+    NYdb::NQuery::TTxSettings::SnapshotRO()};
+auto author = reads.GetAuthor(id);
+```
+
+```cpp
+::userver::ydb::OperationSettings settings;
+settings.is_idempotent = true;
+settings.tx_mode = ::userver::ydb::TransactionMode::kSnapshotRO;
+::authors::userver::Queries reads{table_client, settings};
+auto author = reads.GetAuthor(id);
+```
+
+The generator does not infer replay safety from `:one`/`:many` or SQL verbs.
+In particular, do not run `INSERT ... RETURNING` through an idempotent helper
+unless the application guarantees safe replay. Conservative SDK retries still
+handle errors known not to have committed; disabling idempotency does not mean
+all retries are disabled. Inside an existing transaction, retry the entire unit
+of work instead of retrying individual generated calls.
+
+Both profiles currently buffer query results, then construct result DTOs;
+`:many` can hold both representations in memory. Bound production reads in SQL
+or use the SDK streaming API for large scans. Native calls block in
+`GetValueSync`; use the userver profile inside userver coroutine handlers.
+Result-returning helpers require exactly one result set and reject extra sets.
 
 ## Types
 
@@ -44,7 +74,7 @@ Construct userver `Queries` with `TableClient&` for standalone calls through `Ta
 
 The native mapping retains the `String` versus `Utf8` distinction in its parameter builders and result parsers even though both values use `std::string`. userver uses its strong `Utf8` typedef, so the distinction is also visible in the public C++ type. Nested optionals and non-scalar containers are rejected explicitly.
 
-Identifiers must be ASCII C++ identifiers, must not be C++20 keywords, and must not start with `_` or the generator-reserved `sqlc_` prefix. Duplicate query, parameter, or result-column names are rejected, as are names that collide with generated row types, the `Queries` class, its client member, or per-query SQL constants. Generated SQL normally remains readable as a multiline raw string. The generator selects a raw-string delimiter absent from the SQL and switches to length-preserving escaped fragments for control bytes, carriage returns, byte-order marks, and invalid UTF-8.
+Identifiers must be ASCII C++ identifiers, must not be C++20 keywords, and must not start with `_` or the generator-reserved `sqlc_` prefix. Duplicate query, parameter, or result-column names are rejected, as are names that collide with generated row types, the `Queries` class, its client member, or their execution-settings members. Identifiers containing `__` are also rejected because C++ reserves them. Generated SQL normally remains readable as a multiline raw string. The generator selects a raw-string delimiter absent from the SQL.
 
 ## Dependencies and examples
 

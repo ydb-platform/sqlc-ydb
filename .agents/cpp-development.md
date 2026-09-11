@@ -56,3 +56,25 @@ inside the same SDK image used to build them.
 The smoke config disables userver's optional coroutine stack usage monitor,
 whose `userfaultfd` call is blocked by Docker's default seccomp profile.
 The example runs with ordinary container permissions.
+
+## PR #8 contract review (2026-09-11)
+
+Checked settings overloads against the pinned installed headers, including
+`TxActor::Execute(ExecuteSettings, Query, ...)` and native `RetryQuerySync`
+with explicit `TRetryOperationSettings`. The generator copies constructor
+settings; standalone calls forward retry/mode/execution settings, while external
+transactions accept execution settings only. See the public C++ contract for
+ownership and defaults.
+
+The upstream [select handler](https://github.com/userver-framework/userver/blob/86759637d175baa64f0b3b01f1a027bfedbf795a/samples/ydb_service/views/select-rows/post/view.cpp)
+uses OperationSettings, named parameters, GetSingleCursor and typed Row::Get.
+Its ExecuteDataQuery API is older than our Query API path. The
+[transaction handler](https://github.com/userver-framework/userver/blob/86759637d175baa64f0b3b01f1a027bfedbf795a/samples/ydb_service/views/upsert-2rows/post/view.cpp)
+uses RetryTx, TxActor::Execute and caller-selected TxAction, matching our
+transaction ownership model. Native execution follows the
+[official example](https://ydb.tech/docs/en/dev/example-app/example-cpp)
+with checked statuses, retry-managed sessions and typed parameter/result APIs.
+
+Both smoke tests now execute CreateAuthor with present/null optional values,
+assert every RETURNING column, run configured SnapshotRO reads, and exercise
+request settings in caller-owned transactions with rollback assertions.

@@ -3,7 +3,6 @@
 
 #include <cstdint>
 #include <optional>
-#include <string>
 
 #include <userver/ydb/types.hpp>
 
