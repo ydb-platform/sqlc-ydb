@@ -20,10 +20,10 @@ public sealed class Queries
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));
     }
 
+    // -- name: CountPilots :one
     public async Task<CountPilotsRow> CountPilotsAsync(CancellationToken cancellationToken = default)
     {
         var rows = await _connection.QueryToListAsync(CountPilotsRowFrom,
-            "-- name: CountPilots :one\n" +
             "SELECT COUNT(*) AS pilot_count FROM pilots;", cancellationToken).ConfigureAwait(false);
         if (rows.Count == 0)
         {
@@ -36,10 +36,10 @@ public sealed class Queries
         reader.GetFieldValue<ulong>(0)
     );
 
+    // -- name: ListPilots :many
     public async Task<IReadOnlyList<ListPilotsRow>> ListPilotsAsync(CancellationToken cancellationToken = default)
     {
         var rows = await _connection.QueryToListAsync(ListPilotsRowFrom,
-            "-- name: ListPilots :many\n" +
             "SELECT id, name FROM pilots ORDER BY id LIMIT 5;", cancellationToken).ConfigureAwait(false);
         return rows;
     }
@@ -49,10 +49,10 @@ public sealed class Queries
         reader.GetFieldValue<string>(1)
     );
 
+    // -- name: DeletePilot :exec
     public async Task DeletePilotAsync(int PilotID, CancellationToken cancellationToken = default)
     {
         await _connection.ExecuteAsync(
-            "-- name: DeletePilot :exec\n" +
             "DELETE FROM pilots WHERE id = $pilot_id;", cancellationToken, new DataParameter("$pilot_id", PilotID, DataType.Int32)).ConfigureAwait(false);
     }
 }

@@ -25,10 +25,10 @@ public sealed class Queries
 
     public Queries WithTransaction(YdbTransaction transaction) => new(_connection, transaction ?? throw new ArgumentNullException(nameof(transaction)));
 
+    // -- name: ListCities :many
     public async Task<IReadOnlyList<ListCitiesRow>> ListCitiesAsync(CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
-            "-- name: ListCities :many\n" +
             "SELECT slug, name\n" +
             "FROM city\n" +
             "ORDER BY name;", null, _transaction, cancellationToken: cancellationToken);
@@ -46,10 +46,10 @@ public sealed class Queries
         reader.GetFieldValue<string>(1)
     );
 
+    // -- name: GetCity :one
     public async Task<GetCityRow> GetCityAsync(string Slug, CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
-            "-- name: GetCity :one\n" +
             "SELECT slug, name\n" +
             "FROM city\n" +
             "WHERE slug = $slug;", new YdbParameters(new YdbParameter("$slug", DbType.String, Slug)), _transaction, cancellationToken: cancellationToken);
@@ -66,10 +66,10 @@ public sealed class Queries
         reader.GetFieldValue<string>(1)
     );
 
+    // -- name: CreateCity :one
     public async Task<CreateCityRow> CreateCityAsync(CreateCityParams args, CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
-            "-- name: CreateCity :one\n" +
             "INSERT INTO city (\n" +
             "    name,\n" +
             "    slug\n" +
@@ -90,20 +90,20 @@ public sealed class Queries
         reader.GetFieldValue<string>(1)
     );
 
+    // -- name: UpdateCityName :exec
     public async Task UpdateCityNameAsync(UpdateCityNameParams args, CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
-            "-- name: UpdateCityName :exec\n" +
             "UPDATE city\n" +
             "SET name = $name\n" +
             "WHERE slug = $slug;", new YdbParameters(new YdbParameter("$name", DbType.String, args.Name), new YdbParameter("$slug", DbType.String, args.Slug)), _transaction, cancellationToken: cancellationToken);
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
 
+    // -- name: ListVenues :many
     public async Task<IReadOnlyList<ListVenuesRow>> ListVenuesAsync(string City, CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
-            "-- name: ListVenues :many\n" +
             "SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n" +
             "FROM venue\n" +
             "WHERE city = $city\n" +
@@ -130,19 +130,19 @@ public sealed class Queries
         reader.IsDBNull(9) ? null : reader.GetFieldValue<DateTime>(9)
     );
 
+    // -- name: DeleteVenue :exec
     public async Task DeleteVenueAsync(string Slug, CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
-            "-- name: DeleteVenue :exec\n" +
             "DELETE FROM venue\n" +
             "WHERE slug = $slug AND slug = $slug;", new YdbParameters(new YdbParameter("$slug", DbType.String, Slug)), _transaction, cancellationToken: cancellationToken);
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
 
+    // -- name: GetVenue :one
     public async Task<GetVenueRow> GetVenueAsync(GetVenueParams args, CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
-            "-- name: GetVenue :one\n" +
             "SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n" +
             "FROM venue\n" +
             "WHERE slug = $slug AND city = $city;", new YdbParameters(new YdbParameter("$slug", DbType.String, args.Slug), new YdbParameter("$city", DbType.String, args.City)), _transaction, cancellationToken: cancellationToken);
@@ -167,10 +167,10 @@ public sealed class Queries
         reader.IsDBNull(9) ? null : reader.GetFieldValue<DateTime>(9)
     );
 
+    // -- name: CreateVenue :one
     public async Task<CreateVenueRow> CreateVenueAsync(CreateVenueParams args, CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
-            "-- name: CreateVenue :one\n" +
             "INSERT INTO venue (\n" +
             "    id,\n" +
             "    slug,\n" +
@@ -204,10 +204,10 @@ public sealed class Queries
         reader.GetFieldValue<ulong>(0)
     );
 
+    // -- name: UpdateVenueName :one
     public async Task<UpdateVenueNameRow> UpdateVenueNameAsync(UpdateVenueNameParams args, CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
-            "-- name: UpdateVenueName :one\n" +
             "UPDATE venue\n" +
             "SET name = $name\n" +
             "WHERE slug = $slug\n" +
@@ -224,10 +224,10 @@ public sealed class Queries
         reader.GetFieldValue<ulong>(0)
     );
 
+    // -- name: VenueCountByCity :many
     public async Task<IReadOnlyList<VenueCountByCityRow>> VenueCountByCityAsync(CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
-            "-- name: VenueCountByCity :many\n" +
             "SELECT\n" +
             "    city,\n" +
             "    COUNT(*) AS venue_count\n" +

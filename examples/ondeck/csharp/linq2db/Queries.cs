@@ -20,10 +20,10 @@ public sealed class Queries
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));
     }
 
+    // -- name: ListCities :many
     public async Task<IReadOnlyList<ListCitiesRow>> ListCitiesAsync(CancellationToken cancellationToken = default)
     {
         var rows = await _connection.QueryToListAsync(ListCitiesRowFrom,
-            "-- name: ListCities :many\n" +
             "SELECT slug, name\n" +
             "FROM city\n" +
             "ORDER BY name;", cancellationToken).ConfigureAwait(false);
@@ -35,10 +35,10 @@ public sealed class Queries
         reader.GetFieldValue<string>(1)
     );
 
+    // -- name: GetCity :one
     public async Task<GetCityRow> GetCityAsync(string Slug, CancellationToken cancellationToken = default)
     {
         var rows = await _connection.QueryToListAsync(GetCityRowFrom,
-            "-- name: GetCity :one\n" +
             "SELECT slug, name\n" +
             "FROM city\n" +
             "WHERE slug = $slug;", cancellationToken, new DataParameter("$slug", Slug, DataType.NVarChar)).ConfigureAwait(false);
@@ -54,10 +54,10 @@ public sealed class Queries
         reader.GetFieldValue<string>(1)
     );
 
+    // -- name: CreateCity :one
     public async Task<CreateCityRow> CreateCityAsync(CreateCityParams args, CancellationToken cancellationToken = default)
     {
         var rows = await _connection.QueryToListAsync(CreateCityRowFrom,
-            "-- name: CreateCity :one\n" +
             "INSERT INTO city (\n" +
             "    name,\n" +
             "    slug\n" +
@@ -77,19 +77,19 @@ public sealed class Queries
         reader.GetFieldValue<string>(1)
     );
 
+    // -- name: UpdateCityName :exec
     public async Task UpdateCityNameAsync(UpdateCityNameParams args, CancellationToken cancellationToken = default)
     {
         await _connection.ExecuteAsync(
-            "-- name: UpdateCityName :exec\n" +
             "UPDATE city\n" +
             "SET name = $name\n" +
             "WHERE slug = $slug;", cancellationToken, new DataParameter("$name", args.Name, DataType.NVarChar), new DataParameter("$slug", args.Slug, DataType.NVarChar)).ConfigureAwait(false);
     }
 
+    // -- name: ListVenues :many
     public async Task<IReadOnlyList<ListVenuesRow>> ListVenuesAsync(string City, CancellationToken cancellationToken = default)
     {
         var rows = await _connection.QueryToListAsync(ListVenuesRowFrom,
-            "-- name: ListVenues :many\n" +
             "SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n" +
             "FROM venue\n" +
             "WHERE city = $city\n" +
@@ -110,18 +110,18 @@ public sealed class Queries
         reader.IsDBNull(9) ? null : reader.GetFieldValue<DateTime>(9)
     );
 
+    // -- name: DeleteVenue :exec
     public async Task DeleteVenueAsync(string Slug, CancellationToken cancellationToken = default)
     {
         await _connection.ExecuteAsync(
-            "-- name: DeleteVenue :exec\n" +
             "DELETE FROM venue\n" +
             "WHERE slug = $slug AND slug = $slug;", cancellationToken, new DataParameter("$slug", Slug, DataType.NVarChar)).ConfigureAwait(false);
     }
 
+    // -- name: GetVenue :one
     public async Task<GetVenueRow> GetVenueAsync(GetVenueParams args, CancellationToken cancellationToken = default)
     {
         var rows = await _connection.QueryToListAsync(GetVenueRowFrom,
-            "-- name: GetVenue :one\n" +
             "SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n" +
             "FROM venue\n" +
             "WHERE slug = $slug AND city = $city;", cancellationToken, new DataParameter("$slug", args.Slug, DataType.NVarChar), new DataParameter("$city", args.City, DataType.NVarChar)).ConfigureAwait(false);
@@ -145,10 +145,10 @@ public sealed class Queries
         reader.IsDBNull(9) ? null : reader.GetFieldValue<DateTime>(9)
     );
 
+    // -- name: CreateVenue :one
     public async Task<CreateVenueRow> CreateVenueAsync(CreateVenueParams args, CancellationToken cancellationToken = default)
     {
         var rows = await _connection.QueryToListAsync(CreateVenueRowFrom,
-            "-- name: CreateVenue :one\n" +
             "INSERT INTO venue (\n" +
             "    id,\n" +
             "    slug,\n" +
@@ -181,10 +181,10 @@ public sealed class Queries
         reader.GetFieldValue<ulong>(0)
     );
 
+    // -- name: UpdateVenueName :one
     public async Task<UpdateVenueNameRow> UpdateVenueNameAsync(UpdateVenueNameParams args, CancellationToken cancellationToken = default)
     {
         var rows = await _connection.QueryToListAsync(UpdateVenueNameRowFrom,
-            "-- name: UpdateVenueName :one\n" +
             "UPDATE venue\n" +
             "SET name = $name\n" +
             "WHERE slug = $slug\n" +
@@ -200,10 +200,10 @@ public sealed class Queries
         reader.GetFieldValue<ulong>(0)
     );
 
+    // -- name: VenueCountByCity :many
     public async Task<IReadOnlyList<VenueCountByCityRow>> VenueCountByCityAsync(CancellationToken cancellationToken = default)
     {
         var rows = await _connection.QueryToListAsync(VenueCountByCityRowFrom,
-            "-- name: VenueCountByCity :many\n" +
             "SELECT\n" +
             "    city,\n" +
             "    COUNT(*) AS venue_count\n" +

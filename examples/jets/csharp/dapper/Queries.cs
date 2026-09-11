@@ -25,10 +25,10 @@ public sealed class Queries
 
     public Queries WithTransaction(YdbTransaction transaction) => new(_connection, transaction ?? throw new ArgumentNullException(nameof(transaction)));
 
+    // -- name: CountPilots :one
     public async Task<CountPilotsRow> CountPilotsAsync(CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
-            "-- name: CountPilots :one\n" +
             "SELECT COUNT(*) AS pilot_count FROM pilots;", null, _transaction, cancellationToken: cancellationToken);
         await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
@@ -42,10 +42,10 @@ public sealed class Queries
         reader.GetFieldValue<ulong>(0)
     );
 
+    // -- name: ListPilots :many
     public async Task<IReadOnlyList<ListPilotsRow>> ListPilotsAsync(CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
-            "-- name: ListPilots :many\n" +
             "SELECT id, name FROM pilots ORDER BY id LIMIT 5;", null, _transaction, cancellationToken: cancellationToken);
         await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
         var rows = new List<ListPilotsRow>();
@@ -61,10 +61,10 @@ public sealed class Queries
         reader.GetFieldValue<string>(1)
     );
 
+    // -- name: DeletePilot :exec
     public async Task DeletePilotAsync(int PilotID, CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
-            "-- name: DeletePilot :exec\n" +
             "DELETE FROM pilots WHERE id = $pilot_id;", new YdbParameters(new YdbParameter("$pilot_id", DbType.Int32, PilotID)), _transaction, cancellationToken: cancellationToken);
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }

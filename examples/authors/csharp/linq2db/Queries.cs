@@ -20,10 +20,10 @@ public sealed class Queries
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));
     }
 
+    // -- name: GetAuthor :one
     public async Task<GetAuthorRow> GetAuthorAsync(ulong AuthorID, CancellationToken cancellationToken = default)
     {
         var rows = await _connection.QueryToListAsync(GetAuthorRowFrom,
-            "-- name: GetAuthor :one\n" +
             "SELECT id, name, bio FROM authors WHERE id = $author_id;", cancellationToken, new DataParameter("$author_id", AuthorID, DataType.UInt64)).ConfigureAwait(false);
         if (rows.Count == 0)
         {
@@ -38,10 +38,10 @@ public sealed class Queries
         reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)
     );
 
+    // -- name: ListAuthors :many
     public async Task<IReadOnlyList<ListAuthorsRow>> ListAuthorsAsync(CancellationToken cancellationToken = default)
     {
         var rows = await _connection.QueryToListAsync(ListAuthorsRowFrom,
-            "-- name: ListAuthors :many\n" +
             "SELECT id, name, bio FROM authors ORDER BY name;", cancellationToken).ConfigureAwait(false);
         return rows;
     }
@@ -52,10 +52,10 @@ public sealed class Queries
         reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)
     );
 
+    // -- name: GetAuthorName :one
     public async Task<GetAuthorNameRow> GetAuthorNameAsync(ulong AuthorID, CancellationToken cancellationToken = default)
     {
         var rows = await _connection.QueryToListAsync(GetAuthorNameRowFrom,
-            "-- name: GetAuthorName :one\n" +
             "SELECT name FROM authors WHERE id = $author_id;", cancellationToken, new DataParameter("$author_id", AuthorID, DataType.UInt64)).ConfigureAwait(false);
         if (rows.Count == 0)
         {
@@ -68,10 +68,10 @@ public sealed class Queries
         reader.GetFieldValue<string>(0)
     );
 
+    // -- name: CreateAuthor :one
     public async Task<CreateAuthorRow> CreateAuthorAsync(CreateAuthorParams args, CancellationToken cancellationToken = default)
     {
         var rows = await _connection.QueryToListAsync(CreateAuthorRowFrom,
-            "-- name: CreateAuthor :one\n" +
             "INSERT INTO `authors` (`id`, `name`, `bio`)\n" +
             "VALUES ($author_id, $author_name, $biography)\n" +
             "RETURNING `id`, `name`, `bio`;", cancellationToken, new DataParameter("$author_id", args.AuthorID, DataType.UInt64), new DataParameter("$author_name", args.AuthorName, DataType.NVarChar), new DataParameter("$biography", YdbValue.MakeOptionalUtf8(args.Biography), DataType.NVarChar)).ConfigureAwait(false);
@@ -88,18 +88,18 @@ public sealed class Queries
         reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)
     );
 
+    // -- name: UpsertAuthor :exec
     public async Task UpsertAuthorAsync(UpsertAuthorParams args, CancellationToken cancellationToken = default)
     {
         await _connection.ExecuteAsync(
-            "-- name: UpsertAuthor :exec\n" +
             "UPSERT INTO authors (id, name, bio)\n" +
             "VALUES ($author_id, $author_name, $biography);", cancellationToken, new DataParameter("$author_id", args.AuthorID, DataType.UInt64), new DataParameter("$author_name", args.AuthorName, DataType.NVarChar), new DataParameter("$biography", YdbValue.MakeOptionalUtf8(args.Biography), DataType.NVarChar)).ConfigureAwait(false);
     }
 
+    // -- name: DeleteAuthor :exec
     public async Task DeleteAuthorAsync(ulong AuthorID, CancellationToken cancellationToken = default)
     {
         await _connection.ExecuteAsync(
-            "-- name: DeleteAuthor :exec\n" +
             "DELETE FROM authors WHERE id = $author_id;", cancellationToken, new DataParameter("$author_id", AuthorID, DataType.UInt64)).ConfigureAwait(false);
     }
 }
