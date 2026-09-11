@@ -45,7 +45,11 @@ conversion is needed for this target.
 
 The language packages in `internal/codegen` produce files from that
 resolved model. They handle naming, runtime-specific parameter binding, result
-decoding and resource lifetimes. They do not analyze SQL or load external code.
+decoding and resource lifetimes. They do not analyze SQL or load external code. For the jOOQ DSL target,
+`AnalyzedQuery.Syntax` retains the original ANTLR contexts and analyzer-resolved
+column/table bindings. The renderer walks these contexts directly; it does not
+reparse text or construct a second AST. Unsupported DSL constructs fail in the
+target without restricting other generators.
 Lexical adaptation of parameter placeholders for a driver is separate from
 semantic query analysis and must preserve strings, comments and identifiers.
 

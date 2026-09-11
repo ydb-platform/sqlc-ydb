@@ -61,6 +61,7 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	if len(diagnostics) != 0 {
 		return query, diagnostics
 	}
+	query.Syntax = &model.QuerySyntax{Root: parsed.tree, Columns: map[int]model.ColumnBinding{}}
 	tree := collectQueryTree(parsed.tree)
 	query.SQLWithoutDeclarations = withoutDeclarations(block.text, parsed.tokens, tree.declares)
 	if diagnostics = unsupportedSQLCMacroDiagnostics(block, parsed.tokens); len(diagnostics) != 0 {
@@ -106,6 +107,7 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 			if len(relationDiagnostics) != 0 {
 				continue
 			}
+			recordColumnBindings(query.Syntax, core, armRelations)
 			armTree := collectQueryTree(core)
 			inferFromComparisons(armTree, armRelations, inferred)
 			inferFromInLists(armTree.conds, armRelations, inferred)
@@ -146,6 +148,7 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	}
 
 	if selectStatement == nil && len(relations) != 0 {
+		recordColumnBindings(query.Syntax, parsed.tree, relations)
 		diagnostics = append(diagnostics, validateColumnReferences(block, parsed.tree, relations)...)
 		inferFromComparisons(tree, relations, inferred)
 	}
@@ -913,4 +916,23 @@ func tableColumn(table *model.Table, name string) *model.Column {
 
 func compatibleTypes(left, right model.Type) bool {
 	return left.Equal(right) || right.IsOptional() && left.Equal(right.UnwrapOptional())
+}
+
+func recordColumnBindings(syntax *model.QuerySyntax, root antlr.Tree, relations []relation) {
+	for _, relation := range relations {
+		syntax.Relations = append(syntax.Relations, model.TableBinding{Table: relation.table.Name, Alias: relation.alias})
+	}
+	for _, ref := range columnRefs(root) {
+		for _, relation := range relations {
+			if ref.qualifier != "" && !strings.EqualFold(ref.qualifier, relation.alias) {
+				continue
+			}
+			if column := tableColumn(relation.table, ref.name); column != nil {
+				syntax.Columns[ref.ctx.GetStart().GetTokenIndex()] = model.ColumnBinding{
+					TableBinding: model.TableBinding{Table: relation.table.Name, Alias: relation.alias}, Column: *column,
+				}
+				break
+			}
+		}
+	}
 }

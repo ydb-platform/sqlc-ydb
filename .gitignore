@@ -31,3 +31,5 @@ examples/php/vendor/
 /examples/authors/kotlin/src/generated/kotlin/
 
 /examples/.typescript-build/
+
+/examples/*/java/jooq/

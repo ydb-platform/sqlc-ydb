@@ -108,3 +108,18 @@ Go parameter binding adapts the historical ParamsBuilder idea against SDK
 - `tests/integration/database_sql_regression_test.go` and
   `tests/integration/decimal_test.go`: typed database/sql parameter and scanning
   examples. SDK runtime imports remain outside the generator's own module.
+
+### jOOQ YDB prototype (2026-09-11)
+
+Pinned runtime: jooq 3.21.0, jooq-ydb-dialect 2.0.0, ydb-jdbc-driver 2.4.1,
+Java 21. Inspected the published jars and corresponding ydb-java-dialects sources:
+[YdbTypes](https://github.com/ydb-platform/ydb-java-dialects/blob/main/jooq-dialect/src/main/java/tech/ydb/jooq/YdbTypes.java),
+[UpsertTest](https://github.com/ydb-platform/ydb-java-dialects/blob/main/jooq-dialect/src/test/java/tech/ydb/jooq/UpsertTest.java),
+[YdbDSLContextImpl](https://github.com/ydb-platform/ydb-java-dialects/blob/main/jooq-dialect/src/main/java/tech/ydb/jooq/impl/YdbDSLContextImpl.java).
+`org.jooq.impl.YdbListener` quotes Name nodes except Name.Quoted.SYSTEM.
+The DEFAULT DML execution path uses executeUpdate/getGeneratedKeys, incompatible
+with YDB RETURNING result sets. Generated RETURNING statements therefore execute
+as ResultQuery query parts with explicit field coercion. The exact compatibility
+contract and commands are in [Java generation](../docs/java.md#jooq-prototype);
+`examples/java/jooq` compiles every example method and executes live checks in
+isolated tables. No upstream source was copied into the generator.

@@ -7,6 +7,9 @@ the version and moves these entries into a numbered section at release time.
 
 ### Added
 
+- Add a Java jOOQ prototype that translates all five example families into typed
+  DSL queries, with YDB bindings and caller-owned transactions.
+
 - Standalone YDB-only CLI with `generate`, `compile`, `diff`, `init`, and
   `version`; `version --verbose` also reports the commit embedded by release builds.
 - Direct ANTLR YQL parsing, semantic analysis, and supported schema migration

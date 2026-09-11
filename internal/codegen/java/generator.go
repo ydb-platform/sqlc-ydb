@@ -155,6 +155,9 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 	if o.Runtime == "" || o.Runtime == "native" {
 		o.Runtime = "ydb"
 	}
+	if o.Runtime == "jooq" {
+		return generateJooq(a, o)
+	}
 	if o.Runtime != "ydb" && o.Runtime != "jdbc" && o.Runtime != "spring" && o.Runtime != "hibernate" {
 		return nil, fmt.Errorf("unsupported Java runtime %q", o.Runtime)
 	}

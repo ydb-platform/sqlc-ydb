@@ -15,7 +15,8 @@ gen:
     runtime: ydb
 ```
 
-`runtime` accepts `ydb` (also `native`), `jdbc`, `spring`, or `hibernate`.
+`runtime` accepts `ydb` (also `native`), `jdbc`, `spring`, `hibernate`, or
+`jooq`. The [jOOQ prototype](#jooq-prototype) has its own DSL and runtime contract.
 Files are emitted directly into `out`; match it to your Java package directory.
 Each schema table and query projection gets a record, without ORM annotations.
 
@@ -80,3 +81,62 @@ compare exact UTF-8 bytes with the original SQL.
 The inspected SDK sources and framework API references are recorded in
 [source provenance](../.agents/sdk-evidence.md#java-sdk-and-framework-references).
 Dependency versions used by the example are pinned in [its Maven build](../examples/authors/java/pom.xml).
+
+## jOOQ prototype
+
+`runtime: jooq` translates named YQL queries into the jOOQ DSL. SQL files remain
+its input; generated methods contain no embedded SQL statements. Unsupported
+constructs fail generation with the query name and offending syntax, without a
+plain-SQL fallback. The prototype covers all 40 queries in the five example
+families: SELECT, projections, aliases, LEFT JOIN, comparisons and logical
+conditions, ordering, LIMIT, GROUP BY with COUNT(*), INSERT/UPSERT, UPDATE,
+DELETE and RETURNING. Its YQL function subset includes SetIsDisjoint, ToSet and
+Yson::ConvertToStringList; other functions require an explicit implementation.
+
+```yaml
+gen:
+  java:
+    package: authors.jooq
+    out: java/jooq
+    runtime: jooq
+```
+
+Each output contains `Tables.java` (typed fields derived from the local schema),
+`Queries.java` and projection records. Generation is offline and does not need
+a second jOOQ schema-generation step or a running database. Table aliases retain
+typed fields. Parameters are bound with the YDB field types, never interpolated
+into SQL. The constructor borrows a `YdbDSLContext`: callers own connection,
+transaction, retry and lifecycle. `:one` returns `Optional<Row>` and rejects
+multiple rows; `:many` returns `List<Row>`; `:exec` returns `void`.
+
+The shared [Maven project](../examples/java/jooq/pom.xml) pins Java 21,
+jOOQ 3.21.0, YDB jOOQ dialect 2.0.0 and JDBC 2.4.1. Value carriers follow that
+dialect: Uint64 uses ULong, Json uses JSON, Timestamp uses Instant, Utf8 uses
+String. DTO members use reference types, including nullable values. There is
+no automatic conversion to the other Java profiles' long-based Uint64 API.
+
+Two details are specific to the pinned dialect:
+
+- Built-in function names use `systemName`, so the dialect does not quote
+  `Yson::ConvertToStringList` as one identifier.
+- RETURNING lists use unqualified fields. Execution uses
+  `dsl.resultQuery("{0}", stmt).coerce(...)` because the dialect selects jOOQ's
+  DEFAULT DML path, which otherwise calls JDBC executeUpdate/getGeneratedKeys.
+  YDB returns an ordinary result set. `{0}` embeds the already constructed jOOQ
+  query part, preserving its typed bindings; it is not a SQL statement or a
+  conversion of the query back into a string. This compatibility path is covered
+  by live INSERT and UPDATE RETURNING tests.
+
+```sh
+make generate
+mvn -f examples/java/jooq/pom.xml test
+YDB_CONNECTION_STRING=grpc://localhost:2136/local \
+  mvn -f examples/java/jooq/pom.xml test
+```
+
+The offline test invokes every generated example method through the real dialect
+and a JDBC mock. Live tests use unique mapped table names, verify the mapping
+before executing queries, and drop only tables they created. They cover nullable
+values, JSON filters, timestamp microseconds, maximum Uint64, joins, aggregates,
+LIMIT, RETURNING and caller-owned rollback. SDK compilation and execution must
+pass before adding new DSL constructs.

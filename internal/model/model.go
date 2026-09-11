@@ -5,6 +5,8 @@ package model
 import (
 	"fmt"
 	"strings"
+
+	"github.com/antlr4-go/antlr/v4"
 )
 
 type Source struct {
@@ -128,7 +130,22 @@ const (
 	ExecRows Command = ":execrows"
 )
 
+// QuerySyntax retains the original ANTLR contexts with resolved column bindings.
+// DSL renderers consume these contexts without reparsing SQL or constructing an AST.
+type QuerySyntax struct {
+	Root      antlr.ParserRuleContext
+	Columns   map[int]ColumnBinding
+	Relations []TableBinding
+}
+type TableBinding struct{ Table, Alias string }
+type ColumnBinding struct {
+	TableBinding
+	Column Column
+}
+
 type AnalyzedQuery struct {
+	Syntax *QuerySyntax `json:"-"`
+
 	Name    string
 	Command Command
 	SQL     string

@@ -118,3 +118,12 @@ sql:
         namespace: Authors.Linq2DB
         out: csharp/linq2db
         runtime: linq2db
+  - name: jooq
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      java:
+        package: authors.jooq
+        out: java/jooq
+        runtime: jooq

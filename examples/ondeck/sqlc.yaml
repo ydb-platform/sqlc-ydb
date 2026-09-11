@@ -46,3 +46,12 @@ sql:
         namespace: Ondeck.Linq2DB
         out: csharp/linq2db
         runtime: linq2db
+  - name: jooq
+    engine: ydb
+    schema: schema
+    queries: query
+    gen:
+      java:
+        package: ondeck.jooq
+        out: java/jooq
+        runtime: jooq
