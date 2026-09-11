@@ -2,52 +2,82 @@ package authors.spring;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.util.List;
+import java.util.Iterator;
 
+import javax.sql.DataSource;
+
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.jdbc.DataSourceBuilder;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.SingleConnectionDataSource;
+import org.springframework.transaction.annotation.Transactional;
+
+import tech.ydb.data.repository.config.AbstractYdbJdbcConfiguration;
 
 /** Run from examples/authors; the smoke creates and drops its authors table. */
-public final class Smoke {
+
+@SpringBootApplication
+public class Smoke extends AbstractYdbJdbcConfiguration implements CommandLineRunner {
     private static final long MAX_UINT64 = -1L;
     private static final long SECOND_ID = 7L;
 
-    private Smoke() { }
+    private final ApplicationContext context;
 
-    public static void main(String[] args) throws Exception {
+    public Smoke(ApplicationContext context) {
+        this.context = context;
+    }
+
+    @Bean
+    @ConfigurationProperties("spring.datasource")
+    public DataSource dataSource() {
         String endpoint = System.getenv("YDB_CONNECTION_STRING");
-        if (endpoint == null || endpoint.isBlank()) throw new IllegalStateException("YDB_CONNECTION_STRING is required");
+        if (endpoint == null || endpoint.isBlank()) {
+            throw new IllegalStateException("YDB_CONNECTION_STRING is required");
+        }
+        return DataSourceBuilder.create().url("jdbc:ydb:" + endpoint).build();
+    }
+
+    @Override
+    public void run(String... args) throws Exception {
         String schema = readSchema();
-        try (Connection connection = DriverManager.getConnection("jdbc:ydb:" + endpoint)) {
-            try (var statement = connection.createStatement()) { statement.execute(schema); }
-            try {
-                JdbcTemplate template = new JdbcTemplate(new SingleConnectionDataSource(connection, true));
-                Queries queries = new Queries(template);
-                exercise(queries);
-                check(!connection.isClosed(), "Spring borrowed connection remains open");
-            } finally {
-                try (var statement = connection.createStatement()) { statement.execute("DROP TABLE authors;"); }
-            }
+        JdbcTemplate jdbc = context.getBean(JdbcTemplate.class);
+        jdbc.execute(schema);
+        try {
+            context.getBean(Smoke.class).exercise(context.getBean(Queries.class));
+        } finally {
+            jdbc.execute("DROP TABLE authors;");
         }
     }
 
-    private static void exercise(Queries queries) {
-        queries.upsertAuthor(MAX_UINT64, "Unsigned", null);
-        GetAuthorRow emptyBio = queries.getAuthor(MAX_UINT64).orElseThrow();
+    public static void main(String[] args) throws Exception {
+        SpringApplication.run(Smoke.class, args).close();
+    }
+
+    @Transactional
+    public void exercise(Queries queries) {
+        queries.save(new Authors(MAX_UINT64, "Unsigned", null));
+
+        Authors emptyBio = queries.findById(MAX_UINT64).orElseThrow();
         check(emptyBio.id() == MAX_UINT64 && "Unsigned".equals(emptyBio.name()) && emptyBio.bio() == null,
                 "nullable Spring row");
-        check("Unsigned".equals(queries.getAuthorName(MAX_UINT64).orElseThrow().name()), "Spring name");
+        check("Unsigned".equals(queries.findAuthorNameById(MAX_UINT64).orElseThrow().name()), "Spring name");
 
-        queries.upsertAuthor(MAX_UINT64, "Unsigned", "Biography");
-        check("Biography".equals(queries.getAuthor(MAX_UINT64).orElseThrow().bio()), "non-null Spring bio");
-        queries.upsertAuthor(SECOND_ID, "Second", null);
-        List<ListAuthorsRow> rows = queries.listAuthors();
-        check(rows.stream().anyMatch(row -> row.id() == MAX_UINT64), "Spring list result");
+        emptyBio.setBio("Biography");
+        queries.save(emptyBio);
+        check("Biography".equals(queries.findById(MAX_UINT64).orElseThrow().bio()), "non-null Spring bio");
+        queries.save(new Authors(SECOND_ID, "Second", null));
 
-        queries.deleteAuthor(SECOND_ID);
-        check(queries.getAuthor(SECOND_ID).isEmpty(), "Spring delete result");
+        Iterator<Authors> rows = queries.findAll().iterator();
+        check(rows.hasNext() && "Second".equals(rows.next().name()), "Spring list result");
+        check(rows.hasNext() && "Unsigned".equals(rows.next().name()), "Spring list result");
+        check(!rows.hasNext(), "Spring list result");
+
+        queries.deleteById(SECOND_ID);
+        check(queries.findById(SECOND_ID).isEmpty(), "Spring delete result");
     }
 
     private static String readSchema() throws Exception {

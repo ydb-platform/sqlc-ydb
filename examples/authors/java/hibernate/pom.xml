@@ -24,7 +24,7 @@
         <dependency>
             <groupId>tech.ydb.dialects</groupId>
             <artifactId>hibernate-ydb-dialect</artifactId>
-            <version>${hibernate.ydb.version}</version>
+            <version>${hibernate.ydb.dialect.version}</version>
         </dependency>
     </dependencies>
 </project>

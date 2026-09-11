@@ -23,9 +23,12 @@
         <maven.compiler.release>17</maven.compiler.release>
         <ydb.sdk.version>2.4.11</ydb.sdk.version>
         <ydb.jdbc.version>2.4.1</ydb.jdbc.version>
-        <spring.jdbc.version>6.2.0</spring.jdbc.version>
+
+        <spring.boot.version>4.0.3</spring.boot.version>
+        <spring.jdbc.ydb.dialect.version>1.2.2</spring.jdbc.ydb.dialect.version>
+
         <hibernate.version>6.2.7.Final</hibernate.version>
-        <hibernate.ydb.version>1.7.1</hibernate.ydb.version>
+        <hibernate.ydb.dialect.version>1.7.1</hibernate.ydb.dialect.version>
     </properties>
 
     <dependencyManagement>
