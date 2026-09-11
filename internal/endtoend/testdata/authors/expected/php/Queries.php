@@ -28,15 +28,18 @@ final class Queries
         $parameters = [
             '$author_id' => YdbValueCodec::typedUint64($authorId, 'author_id'),
         ];
+
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 DECLARE $author_id AS Uint64;
                 SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
             return (new YdbRawExecutor($this->table))->execute($session, $query);
         }, false);
+
         $rows = $this->decodeRows(
             $result,
             'GetAuthor',
@@ -51,6 +54,7 @@ final class Queries
                 YdbValueCodec::optionalUtf8($items->offsetGet(2), 'GetAuthor.bio'),
             ),
         );
+
         return $rows[0] ?? null;
     }
 
@@ -65,6 +69,10 @@ final class Queries
             throw new UnexpectedValueException(sprintf('%s: expected one YDB result set, got %d', $query, count($sets)));
         }
         $set = $sets->offsetGet(0);
+        if ($set->getTruncated()) {
+            throw new UnexpectedValueException($query . ': YDB result is truncated; use a bounded query or pagination');
+        }
+
         $columns = $set->getColumns();
         if (count($columns) !== count($expectedColumns)) {
             throw new UnexpectedValueException(sprintf('%s: expected %d result columns, got %d', $query, count($expectedColumns), count($columns)));

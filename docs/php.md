@@ -47,12 +47,13 @@ single parameter accepts that scalar directly; a method with several parameters
 accepts a generated immutable `*Params` object. `:execrows` is rejected because
 the SDK does not expose a portable affected-row count.
 
-Every source query remains available as a public `Queries::*_SQL` constant. SQL
-is rendered as an adaptive nowdoc so the original multiline text stays readable
-and exact. A quoted-fragment representation is used only when source control
-bytes cannot be represented safely in a nowdoc. The PHP SDK sends explicit
-parameter values but does not reconstruct YQL `DECLARE` statements, so generated
-methods execute the complete original SQL.
+SQL is embedded at the query call site in an adaptive nowdoc. The sqlc query
+annotation is emitted as a PHP comment before the method. Parameters are bound
+separately, and parameterized queries explicitly request execution-plan caching.
+
+Table API can truncate result sets. Generated row helpers reject a truncated
+result with an exception instead of returning an incomplete list as complete.
+Use a bounded query or explicit pagination for large results.
 
 ## Types and exact values
 
@@ -86,7 +87,8 @@ The bridge receives the SDK client's credentials, metadata, discovery settings,
 logger and gRPC status handling from the caller-owned `Table`; it does not use
 reflection or private SDK state. Generated decoders verify the result-set count,
 column order and names, analyzed YQL types, row width and every protobuf value
-case before constructing a row.
+case before constructing a row. Only codec methods reachable from the generated
+queries and their dependencies are emitted.
 
 ## Dependency and checks
 

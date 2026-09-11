@@ -35,7 +35,8 @@ foreach ($namespaces as $namespace) {
     check(class_exists($namespace . '\\YdbValueCodec'), $namespace . '\\YdbValueCodec was not generated or autoloaded');
 }
 
-$codec = 'Batch\\Native\\YdbValueCodec';
+require dirname(__DIR__, 2) . '/internal/endtoend/testdata/php_codec/expected/php/YdbRuntime.php';
+$codec = 'PhpCodec\\YdbValueCodec';
 foreach (['typedFloat', 'typedOptionalFloat'] as $bindFloat) {
     foreach ([1e40, -1e40] as $overflow) {
         try {
@@ -196,6 +197,7 @@ final class RetryProbeClient
     public static int $resetExecutions = 0;
     public int $executions = 0;
     public string $sql = '';
+    public bool $keepInCache = false;
 
     public function __construct(private readonly string $kind, array $options = [])
     {
@@ -205,6 +207,7 @@ final class RetryProbeClient
     {
         ++$this->executions;
         $this->sql = $request->getQuery()->getYqlText();
+        $this->keepInCache = $request->getQueryCachePolicy()->getKeepInCache();
         return new RetryProbeCall($this->kind, $request->getSessionId());
     }
 }
@@ -308,6 +311,21 @@ foreach (['authors', 'batch', 'booktest', 'jets', 'ondeck'] as $family) {
         exec($command, $output, $status);
         check($status === 0, 'PHP syntax check failed for ' . $file . "\n" . implode("\n", $output));
     }
+}
+
+
+check($retryProbeClients[1]->keepInCache, 'parameterized query did not request plan caching');
+
+$queries = new Authors\Native\Queries($retryProbeTable);
+$decode = new ReflectionMethod($queries, 'decodeRows');
+$result = new \Ydb\Table\ExecuteQueryResult([
+    'result_sets' => [new \Ydb\ResultSet(['truncated' => true])],
+]);
+try {
+    $decode->invoke($queries, $result, 'ListAuthors', [], static fn($items) => null);
+    throw new RuntimeException('truncated result was accepted as complete');
+} catch (UnexpectedValueException $error) {
+    check(str_contains($error->getMessage(), 'truncated'), 'unexpected truncation error');
 }
 
 echo "Imported and checked generated PHP for all five examples against YDB PHP SDK 1.16.1.\n";

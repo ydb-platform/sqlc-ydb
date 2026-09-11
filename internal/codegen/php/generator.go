@@ -3,6 +3,7 @@ package php
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"unicode"
@@ -68,7 +69,7 @@ func Generate(in *model.AnalysisResult, opts Options) ([]model.File, error) {
 
 	files := []model.File{
 		{Name: "Queries.php", Content: []byte(renderQueries(in, opts.Namespace))},
-		{Name: "YdbRuntime.php", Content: []byte(renderRuntime(opts.Namespace))},
+		{Name: "YdbRuntime.php", Content: []byte(renderRequiredRuntime(opts.Namespace, renderQueries(in, opts.Namespace)))},
 	}
 	for _, table := range in.Catalog.Tables {
 		name := pascalName(table.Name)
@@ -247,6 +248,10 @@ func renderQueries(in *model.AnalysisResult, namespace string) string {
             throw new UnexpectedValueException(sprintf('%s: expected one YDB result set, got %d', $query, count($sets)));
         }
         $set = $sets->offsetGet(0);
+        if ($set->getTruncated()) {
+            throw new UnexpectedValueException($query . ': YDB result is truncated; use a bounded query or pagination');
+        }
+
         $columns = $set->getColumns();
         if (count($columns) !== count($expectedColumns)) {
             throw new UnexpectedValueException(sprintf('%s: expected %d result columns, got %d', $query, count($expectedColumns), count($columns)));
@@ -312,14 +317,18 @@ func renderMethod(b *strings.Builder, query model.AnalyzedQuery) {
 	}
 	b.WriteString("        ];\n")
 	literal := phpSQLString(model.WithoutQueryAnnotation(query.SQL), "                ")
-	b.WriteString("        $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {\n")
-	fmt.Fprintf(b, "            $query = $session->newQuery(%s)\n                ->parameters($parameters)\n                ->beginTx('serializable_read_write');\n", literal)
+	b.WriteString("\n        ")
+	if query.Command != model.Exec {
+		b.WriteString("$result = ")
+	}
+	b.WriteString("$this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {\n")
+	fmt.Fprintf(b, "            $query = $session->newQuery(%s)\n                ->parameters($parameters)\n                ->keepInCache(count($parameters) > 0)\n                ->beginTx('serializable_read_write');\n", literal)
 	b.WriteString("            return (new YdbRawExecutor($this->table))->execute($session, $query);\n        }, false);\n")
 	if query.Command == model.Exec {
 		b.WriteString("    }\n")
 		return
 	}
-	b.WriteString("        $rows = $this->decodeRows(\n            $result,\n")
+	b.WriteString("\n        $rows = $this->decodeRows(\n            $result,\n")
 	fmt.Fprintf(b, "            %s,\n            [\n", phpString(query.Name, ""))
 	for _, column := range query.ResultSets[0].Columns {
 		base := column.Type.UnwrapOptional()
@@ -339,11 +348,55 @@ func renderMethod(b *strings.Builder, query model.AnalyzedQuery) {
 	}
 	b.WriteString("            ),\n        );\n")
 	if query.Command == model.One {
-		b.WriteString("        return $rows[0] ?? null;\n")
+		b.WriteString("\n        return $rows[0] ?? null;\n")
 	} else {
-		b.WriteString("        return $rows;\n")
+		b.WriteString("\n        return $rows;\n")
 	}
 	b.WriteString("    }\n")
+}
+
+// The runtime template has one static method per block. Retain only methods
+// reachable from generated queries, including private codec dependencies.
+func renderRequiredRuntime(namespace, queries string) string {
+	runtime := renderRuntime(namespace)
+	start := strings.Index(runtime, "    public static function assertType(")
+	prefix, body := runtime[:start], runtime[start:]
+	methodPattern := regexp.MustCompile(`(?m)^    (?:public|private) static function ([A-Za-z0-9_]+)\(`)
+	matches := methodPattern.FindAllStringSubmatchIndex(body, -1)
+	blocks := make(map[string]string)
+	var order []string
+	for i, match := range matches {
+		end := len(body) - 2
+		if i+1 < len(matches) {
+			end = matches[i+1][0]
+		}
+		name := body[match[2]:match[3]]
+		blocks[name] = body[match[0]:end]
+		order = append(order, name)
+	}
+	refs := regexp.MustCompile(`(?:YdbValueCodec|self)::([A-Za-z0-9_]+)\(`)
+	needed := make(map[string]bool)
+	var visit func(string)
+	visit = func(source string) {
+		for _, match := range refs.FindAllStringSubmatch(source, -1) {
+			name := match[1]
+			if needed[name] {
+				continue
+			}
+			needed[name] = true
+			visit(blocks[name])
+		}
+	}
+	visit(queries)
+	var b strings.Builder
+	b.WriteString(prefix)
+	for _, name := range order {
+		if needed[name] {
+			b.WriteString(blocks[name])
+		}
+	}
+	b.WriteString("}\n")
+	return b.String()
 }
 
 func renderRuntime(namespace string) string {
@@ -428,55 +481,221 @@ final class YdbValueCodec
         }
     }
 
-    public static function typedBool(bool $value, string $where): TypedValue { return self::typed(PrimitiveTypeId::BOOL, 'bool_value', $value); }
-    public static function typedInt8(int $value, string $where): TypedValue { return self::typedInt($value, -128, 127, PrimitiveTypeId::INT8, 'int32_value', $where); }
-    public static function typedUint8(int $value, string $where): TypedValue { return self::typedInt($value, 0, 255, PrimitiveTypeId::UINT8, 'uint32_value', $where); }
-    public static function typedInt16(int $value, string $where): TypedValue { return self::typedInt($value, -32768, 32767, PrimitiveTypeId::INT16, 'int32_value', $where); }
-    public static function typedUint16(int $value, string $where): TypedValue { return self::typedInt($value, 0, 65535, PrimitiveTypeId::UINT16, 'uint32_value', $where); }
-    public static function typedInt32(int $value, string $where): TypedValue { return self::typedInt($value, -2147483648, 2147483647, PrimitiveTypeId::INT32, 'int32_value', $where); }
-    public static function typedUint32(int $value, string $where): TypedValue { return self::typedInt($value, 0, 4294967295, PrimitiveTypeId::UINT32, 'uint32_value', $where); }
-    public static function typedInt64(int $value, string $where): TypedValue { return self::typed(PrimitiveTypeId::INT64, 'int64_value', (string) $value); }
+    public static function typedBool(bool $value, string $where): TypedValue
+    {
+        return self::typed(PrimitiveTypeId::BOOL, 'bool_value', $value);
+    }
+
+    public static function typedInt8(int $value, string $where): TypedValue
+    {
+        return self::typedInt($value, -128, 127, PrimitiveTypeId::INT8, 'int32_value', $where);
+    }
+
+    public static function typedUint8(int $value, string $where): TypedValue
+    {
+        return self::typedInt($value, 0, 255, PrimitiveTypeId::UINT8, 'uint32_value', $where);
+    }
+
+    public static function typedInt16(int $value, string $where): TypedValue
+    {
+        return self::typedInt($value, -32768, 32767, PrimitiveTypeId::INT16, 'int32_value', $where);
+    }
+
+    public static function typedUint16(int $value, string $where): TypedValue
+    {
+        return self::typedInt($value, 0, 65535, PrimitiveTypeId::UINT16, 'uint32_value', $where);
+    }
+
+    public static function typedInt32(int $value, string $where): TypedValue
+    {
+        return self::typedInt($value, -2147483648, 2147483647, PrimitiveTypeId::INT32, 'int32_value', $where);
+    }
+
+    public static function typedUint32(int $value, string $where): TypedValue
+    {
+        return self::typedInt($value, 0, 4294967295, PrimitiveTypeId::UINT32, 'uint32_value', $where);
+    }
+
+    public static function typedInt64(int $value, string $where): TypedValue
+    {
+        return self::typed(PrimitiveTypeId::INT64, 'int64_value', (string) $value);
+    }
+
     public static function typedUint64(string $value, string $where): TypedValue
     {
         self::validateUint64($value, $where);
         return self::typed(PrimitiveTypeId::UINT64, 'uint64_value', self::encodedUint64($value));
     }
-    public static function typedFloat(float $value, string $where): TypedValue { self::finite($value, $where); if (abs($value) > 3.4028234663852886e38) throw new \RangeException($where . ": value is outside YQL Float range"); return self::typed(PrimitiveTypeId::FLOAT, 'float_value', $value); }
-    public static function typedDouble(float $value, string $where): TypedValue { self::finite($value, $where); return self::typed(PrimitiveTypeId::DOUBLE, 'double_value', $value); }
-    public static function typedUtf8(string $value, string $where): TypedValue { self::validUtf8($value, $where); return self::typed(PrimitiveTypeId::UTF8, 'text_value', $value); }
-    public static function typedBytes(string $value, string $where): TypedValue { return self::typed(PrimitiveTypeId::STRING, 'bytes_value', $value); }
-    public static function typedJson(string $value, string $where): TypedValue { self::validJson($value, $where); return self::typed(PrimitiveTypeId::JSON, 'text_value', $value); }
-    public static function typedJsonDocument(string $value, string $where): TypedValue { self::validJson($value, $where); return self::typed(PrimitiveTypeId::JSON_DOCUMENT, 'text_value', $value); }
+    public static function typedFloat(float $value, string $where): TypedValue
+    {
+        self::finite($value, $where);
+        if (abs($value) > 3.4028234663852886e38) {
+            throw new \RangeException($where . ": value is outside YQL Float range");
+        }
+
+        return self::typed(PrimitiveTypeId::FLOAT, 'float_value', $value);
+    }
+
+    public static function typedDouble(float $value, string $where): TypedValue
+    {
+        self::finite($value, $where);
+
+        return self::typed(PrimitiveTypeId::DOUBLE, 'double_value', $value);
+    }
+
+    public static function typedUtf8(string $value, string $where): TypedValue
+    {
+        self::validUtf8($value, $where);
+
+        return self::typed(PrimitiveTypeId::UTF8, 'text_value', $value);
+    }
+
+    public static function typedBytes(string $value, string $where): TypedValue
+    {
+        return self::typed(PrimitiveTypeId::STRING, 'bytes_value', $value);
+    }
+
+    public static function typedJson(string $value, string $where): TypedValue
+    {
+        self::validJson($value, $where);
+
+        return self::typed(PrimitiveTypeId::JSON, 'text_value', $value);
+    }
+
+    public static function typedJsonDocument(string $value, string $where): TypedValue
+    {
+        self::validJson($value, $where);
+
+        return self::typed(PrimitiveTypeId::JSON_DOCUMENT, 'text_value', $value);
+    }
+
     public static function typedTimestamp(int $value, string $where): TypedValue
     {
         self::validateTimestamp($value, $where);
         return self::typed(PrimitiveTypeId::TIMESTAMP, 'uint64_value', (string) $value);
     }
 
-    public static function typedOptionalBool(?bool $value, string $where): TypedValue { return self::typedOptional($value === null ? null : self::typedBool($value, $where), PrimitiveTypeId::BOOL); }
-    public static function typedOptionalInt8(?int $value, string $where): TypedValue { return self::typedOptional($value === null ? null : self::typedInt8($value, $where), PrimitiveTypeId::INT8); }
-    public static function typedOptionalUint8(?int $value, string $where): TypedValue { return self::typedOptional($value === null ? null : self::typedUint8($value, $where), PrimitiveTypeId::UINT8); }
-    public static function typedOptionalInt16(?int $value, string $where): TypedValue { return self::typedOptional($value === null ? null : self::typedInt16($value, $where), PrimitiveTypeId::INT16); }
-    public static function typedOptionalUint16(?int $value, string $where): TypedValue { return self::typedOptional($value === null ? null : self::typedUint16($value, $where), PrimitiveTypeId::UINT16); }
-    public static function typedOptionalInt32(?int $value, string $where): TypedValue { return self::typedOptional($value === null ? null : self::typedInt32($value, $where), PrimitiveTypeId::INT32); }
-    public static function typedOptionalUint32(?int $value, string $where): TypedValue { return self::typedOptional($value === null ? null : self::typedUint32($value, $where), PrimitiveTypeId::UINT32); }
-    public static function typedOptionalInt64(?int $value, string $where): TypedValue { return self::typedOptional($value === null ? null : self::typedInt64($value, $where), PrimitiveTypeId::INT64); }
-    public static function typedOptionalUint64(?string $value, string $where): TypedValue { return self::typedOptional($value === null ? null : self::typedUint64($value, $where), PrimitiveTypeId::UINT64); }
-    public static function typedOptionalFloat(?float $value, string $where): TypedValue { return self::typedOptional($value === null ? null : self::typedFloat($value, $where), PrimitiveTypeId::FLOAT); }
-    public static function typedOptionalDouble(?float $value, string $where): TypedValue { return self::typedOptional($value === null ? null : self::typedDouble($value, $where), PrimitiveTypeId::DOUBLE); }
-    public static function typedOptionalUtf8(?string $value, string $where): TypedValue { return self::typedOptional($value === null ? null : self::typedUtf8($value, $where), PrimitiveTypeId::UTF8); }
-    public static function typedOptionalBytes(?string $value, string $where): TypedValue { return self::typedOptional($value === null ? null : self::typedBytes($value, $where), PrimitiveTypeId::STRING); }
-    public static function typedOptionalJson(?string $value, string $where): TypedValue { return self::typedOptional($value === null ? null : self::typedJson($value, $where), PrimitiveTypeId::JSON); }
-    public static function typedOptionalJsonDocument(?string $value, string $where): TypedValue { return self::typedOptional($value === null ? null : self::typedJsonDocument($value, $where), PrimitiveTypeId::JSON_DOCUMENT); }
-    public static function typedOptionalTimestamp(?int $value, string $where): TypedValue { return self::typedOptional($value === null ? null : self::typedTimestamp($value, $where), PrimitiveTypeId::TIMESTAMP); }
+    public static function typedOptionalBool(?bool $value, string $where): TypedValue
+    {
+        return self::typedOptional($value === null ? null : self::typedBool($value, $where), PrimitiveTypeId::BOOL);
+    }
 
-    public static function bool(Value $value, string $where): bool { $raw = self::read($value, 'bool_value', 'getBoolValue', $where); if (!is_bool($raw)) throw new UnexpectedValueException($where . ': invalid Bool value'); return $raw; }
-    public static function int8(Value $value, string $where): int { return self::decodedInt($value, 'int32_value', 'getInt32Value', -128, 127, $where); }
-    public static function uint8(Value $value, string $where): int { return self::decodedInt($value, 'uint32_value', 'getUint32Value', 0, 255, $where); }
-    public static function int16(Value $value, string $where): int { return self::decodedInt($value, 'int32_value', 'getInt32Value', -32768, 32767, $where); }
-    public static function uint16(Value $value, string $where): int { return self::decodedInt($value, 'uint32_value', 'getUint32Value', 0, 65535, $where); }
-    public static function int32(Value $value, string $where): int { return self::decodedInt($value, 'int32_value', 'getInt32Value', -2147483648, 2147483647, $where); }
-    public static function uint32(Value $value, string $where): int { return self::decodedInt($value, 'uint32_value', 'getUint32Value', 0, 4294967295, $where); }
+    public static function typedOptionalInt8(?int $value, string $where): TypedValue
+    {
+        return self::typedOptional($value === null ? null : self::typedInt8($value, $where), PrimitiveTypeId::INT8);
+    }
+
+    public static function typedOptionalUint8(?int $value, string $where): TypedValue
+    {
+        return self::typedOptional($value === null ? null : self::typedUint8($value, $where), PrimitiveTypeId::UINT8);
+    }
+
+    public static function typedOptionalInt16(?int $value, string $where): TypedValue
+    {
+        return self::typedOptional($value === null ? null : self::typedInt16($value, $where), PrimitiveTypeId::INT16);
+    }
+
+    public static function typedOptionalUint16(?int $value, string $where): TypedValue
+    {
+        return self::typedOptional($value === null ? null : self::typedUint16($value, $where), PrimitiveTypeId::UINT16);
+    }
+
+    public static function typedOptionalInt32(?int $value, string $where): TypedValue
+    {
+        return self::typedOptional($value === null ? null : self::typedInt32($value, $where), PrimitiveTypeId::INT32);
+    }
+
+    public static function typedOptionalUint32(?int $value, string $where): TypedValue
+    {
+        return self::typedOptional($value === null ? null : self::typedUint32($value, $where), PrimitiveTypeId::UINT32);
+    }
+
+    public static function typedOptionalInt64(?int $value, string $where): TypedValue
+    {
+        return self::typedOptional($value === null ? null : self::typedInt64($value, $where), PrimitiveTypeId::INT64);
+    }
+
+    public static function typedOptionalUint64(?string $value, string $where): TypedValue
+    {
+        return self::typedOptional($value === null ? null : self::typedUint64($value, $where), PrimitiveTypeId::UINT64);
+    }
+
+    public static function typedOptionalFloat(?float $value, string $where): TypedValue
+    {
+        return self::typedOptional($value === null ? null : self::typedFloat($value, $where), PrimitiveTypeId::FLOAT);
+    }
+
+    public static function typedOptionalDouble(?float $value, string $where): TypedValue
+    {
+        return self::typedOptional($value === null ? null : self::typedDouble($value, $where), PrimitiveTypeId::DOUBLE);
+    }
+
+    public static function typedOptionalUtf8(?string $value, string $where): TypedValue
+    {
+        return self::typedOptional($value === null ? null : self::typedUtf8($value, $where), PrimitiveTypeId::UTF8);
+    }
+
+    public static function typedOptionalBytes(?string $value, string $where): TypedValue
+    {
+        return self::typedOptional($value === null ? null : self::typedBytes($value, $where), PrimitiveTypeId::STRING);
+    }
+
+    public static function typedOptionalJson(?string $value, string $where): TypedValue
+    {
+        return self::typedOptional($value === null ? null : self::typedJson($value, $where), PrimitiveTypeId::JSON);
+    }
+
+    public static function typedOptionalJsonDocument(?string $value, string $where): TypedValue
+    {
+        return self::typedOptional($value === null ? null : self::typedJsonDocument($value, $where), PrimitiveTypeId::JSON_DOCUMENT);
+    }
+
+    public static function typedOptionalTimestamp(?int $value, string $where): TypedValue
+    {
+        return self::typedOptional($value === null ? null : self::typedTimestamp($value, $where), PrimitiveTypeId::TIMESTAMP);
+    }
+
+
+    public static function bool(Value $value, string $where): bool
+    {
+        $raw = self::read($value, 'bool_value', 'getBoolValue', $where);
+        if (!is_bool($raw)) {
+            throw new UnexpectedValueException($where . ': invalid Bool value');
+        }
+
+        return $raw;
+    }
+
+    public static function int8(Value $value, string $where): int
+    {
+        return self::decodedInt($value, 'int32_value', 'getInt32Value', -128, 127, $where);
+    }
+
+    public static function uint8(Value $value, string $where): int
+    {
+        return self::decodedInt($value, 'uint32_value', 'getUint32Value', 0, 255, $where);
+    }
+
+    public static function int16(Value $value, string $where): int
+    {
+        return self::decodedInt($value, 'int32_value', 'getInt32Value', -32768, 32767, $where);
+    }
+
+    public static function uint16(Value $value, string $where): int
+    {
+        return self::decodedInt($value, 'uint32_value', 'getUint32Value', 0, 65535, $where);
+    }
+
+    public static function int32(Value $value, string $where): int
+    {
+        return self::decodedInt($value, 'int32_value', 'getInt32Value', -2147483648, 2147483647, $where);
+    }
+
+    public static function uint32(Value $value, string $where): int
+    {
+        return self::decodedInt($value, 'uint32_value', 'getUint32Value', 0, 4294967295, $where);
+    }
+
     public static function int64(Value $value, string $where): int
     {
         $raw = (string) self::read($value, 'int64_value', 'getInt64Value', $where);
@@ -495,12 +714,42 @@ final class YdbValueCodec
         self::validateUint64($text, $where);
         return $text;
     }
-    public static function float(Value $value, string $where): float { return self::decodedFloat($value, 'float_value', 'getFloatValue', $where); }
-    public static function double(Value $value, string $where): float { return self::decodedFloat($value, 'double_value', 'getDoubleValue', $where); }
-    public static function utf8(Value $value, string $where): string { $raw = self::decodedString($value, 'text_value', 'getTextValue', $where); self::validUtf8($raw, $where); return $raw; }
-    public static function bytes(Value $value, string $where): string { return self::decodedString($value, 'bytes_value', 'getBytesValue', $where); }
-    public static function json(Value $value, string $where): string { $raw = self::decodedString($value, 'text_value', 'getTextValue', $where); self::validJson($raw, $where); return $raw; }
-    public static function jsonDocument(Value $value, string $where): string { return self::json($value, $where); }
+    public static function float(Value $value, string $where): float
+    {
+        return self::decodedFloat($value, 'float_value', 'getFloatValue', $where);
+    }
+
+    public static function double(Value $value, string $where): float
+    {
+        return self::decodedFloat($value, 'double_value', 'getDoubleValue', $where);
+    }
+
+    public static function utf8(Value $value, string $where): string
+    {
+        $raw = self::decodedString($value, 'text_value', 'getTextValue', $where);
+        self::validUtf8($raw, $where);
+
+        return $raw;
+    }
+
+    public static function bytes(Value $value, string $where): string
+    {
+        return self::decodedString($value, 'bytes_value', 'getBytesValue', $where);
+    }
+
+    public static function json(Value $value, string $where): string
+    {
+        $raw = self::decodedString($value, 'text_value', 'getTextValue', $where);
+        self::validJson($raw, $where);
+
+        return $raw;
+    }
+
+    public static function jsonDocument(Value $value, string $where): string
+    {
+        return self::json($value, $where);
+    }
+
     public static function timestamp(Value $value, string $where): int
     {
         $raw = self::uint64($value, $where);
@@ -508,22 +757,86 @@ final class YdbValueCodec
         return (int) $raw;
     }
 
-    public static function optionalBool(Value $value, string $where): ?bool { return self::isNull($value) ? null : self::bool($value, $where); }
-    public static function optionalInt8(Value $value, string $where): ?int { return self::isNull($value) ? null : self::int8($value, $where); }
-    public static function optionalUint8(Value $value, string $where): ?int { return self::isNull($value) ? null : self::uint8($value, $where); }
-    public static function optionalInt16(Value $value, string $where): ?int { return self::isNull($value) ? null : self::int16($value, $where); }
-    public static function optionalUint16(Value $value, string $where): ?int { return self::isNull($value) ? null : self::uint16($value, $where); }
-    public static function optionalInt32(Value $value, string $where): ?int { return self::isNull($value) ? null : self::int32($value, $where); }
-    public static function optionalUint32(Value $value, string $where): ?int { return self::isNull($value) ? null : self::uint32($value, $where); }
-    public static function optionalInt64(Value $value, string $where): ?int { return self::isNull($value) ? null : self::int64($value, $where); }
-    public static function optionalUint64(Value $value, string $where): ?string { return self::isNull($value) ? null : self::uint64($value, $where); }
-    public static function optionalFloat(Value $value, string $where): ?float { return self::isNull($value) ? null : self::float($value, $where); }
-    public static function optionalDouble(Value $value, string $where): ?float { return self::isNull($value) ? null : self::double($value, $where); }
-    public static function optionalUtf8(Value $value, string $where): ?string { return self::isNull($value) ? null : self::utf8($value, $where); }
-    public static function optionalBytes(Value $value, string $where): ?string { return self::isNull($value) ? null : self::bytes($value, $where); }
-    public static function optionalJson(Value $value, string $where): ?string { return self::isNull($value) ? null : self::json($value, $where); }
-    public static function optionalJsonDocument(Value $value, string $where): ?string { return self::isNull($value) ? null : self::jsonDocument($value, $where); }
-    public static function optionalTimestamp(Value $value, string $where): ?int { return self::isNull($value) ? null : self::timestamp($value, $where); }
+    public static function optionalBool(Value $value, string $where): ?bool
+    {
+        return self::isNull($value) ? null : self::bool($value, $where);
+    }
+
+    public static function optionalInt8(Value $value, string $where): ?int
+    {
+        return self::isNull($value) ? null : self::int8($value, $where);
+    }
+
+    public static function optionalUint8(Value $value, string $where): ?int
+    {
+        return self::isNull($value) ? null : self::uint8($value, $where);
+    }
+
+    public static function optionalInt16(Value $value, string $where): ?int
+    {
+        return self::isNull($value) ? null : self::int16($value, $where);
+    }
+
+    public static function optionalUint16(Value $value, string $where): ?int
+    {
+        return self::isNull($value) ? null : self::uint16($value, $where);
+    }
+
+    public static function optionalInt32(Value $value, string $where): ?int
+    {
+        return self::isNull($value) ? null : self::int32($value, $where);
+    }
+
+    public static function optionalUint32(Value $value, string $where): ?int
+    {
+        return self::isNull($value) ? null : self::uint32($value, $where);
+    }
+
+    public static function optionalInt64(Value $value, string $where): ?int
+    {
+        return self::isNull($value) ? null : self::int64($value, $where);
+    }
+
+    public static function optionalUint64(Value $value, string $where): ?string
+    {
+        return self::isNull($value) ? null : self::uint64($value, $where);
+    }
+
+    public static function optionalFloat(Value $value, string $where): ?float
+    {
+        return self::isNull($value) ? null : self::float($value, $where);
+    }
+
+    public static function optionalDouble(Value $value, string $where): ?float
+    {
+        return self::isNull($value) ? null : self::double($value, $where);
+    }
+
+    public static function optionalUtf8(Value $value, string $where): ?string
+    {
+        return self::isNull($value) ? null : self::utf8($value, $where);
+    }
+
+    public static function optionalBytes(Value $value, string $where): ?string
+    {
+        return self::isNull($value) ? null : self::bytes($value, $where);
+    }
+
+    public static function optionalJson(Value $value, string $where): ?string
+    {
+        return self::isNull($value) ? null : self::json($value, $where);
+    }
+
+    public static function optionalJsonDocument(Value $value, string $where): ?string
+    {
+        return self::isNull($value) ? null : self::jsonDocument($value, $where);
+    }
+
+    public static function optionalTimestamp(Value $value, string $where): ?int
+    {
+        return self::isNull($value) ? null : self::timestamp($value, $where);
+    }
+
 
     private static function typed(int $typeId, string $case, mixed $value): TypedValue
     {
@@ -538,11 +851,39 @@ final class YdbValueCodec
         ]);
     }
 
-    private static function type(int $typeId): Type { return new Type(['type_id' => $typeId]); }
-    private static function typedInt(int $value, int $min, int $max, int $typeId, string $case, string $where): TypedValue { self::range($value, $min, $max, $where); return self::typed($typeId, $case, $value); }
-    private static function range(int $value, int $min, int $max, string $where): void { if ($value < $min || $value > $max) throw new \RangeException($where . ': integer is outside the declared YQL range'); }
-    private static function finite(float $value, string $where): void { if (!is_finite($value)) throw new \RangeException($where . ': floating-point value must be finite'); }
-    private static function validUtf8(string $value, string $where): void { if (preg_match('//u', $value) !== 1) throw new \InvalidArgumentException($where . ': value is not valid UTF-8'); }
+    private static function type(int $typeId): Type
+    {
+        return new Type(['type_id' => $typeId]);
+    }
+
+    private static function typedInt(int $value, int $min, int $max, int $typeId, string $case, string $where): TypedValue
+    {
+        self::range($value, $min, $max, $where);
+
+        return self::typed($typeId, $case, $value);
+    }
+
+    private static function range(int $value, int $min, int $max, string $where): void
+    {
+        if ($value < $min || $value > $max) {
+            throw new \RangeException($where . ': integer is outside the declared YQL range');
+        }
+    }
+
+    private static function finite(float $value, string $where): void
+    {
+        if (!is_finite($value)) {
+            throw new \RangeException($where . ': floating-point value must be finite');
+        }
+    }
+
+    private static function validUtf8(string $value, string $where): void
+    {
+        if (preg_match('//u', $value) !== 1) {
+            throw new \InvalidArgumentException($where . ': value is not valid UTF-8');
+        }
+    }
+
     private static function validJson(string $value, string $where): void
     {
         try { json_decode($value, false, 512, JSON_THROW_ON_ERROR); }
@@ -571,7 +912,11 @@ final class YdbValueCodec
         if ($value->getValue() !== $case) throw new UnexpectedValueException($where . ': expected YDB value case ' . $case . ', got ' . $value->getValue());
         return $value->$getter();
     }
-    private static function isNull(Value $value): bool { return $value->getValue() === 'null_flag_value'; }
+    private static function isNull(Value $value): bool
+    {
+        return $value->getValue() === 'null_flag_value';
+    }
+
     private static function decodedInt(Value $value, string $case, string $getter, int $min, int $max, string $where): int
     {
         $raw = self::read($value, $case, $getter, $where);

@@ -1,0 +1,9 @@
+version: "2"
+sql:
+  - engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      php:
+        out: php
+        namespace: PhpCodec
