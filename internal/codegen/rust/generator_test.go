@@ -45,12 +45,13 @@ func TestGenerateYDBQuerierUsesNativeQueryClientContract(t *testing.T) {
 		"use super::models::*;",
 		"pub struct Queries<'a>",
 		"client: &'a mut ydb::QueryClient",
-		".query_result_set(concat!(",
+		"// -- name: CreateBook :one",
+		".query_row(r\"INSERT INTO books (id) VALUES ($id) RETURNING id;\")",
 		`.param("$id", id)`,
 		"row.remove_field(0)?.try_into()?",
-		".query_result_set(concat!(",
+		".query_result_set(",
 		"for mut row in result_set.rows()",
-		".exec(concat!(",
+		".exec(r\"UPDATE books SET tags = $tags WHERE id = $id;\")",
 		`.param("$tags", JsonParam(tags))`,
 	} {
 		if !strings.Contains(queries, want) {
@@ -58,7 +59,7 @@ func TestGenerateYDBQuerierUsesNativeQueryClientContract(t *testing.T) {
 		}
 	}
 	models := generatedFile(t, files, "models.rs")
-	for _, want := range []string{"pub id: u64", "pub title: String", "pub tags: String", "pub available: std::time::SystemTime", "pub subtitle: Option<String>"} {
+	for _, want := range []string{"#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]", "pub id: u64", "pub title: String", "pub tags: String", "pub available: std::time::SystemTime", "pub subtitle: Option<String>"} {
 		if !strings.Contains(models, want) {
 			t.Errorf("generated models missing %q:\n%s", want, models)
 		}
@@ -88,6 +89,32 @@ func TestDecodesQualifiedProjectionByResolvedOrdinal(t *testing.T) {
 	}
 	if strings.Contains(queries, "remove_field_by_name") {
 		t.Fatalf("qualified result labels must not be used for decoding:\n%s", queries)
+	}
+}
+
+func TestGetPrefixAndMultilineSQLMatchApprovedRustStyle(t *testing.T) {
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name: "GetAuthor", Command: model.One,
+		SQL:                    "-- name: GetAuthor :one\nINSERT INTO authors (id, name)\nVALUES ($id, $name)\nRETURNING id, name;",
+		SQLWithoutDeclarations: "-- name: GetAuthor :one\nINSERT INTO authors (id, name)\nVALUES ($id, $name)\nRETURNING id, name;",
+		Parameters:             []model.Parameter{{Name: "id", Type: model.Type{Kind: "Uint64"}}, {Name: "name", Type: model.Type{Kind: "Utf8"}}},
+		ResultSets:             []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}}, {Name: "name", Type: model.Type{Kind: "Utf8"}}}}},
+	}}}
+	files, err := Generate(a, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	queries := generatedFile(t, files, "queries.rs")
+	for _, want := range []string{
+		"// -- name: GetAuthor :one\n    pub async fn author(",
+		".query_row(\n                r\"\n                 INSERT INTO authors (id, name)\n                 VALUES ($id, $name)\n                 RETURNING id, name;\",\n            )",
+	} {
+		if !strings.Contains(queries, want) {
+			t.Fatalf("approved Rust style missing %q:\n%s", want, queries)
+		}
+	}
+	if strings.Contains(queries, "get_author") || strings.Contains(queries, "-- name: GetAuthor :one\n                 INSERT") {
+		t.Fatalf("generated Rust API retained the get_ prefix or sent metadata as SQL:\n%s", queries)
 	}
 }
 
@@ -147,10 +174,9 @@ func TestTemporalInputsUseExactConstructibleYDBValues(t *testing.T) {
 	for _, want := range []string{
 		"struct TimestampParam(std::time::SystemTime);",
 		"ydb::Value::Timestamp(value.0)",
-		`.param("$available", TimestampParam(available))`,
+		`.param("$available", ydb::Value::Timestamp(available))`,
 		`.param("$created_at", created_at.map(TimestampParam))`,
-		"struct DateParam(std::time::SystemTime);",
-		"ydb::Value::Date(value.0)",
+		`.param("$day", ydb::Value::Date(day))`,
 	} {
 		if !strings.Contains(queries, want) {
 			t.Fatalf("temporal input must retain its YDB wire type; missing %q:\n%s", want, queries)
@@ -170,14 +196,14 @@ func TestGeneratedRawSQLRoundTripsThroughRustCompiler(t *testing.T) {
 		t.Fatalf("expected inline SQL: %s", queries)
 	}
 	start += len(".exec(")
-	end := strings.Index(queries[start:], ");")
+	end := strings.Index(queries[start:], ",\n            )")
 	if end < 0 {
 		t.Fatalf("missing inline SQL closing delimiter: %s", queries)
 	}
 	literal := queries[start : start+end]
 	var expected strings.Builder
 	expected.WriteString("&[")
-	for i, value := range []byte(sql) {
+	for i, value := range []byte(strings.Trim(sql, "\r\n")) {
 		if i != 0 {
 			expected.WriteString(",")
 		}

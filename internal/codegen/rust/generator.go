@@ -15,8 +15,7 @@ type Options struct {
 }
 
 const (
-	rustfmtMaxWidth   = 100
-	rustfmtChainWidth = 60
+	rustfmtMaxWidth = 100
 )
 
 func Generate(in *model.AnalysisResult, opts Options) ([]model.File, error) {
@@ -54,7 +53,7 @@ func validate(in *model.AnalysisResult) error {
 		if !utf8.ValidString(q.SQLWithoutDeclarations) {
 			return fmt.Errorf("rust generator: query %q: SQL without declarations is not valid UTF-8", q.Name)
 		}
-		fn := snakeName(q.Name)
+		fn := strings.TrimPrefix(snakeName(q.Name), "get_")
 		row := pascalName(q.Name) + "Row"
 		if !rustIdent(fn) || rustKeywords[fn] {
 			return fmt.Errorf("rust generator: query %q has invalid generated Rust name %q", q.Name, fn)
@@ -122,7 +121,7 @@ func renderModels(in *model.AnalysisResult) string {
 		if q.Command != model.One && q.Command != model.Many {
 			continue
 		}
-		fmt.Fprintf(&b, "#[derive(Debug, Clone, PartialEq)]\npub struct %sRow {\n", pascalName(q.Name))
+		fmt.Fprintf(&b, "#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]\npub struct %sRow {\n", pascalName(q.Name))
 		for _, c := range q.ResultSets[0].Columns {
 			t, _ := rustType(c.Type)
 			fmt.Fprintf(&b, "    pub %s: %s,\n", snakeName(c.Name), t)
@@ -142,7 +141,7 @@ func renderQueries(in *model.AnalysisResult) string {
 		b.WriteString("#[derive(Default)]\nstruct JsonDocumentParam(String);\n\nimpl From<JsonDocumentParam> for ydb::Value {\n    fn from(value: JsonDocumentParam) -> Self {\n        ydb::Value::JsonDocument(value.0)\n    }\n}\n\n")
 	}
 	for _, kind := range temporalKinds {
-		if !hasParameterKind(in, kind) {
+		if !hasOptionalParameterKind(in, kind) {
 			continue
 		}
 		variant := temporalVariant(kind)
@@ -189,8 +188,9 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 	} else if q.Command == model.Many {
 		ret = "Vec<" + pascalName(q.Name) + "Row>"
 	}
+	methodName := strings.TrimPrefix(snakeName(q.Name), "get_")
 	fmt.Fprintf(b, "    // %s\n", model.QueryAnnotation(q))
-	oneLineSignature := fmt.Sprintf("    pub async fn %s(&mut self", snakeName(q.Name))
+	oneLineSignature := fmt.Sprintf("    pub async fn %s(&mut self", methodName)
 	if len(parameters) != 0 {
 		oneLineSignature += ", " + strings.Join(parameters, ", ")
 	}
@@ -198,38 +198,49 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 	if len(oneLineSignature) <= rustfmtMaxWidth {
 		b.WriteString(oneLineSignature + "\n")
 	} else {
-		fmt.Fprintf(b, "    pub async fn %s(\n        &mut self,\n", snakeName(q.Name))
+		fmt.Fprintf(b, "    pub async fn %s(\n        &mut self,\n", methodName)
 		for _, parameter := range parameters {
 			fmt.Fprintf(b, "        %s,\n", parameter)
 		}
 		fmt.Fprintf(b, "    ) -> ydb::YdbResult<%s> {\n", ret)
 	}
 	method := "exec"
-	if q.Command == model.One || q.Command == model.Many {
+	if q.Command == model.One {
+		method = "query_row"
+	} else if q.Command == model.Many {
 		method = "query_result_set"
 	}
-	callExpression := fmt.Sprintf("self.client.%s(%s)", method, querySQL(q))
-	for _, p := range q.Parameters {
-		callExpression += fmt.Sprintf(".param(%q, %s)", "$"+p.Name, bindExpression(p))
-	}
-	if len(callExpression) <= rustfmtChainWidth {
-		fmt.Fprintf(b, "        let call = %s;\n", callExpression)
+	if q.Command == model.One {
+		b.WriteString("        let mut row = ")
+	} else if q.Command == model.Many {
+		b.WriteString("        let result_set = ")
 	} else {
-		fmt.Fprintf(b, "        let call = self\n            .client\n            .%s(%s)", method, querySQL(q))
-		for _, p := range q.Parameters {
-			fmt.Fprintf(b, "\n            .param(%q, %s)", "$"+p.Name, bindExpression(p))
-		}
-		b.WriteString(";\n")
+		b.WriteString("        self.client")
+	}
+	if q.Command != model.Exec {
+		b.WriteString("self\n            .client")
+	}
+	sql := querySQL(q)
+	callPrefix := "            ." + method + "("
+	if strings.Contains(sql, "\n") || len(callPrefix)+len(sql)+1 > rustfmtMaxWidth {
+		b.WriteString("\n            ." + method + "(\n")
+		writeQuerySQL(b, sql, "                ")
+		b.WriteString(",\n            )")
+	} else {
+		b.WriteString("\n" + callPrefix + sql + ")")
+	}
+	for _, p := range q.Parameters {
+		fmt.Fprintf(b, "\n            .param(%q, %s)", "$"+p.Name, bindExpression(p))
 	}
 	switch q.Command {
 	case model.Exec:
-		b.WriteString("        call.await\n")
+		b.WriteString("\n            .await\n")
 	case model.One:
-		b.WriteString("        let result_set = call.await?;\n        let mut row = result_set.rows().next().ok_or(ydb::YdbError::NoRows)?;\n        Ok(")
+		b.WriteString("\n            .await?;\n        Ok(")
 		renderRow(b, q, "")
 		b.WriteString(")\n")
 	case model.Many:
-		b.WriteString("        let result_set = call.await?;\n        let mut rows = Vec::new();\n        for mut row in result_set.rows() {\n            rows.push(")
+		b.WriteString("\n            .await?;\n        let mut rows = Vec::new();\n        for mut row in result_set.rows() {\n            rows.push(")
 		renderRow(b, q, "    ")
 		b.WriteString(");\n        }\n        Ok(rows)\n")
 	}
@@ -272,7 +283,7 @@ func bindExpression(p model.Parameter) string {
 			if optional {
 				return name + ".map(" + variant + "Param)"
 			}
-			return variant + "Param(" + name + ")"
+			return "ydb::Value::" + variant + "(" + name + ")"
 		}
 		return name
 	}
@@ -304,6 +315,17 @@ func hasParameterKind(in *model.AnalysisResult, kind string) bool {
 		for _, p := range q.Parameters {
 			t := p.Type.UnwrapOptional()
 			if strings.EqualFold(t.Kind, kind) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hasOptionalParameterKind(in *model.AnalysisResult, kind string) bool {
+	for _, q := range in.Queries {
+		for _, p := range q.Parameters {
+			if p.Type.IsOptional() && strings.EqualFold(p.Type.UnwrapOptional().Kind, kind) {
 				return true
 			}
 		}
@@ -361,17 +383,34 @@ func querySQL(q model.AnalyzedQuery) string {
 		sql = cleanDeclarationGaps(sql)
 	}
 	sql = model.WithoutQueryAnnotation(sql)
-	lines := strings.SplitAfter(sql, "\n")
-	parts := make([]string, 0, len(lines))
-	for _, line := range lines {
-		if line != "" {
-			parts = append(parts, rustString(line))
-		}
-	}
-	if len(parts) == 0 {
+	sql = strings.Trim(sql, "\r\n")
+	if sql == "" {
 		return `""`
 	}
-	return "concat!(\n                " + strings.Join(parts, ",\n                ") + ",\n            )"
+	if strings.ContainsAny(sql, "\r\x00") {
+		return rustString(sql)
+	}
+	return rawString(sql)
+}
+
+func writeQuerySQL(b *strings.Builder, sql, literalIndent string) {
+	if !strings.Contains(sql, "\n") {
+		b.WriteString(literalIndent + sql)
+		return
+	}
+	quote := strings.IndexByte(sql, '"')
+	if quote < 0 || !strings.HasPrefix(sql, "r") {
+		b.WriteString(sql)
+		return
+	}
+	close := "\"" + sql[1:quote]
+	body := sql[quote+1 : len(sql)-len(close)]
+	b.WriteString(literalIndent + sql[:quote+1])
+	for _, line := range strings.Split(body, "\n") {
+		b.WriteByte('\n')
+		b.WriteString(literalIndent + " " + line)
+	}
+	b.WriteString(close)
 }
 
 func rustString(s string) string {
