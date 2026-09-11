@@ -121,9 +121,9 @@ final class Queries
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 -- name: CreateAuthor :one
-                INSERT INTO authors (id, name, bio)
+                INSERT INTO `authors` (`id`, `name`, `bio`)
                 VALUES ($author_id, $author_name, $biography)
-                RETURNING id, name, bio;
+                RETURNING `id`, `name`, `bio`;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->beginTx('serializable_read_write');
