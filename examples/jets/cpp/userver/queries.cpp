@@ -5,12 +5,13 @@ namespace jets::userver {
 
 // -- name: CountPilots :one
 std::optional<CountPilotsRow> Queries::CountPilots() const {
-    const auto sqlc_query = ::userver::ydb::Query{R"sql(
+    const auto sqlc_query = ::userver::ydb::Query{
+        R"sql(
             SELECT COUNT(*) AS pilot_count FROM pilots;
         )sql",
-            ::userver::ydb::Query::Name{"CountPilots"},
-            ::userver::ydb::Query::LogMode::kNameOnly,
-        };
+        ::userver::ydb::Query::Name{"CountPilots"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
     auto sqlc_response =
         this->transaction_ != nullptr
         ? this->transaction_->Execute(this->execute_settings_, sqlc_query)
@@ -27,12 +28,13 @@ std::optional<CountPilotsRow> Queries::CountPilots() const {
 
 // -- name: ListPilots :many
 std::vector<ListPilotsRow> Queries::ListPilots() const {
-    const auto sqlc_query = ::userver::ydb::Query{R"sql(
+    const auto sqlc_query = ::userver::ydb::Query{
+        R"sql(
             SELECT id, name FROM pilots ORDER BY id LIMIT 5;
         )sql",
-            ::userver::ydb::Query::Name{"ListPilots"},
-            ::userver::ydb::Query::LogMode::kNameOnly,
-        };
+        ::userver::ydb::Query::Name{"ListPilots"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
     auto sqlc_response =
         this->transaction_ != nullptr
         ? this->transaction_->Execute(this->execute_settings_, sqlc_query)
@@ -51,12 +53,13 @@ std::vector<ListPilotsRow> Queries::ListPilots() const {
 
 // -- name: DeletePilot :exec
 void Queries::DeletePilot(std::int32_t pilot_id) const {
-    const auto sqlc_query = ::userver::ydb::Query{R"sql(
+    const auto sqlc_query = ::userver::ydb::Query{
+        R"sql(
             DELETE FROM pilots WHERE id = $pilot_id;
         )sql",
-            ::userver::ydb::Query::Name{"DeletePilot"},
-            ::userver::ydb::Query::LogMode::kNameOnly,
-        };
+        ::userver::ydb::Query::Name{"DeletePilot"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
     static_cast<void>(
         this->transaction_ != nullptr
         ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$pilot_id", pilot_id)
