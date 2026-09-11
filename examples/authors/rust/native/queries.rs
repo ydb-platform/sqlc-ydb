@@ -11,16 +11,15 @@ impl<'a> Queries<'a> {
         Self { client }
     }
 
-    pub async fn get_author(&mut self, author_id: u64) -> ydb::YdbResult<GetAuthorRow> {
-        let call = self
+    pub async fn author(&mut self, author_id: u64) -> ydb::YdbResult<GetAuthorRow> {
+        let mut row = self
             .client
-            .query_result_set(concat!(
+            .query_row(concat!(
                 concat!(r"-- name: GetAuthor :one", "\x0a"),
                 r"SELECT id, name, bio FROM authors WHERE id = $author_id;",
             ))
-            .param("$author_id", author_id);
-        let result_set = call.await?;
-        let mut row = result_set.rows().next().ok_or(ydb::YdbError::NoRows)?;
+            .param("$author_id", author_id)
+            .await?;
         Ok(GetAuthorRow {
             id: row.remove_field(0)?.try_into()?,
             name: row.remove_field(1)?.try_into()?,
@@ -29,13 +28,13 @@ impl<'a> Queries<'a> {
     }
 
     pub async fn list_authors(&mut self) -> ydb::YdbResult<Vec<ListAuthorsRow>> {
-        let call = self
+        let result_set = self
             .client
             .query_result_set(concat!(
                 concat!(r"-- name: ListAuthors :many", "\x0a"),
                 r"SELECT id, name, bio FROM authors ORDER BY name;",
-            ));
-        let result_set = call.await?;
+            ))
+            .await?;
         let mut rows = Vec::new();
         for mut row in result_set.rows() {
             rows.push(ListAuthorsRow {
@@ -47,16 +46,15 @@ impl<'a> Queries<'a> {
         Ok(rows)
     }
 
-    pub async fn get_author_name(&mut self, author_id: u64) -> ydb::YdbResult<GetAuthorNameRow> {
-        let call = self
+    pub async fn author_name(&mut self, author_id: u64) -> ydb::YdbResult<GetAuthorNameRow> {
+        let mut row = self
             .client
-            .query_result_set(concat!(
+            .query_row(concat!(
                 concat!(r"-- name: GetAuthorName :one", "\x0a"),
                 r"SELECT name FROM authors WHERE id = $author_id;",
             ))
-            .param("$author_id", author_id);
-        let result_set = call.await?;
-        let mut row = result_set.rows().next().ok_or(ydb::YdbError::NoRows)?;
+            .param("$author_id", author_id)
+            .await?;
         Ok(GetAuthorNameRow {
             name: row.remove_field(0)?.try_into()?,
         })
@@ -68,9 +66,9 @@ impl<'a> Queries<'a> {
         author_name: String,
         biography: Option<String>,
     ) -> ydb::YdbResult<CreateAuthorRow> {
-        let call = self
+        let mut row = self
             .client
-            .query_result_set(concat!(
+            .query_row(concat!(
                 concat!(r"-- name: CreateAuthor :one", "\x0a"),
                 concat!(r"INSERT INTO `authors` (`id`, `name`, `bio`)", "\x0a"),
                 concat!(r"VALUES ($author_id, $author_name, $biography)", "\x0a"),
@@ -78,9 +76,8 @@ impl<'a> Queries<'a> {
             ))
             .param("$author_id", author_id)
             .param("$author_name", author_name)
-            .param("$biography", biography);
-        let result_set = call.await?;
-        let mut row = result_set.rows().next().ok_or(ydb::YdbError::NoRows)?;
+            .param("$biography", biography)
+            .await?;
         Ok(CreateAuthorRow {
             id: row.remove_field(0)?.try_into()?,
             name: row.remove_field(1)?.try_into()?,
@@ -94,8 +91,7 @@ impl<'a> Queries<'a> {
         author_name: String,
         biography: Option<String>,
     ) -> ydb::YdbResult<()> {
-        let call = self
-            .client
+        self.client
             .exec(concat!(
                 concat!(r"-- name: UpsertAuthor :exec", "\x0a"),
                 concat!(r"UPSERT INTO authors (id, name, bio)", "\x0a"),
@@ -103,18 +99,17 @@ impl<'a> Queries<'a> {
             ))
             .param("$author_id", author_id)
             .param("$author_name", author_name)
-            .param("$biography", biography);
-        call.await
+            .param("$biography", biography)
+            .await
     }
 
     pub async fn delete_author(&mut self, author_id: u64) -> ydb::YdbResult<()> {
-        let call = self
-            .client
+        self.client
             .exec(concat!(
                 concat!(r"-- name: DeleteAuthor :exec", "\x0a"),
                 r"DELETE FROM authors WHERE id = $author_id;",
             ))
-            .param("$author_id", author_id);
-        call.await
+            .param("$author_id", author_id)
+            .await
     }
 }

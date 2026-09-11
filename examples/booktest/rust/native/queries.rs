@@ -11,20 +11,6 @@ impl From<JsonParam> for ydb::Value {
     }
 }
 
-struct TimestampParam(std::time::SystemTime);
-
-impl Default for TimestampParam {
-    fn default() -> Self {
-        Self(std::time::SystemTime::UNIX_EPOCH)
-    }
-}
-
-impl From<TimestampParam> for ydb::Value {
-    fn from(value: TimestampParam) -> Self {
-        ydb::Value::Timestamp(value.0)
-    }
-}
-
 pub struct Queries<'a> {
     client: &'a mut ydb::QueryClient,
 }
@@ -34,36 +20,33 @@ impl<'a> Queries<'a> {
         Self { client }
     }
 
-    pub async fn get_author(&mut self, author_id: u64) -> ydb::YdbResult<GetAuthorRow> {
-        let call = self
+    pub async fn author(&mut self, author_id: u64) -> ydb::YdbResult<GetAuthorRow> {
+        let mut row = self
             .client
-            .query_result_set(concat!(
+            .query_row(concat!(
                 concat!(r"-- name: GetAuthor :one", "\x0a"),
                 concat!(r"SELECT author_id, name", "\x0a"),
                 concat!(r"FROM authors", "\x0a"),
                 r"WHERE author_id = $author_id;",
             ))
-            .param("$author_id", author_id);
-        let result_set = call.await?;
-        let mut row = result_set.rows().next().ok_or(ydb::YdbError::NoRows)?;
+            .param("$author_id", author_id)
+            .await?;
         Ok(GetAuthorRow {
             author_id: row.remove_field(0)?.try_into()?,
             name: row.remove_field(1)?.try_into()?,
         })
     }
 
-    pub async fn get_book(&mut self, book_id: u64) -> ydb::YdbResult<GetBookRow> {
-        let call = self
+    pub async fn book(&mut self, book_id: u64) -> ydb::YdbResult<GetBookRow> {
+        let mut row = self
             .client
-            .query_result_set(concat!(
+            .query_row(concat!(
                 concat!(r"-- name: GetBook :one", "\x0a"),
                 concat!(r"SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags", "\x0a"),
                 concat!(r"FROM books", "\x0a"),
                 r"WHERE book_id = $book_id;",
             ))
-            .param("$book_id", book_id);
-        let result_set = call.await?;
-        let mut row = result_set.rows().next().ok_or(ydb::YdbError::NoRows)?;
+            .param("$book_id", book_id).await?;
         Ok(GetBookRow {
             book_id: row.remove_field(0)?.try_into()?,
             author_id: row.remove_field(1)?.try_into()?,
@@ -77,15 +60,14 @@ impl<'a> Queries<'a> {
     }
 
     pub async fn delete_book(&mut self, book_id: u64) -> ydb::YdbResult<()> {
-        let call = self
-            .client
+        self.client
             .exec(concat!(
                 concat!(r"-- name: DeleteBook :exec", "\x0a"),
                 concat!(r"DELETE FROM books", "\x0a"),
                 r"WHERE book_id = $book_id;",
             ))
-            .param("$book_id", book_id);
-        call.await
+            .param("$book_id", book_id)
+            .await
     }
 
     pub async fn books_by_title_year(
@@ -93,7 +75,7 @@ impl<'a> Queries<'a> {
         title: String,
         publication_year: i32,
     ) -> ydb::YdbResult<Vec<BooksByTitleYearRow>> {
-        let call = self
+        let result_set = self
             .client
             .query_result_set(concat!(
                 concat!(r"-- name: BooksByTitleYear :many", "\x0a"),
@@ -102,8 +84,7 @@ impl<'a> Queries<'a> {
                 r"WHERE title = $title AND publication_year = $publication_year;",
             ))
             .param("$title", title)
-            .param("$publication_year", publication_year);
-        let result_set = call.await?;
+            .param("$publication_year", publication_year).await?;
         let mut rows = Vec::new();
         for mut row in result_set.rows() {
             rows.push(BooksByTitleYearRow {
@@ -121,7 +102,7 @@ impl<'a> Queries<'a> {
     }
 
     pub async fn books_by_tags(&mut self, tags: String) -> ydb::YdbResult<Vec<BooksByTagsRow>> {
-        let call = self
+        let result_set = self
             .client
             .query_result_set(concat!(
                 concat!(r"-- name: BooksByTags :many", "\x0a"),
@@ -133,14 +114,17 @@ impl<'a> Queries<'a> {
                 concat!(r"    b.isbn,", "\x0a"),
                 concat!(r"    b.tags", "\x0a"),
                 concat!(r"FROM books AS b", "\x0a"),
-                concat!(r"LEFT JOIN authors AS a ON b.author_id = a.author_id", "\x0a"),
+                concat!(
+                    r"LEFT JOIN authors AS a ON b.author_id = a.author_id",
+                    "\x0a"
+                ),
                 concat!(r"WHERE NOT SetIsDisjoint(", "\x0a"),
                 concat!(r"    ToSet(Yson::ConvertToStringList(b.tags)),", "\x0a"),
                 concat!(r"    Yson::ConvertToStringList($tags)", "\x0a"),
                 r");",
             ))
-            .param("$tags", JsonParam(tags));
-        let result_set = call.await?;
+            .param("$tags", JsonParam(tags))
+            .await?;
         let mut rows = Vec::new();
         for mut row in result_set.rows() {
             rows.push(BooksByTagsRow {
@@ -159,18 +143,17 @@ impl<'a> Queries<'a> {
         author_id: u64,
         name: String,
     ) -> ydb::YdbResult<CreateAuthorRow> {
-        let call = self
+        let mut row = self
             .client
-            .query_result_set(concat!(
+            .query_row(concat!(
                 concat!(r"-- name: CreateAuthor :one", "\x0a"),
                 concat!(r"INSERT INTO authors (author_id, name)", "\x0a"),
                 concat!(r"VALUES ($author_id, $name)", "\x0a"),
                 r"RETURNING author_id, name;",
             ))
             .param("$author_id", author_id)
-            .param("$name", name);
-        let result_set = call.await?;
-        let mut row = result_set.rows().next().ok_or(ydb::YdbError::NoRows)?;
+            .param("$name", name)
+            .await?;
         Ok(CreateAuthorRow {
             author_id: row.remove_field(0)?.try_into()?,
             name: row.remove_field(1)?.try_into()?,
@@ -188,9 +171,9 @@ impl<'a> Queries<'a> {
         available: std::time::SystemTime,
         tags: String,
     ) -> ydb::YdbResult<CreateBookRow> {
-        let call = self
+        let mut row = self
             .client
-            .query_result_set(concat!(
+            .query_row(concat!(
                 concat!(r"-- name: CreateBook :one", "\x0a"),
                 concat!(r"INSERT INTO books (", "\x0a"),
                 concat!(r"    book_id,", "\x0a"),
@@ -219,10 +202,8 @@ impl<'a> Queries<'a> {
             .param("$book_type", book_type)
             .param("$title", title)
             .param("$publication_year", publication_year)
-            .param("$available", TimestampParam(available))
-            .param("$tags", JsonParam(tags));
-        let result_set = call.await?;
-        let mut row = result_set.rows().next().ok_or(ydb::YdbError::NoRows)?;
+            .param("$available", ydb::Value::Timestamp(available))
+            .param("$tags", JsonParam(tags)).await?;
         Ok(CreateBookRow {
             book_id: row.remove_field(0)?.try_into()?,
             author_id: row.remove_field(1)?.try_into()?,
@@ -241,8 +222,7 @@ impl<'a> Queries<'a> {
         tags: String,
         book_id: u64,
     ) -> ydb::YdbResult<()> {
-        let call = self
-            .client
+        self.client
             .exec(concat!(
                 concat!(r"-- name: UpdateBook :exec", "\x0a"),
                 concat!(r"UPDATE books", "\x0a"),
@@ -251,8 +231,8 @@ impl<'a> Queries<'a> {
             ))
             .param("$title", title)
             .param("$tags", JsonParam(tags))
-            .param("$book_id", book_id);
-        call.await
+            .param("$book_id", book_id)
+            .await
     }
 
     pub async fn update_book_isbn(
@@ -262,8 +242,7 @@ impl<'a> Queries<'a> {
         isbn: String,
         book_id: u64,
     ) -> ydb::YdbResult<()> {
-        let call = self
-            .client
+        self.client
             .exec(concat!(
                 concat!(r"-- name: UpdateBookISBN :exec", "\x0a"),
                 concat!(r"UPDATE books", "\x0a"),
@@ -273,8 +252,8 @@ impl<'a> Queries<'a> {
             .param("$title", title)
             .param("$tags", JsonParam(tags))
             .param("$isbn", isbn)
-            .param("$book_id", book_id);
-        call.await
+            .param("$book_id", book_id)
+            .await
     }
 
     pub async fn delete_author_before_year(
@@ -282,28 +261,26 @@ impl<'a> Queries<'a> {
         publication_year: i32,
         author_id: u64,
     ) -> ydb::YdbResult<()> {
-        let call = self
-            .client
+        self.client
             .exec(concat!(
                 concat!(r"-- name: DeleteAuthorBeforeYear :exec", "\x0a"),
                 concat!(r"DELETE FROM books", "\x0a"),
                 r"WHERE publication_year < $publication_year AND author_id = $author_id;",
             ))
             .param("$publication_year", publication_year)
-            .param("$author_id", author_id);
-        call.await
+            .param("$author_id", author_id)
+            .await
     }
 
     pub async fn say_hello(&mut self, name: String) -> ydb::YdbResult<SayHelloRow> {
-        let call = self
+        let mut row = self
             .client
-            .query_result_set(concat!(
+            .query_row(concat!(
                 concat!(r"-- name: SayHello :one", "\x0a"),
                 r#"SELECT "hello "u || $name AS greeting;"#,
             ))
-            .param("$name", name);
-        let result_set = call.await?;
-        let mut row = result_set.rows().next().ok_or(ydb::YdbError::NoRows)?;
+            .param("$name", name)
+            .await?;
         Ok(SayHelloRow {
             greeting: row.remove_field(0)?.try_into()?,
         })

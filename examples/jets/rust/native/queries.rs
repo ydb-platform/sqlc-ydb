@@ -12,27 +12,26 @@ impl<'a> Queries<'a> {
     }
 
     pub async fn count_pilots(&mut self) -> ydb::YdbResult<CountPilotsRow> {
-        let call = self
+        let mut row = self
             .client
-            .query_result_set(concat!(
+            .query_row(concat!(
                 concat!(r"-- name: CountPilots :one", "\x0a"),
                 r"SELECT COUNT(*) AS pilot_count FROM pilots;",
-            ));
-        let result_set = call.await?;
-        let mut row = result_set.rows().next().ok_or(ydb::YdbError::NoRows)?;
+            ))
+            .await?;
         Ok(CountPilotsRow {
             pilot_count: row.remove_field(0)?.try_into()?,
         })
     }
 
     pub async fn list_pilots(&mut self) -> ydb::YdbResult<Vec<ListPilotsRow>> {
-        let call = self
+        let result_set = self
             .client
             .query_result_set(concat!(
                 concat!(r"-- name: ListPilots :many", "\x0a"),
                 r"SELECT id, name FROM pilots ORDER BY id LIMIT 5;",
-            ));
-        let result_set = call.await?;
+            ))
+            .await?;
         let mut rows = Vec::new();
         for mut row in result_set.rows() {
             rows.push(ListPilotsRow {
@@ -44,13 +43,12 @@ impl<'a> Queries<'a> {
     }
 
     pub async fn delete_pilot(&mut self, pilot_id: i32) -> ydb::YdbResult<()> {
-        let call = self
-            .client
+        self.client
             .exec(concat!(
                 concat!(r"-- name: DeletePilot :exec", "\x0a"),
                 r"DELETE FROM pilots WHERE id = $pilot_id;",
             ))
-            .param("$pilot_id", pilot_id);
-        call.await
+            .param("$pilot_id", pilot_id)
+            .await
     }
 }
