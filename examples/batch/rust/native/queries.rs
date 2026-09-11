@@ -88,8 +88,7 @@ impl<'a> Queries<'a> {
 
     // -- name: BooksByYear :many
     pub async fn books_by_year(&mut self, year: i32) -> ydb::YdbResult<Vec<BooksByYearRow>> {
-        let result_set = self
-            .client
+        self.client
             .query_result_set(
                 r"
                  SELECT book_id, author_id, isbn, book_type, title, year, available, tags
@@ -97,21 +96,21 @@ impl<'a> Queries<'a> {
                  WHERE year = $year;",
             )
             .param("$year", year)
-            .await?;
-        let mut rows = Vec::new();
-        for mut row in result_set.rows() {
-            rows.push(BooksByYearRow {
-                book_id: row.remove_field(0)?.try_into()?,
-                author_id: row.remove_field(1)?.try_into()?,
-                isbn: row.remove_field(2)?.try_into()?,
-                book_type: row.remove_field(3)?.try_into()?,
-                title: row.remove_field(4)?.try_into()?,
-                year: row.remove_field(5)?.try_into()?,
-                available: row.remove_field(6)?.try_into()?,
-                tags: row.remove_field(7)?.try_into()?,
-            });
-        }
-        Ok(rows)
+            .await?
+            .rows()
+            .map(|mut row| {
+                Ok(BooksByYearRow {
+                    book_id: row.remove_field(0)?.try_into()?,
+                    author_id: row.remove_field(1)?.try_into()?,
+                    isbn: row.remove_field(2)?.try_into()?,
+                    book_type: row.remove_field(3)?.try_into()?,
+                    title: row.remove_field(4)?.try_into()?,
+                    year: row.remove_field(5)?.try_into()?,
+                    available: row.remove_field(6)?.try_into()?,
+                    tags: row.remove_field(7)?.try_into()?,
+                })
+            })
+            .collect()
     }
 
     // -- name: CreateAuthor :one

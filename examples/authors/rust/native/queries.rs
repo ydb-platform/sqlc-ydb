@@ -27,19 +27,18 @@ impl<'a> Queries<'a> {
 
     // -- name: ListAuthors :many
     pub async fn list_authors(&mut self) -> ydb::YdbResult<Vec<ListAuthorsRow>> {
-        let result_set = self
-            .client
+        self.client
             .query_result_set(r"SELECT id, name, bio FROM authors ORDER BY name;")
-            .await?;
-        let mut rows = Vec::new();
-        for mut row in result_set.rows() {
-            rows.push(ListAuthorsRow {
-                id: row.remove_field(0)?.try_into()?,
-                name: row.remove_field(1)?.try_into()?,
-                bio: row.remove_field(2)?.try_into()?,
-            });
-        }
-        Ok(rows)
+            .await?
+            .rows()
+            .map(|mut row| {
+                Ok(ListAuthorsRow {
+                    id: row.remove_field(0)?.try_into()?,
+                    name: row.remove_field(1)?.try_into()?,
+                    bio: row.remove_field(2)?.try_into()?,
+                })
+            })
+            .collect()
     }
 
     // -- name: GetAuthorName :one

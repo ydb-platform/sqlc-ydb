@@ -46,12 +46,11 @@ pub struct GetVenueRow {
     pub created_at: Option<std::time::SystemTime>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct CreateVenueRow {
     pub id: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct UpdateVenueNameRow {
     pub id: u64,
 }

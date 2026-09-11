@@ -36,23 +36,22 @@ impl<'a> Queries<'a> {
 
     // -- name: ListCities :many
     pub async fn list_cities(&mut self) -> ydb::YdbResult<Vec<ListCitiesRow>> {
-        let result_set = self
-            .client
+        self.client
             .query_result_set(
                 r"
                  SELECT slug, name
                  FROM city
                  ORDER BY name;",
             )
-            .await?;
-        let mut rows = Vec::new();
-        for mut row in result_set.rows() {
-            rows.push(ListCitiesRow {
-                slug: row.remove_field(0)?.try_into()?,
-                name: row.remove_field(1)?.try_into()?,
-            });
-        }
-        Ok(rows)
+            .await?
+            .rows()
+            .map(|mut row| {
+                Ok(ListCitiesRow {
+                    slug: row.remove_field(0)?.try_into()?,
+                    name: row.remove_field(1)?.try_into()?,
+                })
+            })
+            .collect()
     }
 
     // -- name: GetCity :one
@@ -116,7 +115,7 @@ impl<'a> Queries<'a> {
 
     // -- name: ListVenues :many
     pub async fn list_venues(&mut self, city: String) -> ydb::YdbResult<Vec<ListVenuesRow>> {
-        let result_set = self
+        self
             .client
             .query_result_set(
                 r"
@@ -126,23 +125,23 @@ impl<'a> Queries<'a> {
                  ORDER BY name;",
             )
             .param("$city", city)
-            .await?;
-        let mut rows = Vec::new();
-        for mut row in result_set.rows() {
-            rows.push(ListVenuesRow {
-                id: row.remove_field(0)?.try_into()?,
-                slug: row.remove_field(1)?.try_into()?,
-                name: row.remove_field(2)?.try_into()?,
-                city: row.remove_field(3)?.try_into()?,
-                status: row.remove_field(4)?.try_into()?,
-                statuses: row.remove_field(5)?.try_into()?,
-                spotify_playlist: row.remove_field(6)?.try_into()?,
-                songkick_id: row.remove_field(7)?.try_into()?,
-                tags: row.remove_field(8)?.try_into()?,
-                created_at: row.remove_field(9)?.try_into()?,
-            });
-        }
-        Ok(rows)
+            .await?
+            .rows()
+            .map(|mut row| {
+                Ok(ListVenuesRow {
+                    id: row.remove_field(0)?.try_into()?,
+                    slug: row.remove_field(1)?.try_into()?,
+                    name: row.remove_field(2)?.try_into()?,
+                    city: row.remove_field(3)?.try_into()?,
+                    status: row.remove_field(4)?.try_into()?,
+                    statuses: row.remove_field(5)?.try_into()?,
+                    spotify_playlist: row.remove_field(6)?.try_into()?,
+                    songkick_id: row.remove_field(7)?.try_into()?,
+                    tags: row.remove_field(8)?.try_into()?,
+                    created_at: row.remove_field(9)?.try_into()?,
+                })
+            })
+            .collect()
     }
 
     // -- name: DeleteVenue :exec
@@ -263,8 +262,7 @@ impl<'a> Queries<'a> {
 
     // -- name: VenueCountByCity :many
     pub async fn venue_count_by_city(&mut self) -> ydb::YdbResult<Vec<VenueCountByCityRow>> {
-        let result_set = self
-            .client
+        self.client
             .query_result_set(
                 r"
                  SELECT
@@ -274,14 +272,14 @@ impl<'a> Queries<'a> {
                  GROUP BY city
                  ORDER BY city;",
             )
-            .await?;
-        let mut rows = Vec::new();
-        for mut row in result_set.rows() {
-            rows.push(VenueCountByCityRow {
-                city: row.remove_field(0)?.try_into()?,
-                venue_count: row.remove_field(1)?.try_into()?,
-            });
-        }
-        Ok(rows)
+            .await?
+            .rows()
+            .map(|mut row| {
+                Ok(VenueCountByCityRow {
+                    city: row.remove_field(0)?.try_into()?,
+                    venue_count: row.remove_field(1)?.try_into()?,
+                })
+            })
+            .collect()
     }
 }

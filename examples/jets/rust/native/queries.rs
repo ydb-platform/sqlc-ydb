@@ -24,18 +24,17 @@ impl<'a> Queries<'a> {
 
     // -- name: ListPilots :many
     pub async fn list_pilots(&mut self) -> ydb::YdbResult<Vec<ListPilotsRow>> {
-        let result_set = self
-            .client
+        self.client
             .query_result_set(r"SELECT id, name FROM pilots ORDER BY id LIMIT 5;")
-            .await?;
-        let mut rows = Vec::new();
-        for mut row in result_set.rows() {
-            rows.push(ListPilotsRow {
-                id: row.remove_field(0)?.try_into()?,
-                name: row.remove_field(1)?.try_into()?,
-            });
-        }
-        Ok(rows)
+            .await?
+            .rows()
+            .map(|mut row| {
+                Ok(ListPilotsRow {
+                    id: row.remove_field(0)?.try_into()?,
+                    name: row.remove_field(1)?.try_into()?,
+                })
+            })
+            .collect()
     }
 
     // -- name: DeletePilot :exec

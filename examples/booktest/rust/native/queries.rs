@@ -80,7 +80,7 @@ impl<'a> Queries<'a> {
         title: String,
         publication_year: i32,
     ) -> ydb::YdbResult<Vec<BooksByTitleYearRow>> {
-        let result_set = self
+        self
             .client
             .query_result_set(
                 r"
@@ -90,27 +90,26 @@ impl<'a> Queries<'a> {
             )
             .param("$title", title)
             .param("$publication_year", publication_year)
-            .await?;
-        let mut rows = Vec::new();
-        for mut row in result_set.rows() {
-            rows.push(BooksByTitleYearRow {
-                book_id: row.remove_field(0)?.try_into()?,
-                author_id: row.remove_field(1)?.try_into()?,
-                isbn: row.remove_field(2)?.try_into()?,
-                book_type: row.remove_field(3)?.try_into()?,
-                title: row.remove_field(4)?.try_into()?,
-                publication_year: row.remove_field(5)?.try_into()?,
-                available: row.remove_field(6)?.try_into()?,
-                tags: row.remove_field(7)?.try_into()?,
-            });
-        }
-        Ok(rows)
+            .await?
+            .rows()
+            .map(|mut row| {
+                Ok(BooksByTitleYearRow {
+                    book_id: row.remove_field(0)?.try_into()?,
+                    author_id: row.remove_field(1)?.try_into()?,
+                    isbn: row.remove_field(2)?.try_into()?,
+                    book_type: row.remove_field(3)?.try_into()?,
+                    title: row.remove_field(4)?.try_into()?,
+                    publication_year: row.remove_field(5)?.try_into()?,
+                    available: row.remove_field(6)?.try_into()?,
+                    tags: row.remove_field(7)?.try_into()?,
+                })
+            })
+            .collect()
     }
 
     // -- name: BooksByTags :many
     pub async fn books_by_tags(&mut self, tags: String) -> ydb::YdbResult<Vec<BooksByTagsRow>> {
-        let result_set = self
-            .client
+        self.client
             .query_result_set(
                 r"
                  SELECT
@@ -127,18 +126,18 @@ impl<'a> Queries<'a> {
                  );",
             )
             .param("$tags", JsonParam(tags))
-            .await?;
-        let mut rows = Vec::new();
-        for mut row in result_set.rows() {
-            rows.push(BooksByTagsRow {
-                book_id: row.remove_field(0)?.try_into()?,
-                title: row.remove_field(1)?.try_into()?,
-                name: row.remove_field(2)?.try_into()?,
-                isbn: row.remove_field(3)?.try_into()?,
-                tags: row.remove_field(4)?.try_into()?,
-            });
-        }
-        Ok(rows)
+            .await?
+            .rows()
+            .map(|mut row| {
+                Ok(BooksByTagsRow {
+                    book_id: row.remove_field(0)?.try_into()?,
+                    title: row.remove_field(1)?.try_into()?,
+                    name: row.remove_field(2)?.try_into()?,
+                    isbn: row.remove_field(3)?.try_into()?,
+                    tags: row.remove_field(4)?.try_into()?,
+                })
+            })
+            .collect()
     }
 
     // -- name: CreateAuthor :one
