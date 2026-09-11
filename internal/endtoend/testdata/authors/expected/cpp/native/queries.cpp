@@ -13,7 +13,7 @@ namespace authors::native {
 // -- name: GetAuthor :one
 std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
     std::optional<NYdb::TResultSet> sqlc_result_set;
-    const auto sqlc_status = this->client_.RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
         auto sqlc_params = NYdb::TParamsBuilder()
             .AddParam("$author_id").Uint64(author_id).Build()
             .Build();
@@ -21,14 +21,22 @@ std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
                 DECLARE $author_id AS Uint64;
                 SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;
             )sql",
-            NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),
+            sqlc_tx,
             sqlc_params
         ).GetValueSync();
         if (sqlc_result.IsSuccess() && !sqlc_result.GetResultSets().empty()) {
             sqlc_result_set = sqlc_result.GetResultSet(0);
         }
         return sqlc_result;
-    });
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
+            );
+        });
     NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
     if (!sqlc_result_set) {
         throw std::runtime_error("GetAuthor: successful query returned no result set");

@@ -60,6 +60,14 @@ private fun runNative(endpoint: String, schema: String) {
                 check(queries.getAuthor(SECOND_ID) == null)
                 queries.deleteAuthor(MAX_UINT64)
                 check(queries.listAuthors().isEmpty())
+                retry.supplyStatus { session ->
+                    val transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW)
+                    val transactional = NativeQueries(transaction)
+                    transactional.upsertAuthor(ROLLBACK_ID, "Rollback", null)
+                    check(transactional.getAuthor(ROLLBACK_ID)?.name == "Rollback")
+                    transaction.rollback()
+                }.join().expectSuccess()
+                check(queries.getAuthor(ROLLBACK_ID) == null)
                 println("Kotlin native smoke passed")
             } finally {
                 ddl("DROP TABLE authors;")

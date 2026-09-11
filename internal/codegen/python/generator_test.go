@@ -263,7 +263,7 @@ func TestGeneratedSQLLiteralsRoundTripSpecialCharacters(t *testing.T) {
 		if err := os.WriteFile(expectedPath, expectedJSON, 0600); err != nil {
 			t.Fatal(err)
 		}
-		script := fmt.Sprintf("import ast, inspect, json, sys; sys.path.insert(0, %q); from db import queries\ntree = ast.parse(inspect.getsource(queries))\nwith open(%q, encoding='utf-8') as f: expected = json.load(f)\nfor name, want in expected.items():\n    node = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == name.removeprefix('SQL_').lower())\n    call = next(c for c in ast.walk(node) if isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute) and c.func.attr in ('execute', 'execute_with_retries'))\n    got = ast.literal_eval(call.args[0])\n    assert got == want, (name, repr(got), repr(want))\n", dir, expectedPath)
+		script := fmt.Sprintf("import ast, inspect, json, sys; sys.path.insert(0, %q); from db import queries\ntree = ast.parse(inspect.getsource(queries))\nwith open(%q, encoding='utf-8') as f: expected = json.load(f)\nfor name, want in expected.items():\n    node = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == name.removeprefix('SQL_').lower())\n    call = next(c for c in ast.walk(node) if isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute) and c.func.attr in ('_execute', 'execute', 'execute_with_retries'))\n    got = ast.literal_eval(call.args[0])\n    assert got == want, (name, repr(got), repr(want))\n", dir, expectedPath)
 		cmd := exec.Command("python3", "-c", script)
 		cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
 		if out, err := cmd.CombinedOutput(); err != nil {
@@ -356,6 +356,7 @@ class Row(dict): pass
 class ResultSet:
     def __init__(self, rows): self.rows = rows
 class QuerySessionPool: pass
+class QueryTxContext: pass
 `), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -364,13 +365,21 @@ sys.path.insert(0, %q)
 from db.queries import Querier
 import ydb
 
-class Pool:
+class Pool(ydb.QuerySessionPool):
     def __init__(self, results):
         self.results = results
         self.calls = []
     def execute_with_retries(self, sql, parameters):
         self.calls.append((sql, parameters))
         return self.results
+
+class Transaction(ydb.QueryTxContext):
+    def __init__(self, results):
+        self.results = results
+        self.calls = []
+    def execute(self, sql, parameters):
+        self.calls.append((sql, parameters))
+        return iter(self.results)
 
 pool = Pool([ydb.ResultSet([ydb.Row({'a.id': 7, 'display_name': None})])])
 row = Querier(pool).get_author(7, 8, 9, 10)
@@ -381,6 +390,11 @@ pool.results = [ydb.ResultSet([ydb.Row({'a.id': 8})])]
 rows = list(Querier(pool).list_authors())
 assert len(rows) == 1 and rows[0].id == 8
 assert Querier(Pool([ydb.ResultSet([])])).get_author(7, 8, 9, 10) is None
+
+tx = Transaction([ydb.ResultSet([ydb.Row({'a.id': 9, 'display_name': 'transaction'})])])
+row = Querier(tx).get_author(7, 8, 9, 10)
+assert row.id == 9 and row.display_name == 'transaction'
+assert len(tx.calls) == 1
 
 try:
     Querier(Pool([])).get_author(7, 8, 9, 10)
@@ -571,6 +585,13 @@ try:
     y = YQuerier(pool); y.insert_author(1, "one", b"bytes")
     assert y.get_author(1).blob == b"bytes" and y.get_author(99) is None and y.get_joined_author(1).id == 1
     assert list(y.list_authors())[0].name == "one"; y.find_author(None); y.find_author("one")
+    def rollback_generated_calls(tx):
+        q = YQuerier(tx)
+        q.insert_author(4, "rollback", b"transaction")
+        assert q.get_author(4).name == "rollback"
+        tx.rollback()
+    pool.retry_tx_sync(rollback_generated_calls)
+    assert y.get_author(4) is None
     import ydb_dbapi
     host, port = u.hostname, u.port
     c = ydb_dbapi.connect(host=host, port=port, database=database, protocol=u.scheme)

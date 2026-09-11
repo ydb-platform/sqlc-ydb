@@ -76,6 +76,19 @@ std::string SmokeHandler::HandleRequest(server::http::HttpRequest&, server::requ
     if (row_count != 2) {
         throw std::runtime_error("userver generated adapter returned an unexpected row count");
     }
+
+    client_->RetryTx("sqlc-generated-helpers", {}, [&](ydb::TxActor& transaction) {
+        ::authors::userver::Queries transactional_queries{transaction};
+        transactional_queries.UpsertAuthor(kMaxId - 2, ydb::Utf8{"rolled back"}, std::nullopt);
+        if (!transactional_queries.GetAuthor(kMaxId - 2)) {
+            throw std::runtime_error("userver generated adapter did not share the transaction");
+        }
+        return ydb::TxAction::kRollback;
+    });
+    if (queries.GetAuthor(kMaxId - 2)) {
+        throw std::runtime_error("userver generated adapter committed a caller-owned transaction");
+    }
+
     queries.DeleteAuthor(kMaxId);
     queries.DeleteAuthor(kMaxId - 1);
     created_table.Drop();

@@ -9,17 +9,20 @@
 #include <vector>
 
 #include <userver/ydb/table.hpp>
+#include <userver/ydb/transaction.hpp>
 
 namespace authors::userver {
 
 class Queries final {
 public:
-    explicit Queries(::userver::ydb::TableClient& client) noexcept : client_(client) {}
+    explicit Queries(::userver::ydb::TableClient& client) noexcept : client_(&client), transaction_(nullptr) {}
+    explicit Queries(::userver::ydb::TxActor& transaction) noexcept : client_(nullptr), transaction_(&transaction) {}
 
     std::optional<GetAuthorRow> GetAuthor(std::uint64_t author_id) const;
 
 private:
-    ::userver::ydb::TableClient& client_;
+    ::userver::ydb::TableClient* client_;
+    ::userver::ydb::TxActor* transaction_;
 };
 
 }  // namespace authors::userver

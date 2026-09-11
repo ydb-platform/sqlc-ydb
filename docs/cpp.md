@@ -21,11 +21,11 @@ Use `runtime: userver` for the userver adapter. The configuration layer also acc
 
 ## Ownership and transactions
 
-`Queries` stores a non-owning reference to the runtime client. The caller must keep `NYdb::NQuery::TQueryClient` or `userver::ydb::TableClient` alive longer than the generated `Queries` object. The native driver and userver component remain caller-owned as well.
+`Queries` stores a non-owning pointer to the runtime executor. The caller must keep the supplied client or transaction actor alive longer than the generated `Queries` object. The native driver and userver component remain caller-owned as well.
 
-Every native generated method calls `TQueryClient::RetryQuerySync`, obtains a retry-managed `TSession`, and executes one query with `BeginTx(SerializableRW()).CommitTx()`. Every retry attempt rebuilds the parameter object. This is a self-contained transaction per generated method; generated methods do not join a caller-owned transaction.
+Construct native `Queries` with `TQueryClient&` for standalone calls. Every method then calls `RetryQuerySync`, obtains a retry-managed `TSession`, and executes one query with `BeginTx(SerializableRW()).CommitTx()`. Every retry attempt rebuilds the parameter object. Construct it with `TTransaction&` to run several generated methods in that caller-owned transaction; methods use `TTxControl::Tx(transaction)` and never commit, roll back or retry it.
 
-Every userver generated method calls `TableClient::ExecuteQuery`. userver performs retries internally and its default operation settings select a committed serializable read-write transaction for that call. Multi-statement caller transactions belong in handwritten code using `TableClient::RetryTx`; generated methods do not join them.
+Construct userver `Queries` with `TableClient&` for standalone calls through `TableClient::ExecuteQuery`. To run several generated methods atomically, create `Queries` from the `TxActor&` supplied to `TableClient::RetryTx`. The callback controls commit or rollback through its returned `TxAction`; a retry repeats the whole callback.
 
 ## Types
 

@@ -33,6 +33,20 @@ def check(querier):
     assert querier.get_author(author_id) is None
 
 
+def check_native_transaction(pool):
+    author_id = 2**64 - 2
+
+    def rollback(transaction):
+        querier = NativeQuerier(transaction)
+        querier.upsert_author(author_id, "rolled back", None)
+        assert querier.get_author(author_id).name == "rolled back"
+        transaction.rollback()
+
+    pool.retry_tx_sync(rollback)
+
+    assert NativeQuerier(pool).get_author(author_id) is None
+
+
 def main():
     url = urlsplit(os.environ["YDB_CONNECTION_STRING"])
     config = ydb.DriverConfig(
@@ -45,6 +59,7 @@ def main():
             pool.execute_with_retries((Path(__file__).resolve().parent.parent / "schema.sql").read_text())
             try:
                 check(NativeQuerier(pool))
+                check_native_transaction(pool)
                 print("native YDB: passed", flush=True)
                 connection = ydb_dbapi.connect(
                     host=url.hostname, port=url.port, database=url.path, protocol=url.scheme,

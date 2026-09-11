@@ -79,10 +79,12 @@ func TestGenerateNativeYDBAuthorsAPI(t *testing.T) {
 	}
 	for _, want := range []string{
 		"explicit Queries(NYdb::NQuery::TQueryClient& client) noexcept",
+		"explicit Queries(NYdb::NQuery::TTransaction& transaction) noexcept",
 		"std::optional<GetAuthorRow> GetAuthor(std::uint64_t author_id) const;",
 		"std::vector<ListAuthorsRow> ListAuthors() const;",
 		"void UpsertAuthor(std::uint64_t author_id, const std::string& author_name, const std::optional<std::string>& biography) const;",
-		"NYdb::NQuery::TQueryClient& client_;",
+		"NYdb::NQuery::TQueryClient* client_;",
+		"NYdb::NQuery::TTransaction* transaction_;",
 	} {
 		if !strings.Contains(header, want) {
 			t.Errorf("queries.hpp missing %q:\n%s", want, header)
@@ -90,7 +92,8 @@ func TestGenerateNativeYDBAuthorsAPI(t *testing.T) {
 	}
 	for _, want := range []string{
 		"#include <ydb-cpp-sdk/client/types/status/status.h>",
-		"client_.RetryQuerySync",
+		"client_->RetryQuerySync",
+		"NYdb::NQuery::TTxControl::Tx(*this->transaction_)",
 		"NYdb::NStatusHelpers::ThrowOnError(sqlc_status);",
 		"NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()",
 		".AddParam(\"$author_id\").Uint64(author_id).Build()",
@@ -124,8 +127,10 @@ func TestGenerateUserverAuthorsAPI(t *testing.T) {
 	}
 	for _, want := range []string{
 		"explicit Queries(::userver::ydb::TableClient& client) noexcept",
+		"explicit Queries(::userver::ydb::TxActor& transaction) noexcept",
 		"void UpsertAuthor(std::uint64_t author_id, const ::userver::ydb::Utf8& author_name, const std::optional<::userver::ydb::Utf8>& biography) const;",
-		"::userver::ydb::TableClient& client_;",
+		"::userver::ydb::TableClient* client_;",
+		"::userver::ydb::TxActor* transaction_;",
 	} {
 		if !strings.Contains(header, want) {
 			t.Errorf("queries.hpp missing %q:\n%s", want, header)
@@ -135,7 +140,8 @@ func TestGenerateUserverAuthorsAPI(t *testing.T) {
 		"::userver::ydb::Query{",
 		"::userver::ydb::Query::Name{\"GetAuthor\"}",
 		"::userver::ydb::Query::LogMode::kNameOnly",
-		"}, \"$author_id\", author_id)",
+		"this->transaction_->Execute(",
+		"ExecuteQuery(sqlc_query, \"$author_id\", author_id)",
 		"sqlc_row.Get<std::uint64_t>(\"id\")",
 		"sqlc_row.Get<::userver::ydb::Utf8>(\"name\")",
 		"sqlc_row.Get<std::optional<::userver::ydb::Utf8>>(\"bio\")",
@@ -327,14 +333,16 @@ func TestRejectsGeneratedNameCollisions(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
-	t.Run("query method conflicts with client member", func(t *testing.T) {
-		a := authorsAnalysis()
-		a.Queries[0].Name = "client_"
-		_, err := Generate(a, Options{Runtime: "ydb"})
-		if err == nil || !strings.Contains(err.Error(), "invalid C++ query name") {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
+	for _, member := range []string{"client_", "transaction_"} {
+		t.Run("query method conflicts with "+member, func(t *testing.T) {
+			a := authorsAnalysis()
+			a.Queries[0].Name = member
+			_, err := Generate(a, Options{Runtime: "ydb"})
+			if err == nil || !strings.Contains(err.Error(), "invalid C++ query name") {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
 }
 
 func TestParameterCannotShadowClientMember(t *testing.T) {
@@ -345,7 +353,7 @@ func TestParameterCannotShadowClientMember(t *testing.T) {
 		t.Fatal(err)
 	}
 	source := generatedContent(t, files, "queries.cpp")
-	if !strings.Contains(source, "this->client_.RetryQuerySync") {
+	if !strings.Contains(source, "this->client_->RetryQuerySync") {
 		t.Fatalf("client member is not explicitly qualified:\n%s", source)
 	}
 }

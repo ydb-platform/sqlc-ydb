@@ -188,7 +188,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 	var b strings.Builder
 	b.WriteString(header)
 	if o.Runtime == "ydb" {
-		b.WriteString("import tech.ydb.query.tools.SessionRetryContext\nimport tech.ydb.query.tools.QueryReader\nimport tech.ydb.common.transaction.TxMode\nimport tech.ydb.table.query.Params\n")
+		b.WriteString("import tech.ydb.query.QueryTransaction\nimport tech.ydb.query.tools.SessionRetryContext\nimport tech.ydb.query.tools.QueryReader\nimport tech.ydb.common.transaction.TxMode\nimport tech.ydb.table.query.Params\n")
 	}
 	needsValues := false
 	for _, q := range a.Queries {
@@ -197,8 +197,15 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 	if needsValues {
 		b.WriteString("import tech.ydb.table.values.PrimitiveValue\nimport tech.ydb.table.values.PrimitiveType\nimport tech.ydb.table.values.OptionalType\n")
 	}
-	owner := map[string]string{"ydb": "SessionRetryContext", "jdbc": "java.sql.Connection", "exposed": "org.jetbrains.exposed.v1.jdbc.JdbcTransaction"}[o.Runtime]
-	fmt.Fprintf(&b, "\n// The caller owns the injected client and its lifecycle.\nclass Queries(private val client: %s) {\n", owner)
+	if o.Runtime == "ydb" {
+		b.WriteString("\n// The caller owns the injected executor and its lifecycle.\nclass Queries {\n")
+		b.WriteString("    private val client: SessionRetryContext?\n    private val transaction: QueryTransaction?\n\n")
+		b.WriteString("    constructor(client: SessionRetryContext) {\n        this.client = client\n        this.transaction = null\n    }\n\n")
+		b.WriteString("    constructor(transaction: QueryTransaction) {\n        this.client = null\n        this.transaction = transaction\n    }\n")
+	} else {
+		owner := map[string]string{"jdbc": "java.sql.Connection", "exposed": "org.jetbrains.exposed.v1.jdbc.JdbcTransaction"}[o.Runtime]
+		fmt.Fprintf(&b, "\n// The caller owns the injected client and its lifecycle.\nclass Queries(private val client: %s) {\n", owner)
+	}
 	methods := map[string]bool{}
 	for _, q := range a.Queries {
 		if !utf8.ValidString(q.SQL) {
@@ -241,7 +248,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			return nil, fmt.Errorf("%s: Kotlin does not support %s", q.Name, q.Command)
 		}
 		params, names := []string{}, []string{}
-		seen := map[string]bool{"client": true, "kotlin": true, "tech": true}
+		seen := map[string]bool{"client": true, "transaction": true, "kotlin": true, "tech": true}
 		for _, p := range q.Parameters {
 			n, err := name(p.Name, false)
 			if err != nil {
@@ -307,11 +314,17 @@ func emitNative(b *strings.Builder, q model.AnalyzedQuery, names []string, sql, 
 	for i, p := range q.Parameters {
 		fmt.Fprintf(b, "        _params.put(%s, %s)\n", quoted("$"+p.Name), parameterValue(p, names[i]))
 	}
-	b.WriteString("        val _query = client.supplyResult { _session ->\n")
-	fmt.Fprintf(b, "            QueryReader.readFrom(_session.createQuery(%s, TxMode.SERIALIZABLE_RW, _params))\n        }.join().getValue()\n", sql)
 	if q.Command == model.Exec {
+		b.WriteString("        if (transaction != null) {\n")
+		fmt.Fprintf(b, "            transaction.createQuery(%s, _params).execute().join().getStatus().expectSuccess()\n", sql)
+		b.WriteString("        } else {\n            client!!.supplyResult { _session ->\n")
+		fmt.Fprintf(b, "                _session.createQuery(%s, TxMode.SERIALIZABLE_RW, _params).execute()\n            }.join().getStatus().expectSuccess()\n        }\n", sql)
 		return
 	}
+	b.WriteString("        val _query = if (transaction != null) {\n")
+	fmt.Fprintf(b, "            QueryReader.readFrom(transaction.createQuery(%s, _params)).join().getValue()\n", sql)
+	b.WriteString("        } else {\n            client!!.supplyResult { _session ->\n")
+	fmt.Fprintf(b, "                QueryReader.readFrom(_session.createQuery(%s, TxMode.SERIALIZABLE_RW, _params))\n            }.join().getValue()\n        }\n", sql)
 	b.WriteString("        kotlin.check(_query.getResultSetCount() == 1) { \"Expected one result set\" }\n        val _rows = _query.getResultSet(0)\n")
 	emitRows(b, q, row, "        ", true)
 }

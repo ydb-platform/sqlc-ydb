@@ -100,6 +100,11 @@ into SQL. The constructor borrows a `YdbDSLContext`: callers own connection,
 transaction, retry and lifecycle. `:one` returns `Optional<Row>` and rejects
 multiple rows; `:many` returns `List<Row>`; `:exec` returns `void`.
 
+For jOOQ callback transactions, wrap the callback's transaction-local
+configuration with `YDB.using(configuration)` and pass that `YdbDSLContext` to
+`Queries`. A cast from `configuration.dsl()` is invalid because jOOQ returns a
+plain `DefaultDSLContext` there.
+
 The shared [Maven project](../examples/java/jooq/pom.xml) pins Java 21,
 jOOQ 3.21.0, YDB jOOQ dialect 2.0.0 and JDBC 2.4.1. Value carriers follow that
 dialect: Uint64 uses ULong, Json uses JSON, Timestamp uses Instant, Utf8 uses

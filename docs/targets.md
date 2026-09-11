@@ -4,18 +4,18 @@
 |---|---|---|
 | Go native SDK | `gen.go.sql_package: ydb` | `New`, `Queries`, context-aware query methods |
 | Go database/sql | `gen.go.sql_package: database/sql` | `New`, `DBTX`, `Queries`, `WithTx` |
-| Python native SDK | `gen.python.runtime: ydb` | dataclasses and `Querier(QuerySessionPool)` |
+| Python native SDK | `gen.python.runtime: ydb` | dataclasses and `Querier(QuerySessionPool | QueryTxContext)` |
 | Python DB-API | `gen.python.runtime: dbapi` | dataclasses and a connection-based `Querier` |
 | Python SQLAlchemy | `gen.python.runtime: sqlalchemy` | dataclasses and synchronous `Querier` |
-| C++ native SDK | `gen.cpp.runtime: ydb` | `Queries(TQueryClient&)`, structs, optional/vector results |
-| C++ userver | `gen.cpp.runtime: userver` | `Queries(TableClient&)`, userver YDB bindings |
+| C++ native SDK | `gen.cpp.runtime: ydb` | `Queries(TQueryClient&)` or `Queries(TTransaction&)`, structs, optional/vector results |
+| C++ userver | `gen.cpp.runtime: userver` | `Queries(TableClient&)` or `Queries(TxActor&)`, userver YDB bindings |
 | C# ADO.NET | `gen.csharp.runtime: adonet` | async `Queries(YdbConnection)`, records, cancellation and transactions |
 | C# Dapper | `gen.csharp.runtime: dapper` | async query methods on a borrowed `YdbConnection` |
 | C# linq2db | `gen.csharp.runtime: linq2db` | SQL query methods on a borrowed `DataConnection` |
 | TypeScript | `gen.typescript.runtime: ydb` | query classes, row and parameter type aliases |
 | Rust | `gen.rust.runtime: ydb` | async methods on a borrowed `QueryClient` |
 | PHP | `gen.php.runtime: ydb` | typed query methods for the YDB SDK |
-| Kotlin Query SDK | `gen.kotlin.runtime: ydb` | data classes and `Queries(SessionRetryContext)` |
+| Kotlin Query SDK | `gen.kotlin.runtime: ydb` | data classes and `Queries(SessionRetryContext)` or `Queries(QueryTransaction)` |
 | Kotlin JDBC | `gen.kotlin.runtime: jdbc` | typed query methods on a borrowed `Connection` |
 | Kotlin Exposed | `gen.kotlin.runtime: exposed` | typed SQL methods on a borrowed `JdbcTransaction` |
 | Java native SDK | `gen.java.runtime: ydb` | `Queries(QueryTransaction)`, Java 17 records |
@@ -48,11 +48,12 @@ from query results. See the [C#](csharp.md), [TypeScript](typescript.md),
 [Rust](rust.md) and [PHP](php.md) contracts for supported types and API details.
 
 Generated code uses caller-provided clients/connections. The caller controls
-connection lifetime and credentials. Transaction behavior is target-specific:
-both C++ profiles execute a transaction per method; C#, native Java and JDBC use
-the caller's connection or transaction. Generated
-DB-API code closes its own cursors and does not commit caller-owned transactions.
-The language-specific pages document the remaining runtime ownership contracts.
+connection lifetime and credentials. Transaction behavior is target-specific.
+Python native, both C++ profiles and Kotlin native accept transaction-scoped
+executors in addition to their standalone retry clients. C#, native Java and
+JDBC use the caller's connection or transaction. Generated DB-API code closes
+its own cursors and does not commit caller-owned transactions. The
+language-specific pages document the remaining runtime ownership contracts.
 
 Python row decoding follows the selected runtime: native YDB rows are indexed by
 column name, DB-API rows by position, and SQLAlchemy rows through `row._mapping`.

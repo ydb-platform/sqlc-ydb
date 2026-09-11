@@ -112,6 +112,23 @@ int main() {
         if (authors.size() != 2) {
             throw std::runtime_error("native C++ generated adapter returned an unexpected row count");
         }
+
+        auto session_result = client.GetSession().GetValueSync();
+        NYdb::NStatusHelpers::ThrowOnError(session_result);
+        auto session = session_result.GetSession();
+        auto begin_result = session.BeginTransaction(NYdb::NQuery::TTxSettings::SerializableRW()).GetValueSync();
+        NYdb::NStatusHelpers::ThrowOnError(begin_result);
+        auto transaction = begin_result.GetTransaction();
+        authors::native::Queries transactional_queries{transaction};
+        transactional_queries.UpsertAuthor(kMaxId - 2, "rolled back", std::nullopt);
+        if (!transactional_queries.GetAuthor(kMaxId - 2)) {
+            throw std::runtime_error("native C++ generated adapter did not share the transaction");
+        }
+        NYdb::NStatusHelpers::ThrowOnError(transaction.Rollback().GetValueSync());
+        if (queries.GetAuthor(kMaxId - 2)) {
+            throw std::runtime_error("native C++ generated adapter committed a caller-owned transaction");
+        }
+
         queries.DeleteAuthor(kMaxId);
         queries.DeleteAuthor(kMaxId - 1);
         created_table.Drop();

@@ -34,6 +34,13 @@ session or an interactive transaction. Calls are marked non-idempotent because
 `:one` can be an `INSERT ... RETURNING` query and the generator cannot infer a
 safe retry policy from the result shape.
 
+The pinned SDK's interactive `Session` API keeps its transaction identifier
+private. Its public `Session::query` path also converts results through JSON,
+which loses exact JSON text and timestamp microseconds. Consequently generated
+helpers cannot join an interactive transaction while retaining the target's
+lossless result contract. This requires a PHP SDK API that executes a query in
+the current transaction and exposes the raw `ExecuteQueryResult` protobuf.
+
 `:one` returns a typed row object or `null` when the result is empty. `:many`
 returns a list of typed row objects, and `:exec` returns `void`. A method with a
 single parameter accepts that scalar directly; a method with several parameters

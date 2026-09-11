@@ -8,14 +8,17 @@ namespace authors::userver {
 
 // -- name: GetAuthor :one
 std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
-    auto sqlc_response = this->client_.ExecuteQuery(
-        ::userver::ydb::Query{R"sql(
+    const auto sqlc_query = ::userver::ydb::Query{R"sql(
             DECLARE $author_id AS Uint64;
             SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;
         )sql",
             ::userver::ydb::Query::Name{"GetAuthor"},
             ::userver::ydb::Query::LogMode::kNameOnly,
-        }, "$author_id", author_id);
+        };
+    auto sqlc_response =
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(sqlc_query, "$author_id", author_id)
+        : this->client_->ExecuteQuery(sqlc_query, "$author_id", author_id);
     auto sqlc_cursor = sqlc_response.GetSingleCursor();
     if (sqlc_cursor.empty()) {
         return std::nullopt;

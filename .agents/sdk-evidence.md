@@ -31,7 +31,10 @@ pinned in the [example Maven build](../examples/authors/java/pom.xml). The
 - Native query execution uses `QueryClient`, `QuerySession`,
   `tools/SessionRetryContext` and `tools/QueryReader` in the SDK's `query` module.
   `SessionRetryContext` owns operation sessions; the caller owns the transport
-  and client. Parameters use `PrimitiveValue` and `OptionalType` factories.
+  and client. `QueryTransaction.createQuery` provides the same result reader
+  while leaving commit and rollback with the caller. Parameters use
+  `PrimitiveValue` and `OptionalType` factories. Kotlin native exposes both
+  ownership modes through separate generated constructors.
 - Java JDBC uses standard `?` placeholders, which the driver handles through
   `query/params/InMemoryQuery` and `SimpleJdbcPrm`. Bind each occurrence by index;
   this avoids `PreparedQuery`'s name sorting and server-side preparation before
@@ -92,6 +95,24 @@ The [PHP SDK](https://github.com/ydb-platform/ydb-php-sdk) is pinned to 1.16.1
 at `56a783e39368745a35a7bc3e206d4a8200184805`. The generated bridge uses the
 public `Table` accessors and `RequestTrait` to retain raw protobuf result values;
 [PHP](../docs/php.md) explains why the high-level result conversion is unsuitable.
+`Session` keeps its transaction identifier protected, and its public `query()`
+path performs the lossy high-level conversion. A generated helper therefore
+cannot execute its raw protobuf request inside a caller-owned transaction until
+the SDK exposes raw execution with the current transaction control.
+
+## Python and C++ transaction executors
+
+Python's pinned Query SDK exports both `QuerySessionPool` and `QueryTxContext`.
+`retry_tx_sync` passes the latter to the callback; `QueryTxContext.execute`
+returns the same result-set iterator consumed by the generated decoder. The
+generated native `Querier` accepts either object and fully consumes transaction
+results before the callback can finish.
+
+The C++ SDK 3.21.1 `TTransaction` exposes `GetSession()` and can be passed to
+`TTxControl::Tx`. userver 3.2-rc passes `TxActor&` to `TableClient::RetryTx`, and
+`TxActor::Execute` accepts the same query and parameter arguments used by
+`TableClient::ExecuteQuery`. Generated native and userver query classes borrow
+these transaction objects and never commit, roll back, or retry them.
 
 ## Go SDK parameter binding
 

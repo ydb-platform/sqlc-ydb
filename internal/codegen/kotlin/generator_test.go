@@ -91,6 +91,17 @@ func TestNullableScalarModelsAndRuntimeOwnership(t *testing.T) {
 			} else if !strings.Contains(source, "TxMode.SERIALIZABLE_RW") {
 				t.Fatal(source)
 			}
+			if runtime == "" || runtime == "native" || runtime == "ydb" {
+				for _, want := range []string{
+					"constructor(client: SessionRetryContext)",
+					"constructor(transaction: QueryTransaction)",
+					"transaction.createQuery(",
+				} {
+					if !strings.Contains(source, want) {
+						t.Errorf("native transaction support missing %q", want)
+					}
+				}
+			}
 			for _, bad := range []string{"client.close", "client.commit", "client.rollback"} {
 				if strings.Contains(source, bad) {
 					t.Fatalf("borrowed resource ownership violated: %s", bad)
