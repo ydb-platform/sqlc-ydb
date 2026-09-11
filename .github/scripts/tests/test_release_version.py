@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -106,6 +107,32 @@ class ReleaseVersionTest(unittest.TestCase):
         self.assertEqual((self.repo.root / "CHANGELOG.md").read_text(), changelog)
         self.assertEqual((self.repo.root / "internal/cli/cli.go").read_text(), source)
         self.assertFalse((self.repo.root / "notes.md").exists())
+
+    def test_repository_changelog_can_be_used_as_release_notes(self):
+        changelog = SCRIPT.parents[2] / "CHANGELOG.md"
+        sections = re.split(r"^## ", changelog.read_text(encoding="utf-8"), flags=re.MULTILINE)[1:]
+        checked = 0
+        for block in sections:
+            heading, _, content = block.partition("\n")
+            content = content.strip()
+            # Stable preparation leaves Unreleased empty before running tests.
+            if heading == "Unreleased" and not content:
+                continue
+            checked += 1
+            with self.subTest(heading=heading):
+                tag = "v0.0.1-rc0" if heading == "Unreleased" else heading
+                result = self.repo.notes(tag, changelog=str(changelog))
+                self.assert_success(result)
+                self.assertEqual(
+                    (self.repo.root / "notes.md").read_text(),
+                    f"## {tag}\n\n{content}\n",
+                )
+                # Exercise preparation as well as extraction, without changing
+                # the checkout's changelog, version, or tags.
+                self.repo.write_state("0.0.1", content)
+                self.assert_success(self.repo.prepare(rc="true"))
+                self.assert_success(self.repo.prepare(rc="false"))
+        self.assertGreater(checked, 0, "CHANGELOG contains no release notes")
 
     def test_initial_stable_release_is_001_patch(self):
         result = self.repo.prepare()

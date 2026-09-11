@@ -11,6 +11,12 @@ Accumulate consumer-visible changes under `## Unreleased` in
 reserve `Fixed` for corrections to behavior in published versions. Do not add
 the next version heading or change the CLI version by hand.
 
+The first-release headings are `Capabilities`, `Parity with upstream sqlc`,
+`Known limitations` and `Deliberate exclusions`. Later releases can use `Added`,
+`Changed`, `Deprecated`, `Removed`, `Fixed`, `Security` and `Compatibility`.
+`make test-release` checks the repository's actual changelog as well as synthetic
+versioning cases, including extraction after a stable release clears Unreleased.
+
 The form has three inputs:
 
 | Input | Effect |

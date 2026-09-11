@@ -18,7 +18,11 @@ VERSION_SOURCE = Path("internal/cli/cli.go")
 STABLE_HEADING = re.compile(r"^## v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 VERSION_HEADING = re.compile(r"^## v\S+")
 VERSION_DECLARATION = re.compile(r'^var Version = "(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"$', re.MULTILINE)
-CHANGE_HEADING = re.compile(r"^### (Added|Changed|Deprecated|Removed|Fixed|Security|Compatibility)$", re.MULTILINE)
+CHANGE_HEADING = re.compile(
+    r"^### (Added|Changed|Deprecated|Removed|Fixed|Security|Compatibility|"
+    r"Capabilities|Parity with upstream sqlc|Known limitations|Deliberate exclusions)$",
+    re.MULTILINE,
+)
 BULLET = re.compile(r"^- .+\S", re.MULTILINE)
 
 
