@@ -71,9 +71,9 @@ class Queries(private val client: SessionRetryContext) {
         val _query = client.supplyResult { _session ->
             QueryReader.readFrom(_session.createQuery(
                 "-- name: CreateAuthor :one\n" +
-                "INSERT INTO authors (id, name, bio)\n" +
+                "INSERT INTO `authors` (`id`, `name`, `bio`)\n" +
                 "VALUES (\$author_id, \$author_name, \$biography)\n" +
-                "RETURNING id, name, bio;", TxMode.SERIALIZABLE_RW, _params))
+                "RETURNING `id`, `name`, `bio`;", TxMode.SERIALIZABLE_RW, _params))
         }.join().getValue()
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
         val _rows = _query.getResultSet(0)

@@ -65,9 +65,9 @@ class Queries(private val client: java.sql.Connection) {
             "DECLARE \$author_name AS Utf8;\n" +
             "DECLARE \$biography AS Optional<Utf8>;\n" +
             "-- name: CreateAuthor :one\n" +
-            "INSERT INTO authors (id, name, bio)\n" +
+            "INSERT INTO `authors` (`id`, `name`, `bio`)\n" +
             "VALUES (\$author_id, \$author_name, \$biography)\n" +
-            "RETURNING id, name, bio;").use { _prepared ->
+            "RETURNING `id`, `name`, `bio`;").use { _prepared ->
             val _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement::class.java)
             _statement.setObject("author_id", PrimitiveValue.newUint64(authorId))
             _statement.setObject("author_name", PrimitiveValue.newText(authorName))
