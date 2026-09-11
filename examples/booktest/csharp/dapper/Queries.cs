@@ -96,135 +96,271 @@ public sealed class Queries
         value.HasValue ? NormalizeTimestamp(value.Value) : null;
 
     // -- name: GetAuthor :one
-    public async Task<GetAuthorRow> GetAuthorAsync(ulong authorId, CancellationToken cancellationToken = default)
+    public async Task<GetAuthorRow> GetAuthorAsync(ulong authorId, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$author_id", DbType.UInt64, authorId)
+        );
+
         var command = new CommandDefinition(
-            "SELECT author_id, name\n" +
-            "FROM authors\n" +
-            "WHERE author_id = $author_id;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, authorId)), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            SELECT author_id, name
+            FROM authors
+            WHERE author_id = $author_id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         return await _connection.QueryFirstAsync<GetAuthorRow>(command).ConfigureAwait(false);
     }
 
     // -- name: GetBook :one
-    public async Task<GetBookRow> GetBookAsync(ulong bookId, CancellationToken cancellationToken = default)
+    public async Task<GetBookRow> GetBookAsync(ulong bookId, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$book_id", DbType.UInt64, bookId)
+        );
+
         var command = new CommandDefinition(
-            "SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags\n" +
-            "FROM books\n" +
-            "WHERE book_id = $book_id;", new YdbParameters(new YdbParameter("$book_id", DbType.UInt64, bookId)), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
+            FROM books
+            WHERE book_id = $book_id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         return await _connection.QueryFirstAsync<GetBookRow>(command).ConfigureAwait(false);
     }
 
     // -- name: DeleteBook :exec
-    public async Task DeleteBookAsync(ulong bookId, CancellationToken cancellationToken = default)
+    public async Task DeleteBookAsync(ulong bookId, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$book_id", DbType.UInt64, bookId)
+        );
+
         var command = new CommandDefinition(
-            "DELETE FROM books\n" +
-            "WHERE book_id = $book_id;", new YdbParameters(new YdbParameter("$book_id", DbType.UInt64, bookId)), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            DELETE FROM books
+            WHERE book_id = $book_id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
 
     // -- name: BooksByTitleYear :many
-    public async Task<IReadOnlyList<BooksByTitleYearRow>> BooksByTitleYearAsync(BooksByTitleYearParams args, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<BooksByTitleYearRow>> BooksByTitleYearAsync(BooksByTitleYearParams args, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$title", DbType.String, args.Title),
+            new YdbParameter("$publication_year", DbType.Int32, args.PublicationYear)
+        );
+
         var command = new CommandDefinition(
-            "SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags\n" +
-            "FROM books\n" +
-            "WHERE title = $title AND publication_year = $publication_year;", new YdbParameters(new YdbParameter("$title", DbType.String, args.Title), new YdbParameter("$publication_year", DbType.Int32, args.PublicationYear)), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
+            FROM books
+            WHERE title = $title AND publication_year = $publication_year;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         return (await _connection.QueryAsync<BooksByTitleYearRow>(command).ConfigureAwait(false)).AsList();
     }
 
     // -- name: BooksByTags :many
-    public async Task<IReadOnlyList<BooksByTagsRow>> BooksByTagsAsync(string tags, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<BooksByTagsRow>> BooksByTagsAsync(string tags, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$tags", YdbValue.MakeJson(tags))
+        );
+
         var command = new CommandDefinition(
-            "DECLARE $tags AS Json;\n" +
-            "SELECT\n" +
-            "    b.book_id,\n" +
-            "    b.title,\n" +
-            "    a.name,\n" +
-            "    b.isbn,\n" +
-            "    b.tags\n" +
-            "FROM books AS b\n" +
-            "LEFT JOIN authors AS a ON b.author_id = a.author_id\n" +
-            "WHERE NOT SetIsDisjoint(\n" +
-            "    ToSet(Yson::ConvertToStringList(b.tags)),\n" +
-            "    Yson::ConvertToStringList($tags)\n" +
-            ");", new YdbParameters(new YdbParameter("$tags", YdbValue.MakeJson(tags))), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            DECLARE $tags AS Json;
+            SELECT
+                b.book_id,
+                b.title,
+                a.name,
+                b.isbn,
+                b.tags
+            FROM books AS b
+            LEFT JOIN authors AS a ON b.author_id = a.author_id
+            WHERE NOT SetIsDisjoint(
+                ToSet(Yson::ConvertToStringList(b.tags)),
+                Yson::ConvertToStringList($tags)
+            );
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         return (await _connection.QueryAsync<BooksByTagsRow>(command).ConfigureAwait(false)).AsList();
     }
 
     // -- name: CreateAuthor :one
-    public async Task<CreateAuthorRow> CreateAuthorAsync(CreateAuthorParams args, CancellationToken cancellationToken = default)
+    public async Task<CreateAuthorRow> CreateAuthorAsync(CreateAuthorParams args, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$author_id", DbType.UInt64, args.AuthorID),
+            new YdbParameter("$name", DbType.String, args.Name)
+        );
+
         var command = new CommandDefinition(
-            "INSERT INTO authors (author_id, name)\n" +
-            "VALUES ($author_id, $name)\n" +
-            "RETURNING author_id, name;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, args.AuthorID), new YdbParameter("$name", DbType.String, args.Name)), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            INSERT INTO authors (author_id, name)
+            VALUES ($author_id, $name)
+            RETURNING author_id, name;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         return await _connection.QueryFirstAsync<CreateAuthorRow>(command).ConfigureAwait(false);
     }
 
     // -- name: CreateBook :one
-    public async Task<CreateBookRow> CreateBookAsync(CreateBookParams args, CancellationToken cancellationToken = default)
+    public async Task<CreateBookRow> CreateBookAsync(CreateBookParams args, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$book_id", DbType.UInt64, args.BookID),
+            new YdbParameter("$author_id", DbType.UInt64, args.AuthorID),
+            new YdbParameter("$isbn", DbType.String, args.Isbn),
+            new YdbParameter("$book_type", DbType.String, args.BookType),
+            new YdbParameter("$title", DbType.String, args.Title),
+            new YdbParameter("$publication_year", DbType.Int32, args.PublicationYear),
+            new YdbParameter("$available", YdbValue.MakeTimestamp(NormalizeTimestamp(args.Available))),
+            new YdbParameter("$tags", YdbValue.MakeJson(args.Tags))
+        );
+
         var command = new CommandDefinition(
-            "INSERT INTO books (\n" +
-            "    book_id,\n" +
-            "    author_id,\n" +
-            "    isbn,\n" +
-            "    book_type,\n" +
-            "    title,\n" +
-            "    publication_year,\n" +
-            "    available,\n" +
-            "    tags\n" +
-            ") VALUES (\n" +
-            "    $book_id,\n" +
-            "    $author_id,\n" +
-            "    $isbn,\n" +
-            "    $book_type,\n" +
-            "    $title,\n" +
-            "    $publication_year,\n" +
-            "    $available,\n" +
-            "    $tags\n" +
-            ")\n" +
-            "RETURNING book_id, author_id, isbn, book_type, title, publication_year, available, tags;", new YdbParameters(new YdbParameter("$book_id", DbType.UInt64, args.BookID), new YdbParameter("$author_id", DbType.UInt64, args.AuthorID), new YdbParameter("$isbn", DbType.String, args.Isbn), new YdbParameter("$book_type", DbType.String, args.BookType), new YdbParameter("$title", DbType.String, args.Title), new YdbParameter("$publication_year", DbType.Int32, args.PublicationYear), new YdbParameter("$available", YdbValue.MakeTimestamp(NormalizeTimestamp(args.Available))), new YdbParameter("$tags", YdbValue.MakeJson(args.Tags))), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            INSERT INTO books (
+                book_id,
+                author_id,
+                isbn,
+                book_type,
+                title,
+                publication_year,
+                available,
+                tags
+            ) VALUES (
+                $book_id,
+                $author_id,
+                $isbn,
+                $book_type,
+                $title,
+                $publication_year,
+                $available,
+                $tags
+            )
+            RETURNING book_id, author_id, isbn, book_type, title, publication_year, available, tags;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         return await _connection.QueryFirstAsync<CreateBookRow>(command).ConfigureAwait(false);
     }
 
     // -- name: UpdateBook :exec
-    public async Task UpdateBookAsync(UpdateBookParams args, CancellationToken cancellationToken = default)
+    public async Task UpdateBookAsync(UpdateBookParams args, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$title", DbType.String, args.Title),
+            new YdbParameter("$tags", YdbValue.MakeJson(args.Tags)),
+            new YdbParameter("$book_id", DbType.UInt64, args.BookID)
+        );
+
         var command = new CommandDefinition(
-            "UPDATE books\n" +
-            "SET title = $title, tags = $tags\n" +
-            "WHERE book_id = $book_id;", new YdbParameters(new YdbParameter("$title", DbType.String, args.Title), new YdbParameter("$tags", YdbValue.MakeJson(args.Tags)), new YdbParameter("$book_id", DbType.UInt64, args.BookID)), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            UPDATE books
+            SET title = $title, tags = $tags
+            WHERE book_id = $book_id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
 
     // -- name: UpdateBookISBN :exec
-    public async Task UpdateBookISBNAsync(UpdateBookISBNParams args, CancellationToken cancellationToken = default)
+    public async Task UpdateBookISBNAsync(UpdateBookISBNParams args, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$title", DbType.String, args.Title),
+            new YdbParameter("$tags", YdbValue.MakeJson(args.Tags)),
+            new YdbParameter("$isbn", DbType.String, args.Isbn),
+            new YdbParameter("$book_id", DbType.UInt64, args.BookID)
+        );
+
         var command = new CommandDefinition(
-            "UPDATE books\n" +
-            "SET title = $title, tags = $tags, isbn = $isbn\n" +
-            "WHERE book_id = $book_id;", new YdbParameters(new YdbParameter("$title", DbType.String, args.Title), new YdbParameter("$tags", YdbValue.MakeJson(args.Tags)), new YdbParameter("$isbn", DbType.String, args.Isbn), new YdbParameter("$book_id", DbType.UInt64, args.BookID)), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            UPDATE books
+            SET title = $title, tags = $tags, isbn = $isbn
+            WHERE book_id = $book_id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
 
     // -- name: DeleteAuthorBeforeYear :exec
-    public async Task DeleteAuthorBeforeYearAsync(DeleteAuthorBeforeYearParams args, CancellationToken cancellationToken = default)
+    public async Task DeleteAuthorBeforeYearAsync(DeleteAuthorBeforeYearParams args, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$publication_year", DbType.Int32, args.PublicationYear),
+            new YdbParameter("$author_id", DbType.UInt64, args.AuthorID)
+        );
+
         var command = new CommandDefinition(
-            "DELETE FROM books\n" +
-            "WHERE publication_year < $publication_year AND author_id = $author_id;", new YdbParameters(new YdbParameter("$publication_year", DbType.Int32, args.PublicationYear), new YdbParameter("$author_id", DbType.UInt64, args.AuthorID)), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            DELETE FROM books
+            WHERE publication_year < $publication_year AND author_id = $author_id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
 
     // -- name: SayHello :one
-    public async Task<SayHelloRow> SayHelloAsync(string name, CancellationToken cancellationToken = default)
+    public async Task<SayHelloRow> SayHelloAsync(string name, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$name", DbType.String, name)
+        );
+
         var command = new CommandDefinition(
-            "SELECT \"hello \"u || $name AS greeting;", new YdbParameters(new YdbParameter("$name", DbType.String, name)), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            SELECT "hello "u || $name AS greeting;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         return await _connection.QueryFirstAsync<SayHelloRow>(command).ConfigureAwait(false);
     }
 

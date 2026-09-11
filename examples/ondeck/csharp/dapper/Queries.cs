@@ -75,128 +75,242 @@ public sealed class Queries
         value.HasValue ? NormalizeTimestamp(value.Value) : null;
 
     // -- name: ListCities :many
-    public async Task<IReadOnlyList<ListCitiesRow>> ListCitiesAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ListCitiesRow>> ListCitiesAsync(CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
         var command = new CommandDefinition(
-            "SELECT slug, name\n" +
-            "FROM city\n" +
-            "ORDER BY name;", null, _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            SELECT slug, name
+            FROM city
+            ORDER BY name;
+            """,
+            parameters: null,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         return (await _connection.QueryAsync<ListCitiesRow>(command).ConfigureAwait(false)).AsList();
     }
 
     // -- name: GetCity :one
-    public async Task<GetCityRow> GetCityAsync(string slug, CancellationToken cancellationToken = default)
+    public async Task<GetCityRow> GetCityAsync(string slug, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$slug", DbType.String, slug)
+        );
+
         var command = new CommandDefinition(
-            "SELECT slug, name\n" +
-            "FROM city\n" +
-            "WHERE slug = $slug;", new YdbParameters(new YdbParameter("$slug", DbType.String, slug)), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            SELECT slug, name
+            FROM city
+            WHERE slug = $slug;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         return await _connection.QueryFirstAsync<GetCityRow>(command).ConfigureAwait(false);
     }
 
     // -- name: CreateCity :one
-    public async Task<CreateCityRow> CreateCityAsync(CreateCityParams args, CancellationToken cancellationToken = default)
+    public async Task<CreateCityRow> CreateCityAsync(CreateCityParams args, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$name", DbType.String, args.Name),
+            new YdbParameter("$slug", DbType.String, args.Slug)
+        );
+
         var command = new CommandDefinition(
-            "INSERT INTO city (\n" +
-            "    name,\n" +
-            "    slug\n" +
-            ") VALUES (\n" +
-            "    $name,\n" +
-            "    $slug\n" +
-            ") RETURNING slug, name;", new YdbParameters(new YdbParameter("$name", DbType.String, args.Name), new YdbParameter("$slug", DbType.String, args.Slug)), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            INSERT INTO city (
+                name,
+                slug
+            ) VALUES (
+                $name,
+                $slug
+            ) RETURNING slug, name;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         return await _connection.QueryFirstAsync<CreateCityRow>(command).ConfigureAwait(false);
     }
 
     // -- name: UpdateCityName :exec
-    public async Task UpdateCityNameAsync(UpdateCityNameParams args, CancellationToken cancellationToken = default)
+    public async Task UpdateCityNameAsync(UpdateCityNameParams args, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$name", DbType.String, args.Name),
+            new YdbParameter("$slug", DbType.String, args.Slug)
+        );
+
         var command = new CommandDefinition(
-            "UPDATE city\n" +
-            "SET name = $name\n" +
-            "WHERE slug = $slug;", new YdbParameters(new YdbParameter("$name", DbType.String, args.Name), new YdbParameter("$slug", DbType.String, args.Slug)), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            UPDATE city
+            SET name = $name
+            WHERE slug = $slug;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
 
     // -- name: ListVenues :many
-    public async Task<IReadOnlyList<ListVenuesRow>> ListVenuesAsync(string city, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ListVenuesRow>> ListVenuesAsync(string city, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$city", DbType.String, city)
+        );
+
         var command = new CommandDefinition(
-            "SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n" +
-            "FROM venue\n" +
-            "WHERE city = $city\n" +
-            "ORDER BY name;", new YdbParameters(new YdbParameter("$city", DbType.String, city)), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
+            FROM venue
+            WHERE city = $city
+            ORDER BY name;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         return (await _connection.QueryAsync<ListVenuesRow>(command).ConfigureAwait(false)).AsList();
     }
 
     // -- name: DeleteVenue :exec
-    public async Task DeleteVenueAsync(string slug, CancellationToken cancellationToken = default)
+    public async Task DeleteVenueAsync(string slug, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$slug", DbType.String, slug)
+        );
+
         var command = new CommandDefinition(
-            "DELETE FROM venue\n" +
-            "WHERE slug = $slug AND slug = $slug;", new YdbParameters(new YdbParameter("$slug", DbType.String, slug)), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            DELETE FROM venue
+            WHERE slug = $slug AND slug = $slug;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
 
     // -- name: GetVenue :one
-    public async Task<GetVenueRow> GetVenueAsync(GetVenueParams args, CancellationToken cancellationToken = default)
+    public async Task<GetVenueRow> GetVenueAsync(GetVenueParams args, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$slug", DbType.String, args.Slug),
+            new YdbParameter("$city", DbType.String, args.City)
+        );
+
         var command = new CommandDefinition(
-            "SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n" +
-            "FROM venue\n" +
-            "WHERE slug = $slug AND city = $city;", new YdbParameters(new YdbParameter("$slug", DbType.String, args.Slug), new YdbParameter("$city", DbType.String, args.City)), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
+            FROM venue
+            WHERE slug = $slug AND city = $city;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         return await _connection.QueryFirstAsync<GetVenueRow>(command).ConfigureAwait(false);
     }
 
     // -- name: CreateVenue :one
-    public async Task<CreateVenueRow> CreateVenueAsync(CreateVenueParams args, CancellationToken cancellationToken = default)
+    public async Task<CreateVenueRow> CreateVenueAsync(CreateVenueParams args, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$id", DbType.UInt64, args.ID),
+            new YdbParameter("$slug", DbType.String, args.Slug),
+            new YdbParameter("$name", DbType.String, args.Name),
+            new YdbParameter("$city", DbType.String, args.City),
+            new YdbParameter("$created_at", YdbValue.MakeOptionalTimestamp(NormalizeTimestamp(args.CreatedAt))),
+            new YdbParameter("$spotify_playlist", DbType.String, args.SpotifyPlaylist),
+            new YdbParameter("$status", DbType.String, args.Status),
+            new YdbParameter("$statuses", YdbValue.MakeOptionalJson(args.Statuses)),
+            new YdbParameter("$tags", YdbValue.MakeOptionalJson(args.Tags))
+        );
+
         var command = new CommandDefinition(
-            "INSERT INTO venue (\n" +
-            "    id,\n" +
-            "    slug,\n" +
-            "    name,\n" +
-            "    city,\n" +
-            "    created_at,\n" +
-            "    spotify_playlist,\n" +
-            "    status,\n" +
-            "    statuses,\n" +
-            "    tags\n" +
-            ") VALUES (\n" +
-            "    $id,\n" +
-            "    $slug,\n" +
-            "    $name,\n" +
-            "    $city,\n" +
-            "    $created_at,\n" +
-            "    $spotify_playlist,\n" +
-            "    $status,\n" +
-            "    $statuses,\n" +
-            "    $tags\n" +
-            ") RETURNING id;", new YdbParameters(new YdbParameter("$id", DbType.UInt64, args.ID), new YdbParameter("$slug", DbType.String, args.Slug), new YdbParameter("$name", DbType.String, args.Name), new YdbParameter("$city", DbType.String, args.City), new YdbParameter("$created_at", YdbValue.MakeOptionalTimestamp(NormalizeTimestamp(args.CreatedAt))), new YdbParameter("$spotify_playlist", DbType.String, args.SpotifyPlaylist), new YdbParameter("$status", DbType.String, args.Status), new YdbParameter("$statuses", YdbValue.MakeOptionalJson(args.Statuses)), new YdbParameter("$tags", YdbValue.MakeOptionalJson(args.Tags))), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            INSERT INTO venue (
+                id,
+                slug,
+                name,
+                city,
+                created_at,
+                spotify_playlist,
+                status,
+                statuses,
+                tags
+            ) VALUES (
+                $id,
+                $slug,
+                $name,
+                $city,
+                $created_at,
+                $spotify_playlist,
+                $status,
+                $statuses,
+                $tags
+            ) RETURNING id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         return await _connection.QueryFirstAsync<CreateVenueRow>(command).ConfigureAwait(false);
     }
 
     // -- name: UpdateVenueName :one
-    public async Task<UpdateVenueNameRow> UpdateVenueNameAsync(UpdateVenueNameParams args, CancellationToken cancellationToken = default)
+    public async Task<UpdateVenueNameRow> UpdateVenueNameAsync(UpdateVenueNameParams args, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$name", DbType.String, args.Name),
+            new YdbParameter("$slug", DbType.String, args.Slug)
+        );
+
         var command = new CommandDefinition(
-            "UPDATE venue\n" +
-            "SET name = $name\n" +
-            "WHERE slug = $slug\n" +
-            "RETURNING id;", new YdbParameters(new YdbParameter("$name", DbType.String, args.Name), new YdbParameter("$slug", DbType.String, args.Slug)), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            UPDATE venue
+            SET name = $name
+            WHERE slug = $slug
+            RETURNING id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         return await _connection.QueryFirstAsync<UpdateVenueNameRow>(command).ConfigureAwait(false);
     }
 
     // -- name: VenueCountByCity :many
-    public async Task<IReadOnlyList<VenueCountByCityRow>> VenueCountByCityAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<VenueCountByCityRow>> VenueCountByCityAsync(CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
         var command = new CommandDefinition(
-            "SELECT\n" +
-            "    city,\n" +
-            "    COUNT(*) AS venue_count\n" +
-            "FROM venue\n" +
-            "GROUP BY city\n" +
-            "ORDER BY city;", null, _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            SELECT
+                city,
+                COUNT(*) AS venue_count
+            FROM venue
+            GROUP BY city
+            ORDER BY city;
+            """,
+            parameters: null,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         return (await _connection.QueryAsync<VenueCountByCityRow>(command).ConfigureAwait(false)).AsList();
     }
 

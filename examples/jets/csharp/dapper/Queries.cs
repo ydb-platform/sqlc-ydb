@@ -57,26 +57,51 @@ public sealed class Queries
     }
 
     // -- name: CountPilots :one
-    public async Task<CountPilotsRow> CountPilotsAsync(CancellationToken cancellationToken = default)
+    public async Task<CountPilotsRow> CountPilotsAsync(CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
         var command = new CommandDefinition(
-            "SELECT COUNT(*) AS pilot_count FROM pilots;", null, _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            SELECT COUNT(*) AS pilot_count FROM pilots;
+            """,
+            parameters: null,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         return await _connection.QueryFirstAsync<CountPilotsRow>(command).ConfigureAwait(false);
     }
 
     // -- name: ListPilots :many
-    public async Task<IReadOnlyList<ListPilotsRow>> ListPilotsAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ListPilotsRow>> ListPilotsAsync(CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
         var command = new CommandDefinition(
-            "SELECT id, name FROM pilots ORDER BY id LIMIT 5;", null, _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            SELECT id, name FROM pilots ORDER BY id LIMIT 5;
+            """,
+            parameters: null,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         return (await _connection.QueryAsync<ListPilotsRow>(command).ConfigureAwait(false)).AsList();
     }
 
     // -- name: DeletePilot :exec
-    public async Task DeletePilotAsync(int pilotId, CancellationToken cancellationToken = default)
+    public async Task DeletePilotAsync(int pilotId, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$pilot_id", DbType.Int32, pilotId)
+        );
+
         var command = new CommandDefinition(
-            "DELETE FROM pilots WHERE id = $pilot_id;", new YdbParameters(new YdbParameter("$pilot_id", DbType.Int32, pilotId)), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            DELETE FROM pilots WHERE id = $pilot_id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
 

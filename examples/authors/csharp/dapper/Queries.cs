@@ -31,53 +31,119 @@ public sealed class Queries
     public Queries WithTransaction(YdbTransaction transaction) => new(_connection, transaction ?? throw new ArgumentNullException(nameof(transaction)));
 
     // -- name: GetAuthor :one
-    public async Task<GetAuthorRow> GetAuthorAsync(ulong authorId, CancellationToken cancellationToken = default)
+    public async Task<GetAuthorRow> GetAuthorAsync(ulong authorId, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$author_id", DbType.UInt64, authorId)
+        );
+
         var command = new CommandDefinition(
-            "SELECT id, name, bio FROM authors WHERE id = $author_id;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, authorId)), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            SELECT id, name, bio FROM authors WHERE id = $author_id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         return await _connection.QueryFirstAsync<GetAuthorRow>(command).ConfigureAwait(false);
     }
 
     // -- name: ListAuthors :many
-    public async Task<IReadOnlyList<ListAuthorsRow>> ListAuthorsAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ListAuthorsRow>> ListAuthorsAsync(CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
         var command = new CommandDefinition(
-            "SELECT id, name, bio FROM authors ORDER BY name;", null, _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            SELECT id, name, bio FROM authors ORDER BY name;
+            """,
+            parameters: null,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         return (await _connection.QueryAsync<ListAuthorsRow>(command).ConfigureAwait(false)).AsList();
     }
 
     // -- name: GetAuthorName :one
-    public async Task<GetAuthorNameRow> GetAuthorNameAsync(ulong authorId, CancellationToken cancellationToken = default)
+    public async Task<GetAuthorNameRow> GetAuthorNameAsync(ulong authorId, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$author_id", DbType.UInt64, authorId)
+        );
+
         var command = new CommandDefinition(
-            "SELECT name FROM authors WHERE id = $author_id;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, authorId)), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            SELECT name FROM authors WHERE id = $author_id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         return await _connection.QueryFirstAsync<GetAuthorNameRow>(command).ConfigureAwait(false);
     }
 
     // -- name: CreateAuthor :one
-    public async Task<CreateAuthorRow> CreateAuthorAsync(CreateAuthorParams args, CancellationToken cancellationToken = default)
+    public async Task<CreateAuthorRow> CreateAuthorAsync(CreateAuthorParams args, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$author_id", DbType.UInt64, args.AuthorID),
+            new YdbParameter("$author_name", DbType.String, args.AuthorName),
+            new YdbParameter("$biography", YdbValue.MakeOptionalUtf8(args.Biography))
+        );
+
         var command = new CommandDefinition(
-            "INSERT INTO `authors` (`id`, `name`, `bio`)\n" +
-            "VALUES ($author_id, $author_name, $biography)\n" +
-            "RETURNING `id`, `name`, `bio`;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, args.AuthorID), new YdbParameter("$author_name", DbType.String, args.AuthorName), new YdbParameter("$biography", YdbValue.MakeOptionalUtf8(args.Biography))), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            INSERT INTO `authors` (`id`, `name`, `bio`)
+            VALUES ($author_id, $author_name, $biography)
+            RETURNING `id`, `name`, `bio`;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         return await _connection.QueryFirstAsync<CreateAuthorRow>(command).ConfigureAwait(false);
     }
 
     // -- name: UpsertAuthor :exec
-    public async Task UpsertAuthorAsync(UpsertAuthorParams args, CancellationToken cancellationToken = default)
+    public async Task UpsertAuthorAsync(UpsertAuthorParams args, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$author_id", DbType.UInt64, args.AuthorID),
+            new YdbParameter("$author_name", DbType.String, args.AuthorName),
+            new YdbParameter("$biography", YdbValue.MakeOptionalUtf8(args.Biography))
+        );
+
         var command = new CommandDefinition(
-            "UPSERT INTO authors (id, name, bio)\n" +
-            "VALUES ($author_id, $author_name, $biography);", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, args.AuthorID), new YdbParameter("$author_name", DbType.String, args.AuthorName), new YdbParameter("$biography", YdbValue.MakeOptionalUtf8(args.Biography))), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            UPSERT INTO authors (id, name, bio)
+            VALUES ($author_id, $author_name, $biography);
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
 
     // -- name: DeleteAuthor :exec
-    public async Task DeleteAuthorAsync(ulong authorId, CancellationToken cancellationToken = default)
+    public async Task DeleteAuthorAsync(ulong authorId, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
+        var parameters = new YdbParameters(
+            new YdbParameter("$author_id", DbType.UInt64, authorId)
+        );
+
         var command = new CommandDefinition(
-            "DELETE FROM authors WHERE id = $author_id;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, authorId)), _transaction, cancellationToken: cancellationToken);
+            commandText: """
+            DELETE FROM authors WHERE id = $author_id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
 
