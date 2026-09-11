@@ -94,20 +94,18 @@ public final class Queries {
         _params.put("$author_id", PrimitiveValue.newUint64(authorId));
         _params.put("$author_name", PrimitiveValue.newText(authorName));
         _params.put("$biography", biography == null ? OptionalType.of(PrimitiveType.Text).emptyValue() : PrimitiveValue.newText(biography).makeOptional());
-        var _query = QueryReader.readFrom(
-                client.createQuery("""
-                    UPSERT INTO authors (id, name, bio)
-                    VALUES ($author_id, $author_name, $biography);\
-                    """, _params)).join().getValue();
+        client.createQuery("""
+            UPSERT INTO authors (id, name, bio)
+            VALUES ($author_id, $author_name, $biography);\
+            """, _params).execute().join().getStatus().expectSuccess();
     }
 
     // -- name: DeleteAuthor :exec
     public void deleteAuthor(long authorId) {
         var _params = Params.create();
         _params.put("$author_id", PrimitiveValue.newUint64(authorId));
-        var _query = QueryReader.readFrom(
-                client.createQuery("""
-                    DELETE FROM authors WHERE id = $author_id;\
-                    """, _params)).join().getValue();
+        client.createQuery("""
+            DELETE FROM authors WHERE id = $author_id;\
+            """, _params).execute().join().getStatus().expectSuccess();
     }
 }
