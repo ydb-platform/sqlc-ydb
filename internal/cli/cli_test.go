@@ -117,7 +117,7 @@ func TestOutputFileCannotBeAnotherOutputDirectory(t *testing.T) {
 }
 
 func TestCLIAndInit(t *testing.T) {
-	for _, args := range [][]string{{"generate", "--bogus"}, {"generate", "-f"}, {"version", "extra"}, {"init", "--v1", "--v2"}, {"push"}, {"generate", "--remote"}} {
+	for _, args := range [][]string{{"generate", "--bogus"}, {"generate", "-f"}, {"version", "extra"}, {"init", "--v1"}, {"push"}, {"generate", "--remote"}} {
 		if code, _, _ := invoke(args...); code == 0 {
 			t.Fatalf("accepted %v", args)
 		}
@@ -133,7 +133,7 @@ func TestCLIAndInit(t *testing.T) {
 		t.Fatal(err)
 	}
 	first, _ := os.ReadFile(cfg)
-	if code, _, err := invoke("init", "-f", cfg, "--v1"); code != 0 {
+	if code, _, err := invoke("init", "-f", cfg, "--v2"); code != 0 {
 		t.Fatal(err)
 	}
 	second, _ := os.ReadFile(cfg)

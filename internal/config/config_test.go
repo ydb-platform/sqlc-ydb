@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestVersionsAndDefaults(t *testing.T) {
+func TestFormatsAndDefaults(t *testing.T) {
 	for _, s := range []string{
 		`version: "2"
 sql:
@@ -18,7 +18,7 @@ sql:
     python:
       out: py
 `,
-		`{"version":"1","packages":[{"engine":"ydb","schema":"schema.sql","queries":["a.sql","b.sql"],"path":"db"}]}`,
+		`{"version":"2","sql":[{"engine":"ydb","schema":"schema.sql","queries":["a.sql","b.sql"],"gen":{"go":{"out":"db"}}}]}`,
 	} {
 		c, err := Parse([]byte(s))
 		if err != nil {
@@ -33,6 +33,8 @@ sql:
 func TestRejectUnsupportedConfiguration(t *testing.T) {
 	base := "version: '2'\nsql:\n- engine: ydb\n  schema: s.sql\n  queries: q.sql\n"
 	for _, tc := range []struct{ name, input, want string }{
+		{"unsupported version", strings.Replace(base, "version: '2'", "version: '1'", 1), `version must be "2"`},
+		{"legacy packages", "version: '1'\npackages: []\n", "field packages"},
 		{"plugin", base + "plugins: []\n", "migrate"},
 		{"codegen", base + "  codegen: []\n", "migrate"},
 		{"unknown", base + "  surprise: true\n", "field surprise"},

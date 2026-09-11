@@ -12,7 +12,7 @@ or simplifying SDK-specific code.
 | Area | Responsibility |
 | --- | --- |
 | `cmd/sqlc-ydb`, `internal/cli` | Commands, pipeline orchestration, output validation and file IO |
-| `internal/config` | Strict config parsing, supported options and defaults |
+| `internal/config` | Strict version 2 config parsing, supported options and defaults |
 | `internal/source` | Input ordering and migration Up sections |
 | `internal/analyzer` | Direct YQL parse contexts, catalog evolution, name/type resolution and diagnostics |
 | `internal/yql/builtins` | Strict supported YQL function, cast and common-type rules |

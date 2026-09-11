@@ -112,26 +112,13 @@ type SQL struct {
 	Codegen yaml.Node `yaml:"codegen"`
 }
 
-type v1Package struct {
-	Name            string `yaml:"name"`
-	Engine          string `yaml:"engine"`
-	Path            string `yaml:"path"`
-	Schema          Paths  `yaml:"schema"`
-	Queries         Paths  `yaml:"queries"`
-	SQLPackage      string `yaml:"sql_package"`
-	EmitJSONTags    bool   `yaml:"emit_json_tags"`
-	EmitInterface   bool   `yaml:"emit_interface"`
-	EmitEmptySlices bool   `yaml:"emit_empty_slices"`
-}
-
 type Config struct {
-	Version  string      `yaml:"version"`
-	SQL      []SQL       `yaml:"sql"`
-	Packages []v1Package `yaml:"packages"`
-	Plugins  yaml.Node   `yaml:"plugins"`
-	Engines  yaml.Node   `yaml:"engines"`
-	Path     string      `yaml:"-"`
-	Dir      string      `yaml:"-"`
+	Version string    `yaml:"version"`
+	SQL     []SQL     `yaml:"sql"`
+	Plugins yaml.Node `yaml:"plugins"`
+	Engines yaml.Node `yaml:"engines"`
+	Path    string    `yaml:"-"`
+	Dir     string    `yaml:"-"`
 }
 
 // Load resolves source/output paths relative to the configuration, not the cwd.
@@ -184,22 +171,8 @@ func Parse(data []byte) (*Config, error) {
 	if c.Plugins.Kind != 0 || c.Engines.Kind != 0 {
 		return nil, pluginError()
 	}
-	switch c.Version {
-	case "1":
-		if len(c.SQL) != 0 {
-			return nil, errors.New("version 1 uses packages, not sql")
-		}
-		for _, p := range c.Packages {
-			c.SQL = append(c.SQL, SQL{Name: p.Name, Engine: p.Engine, Schema: p.Schema, Queries: p.Queries, Gen: Gen{Go: &Go{
-				Package: p.Name, Out: p.Path, SQLPackage: p.SQLPackage, EmitJSONTags: p.EmitJSONTags, EmitInterface: p.EmitInterface, EmitEmptySlices: p.EmitEmptySlices,
-			}}})
-		}
-	case "2":
-		if len(c.Packages) != 0 {
-			return nil, errors.New("version 2 uses sql, not packages")
-		}
-	default:
-		return nil, errors.New("version must be \"1\" or \"2\"")
+	if c.Version != "2" {
+		return nil, errors.New("version must be \"2\"")
 	}
 	if len(c.SQL) == 0 {
 		return nil, errors.New("configuration contains no SQL query sets")

@@ -39,7 +39,7 @@ Commands:
   generate   Analyze queries and generate source code
   compile    Analyze schema and queries without generating files
   diff       Compare generated code with existing files (exit 1 on differences)
-  init       Create a sqlc.yaml configuration (--v1 or --v2)
+  init       Create a sqlc.yaml configuration (version 2)
   version    Print the version (--verbose includes the build commit)
 
 Options:
@@ -50,7 +50,7 @@ Options:
 
 type arguments struct {
 	command, file string
-	v1, help      bool
+	help          bool
 	verbose       bool
 }
 
@@ -76,8 +76,6 @@ func parseArgs(args []string) (arguments, error) {
 		case arg == "--no-remote":
 		case arg == "--remote":
 			return a, errors.New("remote execution is not implemented; sqlc-ydb runs locally")
-		case arg == "--v1":
-			a.v1 = true
 		case arg == "--v2":
 			v2 = true
 		case arg == "--verbose":
@@ -91,11 +89,8 @@ func parseArgs(args []string) (arguments, error) {
 			a.command = arg
 		}
 	}
-	if a.v1 && v2 {
-		return a, errors.New("--v1 and --v2 are mutually exclusive")
-	}
-	if (a.v1 || v2) && a.command != "init" {
-		return a, errors.New("--v1 and --v2 are only valid for init")
+	if v2 && a.command != "init" {
+		return a, errors.New("--v2 is only valid for init")
 	}
 	if a.verbose && a.command != "version" {
 		return a, errors.New("--verbose is only valid for version")
@@ -455,17 +450,6 @@ sql:
         out: queries
         runtime: ydb
 `
-	if a.v1 {
-		text = `version: "1"
-packages:
-  - name: db
-    engine: ydb
-    path: db
-    schema: schema.sql
-    queries: query.sql
-    sql_package: ydb
-`
-	}
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 	if errors.Is(err, os.ErrExist) {
 		_, err = fmt.Fprintf(w, "%s is already created\n", path)

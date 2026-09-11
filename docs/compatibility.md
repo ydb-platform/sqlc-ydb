@@ -28,8 +28,8 @@ not designate a compatible upstream sqlc version.
 - `version` prints one version string; `version --verbose` also prints the
   commit embedded by release builds. Ordinary source builds report `unknown`
   unless the commit is supplied through linker flags.
-- `sqlc.yaml`, `sqlc.yml`, and `sqlc.json`; config version 2 and the basic version 1
-  Go `packages` format. Paths resolve relative to the configuration.
+- `sqlc.yaml`, `sqlc.yml`, and `sqlc.json`; configuration version 2. Paths resolve
+  relative to the configuration.
 - File paths, lists, nonrecursive directories, and ordinary glob patterns.
   Explicit list order is retained; directory entries and glob matches use
   lexical order. Hidden files and `*.down.sql` are excluded.
@@ -64,8 +64,9 @@ Only the commands and options above are implemented. In particular:
 - No `sqlc.arg`, `sqlc.narg`, `sqlc.embed` or `sqlc.slice` macros, type/name
   overrides, driver batch APIs, COPY helpers or command-tag results.
 - `--no-remote` is accepted because execution is always local; `--remote` and
-  upstream's `--no-database` are unsupported. `init --v1` and `--v2` are
-  supported; `version --verbose` is a sqlc-ydb extension.
+  upstream's `--no-database` are unsupported. `init` creates a version 2
+  configuration (`--v2` is also accepted); `version --verbose` is a sqlc-ydb
+  extension.
 - SQL parameters use YQL `$name` syntax. Driver-specific placeholder rewriting
   happens during generation; `$1`, `?` and `@name` are not accepted as an
   alternative input dialect.

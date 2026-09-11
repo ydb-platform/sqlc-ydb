@@ -31,7 +31,7 @@ for release status. Installation and artifact verification are described in
 ## Feature parity with sqlc
 
 The core `generate`, `compile`, `diff`, `init` and `version` workflow is supported.
-Configuration is a subset of sqlc v2 and basic v1 Go packages; queries use YQL
+Configuration is a subset of sqlc v2; queries use YQL
 parameters and `:one`, `:many`, or `:exec` annotations. Other database engines,
 external plugins, sqlc macros, database-assisted analysis and cloud workflows
 are not supported.
