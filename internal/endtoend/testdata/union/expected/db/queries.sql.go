@@ -6,17 +6,18 @@ import (
 	"context"
 )
 
+// -- name: DistinctLabels :many
 func (q *Queries) DistinctLabels(ctx context.Context) ([]DistinctLabelsRow, error) {
-	rows, err := q.db.QueryContext(ctx, `-- name: DistinctLabels :many
-		SELECT id, label FROM local_labels
-		UNION
-		SELECT id, label FROM imported_labels;
-		`,
+	rows, err := q.db.QueryContext(ctx,
+		"SELECT id, label FROM local_labels "+
+			"UNION "+
+			"SELECT id, label FROM imported_labels;",
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+
 	items := []DistinctLabelsRow(nil)
 	for rows.Next() {
 		var row DistinctLabelsRow
@@ -28,23 +29,26 @@ func (q *Queries) DistinctLabels(ctx context.Context) ([]DistinctLabelsRow, erro
 		}
 		items = append(items, row)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+
 	return items, nil
 }
 
+// -- name: QualifiedMissing :many
 func (q *Queries) QualifiedMissing(ctx context.Context) ([]QualifiedMissingRow, error) {
-	rows, err := q.db.QueryContext(ctx, `-- name: QualifiedMissing :many
-		SELECT a.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id
-		UNION ALL
-		SELECT b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id;
-		`,
+	rows, err := q.db.QueryContext(ctx,
+		"SELECT a.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id "+
+			"UNION ALL "+
+			"SELECT b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id;",
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+
 	items := []QualifiedMissingRow(nil)
 	for rows.Next() {
 		var row QualifiedMissingRow
@@ -56,23 +60,26 @@ func (q *Queries) QualifiedMissing(ctx context.Context) ([]QualifiedMissingRow, 
 		}
 		items = append(items, row)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+
 	return items, nil
 }
 
+// -- name: QualifiedNames :many
 func (q *Queries) QualifiedNames(ctx context.Context) ([]QualifiedNamesRow, error) {
-	rows, err := q.db.QueryContext(ctx, `-- name: QualifiedNames :many
-		SELECT a.id, b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id
-		UNION ALL
-		SELECT a.id, b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id;
-		`,
+	rows, err := q.db.QueryContext(ctx,
+		"SELECT a.id, b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id "+
+			"UNION ALL "+
+			"SELECT a.id, b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id;",
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+
 	items := []QualifiedNamesRow(nil)
 	for rows.Next() {
 		var row QualifiedNamesRow
@@ -84,23 +91,26 @@ func (q *Queries) QualifiedNames(ctx context.Context) ([]QualifiedNamesRow, erro
 		}
 		items = append(items, row)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+
 	return items, nil
 }
 
+// -- name: AllLabels :many
 func (q *Queries) AllLabels(ctx context.Context) ([]AllLabelsRow, error) {
-	rows, err := q.db.QueryContext(ctx, `-- name: AllLabels :many
-		SELECT id, label FROM local_labels
-		UNION ALL
-		SELECT id, label FROM imported_labels;
-		`,
+	rows, err := q.db.QueryContext(ctx,
+		"SELECT id, label FROM local_labels "+
+			"UNION ALL "+
+			"SELECT id, label FROM imported_labels;",
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+
 	items := []AllLabelsRow(nil)
 	for rows.Next() {
 		var row AllLabelsRow
@@ -112,8 +122,10 @@ func (q *Queries) AllLabels(ctx context.Context) ([]AllLabelsRow, error) {
 		}
 		items = append(items, row)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+
 	return items, nil
 }

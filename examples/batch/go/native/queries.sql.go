@@ -12,6 +12,7 @@ import (
 	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 
+// -- name: GetAuthor :one
 func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$author_id").Uint64(arg)
@@ -19,11 +20,10 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx, `
-		-- name: GetAuthor :one
-		SELECT author_id, name, biography FROM authors
-		WHERE author_id = $author_id;
-		`, callOptions...,
+	result, err := q.db.QueryRow(ctx,
+		"SELECT author_id, name, biography FROM authors "+
+			"WHERE author_id = $author_id;",
+		callOptions...,
 	)
 	if err != nil {
 		return GetAuthorRow{}, err
@@ -41,6 +41,7 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 	return row, nil
 }
 
+// -- name: DeleteBookExecResult :exec
 func (q *Queries) DeleteBookExecResult(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$book_id").Uint64(arg)
@@ -48,14 +49,14 @@ func (q *Queries) DeleteBookExecResult(ctx context.Context, arg uint64, opts ...
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx, `
-		-- name: DeleteBookExecResult :exec
-		DELETE FROM books
-		WHERE book_id = $book_id;
-		`, callOptions...,
+	return q.db.Exec(ctx,
+		"DELETE FROM books "+
+			"WHERE book_id = $book_id;",
+		callOptions...,
 	)
 }
 
+// -- name: DeleteBook :exec
 func (q *Queries) DeleteBook(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$book_id").Uint64(arg)
@@ -63,14 +64,14 @@ func (q *Queries) DeleteBook(ctx context.Context, arg uint64, opts ...query.Exec
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx, `
-		-- name: DeleteBook :exec
-		DELETE FROM books
-		WHERE book_id = $book_id;
-		`, callOptions...,
+	return q.db.Exec(ctx,
+		"DELETE FROM books "+
+			"WHERE book_id = $book_id;",
+		callOptions...,
 	)
 }
 
+// -- name: DeleteBookNamedFunc :exec
 func (q *Queries) DeleteBookNamedFunc(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$book_id").Uint64(arg)
@@ -78,14 +79,14 @@ func (q *Queries) DeleteBookNamedFunc(ctx context.Context, arg uint64, opts ...q
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx, `
-		-- name: DeleteBookNamedFunc :exec
-		DELETE FROM books
-		WHERE book_id = $book_id;
-		`, callOptions...,
+	return q.db.Exec(ctx,
+		"DELETE FROM books "+
+			"WHERE book_id = $book_id;",
+		callOptions...,
 	)
 }
 
+// -- name: DeleteBookNamedSign :exec
 func (q *Queries) DeleteBookNamedSign(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$book_id").Uint64(arg)
@@ -93,14 +94,14 @@ func (q *Queries) DeleteBookNamedSign(ctx context.Context, arg uint64, opts ...q
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx, `
-		-- name: DeleteBookNamedSign :exec
-		DELETE FROM books
-		WHERE book_id = $book_id;
-		`, callOptions...,
+	return q.db.Exec(ctx,
+		"DELETE FROM books "+
+			"WHERE book_id = $book_id;",
+		callOptions...,
 	)
 }
 
+// -- name: BooksByYear :many
 func (q *Queries) BooksByYear(ctx context.Context, arg int32, opts ...query.ExecuteOption) ([]BooksByYearRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$year").Int32(arg)
@@ -108,12 +109,11 @@ func (q *Queries) BooksByYear(ctx context.Context, arg int32, opts ...query.Exec
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.Query(ctx, `
-		-- name: BooksByYear :many
-		SELECT book_id, author_id, isbn, book_type, title, year, available, tags
-		FROM books
-		WHERE year = $year;
-		`, callOptions...,
+	result, err := q.db.Query(ctx,
+		"SELECT book_id, author_id, isbn, book_type, title, year, available, tags "+
+			"FROM books "+
+			"WHERE year = $year;",
+		callOptions...,
 	)
 	if err != nil {
 		return nil, err
@@ -159,6 +159,7 @@ func (q *Queries) BooksByYear(ctx context.Context, arg int32, opts ...query.Exec
 	return items, nil
 }
 
+// -- name: CreateAuthor :one
 func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts ...query.ExecuteOption) (CreateAuthorRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$author_id").Uint64(arg.AuthorID)
@@ -168,12 +169,11 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx, `
-		-- name: CreateAuthor :one
-		INSERT INTO authors (author_id, name, biography)
-		VALUES ($author_id, $name, $biography)
-		RETURNING author_id, name, biography;
-		`, callOptions...,
+	result, err := q.db.QueryRow(ctx,
+		"INSERT INTO authors (author_id, name, biography) "+
+			"VALUES ($author_id, $name, $biography) "+
+			"RETURNING author_id, name, biography;",
+		callOptions...,
 	)
 	if err != nil {
 		return CreateAuthorRow{}, err
@@ -191,6 +191,7 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts
 	return row, nil
 }
 
+// -- name: CreateBook :one
 func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams, opts ...query.ExecuteOption) (CreateBookRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$book_id").Uint64(arg.BookID)
@@ -205,12 +206,11 @@ func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams, opts ...
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx, `
-		-- name: CreateBook :one
-		INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)
-		VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)
-		RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;
-		`, callOptions...,
+	result, err := q.db.QueryRow(ctx,
+		"INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags) "+
+			"VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags) "+
+			"RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;",
+		callOptions...,
 	)
 	if err != nil {
 		return CreateBookRow{}, err
@@ -233,6 +233,7 @@ func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams, opts ...
 	return row, nil
 }
 
+// -- name: UpdateBook :exec
 func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams, opts ...query.ExecuteOption) error {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$title").Text(arg.Title)
@@ -242,15 +243,15 @@ func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams, opts ...
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx, `
-		-- name: UpdateBook :exec
-		UPDATE books
-		SET title = $title, tags = $tags
-		WHERE book_id = $book_id;
-		`, callOptions...,
+	return q.db.Exec(ctx,
+		"UPDATE books "+
+			"SET title = $title, tags = $tags "+
+			"WHERE book_id = $book_id;",
+		callOptions...,
 	)
 }
 
+// -- name: GetBiography :one
 func (q *Queries) GetBiography(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetBiographyRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$author_id").Uint64(arg)
@@ -258,11 +259,10 @@ func (q *Queries) GetBiography(ctx context.Context, arg uint64, opts ...query.Ex
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx, `
-		-- name: GetBiography :one
-		SELECT biography FROM authors
-		WHERE author_id = $author_id;
-		`, callOptions...,
+	result, err := q.db.QueryRow(ctx,
+		"SELECT biography FROM authors "+
+			"WHERE author_id = $author_id;",
+		callOptions...,
 	)
 	if err != nil {
 		return GetBiographyRow{}, err

@@ -12,6 +12,7 @@ import (
 	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 
+// -- name: ListVenues :many
 func (q *Queries) ListVenues(ctx context.Context, arg string, opts ...query.ExecuteOption) ([]ListVenuesRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$city").Text(arg)
@@ -19,13 +20,12 @@ func (q *Queries) ListVenues(ctx context.Context, arg string, opts ...query.Exec
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.Query(ctx, `
-		-- name: ListVenues :many
-		SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
-		FROM venue
-		WHERE city = $city
-		ORDER BY name;
-		`, callOptions...,
+	result, err := q.db.Query(ctx,
+		"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at "+
+			"FROM venue "+
+			"WHERE city = $city "+
+			"ORDER BY name;",
+		callOptions...,
 	)
 	if err != nil {
 		return nil, err
@@ -73,6 +73,7 @@ func (q *Queries) ListVenues(ctx context.Context, arg string, opts ...query.Exec
 	return items, nil
 }
 
+// -- name: DeleteVenue :exec
 func (q *Queries) DeleteVenue(ctx context.Context, arg string, opts ...query.ExecuteOption) error {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$slug").Text(arg)
@@ -80,14 +81,14 @@ func (q *Queries) DeleteVenue(ctx context.Context, arg string, opts ...query.Exe
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx, `
-		-- name: DeleteVenue :exec
-		DELETE FROM venue
-		WHERE slug = $slug AND slug = $slug;
-		`, callOptions...,
+	return q.db.Exec(ctx,
+		"DELETE FROM venue "+
+			"WHERE slug = $slug AND slug = $slug;",
+		callOptions...,
 	)
 }
 
+// -- name: GetVenue :one
 func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams, opts ...query.ExecuteOption) (GetVenueRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$slug").Text(arg.Slug)
@@ -96,12 +97,11 @@ func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams, opts ...quer
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx, `
-		-- name: GetVenue :one
-		SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
-		FROM venue
-		WHERE slug = $slug AND city = $city;
-		`, callOptions...,
+	result, err := q.db.QueryRow(ctx,
+		"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at "+
+			"FROM venue "+
+			"WHERE slug = $slug AND city = $city;",
+		callOptions...,
 	)
 	if err != nil {
 		return GetVenueRow{}, err
@@ -126,6 +126,7 @@ func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams, opts ...quer
 	return row, nil
 }
 
+// -- name: CreateVenue :one
 func (q *Queries) CreateVenue(ctx context.Context, arg CreateVenueParams, opts ...query.ExecuteOption) (CreateVenueRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$id").Uint64(arg.ID)
@@ -141,30 +142,29 @@ func (q *Queries) CreateVenue(ctx context.Context, arg CreateVenueParams, opts .
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx, `
-		-- name: CreateVenue :one
-		INSERT INTO venue (
-		    id,
-		    slug,
-		    name,
-		    city,
-		    created_at,
-		    spotify_playlist,
-		    status,
-		    statuses,
-		    tags
-		) VALUES (
-		    $id,
-		    $slug,
-		    $name,
-		    $city,
-		    $created_at,
-		    $spotify_playlist,
-		    $status,
-		    $statuses,
-		    $tags
-		) RETURNING id;
-		`, callOptions...,
+	result, err := q.db.QueryRow(ctx,
+		"INSERT INTO venue ( "+
+			"id, "+
+			"slug, "+
+			"name, "+
+			"city, "+
+			"created_at, "+
+			"spotify_playlist, "+
+			"status, "+
+			"statuses, "+
+			"tags "+
+			") VALUES ( "+
+			"$id, "+
+			"$slug, "+
+			"$name, "+
+			"$city, "+
+			"$created_at, "+
+			"$spotify_playlist, "+
+			"$status, "+
+			"$statuses, "+
+			"$tags "+
+			") RETURNING id;",
+		callOptions...,
 	)
 	if err != nil {
 		return CreateVenueRow{}, err
@@ -180,6 +180,7 @@ func (q *Queries) CreateVenue(ctx context.Context, arg CreateVenueParams, opts .
 	return row, nil
 }
 
+// -- name: UpdateVenueName :one
 func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams, opts ...query.ExecuteOption) (UpdateVenueNameRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$name").Text(arg.Name)
@@ -188,13 +189,12 @@ func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx, `
-		-- name: UpdateVenueName :one
-		UPDATE venue
-		SET name = $name
-		WHERE slug = $slug
-		RETURNING id;
-		`, callOptions...,
+	result, err := q.db.QueryRow(ctx,
+		"UPDATE venue "+
+			"SET name = $name "+
+			"WHERE slug = $slug "+
+			"RETURNING id;",
+		callOptions...,
 	)
 	if err != nil {
 		return UpdateVenueNameRow{}, err
@@ -210,16 +210,16 @@ func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams
 	return row, nil
 }
 
+// -- name: VenueCountByCity :many
 func (q *Queries) VenueCountByCity(ctx context.Context, opts ...query.ExecuteOption) ([]VenueCountByCityRow, error) {
-	result, err := q.db.Query(ctx, `
-		-- name: VenueCountByCity :many
-		SELECT
-		    city,
-		    COUNT(*) AS venue_count
-		FROM venue
-		GROUP BY city
-		ORDER BY city;
-		`, opts...,
+	result, err := q.db.Query(ctx,
+		"SELECT "+
+			"city, "+
+			"COUNT(*) AS venue_count "+
+			"FROM venue "+
+			"GROUP BY city "+
+			"ORDER BY city;",
+		opts...,
 	)
 	if err != nil {
 		return nil, err

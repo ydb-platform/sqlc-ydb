@@ -7,17 +7,18 @@ import (
 	"database/sql"
 )
 
+// -- name: ListCities :many
 func (q *Queries) ListCities(ctx context.Context) ([]ListCitiesRow, error) {
-	rows, err := q.db.QueryContext(ctx, `-- name: ListCities :many
-		SELECT slug, name
-		FROM city
-		ORDER BY name;
-		`,
+	rows, err := q.db.QueryContext(ctx,
+		"SELECT slug, name "+
+			"FROM city "+
+			"ORDER BY name;",
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+
 	items := []ListCitiesRow(nil)
 	for rows.Next() {
 		var row ListCitiesRow
@@ -29,52 +30,60 @@ func (q *Queries) ListCities(ctx context.Context) ([]ListCitiesRow, error) {
 		}
 		items = append(items, row)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+
 	return items, nil
 }
 
+// -- name: GetCity :one
 func (q *Queries) GetCity(ctx context.Context, arg string) (GetCityRow, error) {
 	var row GetCityRow
-	err := q.db.QueryRowContext(ctx, `-- name: GetCity :one
-		SELECT slug, name
-		FROM city
-		WHERE slug = $slug;
-		`, sql.Named("slug", arg),
+	err := q.db.QueryRowContext(ctx,
+		"SELECT slug, name "+
+			"FROM city "+
+			"WHERE slug = $slug;",
+		sql.Named("slug", arg),
 	).Scan(
 		&row.Slug,
 		&row.Name,
 	)
+
 	return row, err
 }
 
+// -- name: CreateCity :one
 func (q *Queries) CreateCity(ctx context.Context, arg CreateCityParams) (CreateCityRow, error) {
 	var row CreateCityRow
-	err := q.db.QueryRowContext(ctx, `-- name: CreateCity :one
-		INSERT INTO city (
-		    name,
-		    slug
-		) VALUES (
-		    $name,
-		    $slug
-		) RETURNING slug, name;
-		`, sql.Named("name", arg.Name),
+	err := q.db.QueryRowContext(ctx,
+		"INSERT INTO city ( "+
+			"name, "+
+			"slug "+
+			") VALUES ( "+
+			"$name, "+
+			"$slug "+
+			") RETURNING slug, name;",
+		sql.Named("name", arg.Name),
 		sql.Named("slug", arg.Slug),
 	).Scan(
 		&row.Slug,
 		&row.Name,
 	)
+
 	return row, err
 }
 
+// -- name: UpdateCityName :exec
 func (q *Queries) UpdateCityName(ctx context.Context, arg UpdateCityNameParams) error {
-	_, err := q.db.ExecContext(ctx, `-- name: UpdateCityName :exec
-		UPDATE city
-		SET name = $name
-		WHERE slug = $slug;
-		`, sql.Named("name", arg.Name),
+	_, err := q.db.ExecContext(ctx,
+		"UPDATE city "+
+			"SET name = $name "+
+			"WHERE slug = $slug;",
+		sql.Named("name", arg.Name),
 		sql.Named("slug", arg.Slug),
 	)
+
 	return err
 }

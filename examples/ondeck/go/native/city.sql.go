@@ -12,13 +12,13 @@ import (
 	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 
+// -- name: ListCities :many
 func (q *Queries) ListCities(ctx context.Context, opts ...query.ExecuteOption) ([]ListCitiesRow, error) {
-	result, err := q.db.Query(ctx, `
-		-- name: ListCities :many
-		SELECT slug, name
-		FROM city
-		ORDER BY name;
-		`, opts...,
+	result, err := q.db.Query(ctx,
+		"SELECT slug, name "+
+			"FROM city "+
+			"ORDER BY name;",
+		opts...,
 	)
 	if err != nil {
 		return nil, err
@@ -58,6 +58,7 @@ func (q *Queries) ListCities(ctx context.Context, opts ...query.ExecuteOption) (
 	return items, nil
 }
 
+// -- name: GetCity :one
 func (q *Queries) GetCity(ctx context.Context, arg string, opts ...query.ExecuteOption) (GetCityRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$slug").Text(arg)
@@ -65,12 +66,11 @@ func (q *Queries) GetCity(ctx context.Context, arg string, opts ...query.Execute
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx, `
-		-- name: GetCity :one
-		SELECT slug, name
-		FROM city
-		WHERE slug = $slug;
-		`, callOptions...,
+	result, err := q.db.QueryRow(ctx,
+		"SELECT slug, name "+
+			"FROM city "+
+			"WHERE slug = $slug;",
+		callOptions...,
 	)
 	if err != nil {
 		return GetCityRow{}, err
@@ -87,6 +87,7 @@ func (q *Queries) GetCity(ctx context.Context, arg string, opts ...query.Execute
 	return row, nil
 }
 
+// -- name: CreateCity :one
 func (q *Queries) CreateCity(ctx context.Context, arg CreateCityParams, opts ...query.ExecuteOption) (CreateCityRow, error) {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$name").Text(arg.Name)
@@ -95,16 +96,15 @@ func (q *Queries) CreateCity(ctx context.Context, arg CreateCityParams, opts ...
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx, `
-		-- name: CreateCity :one
-		INSERT INTO city (
-		    name,
-		    slug
-		) VALUES (
-		    $name,
-		    $slug
-		) RETURNING slug, name;
-		`, callOptions...,
+	result, err := q.db.QueryRow(ctx,
+		"INSERT INTO city ( "+
+			"name, "+
+			"slug "+
+			") VALUES ( "+
+			"$name, "+
+			"$slug "+
+			") RETURNING slug, name;",
+		callOptions...,
 	)
 	if err != nil {
 		return CreateCityRow{}, err
@@ -121,6 +121,7 @@ func (q *Queries) CreateCity(ctx context.Context, arg CreateCityParams, opts ...
 	return row, nil
 }
 
+// -- name: UpdateCityName :exec
 func (q *Queries) UpdateCityName(ctx context.Context, arg UpdateCityNameParams, opts ...query.ExecuteOption) error {
 	parameters := ydb.ParamsBuilder()
 	parameters = parameters.Param("$name").Text(arg.Name)
@@ -129,11 +130,10 @@ func (q *Queries) UpdateCityName(ctx context.Context, arg UpdateCityNameParams, 
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx, `
-		-- name: UpdateCityName :exec
-		UPDATE city
-		SET name = $name
-		WHERE slug = $slug;
-		`, callOptions...,
+	return q.db.Exec(ctx,
+		"UPDATE city "+
+			"SET name = $name "+
+			"WHERE slug = $slug;",
+		callOptions...,
 	)
 }

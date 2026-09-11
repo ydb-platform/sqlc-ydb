@@ -9,18 +9,20 @@ import (
 	"github.com/ydb-platform/ydb-go-sdk/v3/types"
 )
 
+// -- name: ListVenues :many
 func (q *Queries) ListVenues(ctx context.Context, arg string) ([]ListVenuesRow, error) {
-	rows, err := q.db.QueryContext(ctx, `-- name: ListVenues :many
-		SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
-		FROM venue
-		WHERE city = $city
-		ORDER BY name;
-		`, sql.Named("city", arg),
+	rows, err := q.db.QueryContext(ctx,
+		"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at "+
+			"FROM venue "+
+			"WHERE city = $city "+
+			"ORDER BY name;",
+		sql.Named("city", arg),
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+
 	items := []ListVenuesRow(nil)
 	for rows.Next() {
 		var row ListVenuesRow
@@ -40,28 +42,33 @@ func (q *Queries) ListVenues(ctx context.Context, arg string) ([]ListVenuesRow, 
 		}
 		items = append(items, row)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+
 	return items, nil
 }
 
+// -- name: DeleteVenue :exec
 func (q *Queries) DeleteVenue(ctx context.Context, arg string) error {
-	_, err := q.db.ExecContext(ctx, `-- name: DeleteVenue :exec
-		DELETE FROM venue
-		WHERE slug = $slug AND slug = $slug;
-		`, sql.Named("slug", arg),
+	_, err := q.db.ExecContext(ctx,
+		"DELETE FROM venue "+
+			"WHERE slug = $slug AND slug = $slug;",
+		sql.Named("slug", arg),
 	)
+
 	return err
 }
 
+// -- name: GetVenue :one
 func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams) (GetVenueRow, error) {
 	var row GetVenueRow
-	err := q.db.QueryRowContext(ctx, `-- name: GetVenue :one
-		SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
-		FROM venue
-		WHERE slug = $slug AND city = $city;
-		`, sql.Named("slug", arg.Slug),
+	err := q.db.QueryRowContext(ctx,
+		"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at "+
+			"FROM venue "+
+			"WHERE slug = $slug AND city = $city;",
+		sql.Named("slug", arg.Slug),
 		sql.Named("city", arg.City),
 	).Scan(
 		&row.ID,
@@ -75,34 +82,36 @@ func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams) (GetVenueRow
 		&row.Tags,
 		&row.CreatedAt,
 	)
+
 	return row, err
 }
 
+// -- name: CreateVenue :one
 func (q *Queries) CreateVenue(ctx context.Context, arg CreateVenueParams) (CreateVenueRow, error) {
 	var row CreateVenueRow
-	err := q.db.QueryRowContext(ctx, `-- name: CreateVenue :one
-		INSERT INTO venue (
-		    id,
-		    slug,
-		    name,
-		    city,
-		    created_at,
-		    spotify_playlist,
-		    status,
-		    statuses,
-		    tags
-		) VALUES (
-		    $id,
-		    $slug,
-		    $name,
-		    $city,
-		    $created_at,
-		    $spotify_playlist,
-		    $status,
-		    $statuses,
-		    $tags
-		) RETURNING id;
-		`, sql.Named("id", arg.ID),
+	err := q.db.QueryRowContext(ctx,
+		"INSERT INTO venue ( "+
+			"id, "+
+			"slug, "+
+			"name, "+
+			"city, "+
+			"created_at, "+
+			"spotify_playlist, "+
+			"status, "+
+			"statuses, "+
+			"tags "+
+			") VALUES ( "+
+			"$id, "+
+			"$slug, "+
+			"$name, "+
+			"$city, "+
+			"$created_at, "+
+			"$spotify_playlist, "+
+			"$status, "+
+			"$statuses, "+
+			"$tags "+
+			") RETURNING id;",
+		sql.Named("id", arg.ID),
 		sql.Named("slug", arg.Slug),
 		sql.Named("name", arg.Name),
 		sql.Named("city", arg.City),
@@ -114,38 +123,42 @@ func (q *Queries) CreateVenue(ctx context.Context, arg CreateVenueParams) (Creat
 	).Scan(
 		&row.ID,
 	)
+
 	return row, err
 }
 
+// -- name: UpdateVenueName :one
 func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams) (UpdateVenueNameRow, error) {
 	var row UpdateVenueNameRow
-	err := q.db.QueryRowContext(ctx, `-- name: UpdateVenueName :one
-		UPDATE venue
-		SET name = $name
-		WHERE slug = $slug
-		RETURNING id;
-		`, sql.Named("name", arg.Name),
+	err := q.db.QueryRowContext(ctx,
+		"UPDATE venue "+
+			"SET name = $name "+
+			"WHERE slug = $slug "+
+			"RETURNING id;",
+		sql.Named("name", arg.Name),
 		sql.Named("slug", arg.Slug),
 	).Scan(
 		&row.ID,
 	)
+
 	return row, err
 }
 
+// -- name: VenueCountByCity :many
 func (q *Queries) VenueCountByCity(ctx context.Context) ([]VenueCountByCityRow, error) {
-	rows, err := q.db.QueryContext(ctx, `-- name: VenueCountByCity :many
-		SELECT
-		    city,
-		    COUNT(*) AS venue_count
-		FROM venue
-		GROUP BY city
-		ORDER BY city;
-		`,
+	rows, err := q.db.QueryContext(ctx,
+		"SELECT "+
+			"city, "+
+			"COUNT(*) AS venue_count "+
+			"FROM venue "+
+			"GROUP BY city "+
+			"ORDER BY city;",
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+
 	items := []VenueCountByCityRow(nil)
 	for rows.Next() {
 		var row VenueCountByCityRow
@@ -157,8 +170,10 @@ func (q *Queries) VenueCountByCity(ctx context.Context) ([]VenueCountByCityRow, 
 		}
 		items = append(items, row)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+
 	return items, nil
 }

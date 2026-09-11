@@ -7,16 +7,17 @@ import (
 	"database/sql"
 )
 
+// -- name: GetAuthor :one
 func (q *Queries) GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, error) {
 	var row GetAuthorRow
-	err := q.db.QueryRowContext(ctx, `-- name: GetAuthor :one
-
-		SELECT `+"`id`"+`, `+"`name`"+`, `+"`bio`"+` FROM `+"`authors`"+` WHERE `+"`id`"+` = $author_id;
-		`, sql.Named("author_id", arg),
+	err := q.db.QueryRowContext(ctx,
+		"SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;",
+		sql.Named("author_id", arg),
 	).Scan(
 		&row.ID,
 		&row.Name,
 		&row.Bio,
 	)
+
 	return row, err
 }

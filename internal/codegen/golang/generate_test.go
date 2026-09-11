@@ -29,50 +29,40 @@ func sample() *model.AnalysisResult {
 	}}
 }
 
-func TestGeneratedSQLUsesRawBlocksWhenRepresentable(t *testing.T) {
+func TestGeneratedSQLUsesQuotedLinesAndPreservesText(t *testing.T) {
 	for _, tc := range []struct {
-		sql, wantDatabase, wantYDB string
-		raw                        bool
+		sql, wantLiteral, wantSQL string
 	}{
-		{"-- name: GetUser :one\nDECLARE $id AS Uint64;\nSELECT id, bio FROM users WHERE id = $id;", "`-- name: GetUser :one\n", "`\n\t\t-- name: GetUser :one\n", true},
-		{"-- name: GetUser :one\nSELECT `id`, `bio` FROM `my/tbl`\nWHERE name = 'Автор' AND path = 'C:\\data';", "SELECT `+\"`id`\"+`, `+\"`bio`\"+` FROM `+\"`my/tbl`\"+`", "SELECT `+\"`id`\"+`, `+\"`bio`\"+` FROM `+\"`my/tbl`\"+`", true},
-		{"-- name: GetUser :one\r\nSELECT id, bio FROM users;\r\n", "\"-- name: GetUser :one\\r\\n\"+\n", "\"-- name: GetUser :one\\r\\n\"+\n", false},
-		{"-- name: GetUser :one\nSELECT '\x00' FROM users;", "\"-- name: GetUser :one\\n\"+\n", "\"-- name: GetUser :one\\n\"+\n", false},
+		{"-- name: GetUser :one\nDECLARE $id AS Uint64;\nSELECT id, bio FROM users WHERE id = $id;", "\"DECLARE $id AS Uint64; \"+\n", "DECLARE $id AS Uint64; SELECT id, bio FROM users WHERE id = $id;"},
+		{"-- name: GetUser :one\nSELECT `id`, `bio` FROM `my/tbl`\nWHERE name = 'Автор' AND path = 'C:\\data';", "\"SELECT `id`, `bio` FROM `my/tbl` \"+\n", "SELECT `id`, `bio` FROM `my/tbl` WHERE name = 'Автор' AND path = 'C:\\data';"},
+		{"-- name: GetUser :one\r\nSELECT id, bio FROM users;\r\n", "\"SELECT id, bio FROM users;\"", "SELECT id, bio FROM users;"},
+		{"-- name: GetUser :one\nSELECT '\x00' FROM users;", "\"SELECT '\\x00' FROM users;\"", "SELECT '\x00' FROM users;"},
 	} {
 		for _, runtime := range []string{"database/sql", "ydb"} {
 			source := generatedSQLSource(t, runtime, tc.sql)
-			wantLiteral := tc.wantDatabase
-			if runtime == "ydb" {
-				wantLiteral = tc.wantYDB
+			if !strings.Contains(string(source), tc.wantLiteral) {
+				t.Fatalf("%s SQL is not a readable quoted expression:\n%s", runtime, source)
 			}
-			if !strings.Contains(string(source), wantLiteral) {
-				t.Fatalf("%s SQL is not a readable multiline literal:\n%s", runtime, source)
+			if !strings.Contains(string(source), "// -- name: GetUser :one\nfunc (q *Queries) GetUser") {
+				t.Fatalf("%s query annotation is not attached to the generated method:\n%s", runtime, source)
 			}
-			if strings.Contains(tc.sql, "`id`") && !strings.Contains(string(source), "`+\"`id`\"+`") {
-				t.Fatalf("backtick identifier was not embedded in the raw SQL block:\n%s", source)
-			}
-			wantSQL := tc.sql
-			if tc.raw {
-				wantSQL = rawBlockSQL(tc.sql, runtime == "ydb")
-			}
-			if got := generatedSQLValue(t, source); got != wantSQL {
-				t.Fatalf("%s SQL changed: got %q, want %q", runtime, got, wantSQL)
+			if got := generatedSQLValue(t, source); got != tc.wantSQL {
+				t.Fatalf("%s SQL = %q, want compact SQL %q", runtime, got, tc.wantSQL)
 			}
 		}
 	}
 }
 
 func TestGeneratedSQLUsesDeclarationFreeVariant(t *testing.T) {
-	const executableSQL = "-- name: GetUser :one\n\nSELECT id, bio FROM users WHERE id = $id;"
+	const executableSQL = "SELECT id, bio FROM users WHERE id = $id;"
 	in := sample()
 	in.Queries = in.Queries[:1]
 	in.Queries[0].SQLWithoutDeclarations = "-- name: GetUser :one\n   \nSELECT id, bio FROM users WHERE id = $id;"
 
 	for _, runtime := range []string{"database/sql", "ydb"} {
 		source := generatedSQLSourceForAnalysis(t, runtime, in)
-		want := rawBlockSQL(executableSQL, runtime == "ydb")
-		if got := generatedSQLValue(t, source); got != want {
-			t.Fatalf("%s executable SQL = %q, want declaration-free block %q", runtime, got, want)
+		if got := generatedSQLValue(t, source); got != executableSQL {
+			t.Fatalf("%s executable SQL = %q, want declaration-free SQL %q", runtime, got, executableSQL)
 		}
 	}
 }
@@ -87,15 +77,16 @@ func TestGeneratedDatabaseSQLFormatsMultiParameterQueryRowCall(t *testing.T) {
 	}}}
 
 	source := generatedSQLSourceForAnalysis(t, "database/sql", in)
-	want := "err := q.db.QueryRowContext(ctx, `INSERT INTO authors VALUES ($author_id, $author_name, $biography) RETURNING id, name, bio;\n" +
-		"\t\t`, sql.Named(\"author_id\", arg.AuthorID),\n" +
+	want := "err := q.db.QueryRowContext(ctx,\n" +
+		"\t\t\"INSERT INTO authors VALUES ($author_id, $author_name, $biography) RETURNING id, name, bio;\",\n" +
+		"\t\tsql.Named(\"author_id\", arg.AuthorID),\n" +
 		"\t\tsql.Named(\"author_name\", arg.AuthorName),\n" +
 		"\t\tsql.Named(\"biography\", arg.Biography),\n" +
 		"\t).Scan(\n" +
 		"\t\t&row.ID,\n" +
 		"\t\t&row.Name,\n" +
 		"\t\t&row.Bio,\n" +
-		"\t)"
+		"\t)\n\n\treturn row, err"
 	if !strings.Contains(string(source), want) {
 		t.Fatalf("multi-parameter QueryRowContext call was not formatted readably:\n%s", source)
 	}
@@ -111,10 +102,13 @@ func TestGeneratedDatabaseSQLFormatsParameterizedCallsAndScans(t *testing.T) {
 	}}
 	source := string(generatedSQLSourceForAnalysis(t, "database/sql", in))
 	for _, want := range []string{
-		"q.db.ExecContext(ctx, `DELETE FROM users WHERE id = $id;\n\t\t`, sql.Named(\"id\", arg),\n\t)",
-		"q.db.QueryContext(ctx, `SELECT id, name FROM users WHERE name = $name;\n\t\t`, sql.Named(\"name\", arg),\n\t)",
+		"q.db.ExecContext(ctx,\n\t\t\"DELETE FROM users WHERE id = $id;\",\n\t\tsql.Named(\"id\", arg),\n\t)\n\n\treturn err",
+		"q.db.QueryContext(ctx,\n\t\t\"SELECT id, name FROM users WHERE name = $name;\",\n\t\tsql.Named(\"name\", arg),\n\t)",
 		"rows.Scan(\n\t\t\t&row.ID,\n\t\t\t&row.Name,\n\t\t)",
-		"q.db.QueryRowContext(ctx, `SELECT COUNT(*) AS count FROM users;\n\t\t`,\n\t).Scan(\n\t\t&row.Count,\n\t)",
+		"q.db.QueryRowContext(ctx,\n\t\t\"SELECT COUNT(*) AS count FROM users;\",\n\t).Scan(\n\t\t&row.Count,\n\t)\n\n\treturn row, err",
+		"\tdefer rows.Close()\n\n\titems := []FindUsersRow(nil)",
+		"\n\t}\n\n\tif err := rows.Err(); err != nil {",
+		"\n\t}\n\n\treturn items, nil",
 	} {
 		if !strings.Contains(source, want) {
 			t.Fatalf("generated database/sql source misses %q:\n%s", want, source)
@@ -141,7 +135,7 @@ func TestGeneratedYDBManyValidatesOneResultSet(t *testing.T) {
 	in.Queries = in.Queries[1:2]
 
 	source := string(generatedSQLSourceForAnalysis(t, "ydb", in))
-	want := "result, err := q.db.Query(ctx, `\n\t\tSELECT `+\"`id`\"+`, `+\"`name`\"+` FROM `+\"`users`\"+`;\n\t\t`, opts...,\n\t)" + `
+	want := "result, err := q.db.Query(ctx,\n\t\t\"SELECT `id`, `name` FROM `users`;\",\n\t\topts...,\n\t)" + `
 	if err != nil {
 		return nil, err
 	}
@@ -325,62 +319,56 @@ func TestGeneratedYDBNamedScanUsesWireNameAndGoFieldName(t *testing.T) {
 }
 
 func TestGeneratedSQLSpecialCharacters(t *testing.T) {
-	cases := []struct {
-		name, sql string
-		raw       bool
-	}{
-		{"quotes", "SELECT '\"\"\"', '```', '\\\"', '\\\\', '''', `id` FROM `users`;", true},
-		{"literal_escapes", `SELECT '\n\r\t\x00\u1234\U0001f680', 'C:\new\test' FROM users;`, true},
-		{"trailing_backslash", "-- trailing backslash\\", true},
-		{"line_endings", "-- mixed\rSELECT id\r\nFROM users\n;\r", false},
-		{"indentation", "\n\nSELECT\n\t id,\n    bio\nFROM users;\n\n", true},
-		{"unicode", "SELECT 'Автор 中文 🚀 e\u0301 \u200d \u2028 \u2029' FROM users;", true},
-		{"bom", "SELECT '\ufeff' FROM users;", false},
-		{"invalid_utf8", "SELECT '\xff\xfe' FROM users;", false},
-		{"comment_symbols", "-- $id :param /* comment */ 100% \\\nSELECT `id` FROM users; -- \" + dangerous() + \"", true},
+	cases := []struct{ name, sql string }{
+		{"quotes", "SELECT '\"\"\"', '```', '\\\"', '\\\\', '''', `id` FROM `users`;"},
+		{"literal_escapes", `SELECT '\n\r\t\x00\u1234\U0001f680', 'C:\new\test' FROM users;`},
+		{"trailing_backslash", "-- trailing backslash\\"},
+		{"line_endings", "-- mixed\rSELECT id\r\nFROM users\n;\r"},
+		{"indentation", "\n\nSELECT\n\t id,\n    bio\nFROM users;\n\n"},
+		{"unicode", "SELECT 'Автор 中文 🚀 e\u0301 \u200d \u2028 \u2029' FROM users;"},
+		{"bom", "SELECT '\ufeff' FROM users;"},
+		{"invalid_utf8", "SELECT '\xff\xfe' FROM users;"},
+		{"comment_symbols", "-- $id :param /* comment */ 100% \\\nSELECT `id` FROM users; -- \" + dangerous() + \""},
 	}
 	for ch := byte(0); ch < 32; ch++ {
-		cases = append(cases, struct {
-			name, sql string
-			raw       bool
-		}{fmt.Sprintf("control_%02x", ch), "SELECT '" + string(ch) + "' FROM users;", ch == '\t' || ch == '\n'})
+		cases = append(cases, struct{ name, sql string }{fmt.Sprintf("control_%02x", ch), "SELECT '" + string(ch) + "' FROM users;"})
 	}
-	cases = append(cases, struct {
-		name, sql string
-		raw       bool
-	}{"delete", "SELECT '\x7f' FROM users;", false})
+	cases = append(cases, struct{ name, sql string }{"delete", "SELECT '\x7f' FROM users;"})
 	for _, runtime := range []string{"database/sql", "ydb"} {
 		for _, tc := range cases {
 			t.Run(runtime+"/"+tc.name, func(t *testing.T) {
 				got := generatedSQLValue(t, generatedSQLSource(t, runtime, tc.sql))
-				want := tc.sql
-				if tc.raw {
-					want = rawBlockSQL(tc.sql, runtime == "ydb")
-				}
+				want := compactSQLForTest(tc.sql)
 				if got != want {
-					t.Fatalf("SQL changed: got %q, want %q", got, want)
+					t.Fatalf("SQL = %q, want compact SQL %q", got, want)
 				}
 			})
 		}
 	}
 }
 
-func rawBlockSQL(sql string, leadingNewline bool) string {
+func compactSQLForTest(sql string) string {
 	lines := strings.Split(sql, "\n")
-	for i, line := range lines {
-		if strings.TrimSpace(line) == "" {
-			lines[i] = ""
+	compact := lines[:0]
+	for _, line := range lines {
+		line = strings.Trim(line, " \t\r")
+		if line != "" {
+			compact = append(compact, line)
+		}
+	}
+	var result strings.Builder
+	for i, line := range compact {
+		result.WriteString(line)
+		if i+1 == len(compact) {
 			continue
 		}
-		if i != 0 || leadingNewline {
-			lines[i] = "\t\t" + line
+		if strings.Contains(line, "--") {
+			result.WriteByte('\n')
+		} else {
+			result.WriteByte(' ')
 		}
 	}
-	body := strings.Join(lines, "\n") + "\n\t\t"
-	if leadingNewline {
-		body = "\n" + body
-	}
-	return body
+	return result.String()
 }
 
 func generatedSQLSource(t *testing.T, runtime, sql string) []byte {
@@ -1043,11 +1031,11 @@ func TestNativeOptionsAreForwardedAndCannotReplaceTypedArguments(t *testing.T) {
 	}
 	for _, want := range []string{
 		"func (q *Queries) Ping(ctx context.Context, opts ...query.ExecuteOption) error",
-		`return q.db.Exec(ctx, "", opts...)`,
+		"return q.db.Exec(ctx,\n\t\t\"\",\n\t\topts...,\n\t)",
 		"func (q *Queries) Put(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error",
 		"callOptions := append([]query.ExecuteOption(nil), opts...)",
 		"callOptions = append(callOptions, query.WithParameters(parameters.Build()))",
-		`return q.db.Exec(ctx, "", callOptions...)`,
+		"return q.db.Exec(ctx,\n\t\t\"\",\n\t\tcallOptions...,\n\t)",
 	} {
 		if !strings.Contains(source, want) {
 			t.Fatalf("native option forwarding lacks %q:\n%s", want, source)
