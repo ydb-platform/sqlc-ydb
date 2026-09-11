@@ -404,7 +404,7 @@ func renderNativeMethod(out *strings.Builder, query model.AnalyzedQuery, options
 		}
 		out.WriteString("\n            .Build();\n")
 	}
-	out.WriteString("        auto sqlc_result = sqlc_session.ExecuteQuery(" + sqlLiteral(model.WithoutQueryAnnotation(query.SQL), "                ", "            ") + ",\n            sqlc_tx")
+	out.WriteString("        auto sqlc_result = sqlc_session.ExecuteQuery(\n            " + sqlLiteral(model.WithoutQueryAnnotation(query.SQL), "                ", "            ") + ",\n            sqlc_tx")
 	if len(query.Parameters) != 0 {
 		out.WriteString(",\n            sqlc_params")
 	}
