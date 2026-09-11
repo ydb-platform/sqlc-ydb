@@ -305,15 +305,28 @@ func inferFromInLists(conditions []*parser.Cond_exprContext, relations []relatio
 			continue
 		}
 		text := condition.In_expr().GetText()
-		if !strings.HasPrefix(text, "(") || !strings.HasSuffix(text, ")") {
-			continue
-		}
 		refs := columnRefs(condition.GetParent())
 		if len(refs) != 1 {
 			continue
 		}
 		column, err := resolveColumn(relations, refs[0])
 		if err != nil {
+			continue
+		}
+		if strings.HasPrefix(text, "$") {
+			var direct parser.IBind_parameterContext
+			descendants(condition.In_expr(), func(node antlr.Tree) {
+				if bind, ok := node.(parser.IBind_parameterContext); ok && bind.GetText() == text {
+					direct = bind
+				}
+			})
+			if direct != nil {
+				elem := column.Type.UnwrapOptional()
+				inferParameter(inferred, bindName(direct), model.Type{Kind: "List", Elem: &elem})
+			}
+			continue
+		}
+		if !strings.HasPrefix(text, "(") || !strings.HasSuffix(text, ")") {
 			continue
 		}
 		var binds []parser.IBind_parameterContext

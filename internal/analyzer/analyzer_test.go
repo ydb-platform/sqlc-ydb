@@ -596,13 +596,16 @@ func TestAnalyzeRejectsCountComparisonInsteadOfCallingItCount(t *testing.T) {
 	}
 }
 
-func TestAnalyzeDoesNotInferScalarTypeForINParameter(t *testing.T) {
-	_, err := Analyze(
+func TestAnalyzeInfersListTypeForINParameter(t *testing.T) {
+	got, err := Analyze(
 		[]model.Source{{Name: "schema.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, PRIMARY KEY (id));`}},
 		[]model.Source{{Name: "query.sql", Text: "-- name: FindAuthors :many\nSELECT id FROM authors WHERE id IN $ids;"}},
 	)
-	if err == nil || !strings.Contains(err.Error(), "cannot resolve type of external parameter $ids; add DECLARE") {
-		t.Fatalf("error = %v", err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Queries[0].Parameters[0].Type.String() != "List<Uint64>" {
+		t.Fatal(got.Queries[0].Parameters)
 	}
 }
 

@@ -124,7 +124,7 @@ func renderModels(in *model.AnalysisResult) string {
 		copyDerive := ", Copy"
 		for _, c := range q.ResultSets[0].Columns {
 			switch strings.ToLower(c.Type.UnwrapOptional().Kind) {
-			case "utf8", "json", "jsondocument", "string", "yson":
+			case "utf8", "json", "jsondocument", "string", "yson", "list":
 				copyDerive = ""
 			}
 		}
@@ -191,6 +191,10 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 	parameters := make([]string, 0, len(q.Parameters))
 	for _, p := range q.Parameters {
 		t, _ := rustType(p.Type)
+		if p.Type.Kind == "List" {
+			elem, _ := rustType(*p.Type.Elem)
+			t = "impl IntoIterator<Item = impl std::borrow::Borrow<" + elem + ">>"
+		}
 		name := snakeName(p.Name)
 		if p.Type.IsOptional() {
 			name = "#[builder(required, into)] " + name
@@ -219,6 +223,20 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 			fmt.Fprintf(b, "        %s,\n", parameter)
 		}
 		fmt.Fprintf(b, "    ) -> ydb::YdbResult<%s> {\n", ret)
+	}
+	for _, p := range q.Parameters {
+		if p.Type.Kind != "List" {
+			continue
+		}
+		elem, _ := rustType(*p.Type.Elem)
+		name := snakeName(p.Name)
+		value := bindExpression(model.Parameter{Name: "item", Type: *p.Type.Elem})
+		defaultValue := "<" + elem + ">::default()"
+		if temporalVariant(p.Type.Elem.Kind) != "" {
+			defaultValue = "std::time::SystemTime::UNIX_EPOCH"
+		}
+		typeValue := strings.ReplaceAll(value, "item", defaultValue)
+		fmt.Fprintf(b, "        let %s = {\n            let items = %s.into_iter();\n            let mut values = Vec::new();\n            for item in items {\n                let item = std::borrow::Borrow::<%s>::borrow(&item).clone();\n                values.push(%s.into());\n            }\n            let item_type = %s.into();\n            ydb::Value::list_from(item_type, values)?\n        };\n", name, name, elem, value, typeValue)
 	}
 	method := "exec"
 	if q.Command == model.One {
@@ -328,6 +346,9 @@ func hasParameterKind(in *model.AnalysisResult, kind string) bool {
 	for _, q := range in.Queries {
 		for _, p := range q.Parameters {
 			t := p.Type.UnwrapOptional()
+			if t.Kind == "List" && t.Elem != nil {
+				t = *t.Elem
+			}
 			if strings.EqualFold(t.Kind, kind) {
 				return true
 			}
@@ -352,10 +373,22 @@ func rustType(t model.Type) (string, error) {
 		if t.Elem == nil {
 			return "", fmt.Errorf("Optional lacks element")
 		}
+		if t.Elem.Kind == "List" {
+			return "", fmt.Errorf("optional lists are unsupported")
+		}
 		inner, err := rustType(*t.Elem)
 		return "Option<" + inner + ">", err
 	}
 	switch strings.ToLower(t.Kind) {
+	case "list":
+		if t.Elem == nil {
+			return "", fmt.Errorf("List lacks element")
+		}
+		if t.Elem.Kind == "List" || t.Elem.IsOptional() {
+			return "", fmt.Errorf("unsupported list element %s", t.Elem.String())
+		}
+		inner, err := rustType(*t.Elem)
+		return "Vec<" + inner + ">", err
 	case "bool":
 		return "bool", nil
 	case "int8":

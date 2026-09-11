@@ -148,3 +148,37 @@ SELECT "hello "u || $name AS greeting;`}}
 		t.Fatalf("parameters = %#v, want %#v", parameters, want)
 	}
 }
+
+func TestINContainerAndScalarParameters(t *testing.T) {
+	for _, tc := range []struct{ sql, want string }{
+		{"id IN $ids", "List<Uint64>"},
+		{"id NOT IN $ids", "List<Uint64>"},
+		{"id IN ($ids)", "Uint64"},
+	} {
+		t.Run(tc.sql, func(t *testing.T) {
+			result, err := Analyze(
+				[]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));"}},
+				[]model.Source{{Name: "queries.sql", Text: "-- name: Find :many\nSELECT id FROM records WHERE " + tc.sql + ";"}},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := result.Queries[0].Parameters[0].Type.String(); got != tc.want {
+				t.Fatalf("got %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestINListExplicitDeclaration(t *testing.T) {
+	got, err := Analyze(
+		[]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));"}},
+		[]model.Source{{Name: "queries.sql", Text: "-- name: Find :many\nDECLARE $ids AS List<Uint64>;\nSELECT id FROM records WHERE id IN $ids;"}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Queries[0].Parameters[0].Type.String() != "List<Uint64>" {
+		t.Fatal(got.Queries[0].Parameters)
+	}
+}

@@ -105,3 +105,22 @@ accept `Into<String>` (including `&str`); numeric setters retain concrete types.
 Optional setters accept `Into<Option<T>>`: pass `None`, `Some(value)`, or a `T`
 value directly. Conversion applies to the whole option, so `None` needs no type
 annotation. Nullable parameters must still be explicitly set, including nulls.
+
+For a list parameter, use `WHERE id IN $ids` (or `NOT IN $ids`). The analyzer
+infers the list element type from the column; `DECLARE $ids AS List<Uint64>`
+is also accepted. `IN ($ids)` instead contains one scalar parameter.
+
+List setters accept `IntoIterator<Item = impl Borrow<T>>`, where `T` is the
+resolved Rust element type:
+
+```rust
+queries.find().ids(vec![1u64, 2]).call().await?;
+queries.find().ids(&[1u64, 2][..]).call().await?;
+queries.find().ids(std::collections::HashSet::from([1u64, 2])).call().await?;
+queries.find().ids((1u64..10).filter(|id| id % 2 == 0)).call().await?;
+queries.find().ids(Vec::<u64>::new()).call().await?;
+```
+
+The iterator is collected into a typed SDK list when the query executes. Empty
+lists retain their SQL element type. Lists support the scalar types in the table
+above; nested lists, nullable lists and nullable list elements are unsupported.

@@ -1,0 +1,8 @@
+version: "2"
+sql:
+  - engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      rust:
+        out: rust

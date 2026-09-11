@@ -343,7 +343,24 @@ func TestGeneratedRustCompilesAgainstPinnedSDK(t *testing.T) {
 	if _, err := exec.LookPath("cargo"); err != nil {
 		t.Fatal("SQLC_YDB_RUST_SDK_CHECK requires cargo")
 	}
-	files, err := Generate(representativeAnalysis(), Options{})
+	analysis := representativeAnalysis()
+	scalar := model.Type{Kind: "Uint64"}
+	analysis.Queries = append(analysis.Queries, model.AnalyzedQuery{
+		Name: "FindIds", Command: model.Many,
+		SQL:                    "SELECT id FROM sqlc_rust_list_items WHERE id IN $ids ORDER BY id;",
+		SQLWithoutDeclarations: "SELECT id FROM sqlc_rust_list_items WHERE id IN $ids ORDER BY id;",
+		Parameters:             []model.Parameter{{Name: "ids", Type: model.Type{Kind: "List", Elem: &scalar}}},
+		ResultSets:             []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: scalar}}}},
+	})
+	for _, kind := range []string{"Bool", "Int8", "Int16", "Int32", "Int64", "Uint8", "Uint16", "Uint32", "Float", "Double", "Utf8", "String", "Yson", "Json", "JsonDocument", "Date", "Datetime", "Timestamp", "Date32", "Datetime64", "Timestamp64"} {
+		elem := model.Type{Kind: kind}
+		analysis.Queries = append(analysis.Queries, model.AnalyzedQuery{
+			Name: "Bind" + kind, Command: model.Exec,
+			SQL: "SELECT $values;", SQLWithoutDeclarations: "SELECT $values;",
+			Parameters: []model.Parameter{{Name: "values", Type: model.Type{Kind: "List", Elem: &elem}}},
+		})
+	}
+	files, err := Generate(analysis, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -356,11 +373,16 @@ func TestGeneratedRustCompilesAgainstPinnedSDK(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	cargo := "[package]\nname = \"generated-check\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n[dependencies]\nydb = \"=0.18.2\"\nbon = \"=3.10.1\"\n"
+	format := exec.Command("rustfmt", "--edition", "2024", "--check", filepath.Join(dir, "src", "lib.rs"))
+	if out, err := format.CombinedOutput(); err != nil {
+		t.Fatalf("list output format: %v\n%s", err, out)
+	}
+	cargo := "[package]\nname = \"generated-check\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n[dependencies]\nydb = \"=0.18.2\"\nbon = \"=3.10.1\"\ntokio = { version = \"1\", features = [\"macros\", \"rt-multi-thread\"] }\n"
 	if err := os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte(cargo), 0600); err != nil {
 		t.Fatal(err)
 	}
-	consumer := `use generated_check::queries::Queries;
+	consumer := `#![recursion_limit = "256"]
+use generated_check::queries::Queries;
 async fn check(q: &mut Queries<'_, ydb::QueryClient>) -> ydb::YdbResult<()> {
     q.create_book().id(1).call().await?;
     q.update_book().id(1).tags("[]").call().await?;
@@ -372,7 +394,28 @@ async fn check_tx(tx: &mut ydb::Transaction) -> ydb::YdbResult<()> {
     q.update_book().id(1).tags("[]").call().await?;
     Ok(())
 }
-fn main() {}
+async fn lists(q: &mut Queries<'_, ydb::QueryClient>) -> ydb::YdbResult<()> {
+    assert_eq!(q.find_ids().ids(vec![1, 2]).call().await?.len(), 2);
+    let ids = [1u64, 2];
+    assert_eq!(q.find_ids().ids(ids.as_slice()).call().await?.len(), 2);
+    assert_eq!(q.find_ids().ids(std::collections::HashSet::from(ids)).call().await?.len(), 2);
+    assert_eq!(q.find_ids().ids(ids.iter().filter(|id| **id == 2)).call().await?[0].id, 2);
+    assert!(q.find_ids().ids(Vec::<u64>::new()).call().await?.is_empty());
+    Ok(())
+}
+#[tokio::main]
+async fn main() -> ydb::YdbResult<()> {
+    let Ok(dsn) = std::env::var("YDB_CONNECTION_STRING") else { return Ok(()); };
+    let client = ydb::ClientBuilder::new_from_connection_string(dsn)?.build().await?;
+    let mut db = client.query_client();
+    db.exec("CREATE TABLE sqlc_rust_list_items (id Uint64 NOT NULL, PRIMARY KEY(id));").await?;
+    let result = async {
+        db.exec("UPSERT INTO sqlc_rust_list_items (id) VALUES (1), (2);").await?;
+        lists(&mut Queries::new(&mut db)).await
+    }.await;
+    db.exec("DROP TABLE sqlc_rust_list_items;").await?;
+    result
+}
 `
 	mainPath := filepath.Join(dir, "src", "main.rs")
 	if err := os.WriteFile(mainPath, []byte(consumer), 0600); err != nil {
@@ -382,6 +425,13 @@ fn main() {}
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("generated Rust does not compile against ydb 0.18.2: %v\n%s", err, out)
+	}
+	if os.Getenv("YDB_CONNECTION_STRING") != "" {
+		cmd = exec.Command("cargo", "run", "--quiet")
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("live lists: %v\n%s", err, out)
+		}
 	}
 	incomplete := strings.Replace(consumer, ".create_book().id(1).call()", ".create_book().call()", 1)
 	if err := os.WriteFile(mainPath, []byte(incomplete), 0600); err != nil {

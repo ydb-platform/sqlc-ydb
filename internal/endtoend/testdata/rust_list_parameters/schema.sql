@@ -1,0 +1,1 @@
+CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY (id));
