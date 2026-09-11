@@ -40,9 +40,9 @@ impl<'a> Queries<'a> {
             .client
             .query_result_set(
                 r"
-                  SELECT slug, name
-                  FROM city
-                  ORDER BY name;",
+                 SELECT slug, name
+                 FROM city
+                 ORDER BY name;",
             )
             .await?;
         let mut rows = Vec::new();
@@ -61,9 +61,9 @@ impl<'a> Queries<'a> {
             .client
             .query_row(
                 r"
-                  SELECT slug, name
-                  FROM city
-                  WHERE slug = $slug;",
+                 SELECT slug, name
+                 FROM city
+                 WHERE slug = $slug;",
             )
             .param("$slug", slug)
             .await?;
@@ -83,13 +83,13 @@ impl<'a> Queries<'a> {
             .client
             .query_row(
                 r"
-                  INSERT INTO city (
-                      name,
-                      slug
-                  ) VALUES (
-                      $name,
-                      $slug
-                  ) RETURNING slug, name;",
+                 INSERT INTO city (
+                     name,
+                     slug
+                 ) VALUES (
+                     $name,
+                     $slug
+                 ) RETURNING slug, name;",
             )
             .param("$name", name)
             .param("$slug", slug)
@@ -105,9 +105,9 @@ impl<'a> Queries<'a> {
         self.client
             .exec(
                 r"
-                  UPDATE city
-                  SET name = $name
-                  WHERE slug = $slug;",
+                 UPDATE city
+                 SET name = $name
+                 WHERE slug = $slug;",
             )
             .param("$name", name)
             .param("$slug", slug)
@@ -146,8 +146,8 @@ ORDER BY name;")
         self.client
             .exec(
                 r"
-                  DELETE FROM venue
-                  WHERE slug = $slug AND slug = $slug;",
+                 DELETE FROM venue
+                 WHERE slug = $slug AND slug = $slug;",
             )
             .param("$slug", slug)
             .await
@@ -193,27 +193,27 @@ WHERE slug = $slug AND city = $city;")
             .client
             .query_row(
                 r"
-                  INSERT INTO venue (
-                      id,
-                      slug,
-                      name,
-                      city,
-                      created_at,
-                      spotify_playlist,
-                      status,
-                      statuses,
-                      tags
-                  ) VALUES (
-                      $id,
-                      $slug,
-                      $name,
-                      $city,
-                      $created_at,
-                      $spotify_playlist,
-                      $status,
-                      $statuses,
-                      $tags
-                  ) RETURNING id;",
+                 INSERT INTO venue (
+                     id,
+                     slug,
+                     name,
+                     city,
+                     created_at,
+                     spotify_playlist,
+                     status,
+                     statuses,
+                     tags
+                 ) VALUES (
+                     $id,
+                     $slug,
+                     $name,
+                     $city,
+                     $created_at,
+                     $spotify_playlist,
+                     $status,
+                     $statuses,
+                     $tags
+                 ) RETURNING id;",
             )
             .param("$id", id)
             .param("$slug", slug)
@@ -240,10 +240,10 @@ WHERE slug = $slug AND city = $city;")
             .client
             .query_row(
                 r"
-                  UPDATE venue
-                  SET name = $name
-                  WHERE slug = $slug
-                  RETURNING id;",
+                 UPDATE venue
+                 SET name = $name
+                 WHERE slug = $slug
+                 RETURNING id;",
             )
             .param("$name", name)
             .param("$slug", slug)
@@ -259,12 +259,12 @@ WHERE slug = $slug AND city = $city;")
             .client
             .query_result_set(
                 r"
-                  SELECT
-                      city,
-                      COUNT(*) AS venue_count
-                  FROM venue
-                  GROUP BY city
-                  ORDER BY city;",
+                 SELECT
+                     city,
+                     COUNT(*) AS venue_count
+                 FROM venue
+                 GROUP BY city
+                 ORDER BY city;",
             )
             .await?;
         let mut rows = Vec::new();

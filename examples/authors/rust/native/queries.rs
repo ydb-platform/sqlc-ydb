@@ -65,9 +65,9 @@ impl<'a> Queries<'a> {
             .client
             .query_row(
                 r"
-                  INSERT INTO `authors` (`id`, `name`, `bio`)
-                  VALUES ($author_id, $author_name, $biography)
-                  RETURNING `id`, `name`, `bio`;",
+                 INSERT INTO `authors` (`id`, `name`, `bio`)
+                 VALUES ($author_id, $author_name, $biography)
+                 RETURNING `id`, `name`, `bio`;",
             )
             .param("$author_id", author_id)
             .param("$author_name", author_name)
@@ -90,8 +90,8 @@ impl<'a> Queries<'a> {
         self.client
             .exec(
                 r"
-                  UPSERT INTO authors (id, name, bio)
-                  VALUES ($author_id, $author_name, $biography);",
+                 UPSERT INTO authors (id, name, bio)
+                 VALUES ($author_id, $author_name, $biography);",
             )
             .param("$author_id", author_id)
             .param("$author_name", author_name)

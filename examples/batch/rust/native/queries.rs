@@ -26,8 +26,8 @@ impl<'a> Queries<'a> {
             .client
             .query_row(
                 r"
-                  SELECT author_id, name, biography FROM authors
-                  WHERE author_id = $author_id;",
+                 SELECT author_id, name, biography FROM authors
+                 WHERE author_id = $author_id;",
             )
             .param("$author_id", author_id)
             .await?;
@@ -43,8 +43,8 @@ impl<'a> Queries<'a> {
         self.client
             .exec(
                 r"
-                  DELETE FROM books
-                  WHERE book_id = $book_id;",
+                 DELETE FROM books
+                 WHERE book_id = $book_id;",
             )
             .param("$book_id", book_id)
             .await
@@ -55,8 +55,8 @@ impl<'a> Queries<'a> {
         self.client
             .exec(
                 r"
-                  DELETE FROM books
-                  WHERE book_id = $book_id;",
+                 DELETE FROM books
+                 WHERE book_id = $book_id;",
             )
             .param("$book_id", book_id)
             .await
@@ -67,8 +67,8 @@ impl<'a> Queries<'a> {
         self.client
             .exec(
                 r"
-                  DELETE FROM books
-                  WHERE book_id = $book_id;",
+                 DELETE FROM books
+                 WHERE book_id = $book_id;",
             )
             .param("$book_id", book_id)
             .await
@@ -79,8 +79,8 @@ impl<'a> Queries<'a> {
         self.client
             .exec(
                 r"
-                  DELETE FROM books
-                  WHERE book_id = $book_id;",
+                 DELETE FROM books
+                 WHERE book_id = $book_id;",
             )
             .param("$book_id", book_id)
             .await
@@ -92,9 +92,9 @@ impl<'a> Queries<'a> {
             .client
             .query_result_set(
                 r"
-                  SELECT book_id, author_id, isbn, book_type, title, year, available, tags
-                  FROM books
-                  WHERE year = $year;",
+                 SELECT book_id, author_id, isbn, book_type, title, year, available, tags
+                 FROM books
+                 WHERE year = $year;",
             )
             .param("$year", year)
             .await?;
@@ -125,9 +125,9 @@ impl<'a> Queries<'a> {
             .client
             .query_row(
                 r"
-                  INSERT INTO authors (author_id, name, biography)
-                  VALUES ($author_id, $name, $biography)
-                  RETURNING author_id, name, biography;",
+                 INSERT INTO authors (author_id, name, biography)
+                 VALUES ($author_id, $name, $biography)
+                 RETURNING author_id, name, biography;",
             )
             .param("$author_id", author_id)
             .param("$name", name)
@@ -187,9 +187,9 @@ RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;")
         self.client
             .exec(
                 r"
-                  UPDATE books
-                  SET title = $title, tags = $tags
-                  WHERE book_id = $book_id;",
+                 UPDATE books
+                 SET title = $title, tags = $tags
+                 WHERE book_id = $book_id;",
             )
             .param("$title", title)
             .param("$tags", JsonParam(tags))
@@ -203,8 +203,8 @@ RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;")
             .client
             .query_row(
                 r"
-                  SELECT biography FROM authors
-                  WHERE author_id = $author_id;",
+                 SELECT biography FROM authors
+                 WHERE author_id = $author_id;",
             )
             .param("$author_id", author_id)
             .await?;

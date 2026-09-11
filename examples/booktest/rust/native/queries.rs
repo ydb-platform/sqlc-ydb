@@ -26,9 +26,9 @@ impl<'a> Queries<'a> {
             .client
             .query_row(
                 r"
-                  SELECT author_id, name
-                  FROM authors
-                  WHERE author_id = $author_id;",
+                 SELECT author_id, name
+                 FROM authors
+                 WHERE author_id = $author_id;",
             )
             .param("$author_id", author_id)
             .await?;
@@ -63,8 +63,8 @@ WHERE book_id = $book_id;")
         self.client
             .exec(
                 r"
-                  DELETE FROM books
-                  WHERE book_id = $book_id;",
+                 DELETE FROM books
+                 WHERE book_id = $book_id;",
             )
             .param("$book_id", book_id)
             .await
@@ -105,18 +105,18 @@ WHERE title = $title AND publication_year = $publication_year;")
             .client
             .query_result_set(
                 r"
-                  SELECT
-                      b.book_id,
-                      b.title,
-                      a.name,
-                      b.isbn,
-                      b.tags
-                  FROM books AS b
-                  LEFT JOIN authors AS a ON b.author_id = a.author_id
-                  WHERE NOT SetIsDisjoint(
-                      ToSet(Yson::ConvertToStringList(b.tags)),
-                      Yson::ConvertToStringList($tags)
-                  );",
+                 SELECT
+                     b.book_id,
+                     b.title,
+                     a.name,
+                     b.isbn,
+                     b.tags
+                 FROM books AS b
+                 LEFT JOIN authors AS a ON b.author_id = a.author_id
+                 WHERE NOT SetIsDisjoint(
+                     ToSet(Yson::ConvertToStringList(b.tags)),
+                     Yson::ConvertToStringList($tags)
+                 );",
             )
             .param("$tags", JsonParam(tags))
             .await?;
@@ -143,9 +143,9 @@ WHERE title = $title AND publication_year = $publication_year;")
             .client
             .query_row(
                 r"
-                  INSERT INTO authors (author_id, name)
-                  VALUES ($author_id, $name)
-                  RETURNING author_id, name;",
+                 INSERT INTO authors (author_id, name)
+                 VALUES ($author_id, $name)
+                 RETURNING author_id, name;",
             )
             .param("$author_id", author_id)
             .param("$name", name)
@@ -172,26 +172,26 @@ WHERE title = $title AND publication_year = $publication_year;")
             .client
             .query_row(
                 r"
-                  INSERT INTO books (
-                      book_id,
-                      author_id,
-                      isbn,
-                      book_type,
-                      title,
-                      publication_year,
-                      available,
-                      tags
-                  ) VALUES (
-                      $book_id,
-                      $author_id,
-                      $isbn,
-                      $book_type,
-                      $title,
-                      $publication_year,
-                      $available,
-                      $tags
-                  )
-                  RETURNING book_id, author_id, isbn, book_type, title, publication_year, available, tags;",
+                 INSERT INTO books (
+                     book_id,
+                     author_id,
+                     isbn,
+                     book_type,
+                     title,
+                     publication_year,
+                     available,
+                     tags
+                 ) VALUES (
+                     $book_id,
+                     $author_id,
+                     $isbn,
+                     $book_type,
+                     $title,
+                     $publication_year,
+                     $available,
+                     $tags
+                 )
+                 RETURNING book_id, author_id, isbn, book_type, title, publication_year, available, tags;",
             )
             .param("$book_id", book_id)
             .param("$author_id", author_id)
@@ -224,9 +224,9 @@ WHERE title = $title AND publication_year = $publication_year;")
         self.client
             .exec(
                 r"
-                  UPDATE books
-                  SET title = $title, tags = $tags
-                  WHERE book_id = $book_id;",
+                 UPDATE books
+                 SET title = $title, tags = $tags
+                 WHERE book_id = $book_id;",
             )
             .param("$title", title)
             .param("$tags", JsonParam(tags))
@@ -245,9 +245,9 @@ WHERE title = $title AND publication_year = $publication_year;")
         self.client
             .exec(
                 r"
-                  UPDATE books
-                  SET title = $title, tags = $tags, isbn = $isbn
-                  WHERE book_id = $book_id;",
+                 UPDATE books
+                 SET title = $title, tags = $tags, isbn = $isbn
+                 WHERE book_id = $book_id;",
             )
             .param("$title", title)
             .param("$tags", JsonParam(tags))
@@ -265,8 +265,8 @@ WHERE title = $title AND publication_year = $publication_year;")
         self.client
             .exec(
                 r"
-                  DELETE FROM books
-                  WHERE publication_year < $publication_year AND author_id = $author_id;",
+                 DELETE FROM books
+                 WHERE publication_year < $publication_year AND author_id = $author_id;",
             )
             .param("$publication_year", publication_year)
             .param("$author_id", author_id)
