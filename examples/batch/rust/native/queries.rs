@@ -154,9 +154,12 @@ impl<'a> Queries<'a> {
     ) -> ydb::YdbResult<CreateBookRow> {
         let mut row = self
             .client
-            .query_row(r"INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)
-VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)
-RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;")
+            .query_row(
+                r"
+                 INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)
+                 VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)
+                 RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;",
+            )
             .param("$book_id", book_id)
             .param("$author_id", author_id)
             .param("$isbn", isbn)
@@ -164,7 +167,8 @@ RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;")
             .param("$title", title)
             .param("$year", year)
             .param("$available", ydb::Value::Timestamp(available))
-            .param("$tags", JsonParam(tags)).await?;
+            .param("$tags", JsonParam(tags))
+            .await?;
         Ok(CreateBookRow {
             book_id: row.remove_field(0)?.try_into()?,
             author_id: row.remove_field(1)?.try_into()?,

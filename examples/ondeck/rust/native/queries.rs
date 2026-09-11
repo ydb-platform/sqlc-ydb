@@ -118,11 +118,15 @@ impl<'a> Queries<'a> {
     pub async fn list_venues(&mut self, city: String) -> ydb::YdbResult<Vec<ListVenuesRow>> {
         let result_set = self
             .client
-            .query_result_set(r"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
-FROM venue
-WHERE city = $city
-ORDER BY name;")
-            .param("$city", city).await?;
+            .query_result_set(
+                r"
+                 SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
+                 FROM venue
+                 WHERE city = $city
+                 ORDER BY name;",
+            )
+            .param("$city", city)
+            .await?;
         let mut rows = Vec::new();
         for mut row in result_set.rows() {
             rows.push(ListVenuesRow {
@@ -157,11 +161,15 @@ ORDER BY name;")
     pub async fn venue(&mut self, slug: String, city: String) -> ydb::YdbResult<GetVenueRow> {
         let mut row = self
             .client
-            .query_row(r"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
-FROM venue
-WHERE slug = $slug AND city = $city;")
+            .query_row(
+                r"
+                 SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
+                 FROM venue
+                 WHERE slug = $slug AND city = $city;",
+            )
             .param("$slug", slug)
-            .param("$city", city).await?;
+            .param("$city", city)
+            .await?;
         Ok(GetVenueRow {
             id: row.remove_field(0)?.try_into()?,
             slug: row.remove_field(1)?.try_into()?,

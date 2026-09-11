@@ -42,10 +42,14 @@ impl<'a> Queries<'a> {
     pub async fn book(&mut self, book_id: u64) -> ydb::YdbResult<GetBookRow> {
         let mut row = self
             .client
-            .query_row(r"SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
-FROM books
-WHERE book_id = $book_id;")
-            .param("$book_id", book_id).await?;
+            .query_row(
+                r"
+                 SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
+                 FROM books
+                 WHERE book_id = $book_id;",
+            )
+            .param("$book_id", book_id)
+            .await?;
         Ok(GetBookRow {
             book_id: row.remove_field(0)?.try_into()?,
             author_id: row.remove_field(1)?.try_into()?,
@@ -78,11 +82,15 @@ WHERE book_id = $book_id;")
     ) -> ydb::YdbResult<Vec<BooksByTitleYearRow>> {
         let result_set = self
             .client
-            .query_result_set(r"SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
-FROM books
-WHERE title = $title AND publication_year = $publication_year;")
+            .query_result_set(
+                r"
+                 SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
+                 FROM books
+                 WHERE title = $title AND publication_year = $publication_year;",
+            )
             .param("$title", title)
-            .param("$publication_year", publication_year).await?;
+            .param("$publication_year", publication_year)
+            .await?;
         let mut rows = Vec::new();
         for mut row in result_set.rows() {
             rows.push(BooksByTitleYearRow {
