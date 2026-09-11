@@ -12,12 +12,12 @@ import tech.ydb.table.values.OptionalType
 // The caller owns the injected client and its lifecycle.
 class Queries(private val client: SessionRetryContext) {
 
+    // -- name: GetAuthor :one
     fun getAuthor(authorId: Long): GetAuthorRow? {
         val _params = Params.create()
         _params.put("\$author_id", PrimitiveValue.newUint64(authorId))
         val _query = client.supplyResult { _session ->
             QueryReader.readFrom(_session.createQuery(
-                "-- name: GetAuthor :one\n" +
                 "SELECT id, name, bio FROM authors WHERE id = \$author_id;", TxMode.SERIALIZABLE_RW, _params))
         }.join().getValue()
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -29,11 +29,11 @@ class Queries(private val client: SessionRetryContext) {
         return GetAuthorRow(_value0, _value1, _value2)
     }
 
+    // -- name: ListAuthors :many
     fun listAuthors(): List<ListAuthorsRow> {
         val _params = Params.create()
         val _query = client.supplyResult { _session ->
             QueryReader.readFrom(_session.createQuery(
-                "-- name: ListAuthors :many\n" +
                 "SELECT id, name, bio FROM authors ORDER BY name;", TxMode.SERIALIZABLE_RW, _params))
         }.join().getValue()
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -48,12 +48,12 @@ class Queries(private val client: SessionRetryContext) {
         return _items
     }
 
+    // -- name: GetAuthorName :one
     fun getAuthorName(authorId: Long): GetAuthorNameRow? {
         val _params = Params.create()
         _params.put("\$author_id", PrimitiveValue.newUint64(authorId))
         val _query = client.supplyResult { _session ->
             QueryReader.readFrom(_session.createQuery(
-                "-- name: GetAuthorName :one\n" +
                 "SELECT name FROM authors WHERE id = \$author_id;", TxMode.SERIALIZABLE_RW, _params))
         }.join().getValue()
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -63,6 +63,7 @@ class Queries(private val client: SessionRetryContext) {
         return GetAuthorNameRow(_value0)
     }
 
+    // -- name: CreateAuthor :one
     fun createAuthor(authorId: Long, authorName: String, biography: String?): CreateAuthorRow? {
         val _params = Params.create()
         _params.put("\$author_id", PrimitiveValue.newUint64(authorId))
@@ -70,7 +71,6 @@ class Queries(private val client: SessionRetryContext) {
         _params.put("\$biography", if (biography == null) OptionalType.of(PrimitiveType.Text).emptyValue() else OptionalType.of(PrimitiveType.Text).newValue(PrimitiveValue.newText(biography)))
         val _query = client.supplyResult { _session ->
             QueryReader.readFrom(_session.createQuery(
-                "-- name: CreateAuthor :one\n" +
                 "INSERT INTO `authors` (`id`, `name`, `bio`)\n" +
                 "VALUES (\$author_id, \$author_name, \$biography)\n" +
                 "RETURNING `id`, `name`, `bio`;", TxMode.SERIALIZABLE_RW, _params))
@@ -84,6 +84,7 @@ class Queries(private val client: SessionRetryContext) {
         return CreateAuthorRow(_value0, _value1, _value2)
     }
 
+    // -- name: UpsertAuthor :exec
     fun upsertAuthor(authorId: Long, authorName: String, biography: String?): Unit {
         val _params = Params.create()
         _params.put("\$author_id", PrimitiveValue.newUint64(authorId))
@@ -91,18 +92,17 @@ class Queries(private val client: SessionRetryContext) {
         _params.put("\$biography", if (biography == null) OptionalType.of(PrimitiveType.Text).emptyValue() else OptionalType.of(PrimitiveType.Text).newValue(PrimitiveValue.newText(biography)))
         val _query = client.supplyResult { _session ->
             QueryReader.readFrom(_session.createQuery(
-                "-- name: UpsertAuthor :exec\n" +
                 "UPSERT INTO authors (id, name, bio)\n" +
                 "VALUES (\$author_id, \$author_name, \$biography);", TxMode.SERIALIZABLE_RW, _params))
         }.join().getValue()
     }
 
+    // -- name: DeleteAuthor :exec
     fun deleteAuthor(authorId: Long): Unit {
         val _params = Params.create()
         _params.put("\$author_id", PrimitiveValue.newUint64(authorId))
         val _query = client.supplyResult { _session ->
             QueryReader.readFrom(_session.createQuery(
-                "-- name: DeleteAuthor :exec\n" +
                 "DELETE FROM authors WHERE id = \$author_id;", TxMode.SERIALIZABLE_RW, _params))
         }.join().getValue()
     }
