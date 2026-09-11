@@ -328,7 +328,7 @@ func renderNativeMethod(out *strings.Builder, query model.AnalyzedQuery, options
 	} else if query.Command == model.Many {
 		returnType = "std::vector<" + query.Name + "Row>"
 	}
-	out.WriteString(returnType + " Queries::" + query.Name + "(" + methodParameters(query, options.Runtime) + ") const {\n")
+	out.WriteString("// " + model.QueryAnnotation(query) + "\n" + returnType + " Queries::" + query.Name + "(" + methodParameters(query, options.Runtime) + ") const {\n")
 	if query.Command == model.One || query.Command == model.Many {
 		out.WriteString("    std::optional<NYdb::TResultSet> sqlc_result_set;\n")
 	}
@@ -341,7 +341,7 @@ func renderNativeMethod(out *strings.Builder, query model.AnalyzedQuery, options
 		}
 		out.WriteString("\n            .Build();\n")
 	}
-	out.WriteString("        auto sqlc_result = sqlc_session.ExecuteQuery(" + sqlLiteral(query.SQL, "                ", "            ") + ",\n            NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()")
+	out.WriteString("        auto sqlc_result = sqlc_session.ExecuteQuery(" + sqlLiteral(model.WithoutQueryAnnotation(query.SQL), "                ", "            ") + ",\n            NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()")
 	if len(query.Parameters) != 0 {
 		out.WriteString(",\n            sqlc_params")
 	}
@@ -380,8 +380,8 @@ func renderUserverMethod(out *strings.Builder, query model.AnalyzedQuery, option
 	} else if query.Command == model.Many {
 		returnType = "std::vector<" + query.Name + "Row>"
 	}
-	out.WriteString(returnType + " Queries::" + query.Name + "(" + methodParameters(query, options.Runtime) + ") const {\n")
-	call := "this->client_.ExecuteQuery(\n        ::userver::ydb::Query{" + sqlLiteral(query.SQL, "            ", "        ") + ",\n            ::userver::ydb::Query::Name{" + strconv.Quote(query.Name) + "},\n            ::userver::ydb::Query::LogMode::kNameOnly,\n        }"
+	out.WriteString("// " + model.QueryAnnotation(query) + "\n" + returnType + " Queries::" + query.Name + "(" + methodParameters(query, options.Runtime) + ") const {\n")
+	call := "this->client_.ExecuteQuery(\n        ::userver::ydb::Query{" + sqlLiteral(model.WithoutQueryAnnotation(query.SQL), "            ", "        ") + ",\n            ::userver::ydb::Query::Name{" + strconv.Quote(query.Name) + "},\n            ::userver::ydb::Query::LogMode::kNameOnly,\n        }"
 	for _, parameter := range query.Parameters {
 		call += ", " + strconv.Quote("$"+parameter.Name) + ", " + parameter.Name
 	}

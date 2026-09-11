@@ -294,6 +294,7 @@ func renderMethod(b *strings.Builder, query model.AnalyzedQuery) {
 	if query.Command == model.Many {
 		fmt.Fprintf(b, "    /** @return list<%s> */\n", rowClass)
 	}
+	fmt.Fprintf(b, "    // %s\n", model.QueryAnnotation(query))
 	fmt.Fprintf(b, "    public function %s(%s): %s\n    {\n", method, argument, returnType)
 	b.WriteString("        $parameters = [\n")
 	for _, parameter := range query.Parameters {
@@ -310,7 +311,7 @@ func renderMethod(b *strings.Builder, query model.AnalyzedQuery) {
 		fmt.Fprintf(b, "            %s => YdbValueCodec::%s(%s, %s),\n", phpString("$"+parameter.Name, ""), fn, value, phpString(parameter.Name, ""))
 	}
 	b.WriteString("        ];\n")
-	literal := phpSQLString(query.SQL, "                ")
+	literal := phpSQLString(model.WithoutQueryAnnotation(query.SQL), "                ")
 	b.WriteString("        $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {\n")
 	fmt.Fprintf(b, "            $query = $session->newQuery(%s)\n                ->parameters($parameters)\n                ->beginTx('serializable_read_write');\n", literal)
 	b.WriteString("            return (new YdbRawExecutor($this->table))->execute($session, $query);\n        }, false);\n")

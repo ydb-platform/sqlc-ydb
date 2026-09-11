@@ -21,27 +21,27 @@ export class Queries {
     this.#sql = sql;
   }
 
+  // -- name: CountPilots :one
   async countPilots(configure?: ConfigureQuery): Promise<CountPilotsRow | null> {
-    const stmt = this.#sql<[CountPilotsRow]>`-- name: CountPilots :one
-      SELECT COUNT(*) AS pilot_count FROM pilots;`;
+    const stmt = this.#sql<[CountPilotsRow]>`SELECT COUNT(*) AS pilot_count FROM pilots;`;
     configure?.(stmt);
     const [rows] = await stmt;
 
     return rows[0] ?? null;
   }
 
+  // -- name: ListPilots :many
   async listPilots(configure?: ConfigureQuery): Promise<ListPilotsRow[]> {
-    const stmt = this.#sql<[ListPilotsRow]>`-- name: ListPilots :many
-      SELECT id, name FROM pilots ORDER BY id LIMIT 5;`;
+    const stmt = this.#sql<[ListPilotsRow]>`SELECT id, name FROM pilots ORDER BY id LIMIT 5;`;
     configure?.(stmt);
     const [rows] = await stmt;
 
     return rows;
   }
 
+  // -- name: DeletePilot :exec
   async deletePilot(pilotId: number, configure?: ConfigureQuery): Promise<void> {
-    const stmt = this.#sql`-- name: DeletePilot :exec
-      DELETE FROM pilots WHERE id = $pilot_id;`
+    const stmt = this.#sql`DELETE FROM pilots WHERE id = $pilot_id;`
       .parameter("pilot_id", new Int32(pilotId));
     configure?.(stmt);
     await stmt;

@@ -214,7 +214,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		methods[method] = true
 		row, _ := name(q.Name, true)
 		row += "Row"
-		sql := sqlLiteral(q.SQL)
+		sql := sqlLiteral(model.WithoutQueryAnnotation(q.SQL))
 		preparedSQL := sql
 		if o.Runtime != "ydb" && len(q.Parameters) > 0 && q.SQLWithoutDeclarations != "" {
 			preparedSQL = sqlLiteral(jdbcSQL(q))
@@ -258,7 +258,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			params = append(params, n+": "+typ)
 			names = append(names, n)
 		}
-		fmt.Fprintf(&b, "\n    fun %s(%s): %s {\n", method, strings.Join(params, ", "), ret)
+		fmt.Fprintf(&b, "\n    // %s\n    fun %s(%s): %s {\n", model.QueryAnnotation(q), method, strings.Join(params, ", "), ret)
 		for i, p := range q.Parameters {
 			max := map[string]string{"Uint8": "255", "Uint16": "65535", "Uint32": "4294967295L"}[p.Type.UnwrapOptional().Kind]
 			if max == "" {
@@ -288,7 +288,7 @@ func jdbcSQL(q model.AnalyzedQuery) string {
 	for _, p := range q.Parameters {
 		fmt.Fprintf(&b, "DECLARE $%s AS %s;\n", p.Name, p.Type.String())
 	}
-	b.WriteString(q.SQLWithoutDeclarations)
+	b.WriteString(model.WithoutQueryAnnotation(q.SQLWithoutDeclarations))
 	return b.String()
 }
 

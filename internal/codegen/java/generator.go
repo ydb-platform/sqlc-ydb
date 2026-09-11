@@ -227,7 +227,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		methods[method] = true
 		row, _ := name(q.Name, true)
 		row += "Row"
-		sql := sqlLiteral(q.SQL)
+		sql := sqlLiteral(model.WithoutQueryAnnotation(q.SQL))
 		preparedSQL := sql
 		if o.Runtime != "ydb" && len(q.Parameters) > 0 && q.SQLWithoutDeclarations != "" {
 			preparedSQL = sqlLiteral(jdbcSQL(q))
@@ -273,7 +273,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		if o.Runtime == "jdbc" {
 			throws = " throws java.sql.SQLException"
 		}
-		fmt.Fprintf(&b, "\n    public %s %s(%s)%s {\n", ret, method, strings.Join(params, ", "), throws)
+		fmt.Fprintf(&b, "\n    // %s\n    public %s %s(%s)%s {\n", model.QueryAnnotation(q), ret, method, strings.Join(params, ", "), throws)
 		// Java's wider signed carriers must not be silently narrowed by the SDK.
 		// Uint64 deliberately uses all 64 bits of long and needs no range check.
 		for i, p := range q.Parameters {
@@ -305,7 +305,7 @@ func jdbcSQL(q model.AnalyzedQuery) string {
 	for _, p := range q.Parameters {
 		fmt.Fprintf(&b, "DECLARE $%s AS %s;\n", p.Name, p.Type.String())
 	}
-	b.WriteString(q.SQLWithoutDeclarations)
+	b.WriteString(model.WithoutQueryAnnotation(q.SQLWithoutDeclarations))
 	return b.String()
 }
 

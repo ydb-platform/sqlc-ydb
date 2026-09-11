@@ -86,7 +86,7 @@ func TestJDBCPreparesWithResolvedParameterDeclarations(t *testing.T) {
 		t.Fatal(err)
 	}
 	generated := string(files[len(files)-1].Content)
-	wantPrepared := "client.prepareStatement(" + sqlLiteral("DECLARE $author_id AS Uint64;\n"+querySQL) + ")"
+	wantPrepared := "client.prepareStatement(" + sqlLiteral("DECLARE $author_id AS Uint64;\n"+model.WithoutQueryAnnotation(querySQL)) + ")"
 	if !strings.Contains(generated, wantPrepared) {
 		t.Fatalf("generated JDBC API did not declare resolved parameters for driver preparation:\n%s", generated)
 	}

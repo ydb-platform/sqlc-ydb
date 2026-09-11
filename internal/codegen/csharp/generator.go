@@ -295,8 +295,8 @@ func writeDapperMethod(b *bytes.Buffer, q model.AnalyzedQuery) {
 	} else if q.Command == model.Many {
 		ret = "Task<IReadOnlyList<" + name + "Row>>"
 	}
-	fmt.Fprintf(b, "\n    public async %s %sAsync(%sCancellationToken cancellationToken = default)\n    {\n", ret, name, methodParameters(q))
-	fmt.Fprintf(b, "        var command = new CommandDefinition(%s, %s, _transaction, cancellationToken: cancellationToken);\n", sqlLiteral(q.SQL), dapperParameters(q))
+	fmt.Fprintf(b, "\n    // %s\n    public async %s %sAsync(%sCancellationToken cancellationToken = default)\n    {\n", model.QueryAnnotation(q), ret, name, methodParameters(q))
+	fmt.Fprintf(b, "        var command = new CommandDefinition(%s, %s, _transaction, cancellationToken: cancellationToken);\n", sqlLiteral(model.WithoutQueryAnnotation(q.SQL)), dapperParameters(q))
 	if q.Command == model.Exec {
 		b.WriteString("        await _connection.ExecuteAsync(command).ConfigureAwait(false);\n")
 		b.WriteString("    }\n")
@@ -347,14 +347,14 @@ func writeLinq2DBMethod(b *bytes.Buffer, q model.AnalyzedQuery) {
 	} else if q.Command == model.Many {
 		ret = "Task<IReadOnlyList<" + name + "Row>>"
 	}
-	fmt.Fprintf(b, "\n    public async %s %sAsync(%sCancellationToken cancellationToken = default)\n    {\n", ret, name, methodParameters(q))
+	fmt.Fprintf(b, "\n    // %s\n    public async %s %sAsync(%sCancellationToken cancellationToken = default)\n    {\n", model.QueryAnnotation(q), ret, name, methodParameters(q))
 	params := linq2DBParameters(q)
 	if q.Command == model.Exec {
-		fmt.Fprintf(b, "        await _connection.ExecuteAsync(%s, cancellationToken%s).ConfigureAwait(false);\n", sqlLiteral(q.SQL), params)
+		fmt.Fprintf(b, "        await _connection.ExecuteAsync(%s, cancellationToken%s).ConfigureAwait(false);\n", sqlLiteral(model.WithoutQueryAnnotation(q.SQL)), params)
 		b.WriteString("    }\n")
 		return
 	}
-	fmt.Fprintf(b, "        var rows = await _connection.QueryToListAsync(%sRowFrom,%s, cancellationToken%s).ConfigureAwait(false);\n", name, sqlLiteral(q.SQL), params)
+	fmt.Fprintf(b, "        var rows = await _connection.QueryToListAsync(%sRowFrom,%s, cancellationToken%s).ConfigureAwait(false);\n", name, sqlLiteral(model.WithoutQueryAnnotation(q.SQL)), params)
 	if q.Command == model.One {
 		b.WriteString("        if (rows.Count == 0)\n        {\n            throw new InvalidOperationException(\"query returned no rows\");\n        }\n        return rows[0];\n")
 	} else {
@@ -458,8 +458,8 @@ func writeMethod(b *bytes.Buffer, q model.AnalyzedQuery) {
 	if q.Command == model.Many {
 		ret = "Task<IReadOnlyList<" + name + "Row>>"
 	}
-	fmt.Fprintf(b, "\n    public async %s %sAsync(%sCancellationToken cancellationToken = default)\n    {\n", ret, name, methodParameters(q))
-	fmt.Fprintf(b, "        await using var command = new YdbCommand(%s, _connection) { Transaction = _transaction };\n", sqlLiteral(q.SQL))
+	fmt.Fprintf(b, "\n    // %s\n    public async %s %sAsync(%sCancellationToken cancellationToken = default)\n    {\n", model.QueryAnnotation(q), ret, name, methodParameters(q))
+	fmt.Fprintf(b, "        await using var command = new YdbCommand(%s, _connection) { Transaction = _transaction };\n", sqlLiteral(model.WithoutQueryAnnotation(q.SQL)))
 	for _, p := range q.Parameters {
 		writeParameter(b, q, p)
 	}

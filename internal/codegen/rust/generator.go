@@ -189,6 +189,7 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 	} else if q.Command == model.Many {
 		ret = "Vec<" + pascalName(q.Name) + "Row>"
 	}
+	fmt.Fprintf(b, "    // %s\n", model.QueryAnnotation(q))
 	oneLineSignature := fmt.Sprintf("    pub async fn %s(&mut self", snakeName(q.Name))
 	if len(parameters) != 0 {
 		oneLineSignature += ", " + strings.Join(parameters, ", ")
@@ -359,6 +360,7 @@ func querySQL(q model.AnalyzedQuery) string {
 	} else {
 		sql = cleanDeclarationGaps(sql)
 	}
+	sql = model.WithoutQueryAnnotation(sql)
 	lines := strings.SplitAfter(sql, "\n")
 	parts := make([]string, 0, len(lines))
 	for _, line := range lines {

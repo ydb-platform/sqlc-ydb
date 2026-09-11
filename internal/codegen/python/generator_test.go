@@ -278,7 +278,7 @@ func TestGeneratedSQLLiteralsRoundTripSpecialCharacters(t *testing.T) {
 
 func TestGeneratedSQLAlchemySQLLiteralRoundTripsLexicalRewrite(t *testing.T) {
 	sql := "-- name: Пример :one\n-- comment $author_id :note\nDECLARE $author_id AS Uint64;\n$local = $author_id;\nSELECT ':ghost', @@:ghost $author_id@@, `:column`, $local FROM authors WHERE id = $author_id;"
-	want := "-- name\\: Пример \\:one\n-- comment $author_id \\:note\nDECLARE $author_id AS Uint64;\n$local = :author_id;\nSELECT '\\:ghost', @@\\:ghost $author_id@@, `\\:column`, $local FROM authors WHERE id = :author_id;"
+	want := "-- comment $author_id \\:note\nDECLARE $author_id AS Uint64;\n$local = :author_id;\nSELECT '\\:ghost', @@\\:ghost $author_id@@, `\\:column`, $local FROM authors WHERE id = :author_id;"
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "find_author", Command: model.Exec, SQL: sql, Parameters: []model.Parameter{{Name: "author_id", Type: model.Type{Kind: "Uint64"}}}}}}
 	files, err := Generate(a, Options{Runtime: "sqlalchemy"})
 	if err != nil {
@@ -463,7 +463,7 @@ row = Querier(c).get_author(7, 8, 9, 10)
 assert row.id == 7 and row.display_name is None and c.result.closed
 assert c.calls[0][1]['id'][0] == 7
 assert [c.calls[0][1][name][0] for name in ('ydb', 'models', 'text')] == [8, 9, 10]
-assert r'\:one' in c.calls[0][0] and 'id = :id;' in c.calls[0][0], repr(c.calls[0][0])
+assert '-- name:' not in c.calls[0][0] and 'id = :id;' in c.calls[0][0], repr(c.calls[0][0])
 c.values = {'a.id': 8}
 rows = list(Querier(c).list_authors())
 assert len(rows) == 1 and rows[0].id == 8 and c.result.closed

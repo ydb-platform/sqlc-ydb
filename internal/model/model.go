@@ -140,6 +140,24 @@ type AnalyzedQuery struct {
 	Source                 Position
 }
 
+// QueryAnnotation returns the sqlc metadata comment associated with q.
+func QueryAnnotation(q AnalyzedQuery) string {
+	return "-- name: " + q.Name + " " + string(q.Command)
+}
+
+// WithoutQueryAnnotation removes a leading sqlc metadata comment from SQL.
+// It preserves declarations, ordinary comments, and all remaining whitespace.
+func WithoutQueryAnnotation(sql string) string {
+	line, rest, found := strings.Cut(sql, "\n")
+	if !found {
+		return sql
+	}
+	if strings.HasPrefix(strings.TrimSpace(strings.TrimSuffix(line, "\r")), "-- name:") {
+		return rest
+	}
+	return sql
+}
+
 type AnalysisResult struct {
 	Catalog     Catalog
 	Queries     []AnalyzedQuery

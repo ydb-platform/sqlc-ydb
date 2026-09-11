@@ -331,7 +331,8 @@ func renderClass(b *strings.Builder, a *model.AnalysisResult, o Options) error {
 }
 
 func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQuery, o Options) error {
-	sql := q.SQL
+	sql := model.WithoutQueryAnnotation(q.SQL)
+	q.SQL = sql
 	if o.Runtime == "sqlalchemy" {
 		var err error
 		sql, err = sqlalchemySQL(q)
@@ -365,6 +366,7 @@ func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQ
 	if o.Runtime == "dbapi" {
 		indent = "            "
 	}
+	b.WriteString("    # " + model.QueryAnnotation(q) + "\n")
 	b.WriteString("    def " + methodName(q.Name) + "(self" + p + ") -> " + ret + ":\n")
 	if o.Runtime == "ydb" {
 		b.WriteString("        parameters = {")

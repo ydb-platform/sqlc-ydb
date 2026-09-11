@@ -283,11 +283,13 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 		}
 		generic = "<[" + row + "]>"
 	}
-	b.WriteString("\n  async " + method + "(" + params + "configure?: ConfigureQuery): Promise<" + ret + "> {\n")
+	b.WriteString("\n  // " + model.QueryAnnotation(q) + "\n")
+	b.WriteString("  async " + method + "(" + params + "configure?: ConfigureQuery): Promise<" + ret + "> {\n")
 	sql := q.SQL
 	if len(q.Parameters) > 0 {
 		sql = omitDeclarationLines(q.SQL, q.SQLWithoutDeclarations)
 	}
+	sql = model.WithoutQueryAnnotation(sql)
 	b.WriteString("    const stmt = this.#sql" + generic + sqlLiteral(strings.TrimSpace(sql)))
 	for _, p := range q.Parameters {
 		field, _ := identifier(p.Name, false)
