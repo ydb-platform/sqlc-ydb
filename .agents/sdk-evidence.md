@@ -32,16 +32,16 @@ pinned in the [example Maven build](../examples/authors/java/pom.xml). The
   `tools/SessionRetryContext` and `tools/QueryReader` in the SDK's `query` module.
   `SessionRetryContext` owns operation sessions; the caller owns the transport
   and client. Parameters use `PrimitiveValue` and `OptionalType` factories.
-- JDBC's `query/params/PreparedQuery.java` sorts indexed `$pN` parameters before
-  other names. The generated code binds by name through `YdbPreparedStatement`
-  to avoid depending on positional order. It supplies SDK `Value<?>` objects,
-  handled by `SimpleJdbcPrm.setValue` and `ValueFactory.readValue`, to preserve
-  unsigned and optional types. The inspected `setObject(name, object, Type)`
-  overload ignores its `Type` argument and is deliberately not used. The
-  driver's default `prepareStatement` path calls `prepareDataQuery` before any
-  values are bound, so JDBC-based generators synthesize declarations from the
-  analyzer's resolved types in a private preparation query while retaining the
-  declaration-free source SQL separately.
+- Java JDBC uses standard `?` placeholders, which the driver handles through
+  `query/params/InMemoryQuery` and `SimpleJdbcPrm`. Bind each occurrence by index;
+  this avoids `PreparedQuery`'s name sorting and server-side preparation before
+  binding. Typed setters handle signed primitives, text and bytes; SDK values
+  preserve unsigned types. No generated declarations or unwrap are needed.
+  `YdbResultSetBase.getObject(index, Class)` returns null for absent values.
+  Kotlin's existing JDBC path still uses named bindings and declarations.
+- Native `ProtoOptionalValueReader.getText/getBytes` return null for absent
+  values; primitive getters throw and still need presence checks. Non-null
+  SDK values provide `makeOptional()`; null parameters need a typed empty value.
 - SDK constructors for `Uint8/16/32` mask the signed Java carrier. Generated
   range checks prevent truncation; `Uint64` intentionally retains every bit
   of a Java `long`.

@@ -5,8 +5,6 @@ import tech.ydb.query.QueryTransaction;
 import tech.ydb.query.tools.QueryReader;
 import tech.ydb.table.query.Params;
 import tech.ydb.table.values.PrimitiveValue;
-import tech.ydb.table.values.PrimitiveType;
-import tech.ydb.table.values.OptionalType;
 
 // The caller owns the injected client and its lifecycle.
 public final class Queries {
@@ -30,7 +28,7 @@ public final class Queries {
         if (!_rows.next()) return java.util.Optional.empty();
         long _value0 = _rows.getColumn(0).getUint64();
         String _value1 = _rows.getColumn(1).getText();
-        String _value2 = _rows.getColumn(2).isOptionalItemPresent() ? _rows.getColumn(2).getOptionalItem().getText() : null;
+        String _value2 = _rows.getColumn(2).getText();
         return java.util.Optional.of(new GetAuthorRow(_value0, _value1, _value2));
     }
 }

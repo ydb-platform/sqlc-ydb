@@ -75,7 +75,7 @@ func TestSQLLiteralRoundTripsThroughJava17(t *testing.T) {
 	}
 }
 
-func TestJDBCPreparesWithResolvedParameterDeclarations(t *testing.T) {
+func TestJDBCUsesStandardPositionalParameters(t *testing.T) {
 	querySQL := "-- name: GetAuthor :one\nSELECT id FROM authors WHERE id = $author_id;"
 	files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{
 		Name: "GetAuthor", Command: model.One, SQL: querySQL, SQLWithoutDeclarations: querySQL,
@@ -86,9 +86,14 @@ func TestJDBCPreparesWithResolvedParameterDeclarations(t *testing.T) {
 		t.Fatal(err)
 	}
 	generated := string(files[len(files)-1].Content)
-	wantPrepared := "client.prepareStatement(" + sqlLiteral("DECLARE $author_id AS Uint64;\n"+model.WithoutQueryAnnotation(querySQL)) + ")"
+	for _, unwanted := range []string{"unwrap(", "DECLARE ", "wasNull("} {
+		if strings.Contains(generated, unwanted) {
+			t.Fatalf("unexpected %s in JDBC output", unwanted)
+		}
+	}
+	wantPrepared := "client.prepareStatement(" + sqlLiteral("SELECT id FROM authors WHERE id = ?;") + ")"
 	if !strings.Contains(generated, wantPrepared) {
-		t.Fatalf("generated JDBC API did not declare resolved parameters for driver preparation:\n%s", generated)
+		t.Fatalf("generated JDBC API did not use positional SQL:\n%s", generated)
 	}
 }
 
@@ -200,9 +205,8 @@ func TestAllSupportedScalarsCompileAgainstAuthorsMavenProfiles(t *testing.T) {
 }
 
 // This test executes generated JDBC code without a YDB server. Its proxy only
-// supplies the JDBC wrapper surface; parameter binding is delegated to the
-// published driver's PreparedQuery, which verifies the driver's real name
-// normalization and Value<?> type checks.
+// supplies the standard JDBC surface; parameter binding is delegated to the
+// published driver's InMemoryQuery to verify actual positional types.
 func TestGeneratedJDBCUsesTypedDriverValuesAndGuardsUnsignedRanges(t *testing.T) {
 	maven := os.Getenv("SQLC_YDB_TEST_MAVEN")
 	if maven == "" {
@@ -210,7 +214,7 @@ func TestGeneratedJDBCUsesTypedDriverValuesAndGuardsUnsignedRanges(t *testing.T)
 	}
 	queries := []model.AnalyzedQuery{
 		{
-			Name: "Bind", Command: model.Exec, SQL: "SELECT 1;",
+			Name: "Bind", Command: model.Exec, SQL: "SELECT $author_id, $maybe_id, $title, $payload;",
 			Parameters: []model.Parameter{
 				{Name: "author_id", Type: model.Type{Kind: "Uint64"}},
 				{Name: "maybe_id", Type: model.Optional(model.Type{Kind: "Uint16"})},
@@ -222,6 +226,19 @@ func TestGeneratedJDBCUsesTypedDriverValuesAndGuardsUnsignedRanges(t *testing.T)
 		{Name: "Bad16", Command: model.Exec, SQL: "SELECT 1;", Parameters: []model.Parameter{{Name: "value", Type: model.Optional(model.Type{Kind: "Uint16"})}}},
 		{Name: "Bad32", Command: model.Exec, SQL: "SELECT 1;", Parameters: []model.Parameter{{Name: "value", Type: model.Type{Kind: "Uint32"}}}},
 	}
+	queries = append(queries, model.AnalyzedQuery{
+		Name: "Nullable", Command: model.One, SQL: "SELECT $number AS number, $flag AS flag, $payload AS payload;",
+		Parameters: []model.Parameter{
+			{Name: "number", Type: model.Optional(model.Type{Kind: "Int64"})},
+			{Name: "flag", Type: model.Optional(model.Type{Kind: "Bool"})},
+			{Name: "payload", Type: model.Optional(model.Type{Kind: "String"})},
+		},
+		ResultSets: []model.ResultSet{{Columns: []model.Column{
+			{Name: "number", Type: model.Optional(model.Type{Kind: "Int64"})},
+			{Name: "flag", Type: model.Optional(model.Type{Kind: "Bool"})},
+			{Name: "payload", Type: model.Optional(model.Type{Kind: "String"})},
+		}}},
+	})
 	files, err := Generate(&model.AnalysisResult{Queries: queries}, Options{Package: "synthetic.jdbc", Runtime: "jdbc"})
 	if err != nil {
 		t.Fatal(err)
@@ -257,28 +274,21 @@ func TestGeneratedJDBCUsesTypedDriverValuesAndGuardsUnsignedRanges(t *testing.T)
 	}
 	const program = `package synthetic.jdbc;
 
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.Types;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Properties;
 
-import tech.ydb.jdbc.YdbPreparedStatement;
 import tech.ydb.jdbc.common.YdbTypes;
 import tech.ydb.jdbc.query.QueryKey;
 import tech.ydb.jdbc.query.YdbQuery;
-import tech.ydb.jdbc.query.params.PreparedQuery;
 import tech.ydb.jdbc.settings.YdbQueryProperties;
 import tech.ydb.table.query.Params;
 import tech.ydb.table.values.DecimalType;
 import tech.ydb.table.values.OptionalType;
 import tech.ydb.table.values.PrimitiveType;
 import tech.ydb.table.values.PrimitiveValue;
-import tech.ydb.table.values.Type;
 
 public final class Main {
     private Main() { }
@@ -293,21 +303,26 @@ public final class Main {
         expectRange(() -> guarded.bad32(4294967296L));
 
         YdbTypes types = new YdbTypes(false, DecimalType.getDefault());
-        YdbQuery query = YdbQuery.parseQuery(new QueryKey("SELECT 1;"), new YdbQueryProperties(new Properties()), types);
-        Map<String, Type> declared = new HashMap<>();
-        declared.put("$author_id", PrimitiveType.Uint64);
-        declared.put("$maybe_id", OptionalType.of(PrimitiveType.Uint16));
-        declared.put("$title", PrimitiveType.Text);
-        declared.put("$payload", PrimitiveType.Bytes);
-        PreparedQuery bound = new PreparedQuery(types, query, declared);
+        YdbQuery query = YdbQuery.parseQuery(new QueryKey("SELECT ?, ?, ?, ?;"), new YdbQueryProperties(new Properties()), types);
+        tech.ydb.jdbc.query.params.InMemoryQuery bound = new tech.ydb.jdbc.query.params.InMemoryQuery(query, false);
         new Queries(bindingConnection(bound)).bind(-1L, null, "typed text", new byte[] { 0, 1, (byte) 255 });
 
         Params values = bound.getCurrentParams();
         check(values.values().size() == 4, "wrong parameter count");
-        check(PrimitiveValue.newUint64(-1L).equals(values.values().get("$author_id")), "Uint64 lost its type or name");
-        check(OptionalType.of(PrimitiveType.Uint16).emptyValue().equals(values.values().get("$maybe_id")), "optional null lost its declared type");
-        check(PrimitiveValue.newText("typed text").equals(values.values().get("$title")), "Utf8 lost its type");
-        check(PrimitiveValue.newBytes(new byte[] { 0, 1, (byte) 255 }).equals(values.values().get("$payload")), "String lost its binary type");
+        check(PrimitiveValue.newUint64(-1L).equals(values.values().get("$jp1")), "Uint64 lost its type or name");
+        check(OptionalType.of(PrimitiveType.Uint16).emptyValue().equals(values.values().get("$jp2")), "optional null lost its declared type");
+        check(PrimitiveValue.newText("typed text").equals(values.values().get("$jp3")), "Utf8 lost its type");
+        check(PrimitiveValue.newBytes(new byte[] { 0, 1, (byte) 255 }).equals(values.values().get("$jp4")), "String lost its binary type");
+        String endpoint = System.getenv("YDB_CONNECTION_STRING");
+        if (endpoint != null && !endpoint.isBlank()) {
+            try (Connection connection = java.sql.DriverManager.getConnection("jdbc:ydb:" + endpoint)) {
+                Queries live = new Queries(connection);
+                NullableRow empty = live.nullable(null, null, null).orElseThrow();
+                check(empty.number() == null && empty.flag() == null && empty.payload() == null, "nullable getters lost NULL");
+                NullableRow filled = live.nullable(42L, false, new byte[]{0, (byte)255}).orElseThrow();
+                check(filled.number() == 42L && !filled.flag() && java.util.Arrays.equals(filled.payload(), new byte[]{0, (byte)255}), "nullable getters lost values");
+            }
+        }
     }
 
     private static Connection refusingConnection() {
@@ -315,22 +330,19 @@ public final class Main {
                 (proxy, method, args) -> { throw new AssertionError("range guard reached Connection." + method.getName()); });
     }
 
-    private static Connection bindingConnection(PreparedQuery query) {
-        YdbPreparedStatement named = (YdbPreparedStatement) Proxy.newProxyInstance(
-                Main.class.getClassLoader(), new Class<?>[] { YdbPreparedStatement.class }, new InvocationHandler() {
-                    @Override public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-                        if (method.getName().equals("setObject") && args != null && args.length == 2 && args[0] instanceof String) {
-                            query.setParam((String) args[0], args[1], Types.JAVA_OBJECT);
-                            return null;
-                        }
-                        if (method.getName().equals("close")) return null;
-                        throw new AssertionError("unexpected YdbPreparedStatement." + method.getName());
-                    }
-                });
+    private static Connection bindingConnection(tech.ydb.jdbc.query.params.InMemoryQuery query) {
         PreparedStatement statement = (PreparedStatement) Proxy.newProxyInstance(
                 Main.class.getClassLoader(), new Class<?>[] { PreparedStatement.class }, (proxy, method, args) -> {
-                    if (method.getName().equals("unwrap") && args != null && args.length == 1 && args[0] == YdbPreparedStatement.class) return named;
-                    if (method.getName().equals("isWrapperFor")) return args != null && args.length == 1 && args[0] == YdbPreparedStatement.class;
+                    if (method.getName().startsWith("set")) {
+                        int type = switch (method.getName()) {
+                            case "setString" -> Types.VARCHAR;
+                            case "setBytes" -> Types.VARBINARY;
+                            case "setObject" -> Types.JAVA_OBJECT;
+                            default -> throw new AssertionError(method);
+                        };
+                        query.setParam((int) args[0], args[1], type);
+                        return null;
+                    }
                     if (method.getName().equals("execute")) return false;
                     if (method.getName().equals("close")) return null;
                     throw new AssertionError("unexpected PreparedStatement." + method.getName());
@@ -371,5 +383,40 @@ public final class Main {
 	run.Dir = moduleDir
 	if out, err := run.CombinedOutput(); err != nil {
 		t.Fatalf("generated JDBC binding fixture failed against the published driver: %v\n%s", err, out)
+	}
+}
+
+func TestJDBCParameterOccurrencesPreserveSQLText(t *testing.T) {
+	q := model.AnalyzedQuery{
+		SQLWithoutDeclarations: "-- name: Check :one\n$local = 'Привет $value';\nSELECT `$value`, $local, $value, $other, $value; -- $value\n",
+		Parameters:             []model.Parameter{{Name: "other"}, {Name: "value"}},
+	}
+	sql, bindings := jdbcSQL(q)
+	want := "$local = 'Привет $value';\nSELECT `$value`, $local, ?, ?, ?; -- $value\n"
+	if sql != want || fmt.Sprint(bindings) != "[1 0 1]" {
+		t.Fatalf("SQL=%q bindings=%v", sql, bindings)
+	}
+}
+
+func TestNullableJavaGettersAndTextBinding(t *testing.T) {
+	q := model.AnalyzedQuery{Name: "Read", Command: model.One, SQL: "SELECT $bio;", Parameters: []model.Parameter{{Name: "bio", Type: model.Optional(model.Type{Kind: "Utf8"})}}, ResultSets: []model.ResultSet{{Columns: []model.Column{
+		{Name: "bio", Type: model.Optional(model.Type{Kind: "Utf8"})},
+		{Name: "number", Type: model.Optional(model.Type{Kind: "Int64"})},
+	}}}}
+	for _, runtime := range []string{"jdbc", "ydb"} {
+		files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{q}}, Options{Package: "nullable", Runtime: runtime})
+		if err != nil {
+			t.Fatal(err)
+		}
+		output := string(files[len(files)-1].Content)
+		expected := []string{"_prepared.setString(1, bio)", "_rows.getObject(2, Long.class)"}
+		if runtime == "ydb" {
+			expected = []string{"PrimitiveValue.newText(bio).makeOptional()", "String _value0 = _rows.getColumn(0).getText();"}
+		}
+		for _, fragment := range expected {
+			if !strings.Contains(output, fragment) {
+				t.Fatalf("missing %s in %s", fragment, output)
+			}
+		}
 	}
 }

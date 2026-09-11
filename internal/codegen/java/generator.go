@@ -6,7 +6,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/antlr4-go/antlr/v4"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
+	yql "github.com/ydb-platform/yql-parsers/go"
 )
 
 type Options struct{ Package, Runtime string }
@@ -206,13 +208,25 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 	if o.Runtime == "ydb" {
 		b.WriteString("import tech.ydb.query.QueryTransaction;\nimport tech.ydb.query.tools.QueryReader;\nimport tech.ydb.table.query.Params;\n")
 	}
-	needsValues := o.Runtime == "ydb"
+	needsValues, needsOptional := false, false
 	for _, q := range a.Queries {
-		needsValues = needsValues || len(q.Parameters) > 0
+		for _, p := range q.Parameters {
+			if o.Runtime == "ydb" || strings.HasPrefix(p.Type.UnwrapOptional().Kind, "Uint") {
+				needsValues = true
+				needsOptional = needsOptional || p.Type.IsOptional()
+			}
+		}
 	}
 	if needsValues {
-		b.WriteString("import tech.ydb.table.values.PrimitiveValue;\nimport tech.ydb.table.values.PrimitiveType;\nimport tech.ydb.table.values.OptionalType;\n\n")
+		b.WriteString("import tech.ydb.table.values.PrimitiveValue;\n")
 	}
+	if needsOptional {
+		b.WriteString("import tech.ydb.table.values.PrimitiveType;\nimport tech.ydb.table.values.OptionalType;\n")
+	}
+	if needsValues || o.Runtime == "ydb" {
+		b.WriteByte('\n')
+	}
+
 	owner := map[string]string{"ydb": "QueryTransaction", "jdbc": "java.sql.Connection"}[o.Runtime]
 	fmt.Fprintf(&b, "// The caller owns the injected client and its lifecycle.\npublic final class Queries {\n    private final %s client;\n\n    public Queries(%s client) {\n        this.client = java.util.Objects.requireNonNull(client);\n    }\n", owner, owner)
 	methods := map[string]bool{}
@@ -232,8 +246,11 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		row += "Row"
 		sql := sqlLiteral(model.WithoutQueryAnnotation(q.SQL))
 		preparedSQL := sql
-		if o.Runtime != "ydb" && len(q.Parameters) > 0 && q.SQLWithoutDeclarations != "" {
-			preparedSQL = sqlLiteral(jdbcSQL(q))
+		var bindings []int
+		if o.Runtime != "ydb" {
+			var text string
+			text, bindings = jdbcSQL(q)
+			preparedSQL = sqlLiteral(text)
 		}
 		ret := "void"
 		switch q.Command {
@@ -294,7 +311,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		if o.Runtime == "ydb" {
 			emitNative(&b, q, paramNames, sql, row)
 		} else {
-			emitJDBC(&b, q, paramNames, preparedSQL, row)
+			emitJDBC(&b, q, paramNames, bindings, preparedSQL, row)
 		}
 		b.WriteString("    }\n")
 	}
@@ -303,13 +320,46 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 	return files, nil
 }
 
-func jdbcSQL(q model.AnalyzedQuery) string {
-	var b strings.Builder
-	for _, p := range q.Parameters {
-		fmt.Fprintf(&b, "DECLARE $%s AS %s;\n", p.Name, p.Type.String())
+// jdbcSQL replaces only parameter tokens, preserving quoted text and local variables.
+// Bindings follow occurrences, including repeated uses of the same parameter.
+func jdbcSQL(q model.AnalyzedQuery) (string, []int) {
+	text := q.SQLWithoutDeclarations
+	if text == "" {
+		text = q.SQL
 	}
-	b.WriteString(model.WithoutQueryAnnotation(q.SQLWithoutDeclarations))
-	return b.String()
+	text = model.WithoutQueryAnnotation(text)
+	parameters := map[string]int{}
+	for i, p := range q.Parameters {
+		parameters[p.Name] = i
+	}
+	lexer := yql.NewYQLLexer(antlr.NewInputStream(text))
+	lexer.RemoveErrorListeners()
+	var tokens []antlr.Token
+	for t := lexer.NextToken(); t.GetTokenType() != antlr.TokenEOF; t = lexer.NextToken() {
+		if t.GetChannel() == antlr.TokenDefaultChannel {
+			tokens = append(tokens, t)
+		}
+	}
+	runes := []rune(text)
+	var b strings.Builder
+	var bindings []int
+	cursor := 0
+	for i, t := range tokens {
+		if t.GetTokenType() != yql.YQLLexerDOLLAR || i+1 == len(tokens) {
+			continue
+		}
+		next := tokens[i+1]
+		parameter, ok := parameters[strings.Trim(next.GetText(), "`")]
+		if !ok {
+			continue
+		}
+		b.WriteString(string(runes[cursor:t.GetStart()]))
+		b.WriteByte('?')
+		cursor = next.GetStop() + 1
+		bindings = append(bindings, parameter)
+	}
+	b.WriteString(string(runes[cursor:]))
+	return b.String(), bindings
 }
 
 func emitNative(b *strings.Builder, q model.AnalyzedQuery, names []string, sql, row string) {
@@ -332,22 +382,29 @@ func parameterValue(p model.Parameter, name string) string {
 	value := "PrimitiveValue.new" + s.sdk + "(" + name + ")"
 	if p.Type.IsOptional() {
 		o := "OptionalType.of(PrimitiveType." + s.sdk + ")"
-		value = name + " == null ? " + o + ".emptyValue() : " + o + ".newValue(" + value + ")"
+		value = name + " == null ? " + o + ".emptyValue() : " + value + ".makeOptional()"
 	}
 	return value
 }
 
-func emitJDBC(b *strings.Builder, q model.AnalyzedQuery, names []string, sql, row string) {
+func emitJDBC(b *strings.Builder, q model.AnalyzedQuery, names []string, bindings []int, sql, row string) {
 	indent := "        "
 	fmt.Fprintf(b, "%stry (var _prepared = client.prepareStatement(%s)) {\n", indent, sql)
 	indent += "    "
-	if len(q.Parameters) > 0 {
-		b.WriteString(indent + "var _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement.class);\n")
-	}
-	for i, p := range q.Parameters {
-		// YdbPreparedStatement adds '$' to a parameter name itself. Passing an
-		// SDK Value preserves inferred YQL types even when SQL omits DECLARE.
-		fmt.Fprintf(b, "%s_statement.setObject(%s, %s);\n", indent, quoted(p.Name), parameterValue(p, names[i]))
+	for position, i := range bindings {
+		p := q.Parameters[i]
+		s, _, _ := typeInfo(p.Type)
+		if strings.HasPrefix(p.Type.UnwrapOptional().Kind, "Uint") {
+			fmt.Fprintf(b, "%s_prepared.setObject(%d, %s);\n", indent, position+1, parameterValue(p, names[i]))
+		} else {
+			sqlType := map[string]string{"Bool": "BOOLEAN", "Int8": "TINYINT", "Int16": "SMALLINT", "Int32": "INTEGER", "Int64": "BIGINT", "Float": "REAL", "Double": "DOUBLE"}[p.Type.UnwrapOptional().Kind]
+			if p.Type.IsOptional() && sqlType != "" {
+				fmt.Fprintf(b, "%sif (%s == null) _prepared.setNull(%d, java.sql.Types.%s);\n%selse ", indent, names[i], position+1, sqlType, indent)
+			} else {
+				b.WriteString(indent)
+			}
+			fmt.Fprintf(b, "_prepared.set%s(%d, %s);\n", s.jdbc, position+1, names[i])
+		}
 	}
 	if q.Command == model.Exec {
 		b.WriteString(indent + "_prepared.execute();\n")
@@ -373,15 +430,16 @@ func emitRows(b *strings.Builder, q model.AnalyzedQuery, row, indent string, nat
 		n := fmt.Sprintf("_value%d", i)
 		if native {
 			reader := fmt.Sprintf("_rows.getColumn(%d)", i)
-			if c.Type.IsOptional() {
+			if c.Type.IsOptional() && s.typ != "String" && s.typ != "byte[]" {
 				fmt.Fprintf(b, "%s%s %s = %s.isOptionalItemPresent() ? %s.getOptionalItem().get%s() : null;\n", indent, typ, n, reader, reader, s.sdk)
 			} else {
 				fmt.Fprintf(b, "%s%s %s = %s.get%s();\n", indent, typ, n, reader, s.sdk)
 			}
 		} else {
-			fmt.Fprintf(b, "%s%s %s = _rows.get%s(%d);\n", indent, typ, n, s.jdbc, i+1)
-			if c.Type.IsOptional() {
-				fmt.Fprintf(b, "%sif (_rows.wasNull()) %s = null;\n", indent, n)
+			if c.Type.IsOptional() && s.typ != "String" && s.typ != "byte[]" {
+				fmt.Fprintf(b, "%s%s %s = _rows.getObject(%d, %s.class);\n", indent, typ, n, i+1, typ)
+			} else {
+				fmt.Fprintf(b, "%s%s %s = _rows.get%s(%d);\n", indent, typ, n, s.jdbc, i+1)
 			}
 		}
 		values = append(values, n)

@@ -2,8 +2,6 @@
 package authors.jdbc;
 
 import tech.ydb.table.values.PrimitiveValue;
-import tech.ydb.table.values.PrimitiveType;
-import tech.ydb.table.values.OptionalType;
 
 // The caller owns the injected client and its lifecycle.
 public final class Queries {
@@ -16,18 +14,15 @@ public final class Queries {
     // -- name: GetAuthor :one
     public java.util.Optional<GetAuthorRow> getAuthor(long authorId) throws java.sql.SQLException {
         try (var _prepared = client.prepareStatement("""
-            DECLARE $author_id AS Uint64;
               \s
-            SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;\
+            SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = ?;\
             """)) {
-            var _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement.class);
-            _statement.setObject("author_id", PrimitiveValue.newUint64(authorId));
+            _prepared.setObject(1, PrimitiveValue.newUint64(authorId));
             try (var _rows = _prepared.executeQuery()) {
                 if (!_rows.next()) return java.util.Optional.empty();
                 long _value0 = _rows.getLong(1);
                 String _value1 = _rows.getString(2);
                 String _value2 = _rows.getString(3);
-                if (_rows.wasNull()) _value2 = null;
                 return java.util.Optional.of(new GetAuthorRow(_value0, _value1, _value2));
             }
         }

@@ -43,17 +43,17 @@ The application owns retry, commit, rollback and the transaction lifecycle.
 The JDBC constructor receives a borrowed `java.sql.Connection`; statements and
 result sets are method-owned and the connection remains application-owned.
 
-For JDBC, variables are bound through the driver's `YdbPreparedStatement`
-name-based `setObject` with an explicitly typed SDK `Value`. Names omit the
-leading `$`, which the driver adds itself. This is required because the driver orders
-indexed `$p1` parameters first and then other names alphabetically. `Uint64`
-uses `long` as a bit-preserving representation, so `-1L` must remain `-1L`; do
-not convert it through `int` or floating point. Nullable `Utf8` is `String`
-with a null binding and nullable result; binary YQL `String` values are
-`byte[]` in the generated Java API. The readable SQL constant preserves the
-declaration-free source. JDBC prepares a private companion query with `DECLARE`
-statements synthesized from the resolved parameter types because the driver
-prepares the query before `setObject` supplies those typed values.
+JDBC uses standard positional `?` parameters and `PreparedStatement` setters.
+Each occurrence is bound in SQL order, including repeated parameters. Text uses
+`setString`, binary values use `setBytes`, and signed primitives use their typed
+setters. Unsigned integers use `setObject` with an SDK value to retain their YQL
+type; `Uint64` preserves all bits of a Java `long`, including `-1L`.
+The driver handles parameter types without generated `DECLARE` statements or
+`unwrap`. Nullable primitive results use `getObject(index, BoxedType.class)`;
+`getString` and `getBytes` already return null for absent values.
+Native nullable text and bytes use SDK getters directly; nullable primitives
+still require a presence check because their getters return Java primitives.
+Non-null optional parameters use `PrimitiveValue.new…(value).makeOptional()`.
 `Uint8`, `Uint16`, and `Uint32` inputs are checked before execution, so a wider
 Java integer cannot be silently truncated by an SDK constructor.
 
