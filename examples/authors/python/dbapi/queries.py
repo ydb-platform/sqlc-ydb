@@ -71,9 +71,9 @@ class Querier:
         try:
             cursor.execute(
                 ("-- name: CreateAuthor :one\n"
-                 "INSERT INTO authors (id, name, bio)\n"
+                 "INSERT INTO `authors` (`id`, `name`, `bio`)\n"
                  "VALUES ($author_id, $author_name, $biography)\n"
-                 "RETURNING id, name, bio;"), parameters)
+                 "RETURNING `id`, `name`, `bio`;"), parameters)
             rows = cursor.fetchall()
             if not rows:
                 return None

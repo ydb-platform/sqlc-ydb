@@ -68,9 +68,9 @@ class Querier:
         parameters = {"author_id": _typed(author_id, _ydb.PrimitiveType.Uint64),"author_name": _typed(author_name, _ydb.PrimitiveType.Utf8),"biography": _typed(biography, _ydb.OptionalType(_ydb.PrimitiveType.Utf8))}
         result = self._connection.execute(_text(
             ("-- name\\: CreateAuthor \\:one\n"
-             "INSERT INTO authors (id, name, bio)\n"
+             "INSERT INTO `authors` (`id`, `name`, `bio`)\n"
              "VALUES (:author_id, :author_name, :biography)\n"
-             "RETURNING id, name, bio;")), parameters)
+             "RETURNING `id`, `name`, `bio`;")), parameters)
         try:
             rows = result.fetchall()
         finally:

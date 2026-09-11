@@ -57,9 +57,9 @@ class Querier:
         parameters = {"$author_id": _typed(author_id, _ydb.PrimitiveType.Uint64),"$author_name": _typed(author_name, _ydb.PrimitiveType.Utf8),"$biography": _typed(biography, _ydb.OptionalType(_ydb.PrimitiveType.Utf8))}
         result_sets = self._pool.execute_with_retries(
             ("-- name: CreateAuthor :one\n"
-             "INSERT INTO authors (id, name, bio)\n"
+             "INSERT INTO `authors` (`id`, `name`, `bio`)\n"
              "VALUES ($author_id, $author_name, $biography)\n"
-             "RETURNING id, name, bio;"), parameters)
+             "RETURNING `id`, `name`, `bio`;"), parameters)
         rows = result_sets[0].rows
         if not rows:
             return None
