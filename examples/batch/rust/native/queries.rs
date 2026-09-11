@@ -15,12 +15,14 @@ pub struct Queries<'a> {
     client: &'a mut ydb::QueryClient,
 }
 
+#[bon::bon]
 impl<'a> Queries<'a> {
     pub fn new(client: &'a mut ydb::QueryClient) -> Self {
         Self { client }
     }
 
     // -- name: GetAuthor :one
+    #[builder(on(String, into))]
     pub async fn author(&mut self, author_id: u64) -> ydb::YdbResult<GetAuthorRow> {
         let mut row = self
             .client
@@ -39,6 +41,7 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: DeleteBookExecResult :exec
+    #[builder(on(String, into))]
     pub async fn delete_book_exec_result(&mut self, book_id: u64) -> ydb::YdbResult<()> {
         self.client
             .exec(
@@ -51,6 +54,7 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: DeleteBook :exec
+    #[builder(on(String, into))]
     pub async fn delete_book(&mut self, book_id: u64) -> ydb::YdbResult<()> {
         self.client
             .exec(
@@ -63,6 +67,7 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: DeleteBookNamedFunc :exec
+    #[builder(on(String, into))]
     pub async fn delete_book_named_func(&mut self, book_id: u64) -> ydb::YdbResult<()> {
         self.client
             .exec(
@@ -75,6 +80,7 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: DeleteBookNamedSign :exec
+    #[builder(on(String, into))]
     pub async fn delete_book_named_sign(&mut self, book_id: u64) -> ydb::YdbResult<()> {
         self.client
             .exec(
@@ -87,6 +93,7 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: BooksByYear :many
+    #[builder(on(String, into))]
     pub async fn books_by_year(&mut self, year: i32) -> ydb::YdbResult<Vec<BooksByYearRow>> {
         self.client
             .query_result_set(
@@ -114,11 +121,12 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: CreateAuthor :one
+    #[builder(on(String, into))]
     pub async fn create_author(
         &mut self,
         author_id: u64,
         name: String,
-        biography: Option<String>,
+        #[builder(required, into)] biography: Option<String>,
     ) -> ydb::YdbResult<CreateAuthorRow> {
         let mut row = self
             .client
@@ -140,6 +148,7 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: CreateBook :one
+    #[builder(on(String, into))]
     pub async fn create_book(
         &mut self,
         book_id: u64,
@@ -181,6 +190,7 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: UpdateBook :exec
+    #[builder(on(String, into))]
     pub async fn update_book(
         &mut self,
         title: String,
@@ -201,6 +211,7 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: GetBiography :one
+    #[builder(on(String, into))]
     pub async fn biography(&mut self, author_id: u64) -> ydb::YdbResult<GetBiographyRow> {
         let mut row = self
             .client

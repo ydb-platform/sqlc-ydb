@@ -6,12 +6,14 @@ pub struct Queries<'a> {
     client: &'a mut ydb::QueryClient,
 }
 
+#[bon::bon]
 impl<'a> Queries<'a> {
     pub fn new(client: &'a mut ydb::QueryClient) -> Self {
         Self { client }
     }
 
     // -- name: CountPilots :one
+    #[builder(on(String, into))]
     pub async fn count_pilots(&mut self) -> ydb::YdbResult<CountPilotsRow> {
         let mut row = self
             .client
@@ -23,6 +25,7 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: ListPilots :many
+    #[builder(on(String, into))]
     pub async fn list_pilots(&mut self) -> ydb::YdbResult<Vec<ListPilotsRow>> {
         self.client
             .query_result_set(r"SELECT id, name FROM pilots ORDER BY id LIMIT 5;")
@@ -38,6 +41,7 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: DeletePilot :exec
+    #[builder(on(String, into))]
     pub async fn delete_pilot(&mut self, pilot_id: i32) -> ydb::YdbResult<()> {
         self.client
             .exec(r"DELETE FROM pilots WHERE id = $pilot_id;")

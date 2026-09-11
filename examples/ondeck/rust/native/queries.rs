@@ -29,12 +29,14 @@ pub struct Queries<'a> {
     client: &'a mut ydb::QueryClient,
 }
 
+#[bon::bon]
 impl<'a> Queries<'a> {
     pub fn new(client: &'a mut ydb::QueryClient) -> Self {
         Self { client }
     }
 
     // -- name: ListCities :many
+    #[builder(on(String, into))]
     pub async fn list_cities(&mut self) -> ydb::YdbResult<Vec<ListCitiesRow>> {
         self.client
             .query_result_set(
@@ -55,6 +57,7 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: GetCity :one
+    #[builder(on(String, into))]
     pub async fn city(&mut self, slug: String) -> ydb::YdbResult<GetCityRow> {
         let mut row = self
             .client
@@ -73,6 +76,7 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: CreateCity :one
+    #[builder(on(String, into))]
     pub async fn create_city(
         &mut self,
         name: String,
@@ -100,6 +104,7 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: UpdateCityName :exec
+    #[builder(on(String, into))]
     pub async fn update_city_name(&mut self, name: String, slug: String) -> ydb::YdbResult<()> {
         self.client
             .exec(
@@ -114,6 +119,7 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: ListVenues :many
+    #[builder(on(String, into))]
     pub async fn list_venues(&mut self, city: String) -> ydb::YdbResult<Vec<ListVenuesRow>> {
         self.client
             .query_result_set(
@@ -144,6 +150,7 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: DeleteVenue :exec
+    #[builder(on(String, into))]
     pub async fn delete_venue(&mut self, slug: String) -> ydb::YdbResult<()> {
         self.client
             .exec(
@@ -156,6 +163,7 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: GetVenue :one
+    #[builder(on(String, into))]
     pub async fn venue(&mut self, slug: String, city: String) -> ydb::YdbResult<GetVenueRow> {
         let mut row = self
             .client
@@ -183,17 +191,18 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: CreateVenue :one
+    #[builder(on(String, into))]
     pub async fn create_venue(
         &mut self,
         id: u64,
         slug: String,
         name: String,
         city: String,
-        created_at: Option<std::time::SystemTime>,
+        #[builder(required, into)] created_at: Option<std::time::SystemTime>,
         spotify_playlist: String,
         status: String,
-        statuses: Option<String>,
-        tags: Option<String>,
+        #[builder(required, into)] statuses: Option<String>,
+        #[builder(required, into)] tags: Option<String>,
     ) -> ydb::YdbResult<CreateVenueRow> {
         let mut row = self
             .client
@@ -237,6 +246,7 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: UpdateVenueName :one
+    #[builder(on(String, into))]
     pub async fn update_venue_name(
         &mut self,
         name: String,
@@ -260,6 +270,7 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: VenueCountByCity :many
+    #[builder(on(String, into))]
     pub async fn venue_count_by_city(&mut self) -> ydb::YdbResult<Vec<VenueCountByCityRow>> {
         self.client
             .query_result_set(

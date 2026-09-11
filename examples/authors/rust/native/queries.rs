@@ -6,12 +6,14 @@ pub struct Queries<'a> {
     client: &'a mut ydb::QueryClient,
 }
 
+#[bon::bon]
 impl<'a> Queries<'a> {
     pub fn new(client: &'a mut ydb::QueryClient) -> Self {
         Self { client }
     }
 
     // -- name: GetAuthor :one
+    #[builder(on(String, into))]
     pub async fn author(&mut self, author_id: u64) -> ydb::YdbResult<GetAuthorRow> {
         let mut row = self
             .client
@@ -26,6 +28,7 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: ListAuthors :many
+    #[builder(on(String, into))]
     pub async fn list_authors(&mut self) -> ydb::YdbResult<Vec<ListAuthorsRow>> {
         self.client
             .query_result_set(r"SELECT id, name, bio FROM authors ORDER BY name;")
@@ -42,6 +45,7 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: GetAuthorName :one
+    #[builder(on(String, into))]
     pub async fn author_name(&mut self, author_id: u64) -> ydb::YdbResult<GetAuthorNameRow> {
         let mut row = self
             .client
@@ -54,11 +58,12 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: CreateAuthor :one
+    #[builder(on(String, into))]
     pub async fn create_author(
         &mut self,
         author_id: u64,
         author_name: String,
-        biography: Option<String>,
+        #[builder(required, into)] biography: Option<String>,
     ) -> ydb::YdbResult<CreateAuthorRow> {
         let mut row = self
             .client
@@ -80,11 +85,12 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: UpsertAuthor :exec
+    #[builder(on(String, into))]
     pub async fn upsert_author(
         &mut self,
         author_id: u64,
         author_name: String,
-        biography: Option<String>,
+        #[builder(required, into)] biography: Option<String>,
     ) -> ydb::YdbResult<()> {
         self.client
             .exec(
@@ -99,6 +105,7 @@ impl<'a> Queries<'a> {
     }
 
     // -- name: DeleteAuthor :exec
+    #[builder(on(String, into))]
     pub async fn delete_author(&mut self, author_id: u64) -> ydb::YdbResult<()> {
         self.client
             .exec(r"DELETE FROM authors WHERE id = $author_id;")
