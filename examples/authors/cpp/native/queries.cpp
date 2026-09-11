@@ -13,21 +13,29 @@ namespace authors::native {
 // -- name: GetAuthor :one
 std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
     std::optional<NYdb::TResultSet> sqlc_result_set;
-    const auto sqlc_status = this->client_.RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
         auto sqlc_params = NYdb::TParamsBuilder()
             .AddParam("$author_id").Uint64(author_id).Build()
             .Build();
         auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
                 SELECT id, name, bio FROM authors WHERE id = $author_id;
             )sql",
-            NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),
+            sqlc_tx,
             sqlc_params
         ).GetValueSync();
         if (sqlc_result.IsSuccess() && !sqlc_result.GetResultSets().empty()) {
             sqlc_result_set = sqlc_result.GetResultSet(0);
         }
         return sqlc_result;
-    });
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
+            );
+        });
     NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
     if (!sqlc_result_set) {
         throw std::runtime_error("GetAuthor: successful query returned no result set");
@@ -47,17 +55,25 @@ std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
 // -- name: ListAuthors :many
 std::vector<ListAuthorsRow> Queries::ListAuthors() const {
     std::optional<NYdb::TResultSet> sqlc_result_set;
-    const auto sqlc_status = this->client_.RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
         auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
                 SELECT id, name, bio FROM authors ORDER BY name;
             )sql",
-            NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
+            sqlc_tx
         ).GetValueSync();
         if (sqlc_result.IsSuccess() && !sqlc_result.GetResultSets().empty()) {
             sqlc_result_set = sqlc_result.GetResultSet(0);
         }
         return sqlc_result;
-    });
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
+            );
+        });
     NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
     if (!sqlc_result_set) {
         throw std::runtime_error("ListAuthors: successful query returned no result set");
@@ -78,21 +94,29 @@ std::vector<ListAuthorsRow> Queries::ListAuthors() const {
 // -- name: GetAuthorName :one
 std::optional<GetAuthorNameRow> Queries::GetAuthorName(std::uint64_t author_id) const {
     std::optional<NYdb::TResultSet> sqlc_result_set;
-    const auto sqlc_status = this->client_.RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
         auto sqlc_params = NYdb::TParamsBuilder()
             .AddParam("$author_id").Uint64(author_id).Build()
             .Build();
         auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
                 SELECT name FROM authors WHERE id = $author_id;
             )sql",
-            NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),
+            sqlc_tx,
             sqlc_params
         ).GetValueSync();
         if (sqlc_result.IsSuccess() && !sqlc_result.GetResultSets().empty()) {
             sqlc_result_set = sqlc_result.GetResultSet(0);
         }
         return sqlc_result;
-    });
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
+            );
+        });
     NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
     if (!sqlc_result_set) {
         throw std::runtime_error("GetAuthorName: successful query returned no result set");
@@ -110,7 +134,7 @@ std::optional<GetAuthorNameRow> Queries::GetAuthorName(std::uint64_t author_id) 
 // -- name: CreateAuthor :one
 std::optional<CreateAuthorRow> Queries::CreateAuthor(std::uint64_t author_id, const std::string& author_name, const std::optional<std::string>& biography) const {
     std::optional<NYdb::TResultSet> sqlc_result_set;
-    const auto sqlc_status = this->client_.RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
         auto sqlc_params = NYdb::TParamsBuilder()
             .AddParam("$author_id").Uint64(author_id).Build()
             .AddParam("$author_name").Utf8(author_name).Build()
@@ -121,14 +145,22 @@ std::optional<CreateAuthorRow> Queries::CreateAuthor(std::uint64_t author_id, co
                 VALUES ($author_id, $author_name, $biography)
                 RETURNING `id`, `name`, `bio`;
             )sql",
-            NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),
+            sqlc_tx,
             sqlc_params
         ).GetValueSync();
         if (sqlc_result.IsSuccess() && !sqlc_result.GetResultSets().empty()) {
             sqlc_result_set = sqlc_result.GetResultSet(0);
         }
         return sqlc_result;
-    });
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
+            );
+        });
     NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
     if (!sqlc_result_set) {
         throw std::runtime_error("CreateAuthor: successful query returned no result set");
@@ -147,7 +179,7 @@ std::optional<CreateAuthorRow> Queries::CreateAuthor(std::uint64_t author_id, co
 
 // -- name: UpsertAuthor :exec
 void Queries::UpsertAuthor(std::uint64_t author_id, const std::string& author_name, const std::optional<std::string>& biography) const {
-    const auto sqlc_status = this->client_.RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
         auto sqlc_params = NYdb::TParamsBuilder()
             .AddParam("$author_id").Uint64(author_id).Build()
             .AddParam("$author_name").Utf8(author_name).Build()
@@ -157,28 +189,44 @@ void Queries::UpsertAuthor(std::uint64_t author_id, const std::string& author_na
                 UPSERT INTO authors (id, name, bio)
                 VALUES ($author_id, $author_name, $biography);
             )sql",
-            NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),
+            sqlc_tx,
             sqlc_params
         ).GetValueSync();
         return sqlc_result;
-    });
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
+            );
+        });
     NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
 }
 
 // -- name: DeleteAuthor :exec
 void Queries::DeleteAuthor(std::uint64_t author_id) const {
-    const auto sqlc_status = this->client_.RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
         auto sqlc_params = NYdb::TParamsBuilder()
             .AddParam("$author_id").Uint64(author_id).Build()
             .Build();
         auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
                 DELETE FROM authors WHERE id = $author_id;
             )sql",
-            NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),
+            sqlc_tx,
             sqlc_params
         ).GetValueSync();
         return sqlc_result;
-    });
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
+            );
+        });
     NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
 }
 

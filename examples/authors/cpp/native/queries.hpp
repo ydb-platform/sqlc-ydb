@@ -14,7 +14,8 @@ namespace authors::native {
 
 class Queries final {
 public:
-    explicit Queries(NYdb::NQuery::TQueryClient& client) noexcept : client_(client) {}
+    explicit Queries(NYdb::NQuery::TQueryClient& client) noexcept : client_(&client), transaction_(nullptr) {}
+    explicit Queries(NYdb::NQuery::TTransaction& transaction) noexcept : client_(nullptr), transaction_(&transaction) {}
 
     std::optional<GetAuthorRow> GetAuthor(std::uint64_t author_id) const;
     std::vector<ListAuthorsRow> ListAuthors() const;
@@ -24,7 +25,8 @@ public:
     void DeleteAuthor(std::uint64_t author_id) const;
 
 private:
-    NYdb::NQuery::TQueryClient& client_;
+    NYdb::NQuery::TQueryClient* client_;
+    NYdb::NQuery::TTransaction* transaction_;
 };
 
 }  // namespace authors::native
