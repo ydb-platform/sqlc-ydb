@@ -1,6 +1,9 @@
 #include "smoke_handler.hpp"
 
 #include "queries.hpp"
+#include "../../../batch/cpp/userver/queries.hpp"
+
+#include <userver/formats/json.hpp>
 
 #include <chrono>
 #include <cstdint>
@@ -15,8 +18,8 @@ namespace authors::userver_example {
 
 namespace {
 
-std::string ReadSchema() {
-    std::ifstream input{"schema.sql"};
+std::string ReadSchema(const char* path = "schema.sql") {
+    std::ifstream input{path};
     if (!input) {
         throw std::runtime_error("open schema.sql from the examples/authors working directory");
     }
@@ -27,23 +30,24 @@ std::string ReadSchema() {
 
 class CreatedAuthorsTable final {
 public:
-    explicit CreatedAuthorsTable(ydb::TableClient& client) : client_(client) {}
+    explicit CreatedAuthorsTable(ydb::TableClient& client, std::string table = "authors") : client_(client), table_(table) {}
     ~CreatedAuthorsTable() {
         if (active_) {
             try {
-                client_.ExecuteSchemeQuery("DROP TABLE authors;");
+                client_.ExecuteSchemeQuery("DROP TABLE " + table_ + ";");
             } catch (...) {
             }
         }
     }
 
     void Drop() {
-        client_.ExecuteSchemeQuery("DROP TABLE authors;");
+        client_.ExecuteSchemeQuery("DROP TABLE " + table_ + ";");
         active_ = false;
     }
 
 private:
     ydb::TableClient& client_;
+    std::string table_;
     bool active_{true};
 };
 
@@ -110,6 +114,29 @@ std::string SmokeHandler::HandleRequest(server::http::HttpRequest&, server::requ
     queries.DeleteAuthor(kMaxId);
     queries.DeleteAuthor(kMaxId - 1);
     created_table.Drop();
+
+    const auto batch_schema = ReadSchema("../batch/schema.sql");
+    const auto books_start = batch_schema.find("CREATE TABLE books");
+    if (books_start == std::string::npos) throw std::runtime_error("batch books schema not found");
+    client_->ExecuteSchemeQuery(batch_schema.substr(0, books_start));
+    CreatedAuthorsTable batch_authors{*client_};
+    client_->ExecuteSchemeQuery(batch_schema.substr(books_start));
+    CreatedAuthorsTable batch_books{*client_, "books"};
+    ::batch::userver::Queries batch_queries{*client_};
+    const auto json = formats::json::FromString(R"({"id":18446744073709551615})");
+    const auto json_author = batch_queries.CreateAuthor(1, ydb::Utf8{"json"}, json);
+    const auto null_json_author = batch_queries.CreateAuthor(2, ydb::Utf8{"null"}, std::nullopt);
+    const auto timestamp = std::chrono::system_clock::time_point{std::chrono::microseconds{1700000000123456}};
+    const auto book = batch_queries.CreateBook(kMaxId, 1, ydb::Utf8{"isbn"}, ydb::Utf8{"type"}, ydb::Utf8{"title"}, 2026, timestamp, json);
+    const auto books = batch_queries.BooksByYear(2026);
+    if (!json_author || !json_author->biography || (*json_author->biography)["id"].As<std::uint64_t>() != kMaxId ||
+        !null_json_author || null_json_author->biography || !book || book->available != timestamp ||
+        book->tags["id"].As<std::uint64_t>() != kMaxId || books.size() != 1 || books[0].available != timestamp) {
+        throw std::runtime_error("userver Json/Timestamp round-trip failed");
+    }
+    batch_books.Drop();
+    batch_authors.Drop();
+
     return "userver generated adapter ok; rows=" + std::to_string(row_count) + "\n";
 }
 

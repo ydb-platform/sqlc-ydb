@@ -14,10 +14,10 @@ The API was checked on 2026-09-07 against these exact revisions:
 
 ## Build and smoke
 
-Generate all authors adapters from the repository root:
+Generate all example adapters from the repository root:
 
 ```bash
-go run ./cmd/sqlc-ydb generate -f examples/authors/sqlc.yaml
+make generate
 ```
 
 The SDK release examined for this build setup was `v3.22.0`, which publishes Ubuntu 24.04 `libydb-cpp-dev` and `yandex-googleapis-api-common-protos` packages. Its CMake package installs below `/usr/share/yandex`. Native links the real `YDB-CPP-SDK::Driver`, `YDB-CPP-SDK::Params`, and `YDB-CPP-SDK::Query` targets; userver links `userver::ydb`. The pinned userver target also links `YDB-CPP-SDK::ydb-cpp-iam`.
@@ -78,3 +78,11 @@ with checked statuses, retry-managed sessions and typed parameter/result APIs.
 Both smoke tests now execute CreateAuthor with present/null optional values,
 assert every RETURNING column, run configured SnapshotRO reads, and exercise
 request settings in caller-owned transactions with rollback assertions.
+
+All five example families now configure both C++ profiles. The existing CMake
+acceptance targets compile their ten adapters. The native and userver smokes
+also run batch Json/optional Json and microsecond Timestamp round-trips,
+including a JSON integer at Uint64 max. Native Json uses std::string and
+Timestamp uses TInstant; userver follows its documented formats::json::Value
+and system_clock::time_point mappings. Other families are compiled, not yet
+exercised by these C++ live smokes.

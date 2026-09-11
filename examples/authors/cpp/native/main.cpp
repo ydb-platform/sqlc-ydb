@@ -1,4 +1,5 @@
 #include "queries.hpp"
+#include "../../../batch/cpp/native/queries.hpp"
 
 #include <ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb-cpp-sdk/client/query/client.h>
@@ -18,8 +19,8 @@
 
 namespace {
 
-std::string ReadSchema() {
-    std::ifstream input{"schema.sql"};
+std::string ReadSchema(const char* path = "schema.sql") {
+    std::ifstream input{path};
     if (!input) {
         throw std::runtime_error("open schema.sql from the examples/authors working directory");
     }
@@ -57,23 +58,24 @@ void ExecuteStatement(NYdb::NQuery::TQueryClient& client, const std::string& sta
 
 class CreatedAuthorsTable final {
 public:
-    explicit CreatedAuthorsTable(NYdb::NQuery::TQueryClient& client) : client_(client) {}
+    explicit CreatedAuthorsTable(NYdb::NQuery::TQueryClient& client, std::string table = "authors") : client_(client), table_(table) {}
     ~CreatedAuthorsTable() {
         if (active_) {
             try {
-                ExecuteStatement(client_, "DROP TABLE authors;");
+                ExecuteStatement(client_, "DROP TABLE " + table_ + ";");
             } catch (...) {
             }
         }
     }
 
     void Drop() {
-        ExecuteStatement(client_, "DROP TABLE authors;");
+        ExecuteStatement(client_, "DROP TABLE " + table_ + ";");
         active_ = false;
     }
 
 private:
     NYdb::NQuery::TQueryClient& client_;
+    std::string table_;
     bool active_{true};
 };
 
@@ -146,6 +148,28 @@ int main() {
         queries.DeleteAuthor(kMaxId);
         queries.DeleteAuthor(kMaxId - 1);
         created_table.Drop();
+
+        const auto batch_schema = ReadSchema("../batch/schema.sql");
+        const auto books_start = batch_schema.find("CREATE TABLE books");
+        if (books_start == std::string::npos) throw std::runtime_error("batch books schema not found");
+        ExecuteStatement(client, batch_schema.substr(0, books_start));
+        CreatedAuthorsTable batch_authors{client};
+        ExecuteStatement(client, batch_schema.substr(books_start));
+        CreatedAuthorsTable batch_books{client, "books"};
+        batch::native::Queries batch_queries{client};
+        const std::string json = R"({"id":18446744073709551615})";
+        const auto json_author = batch_queries.CreateAuthor(1, "json", json);
+        const auto null_json_author = batch_queries.CreateAuthor(2, "null", std::nullopt);
+        const auto timestamp = TInstant::MicroSeconds(1700000000123456);
+        const auto book = batch_queries.CreateBook(kMaxId, 1, "isbn", "type", "title", 2026, timestamp, json);
+        const auto books = batch_queries.BooksByYear(2026);
+        if (!json_author || json_author->biography != json || !null_json_author || null_json_author->biography ||
+            !book || book->available != timestamp || book->tags != json || books.size() != 1 || books[0].available != timestamp) {
+            throw std::runtime_error("native Json/Timestamp round-trip failed");
+        }
+        batch_books.Drop();
+        batch_authors.Drop();
+
         driver.Stop(true);
         std::cout << "native C++ generated adapter ok; rows=" << authors.size() << '\n';
         return 0;

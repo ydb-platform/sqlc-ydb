@@ -70,6 +70,8 @@ Result-returning helpers require exactly one result set and reject extra sets.
 | `Double` | `double` | `double` |
 | `String` | `std::string` through SDK `String` accessors | `std::string` |
 | `Utf8` | `std::string` through SDK `Utf8` accessors | `userver::ydb::Utf8` |
+| `Json` | `std::string` through SDK Json accessors | `userver::formats::json::Value` |
+| `Timestamp` | `TInstant` | `std::chrono::system_clock::time_point` |
 | `Optional<T>` | `std::optional<T>` | `std::optional<T>` |
 
 The native mapping retains the `String` versus `Utf8` distinction in its parameter builders and result parsers even though both values use `std::string`. userver uses its strong `Utf8` typedef, so the distinction is also visible in the public C++ type. Nested optionals and non-scalar containers are rejected explicitly.
@@ -81,7 +83,7 @@ Identifiers must be ASCII C++ identifiers, must not be C++20 keywords, and must 
 Generated code requires C++20. Native applications link the SDK `Driver`,
 `Params`, and `Query` components; userver applications link `userver::ydb`.
 The bundled [CMake project](../examples/authors/cpp/CMakeLists.txt) builds both
-profiles. Its [container environment](../examples/authors/cpp/Dockerfile) pins
+profiles for authors, batch, booktest, jets, and ondeck. Its [container environment](../examples/authors/cpp/Dockerfile) pins
 YDB C++ SDK 3.21.1 and userver 3.2-rc.
 
 See the [authors configuration](../examples/authors/sqlc.yaml) for both output

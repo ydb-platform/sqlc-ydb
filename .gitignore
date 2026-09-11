@@ -19,9 +19,9 @@ examples/php/vendor/
 /examples/authors/python/native/
 /examples/authors/python/dbapi/
 /examples/authors/python/sqlalchemy/
-/examples/authors/cpp/*/models.hpp
-/examples/authors/cpp/*/queries.hpp
-/examples/authors/cpp/*/queries.cpp
+/examples/*/cpp/*/models.hpp
+/examples/*/cpp/*/queries.hpp
+/examples/*/cpp/*/queries.cpp
 /examples/*/csharp/*/Models.cs
 /examples/*/csharp/*/Queries.cs
 /examples/authors/java/*/src/main/java/

@@ -52,3 +52,21 @@ sql:
         package: batch.jooq
         out: java/jooq
         runtime: jooq
+  - name: cpp-native
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      cpp:
+        namespace: batch::native
+        out: cpp/native
+        runtime: ydb
+  - name: cpp-userver
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      cpp:
+        namespace: batch::userver
+        out: cpp/userver
+        runtime: userver

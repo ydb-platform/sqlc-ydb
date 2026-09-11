@@ -7,6 +7,8 @@ the version and moves these entries into a numbered section at release time.
 
 ### Added
 
+- C++ Json and Timestamp bindings, with native/userver generation for all five example families.
+
 - C++ native and userver helpers accept SDK execution policies and caller-owned
   transaction request settings; result-returning helpers require one result set.
 

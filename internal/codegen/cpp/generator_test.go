@@ -486,3 +486,41 @@ func TestSettingsAndHeaderHygiene(t *testing.T) {
 		t.Error("C++ reserved double underscore accepted")
 	}
 }
+
+func TestJsonTimestampTypes(t *testing.T) {
+	for _, runtime := range []string{"ydb", "userver"} {
+		for _, optional := range []bool{false, true} {
+			jsonType, timestampType := model.Type{Kind: "Json"}, model.Type{Kind: "Timestamp"}
+			if optional {
+				jsonType, timestampType = model.Optional(jsonType), model.Optional(timestampType)
+			}
+			in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+				Name: "Values", Command: model.One, SQL: "SELECT $data AS data, $at AS at;",
+				Parameters: []model.Parameter{{Name: "data", Type: jsonType}, {Name: "at", Type: timestampType}},
+				ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "data", Type: jsonType}, {Name: "at", Type: timestampType}}}},
+			}}}
+			files, err := Generate(in, Options{Runtime: runtime})
+			if err != nil {
+				t.Fatal(err)
+			}
+			models := generatedContent(t, files, "models.hpp")
+			source := generatedContent(t, files, "queries.cpp")
+			if runtime == "ydb" {
+				if !strings.Contains(models, "TInstant") || !strings.Contains(models, "std::string") {
+					t.Fatal(models)
+				}
+				prefix := ""
+				if optional {
+					prefix = "Optional"
+				}
+				for _, kind := range []string{"Json", "Timestamp"} {
+					if !strings.Contains(source, "."+prefix+kind+"(") || !strings.Contains(source, "Get"+prefix+kind+"()") {
+						t.Fatal(source)
+					}
+				}
+			} else if !strings.Contains(models, "::userver::formats::json::Value") || !strings.Contains(models, "std::chrono::system_clock::time_point") || !strings.Contains(models, "<userver/formats/json/value.hpp>") {
+				t.Fatal(models)
+			}
+		}
+	}
+}

@@ -50,3 +50,21 @@ sql:
         package: ondeck.jooq
         out: java/jooq
         runtime: jooq
+  - name: cpp-native
+    engine: ydb
+    schema: schema
+    queries: query
+    gen:
+      cpp:
+        namespace: ondeck::native
+        out: cpp/native
+        runtime: ydb
+  - name: cpp-userver
+    engine: ydb
+    schema: schema
+    queries: query
+    gen:
+      cpp:
+        namespace: ondeck::userver
+        out: cpp/userver
+        runtime: userver

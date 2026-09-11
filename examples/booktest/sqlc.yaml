@@ -53,3 +53,21 @@ sql:
         package: booktest.jooq
         out: java/jooq
         runtime: jooq
+  - name: cpp-native
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      cpp:
+        namespace: booktest::native
+        out: cpp/native
+        runtime: ydb
+  - name: cpp-userver
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      cpp:
+        namespace: booktest::userver
+        out: cpp/userver
+        runtime: userver
