@@ -11,13 +11,13 @@ impl From<JsonParam> for ydb::Value {
     }
 }
 
-pub struct Queries<'a> {
-    client: &'a mut ydb::QueryClient,
+pub struct Queries<'a, E: ydb::QueryExecutor> {
+    client: &'a mut E,
 }
 
 #[bon::bon]
-impl<'a> Queries<'a> {
-    pub fn new(client: &'a mut ydb::QueryClient) -> Self {
+impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
+    pub fn new(client: &'a mut E) -> Self {
         Self { client }
     }
 
