@@ -13,6 +13,7 @@ flowchart LR
   D --> J[Built-in TypeScript generator]
   D --> K[Built-in Rust generator]
   D --> L[Built-in PHP generator]
+  D --> M[Built-in Kotlin generator]
 ```
 
 `internal/source` loads files and migration inputs. `internal/analyzer` owns
@@ -52,6 +53,8 @@ reparse text or construct a second AST. Unsupported DSL constructs fail in the
 target without restricting other generators.
 Lexical adaptation of parameter placeholders for a driver is separate from
 semantic query analysis and must preserve strings, comments and identifiers.
+`internal/codegen/jdbc` implements the shared positional-parameter contract for
+Java and Kotlin; their SDK binding and result decoding remain in each generator.
 
 `internal/cli` connects these stages for all commands. All configured outputs are
 prepared before writes start. Each file is replaced through a temporary sibling;
@@ -69,7 +72,7 @@ every selected generator. `compile` stops after analysis. Planned macro
 processing belongs inside this boundary; see [the roadmap](roadmap.md).
 A separate compiler package is unnecessary while the analyzer owns these stages.
 
-`model.Type` owns structural equality and diagnostic formatting. The analyzer,
+`model.Type` owns structural equality and YQL type formatting. The analyzer,
 built-in function resolver and Python model reuse checks share those operations.
 SDK-specific type mapping stays in each generator.
 

@@ -12,13 +12,13 @@
 | C# ADO.NET | `gen.csharp.runtime: adonet` | async `Queries(YdbConnection)`, records, cancellation and transactions |
 | C# Dapper | `gen.csharp.runtime: dapper` | async query methods on a borrowed `YdbConnection` |
 | TypeScript | `gen.typescript.runtime: ydb` | query classes, row and parameter type aliases |
-| Rust | `gen.rust.runtime: ydb` | async methods on a borrowed `QueryClient` |
+| Rust | `gen.rust.runtime: ydb` | async methods on a borrowed `QueryExecutor` (client or transaction) |
 | PHP | `gen.php.runtime: ydb` | typed query methods for the YDB SDK |
 | Kotlin Query SDK | `gen.kotlin.runtime: ydb` | data classes and `Queries(SessionRetryContext)` or `Queries(QueryTransaction)` |
 | Kotlin JDBC | `gen.kotlin.runtime: jdbc` | typed query methods on a borrowed `Connection` |
 | Kotlin Exposed | `gen.kotlin.runtime: exposed` | typed SQL methods on a borrowed `JdbcTransaction` |
 | Java native SDK | `gen.java.runtime: ydb` | `Queries(QueryTransaction)`, Java 17 records |
-| Java JDBC | `gen.java.runtime: jdbc` | `Queries(Connection)`, named YDB prepared statements |
+| Java JDBC | `gen.java.runtime: jdbc` | `Queries(Connection)`, positional prepared statements |
 | Java jOOQ | `gen.java.runtime: jooq` | `Queries(YdbDSLContext)`, typed jOOQ DSL queries and projection records |
 
 `Utf8` is text (`string` / `str`); `String` is binary (`[]byte` / `bytes`).
@@ -33,17 +33,17 @@ execution status. The selected YDB SDK/driver APIs do not expose a portable
 affected-row count, so all generators reject `:execrows`.
 
 C++ and Java `:one` results are optional; C# throws `InvalidOperationException`
-when no row exists. All
-return the first row when present. `:many` returns a typed collection. Java
-represents `Uint64` as the full 64-bit `long` bit pattern; use
+when no row exists. C++, Java native/JDBC and C# return the first row when
+present. Rust and jOOQ reject multiple rows for `:one`; Rust reports
+`YdbError::NoRows` for an empty result. `:many` returns a typed collection.
+Java native/JDBC represent `Uint64` as the full 64-bit `long` bit pattern; use
 `Long.toUnsignedString` for unsigned decimal formatting. C++ uses `uint64_t`
-and C# uses `ulong`. Binary YQL `String` stays binary in every target.
+and C# uses `ulong`; jOOQ uses `ULong`. Binary YQL `String` stays binary in every
+target.
 
 Type coverage differs by target. Unsupported temporal, decimal, container or
 other unmapped types fail explicitly; see the individual target docs.
-Dapper integrations generate SQL query
-projections and methods; they do not infer ORM entities or LINQ expressions
-from query results. See the [C#](csharp.md), [TypeScript](typescript.md),
+See the [C#](csharp.md), [TypeScript](typescript.md),
 [Rust](rust.md) and [PHP](php.md) contracts for supported types and API details.
 
 Generated code uses caller-provided clients/connections. The caller controls
@@ -100,8 +100,7 @@ for Decimal/UUID parameters rather than generic driver conversion.
 Native Go query methods and generated interfaces accept trailing
 `opts ...query.ExecuteOption`. Options are forwarded without changing the
 caller's slice. Generated typed parameters are applied last, so a caller option
-cannot replace the bindings represented by the method arguments. Existing calls
-without execution options continue to compile.
+cannot replace the bindings represented by the method arguments.
 
 Kotlin types, nullable results and transaction ownership are documented in
 [Kotlin](kotlin.md). Kotlin examples use the shared authors schema and queries.

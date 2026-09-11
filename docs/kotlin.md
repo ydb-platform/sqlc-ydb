@@ -15,8 +15,7 @@ gen:
 The [authors example](../examples/authors/kotlin) builds all three profiles from
 the same [SQL](../examples/authors/queries.sql). The `batch`, `booktest`,
 `jets`, and `ondeck` examples generate native Query SDK APIs. Run `make generate`
-before building an application. Generated example files are ignored on main and
-reviewed in a separate Kotlin pull request.
+to update the checked-in examples.
 
 ## Generated API
 
@@ -34,8 +33,7 @@ types; an absent row differs from a row whose optional fields are null.
 Methods created from a native `QueryTransaction`, JDBC and Exposed methods do not
 commit, roll back, close borrowed resources or create nested transactions.
 Exposed output is SQL-first: it does not infer `Table` objects or translate SQL
-into the Exposed DSL. The readable SQL property preserves the declaration-free
-source. JDBC and Exposed use positional `?` parameters and standard
+into the Exposed DSL. SQL is embedded at each execution site without generated declarations. JDBC and Exposed use positional `?` parameters and standard
 `PreparedStatement` setters. Unsigned integers, `Json`, and `Timestamp` use
 typed SDK values so the driver receives their YQL types without generated
 `DECLARE` statements or `unwrap`.
@@ -51,8 +49,8 @@ the Java SDK. Use `java.lang.Long.toUnsignedString` to format a `Uint64` value.
 Values are bound through the SDK's typed values, including typed empty optionals.
 Other YQL types fail generation explicitly.
 
-SQL strings preserve parameter names, Unicode and control characters without
-Kotlin interpolation. Unsupported identifiers and generated-name collisions
+SQL literals preserve Unicode and control characters without Kotlin
+interpolation. Unsupported identifiers and generated-name collisions
 produce errors instead of invalid Kotlin source.
 
 ## Dependencies and verification

@@ -121,7 +121,11 @@ func TestSharedTransactions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+			t.Errorf("rollback cleanup: %v", err)
+		}
+	}()
 	q := sq.New(db.SQL).WithTx(tx)
 	if err := q.UpsertAuthor(ctx, sq.UpsertAuthorParams{AuthorID: 42, AuthorName: "transaction"}); err != nil {
 		t.Fatal(err)

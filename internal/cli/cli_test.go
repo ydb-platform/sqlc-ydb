@@ -2,11 +2,34 @@ package cli
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+type brokenWriter struct{}
+
+func (brokenWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
+
+func TestCLIReportsOutputFailures(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "sqlc.yaml")
+	for _, args := range [][]string{{"--help"}, {"version"}, {"version", "--verbose"}, {"init", "-f", configPath}, {"init", "-f", configPath}} {
+		var stderr bytes.Buffer
+		if code := Run(args, brokenWriter{}, &stderr); code != 1 || !strings.Contains(stderr.String(), io.ErrClosedPipe.Error()) {
+			t.Errorf("%v: status %d, stderr %q", args, code, stderr.String())
+		}
+	}
+	if code := Run([]string{"unknown"}, io.Discard, brokenWriter{}); code != 1 {
+		t.Errorf("diagnostic write failure changed exit status: %d", code)
+	}
+	_, err := compare([]output{{path: filepath.Join(t.TempDir(), "missing.go"), content: []byte("generated\n")}}, brokenWriter{})
+	if !errors.Is(err, io.ErrClosedPipe) {
+		t.Errorf("diff output failure: %v", err)
+	}
+}
 
 func invoke(args ...string) (int, string, string) {
 	var out, err bytes.Buffer

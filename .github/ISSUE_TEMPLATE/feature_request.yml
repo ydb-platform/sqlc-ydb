@@ -1,0 +1,22 @@
+name: Feature request
+description: Propose a YQL, generated API, or workflow improvement.
+body:
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use case
+      description: What application task is difficult or impossible today? Describe any current workaround.
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Input and desired behavior
+      description: For query features, show a minimal schema/query and the generated API or calling code you want. Keep SQL as the source of the query. For CLI/configuration features, show the proposed command or configuration.
+    validations:
+      required: true
+  - type: input
+    id: target
+    attributes:
+      label: Target language and runtime
+      description: If applicable, name the SDK/framework and link a relevant API or documentation example.

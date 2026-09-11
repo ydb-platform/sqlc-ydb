@@ -1,0 +1,39 @@
+name: Bug report
+description: Report incorrect analysis, generated code, or CLI behavior.
+body:
+  - type: textarea
+    id: environment
+    attributes:
+      label: Version and target
+      description: Paste `sqlc-ydb version --verbose`. For generated-code issues, include the language/runtime profile and SDK version; include compiler and YDB versions when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include the command and steps. For generation issues, paste the smallest schema, named query, and sqlc configuration together here, or link a small reproducer.
+      placeholder: |
+        Schema:
+
+        Query (including -- name: ...):
+
+        sqlc.yaml:
+
+        Command:
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Paste the diagnostic, relevant generated code, or runtime error as text.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Show the expected result or generated code and explain the difference.
+    validations:
+      required: true

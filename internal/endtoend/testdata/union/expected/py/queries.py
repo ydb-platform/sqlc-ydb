@@ -5,10 +5,6 @@ from . import models as _models
 import ydb as _ydb
 
 
-def _typed(value, typ):
-    return _ydb.TypedValue(value, typ)
-
-
 class Querier:
     def __init__(self, executor: Union[_ydb.QuerySessionPool, _ydb.QueryTxContext], *, retry_settings: Optional[_ydb.RetrySettings] = None):
         if retry_settings is not None and not isinstance(executor, _ydb.QuerySessionPool):

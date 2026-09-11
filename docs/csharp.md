@@ -1,11 +1,9 @@
 # C# generation
 
-The built-in C# generator has `adonet` and `dapper` runtime
-profiles. The default is `adonet`, which preserves the original configuration
-and generated API. Every profile generates `Models.cs` and `Queries.cs`, keeps
-the source YQL in readable exact string fragments, and exposes async `:one`,
-`:many`, and `:exec` methods with a `CancellationToken`. `:execrows` is rejected
-because YDB does not return affected-row counts.
+The built-in C# generator has `adonet` (default) and `dapper` runtime profiles.
+Both generate `Models.cs` and `Queries.cs`, with records and async `:one`,
+`:many`, and `:exec` methods accepting a `CancellationToken`. `:execrows` is
+rejected because the selected YDB APIs do not expose affected-row counts.
 
 ```yaml
 version: "2"
@@ -20,10 +18,11 @@ sql:
         runtime: dapper
 ```
 
-SQL is emitted as portable escaped C# string fragments so quotes, backslashes,
-CRLF, Unicode, and C0 control characters preserve their exact text without a
-raw-literal delimiter dependency. Result records and parameter records come
-from resolved SQL shapes. The generator does not infer ORM entities.
+Result and parameter records come from resolved SQL shapes. The generator does
+not infer ORM entities. SQL appears at the execution site; query annotations
+become C# comments before methods. ADO.NET uses escaped string fragments.
+Dapper uses indented multiline raw strings, falling back to escaped literals
+for control characters or line endings a raw string would normalize.
 
 `:one` returns the first row and throws `InvalidOperationException` if no row
 exists. `:many` returns `IReadOnlyList<Row>` and `:exec` returns `Task`.
@@ -35,6 +34,10 @@ caller-owned `YdbTransaction`. `WithTransaction` returns another lightweight
 `Queries` wrapper. Generated code creates and disposes each `YdbCommand`; it
 does not create a data source, open a connection, begin a transaction, or
 dispose caller-owned resources.
+
+Both constructors reject a transaction belonging to another connection. The
+caller must keep the transaction active; the SDK checks its state during
+execution. Generated wrappers do not commit or roll back caller transactions.
 
 The `dapper` profile has the same connection and transaction contract. It uses
 Dapper `CommandDefinition`, `QueryFirstAsync<Row>`, `QueryAsync<Row>`, and
@@ -49,6 +52,9 @@ mapping of application types are not changed. SQL text and aliases are unchanged
 
 `SqlMapper.IDynamicParameters` adds concrete `YdbParameter` instances, preserving
 YDB-specific types and typed optional nulls instead of relying on CLR inference.
+Parameters are built separately, one per line. Dapper methods accept optional
+`commandTimeout` seconds after `cancellationToken`; null retains the
+Dapper/connection default. Both controls are passed through `CommandDefinition`.
 
 ## Types and parameters
 
@@ -65,26 +71,13 @@ use the corresponding typed `YdbValue.MakeOptional*` builder for both present
 and null values. A bare present CLR value would otherwise bind as `T`, while a
 declared YQL parameter requires `Optional<T>`.
 
+Timestamp parameters normalize Local values to UTC; Unspecified values are
+interpreted as UTC. Normalization precedes typed `YdbValue` construction;
+optional nulls remain null. Scalar method parameters use camelCase; record
+properties use PascalCase.
+
 ## Dependencies
 
-The shared example project targets `net8.0` and pins `Ydb.Sdk` 0.35.0,
-Dapper 2.1.79. Runtime packages belong to the generated
-application. See the [shared C# examples](../examples/csharp/README.md) for
-build and usage entry points.
-
-Timestamp parameters normalize Local values to UTC. Unspecified values are
-interpreted as UTC. Optional nulls remain null.
-The normalization occurs before constructing a typed YdbValue in every profile.
-
-ADO.NET and Dapper constructors reject transactions belonging to another
-connection. The caller must also keep the transaction active; the SDK checks
-active-transaction state during execution. Wrappers never commit or dispose a
-caller-owned transaction. Single SQL arguments use camelCase; record properties
-remain PascalCase.
-
-Dapper methods accept an optional `commandTimeout` in seconds, passed to
-`CommandDefinition`. Null retains the Dapper/connection default. It follows the
-existing cancellationToken argument so positional cancellation calls remain valid.
-SQL uses C# multiline raw strings; SQL with control characters or line endings
-that C# would normalize retains escaped literals. Parameters are built separately
-with explicit YDB types.
+The shared example project targets `net8.0` and pins `Ydb.Sdk` 0.35.0 and
+Dapper 2.1.79. Runtime packages belong to the generated application. See the
+[shared C# examples](../examples/csharp/README.md) for build and usage entry points.

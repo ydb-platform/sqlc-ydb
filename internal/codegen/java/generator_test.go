@@ -386,18 +386,6 @@ public final class Main {
 	}
 }
 
-func TestJDBCParameterOccurrencesPreserveSQLText(t *testing.T) {
-	q := model.AnalyzedQuery{
-		SQLWithoutDeclarations: "-- name: Check :one\n$local = 'Привет $value';\nSELECT `$value`, $local, $value, $other, $value; -- $value\n",
-		Parameters:             []model.Parameter{{Name: "other"}, {Name: "value"}},
-	}
-	sql, bindings := jdbcSQL(q)
-	want := "$local = 'Привет $value';\nSELECT `$value`, $local, ?, ?, ?; -- $value\n"
-	if sql != want || fmt.Sprint(bindings) != "[1 0 1]" {
-		t.Fatalf("SQL=%q bindings=%v", sql, bindings)
-	}
-}
-
 func TestNullableJavaGettersAndTextBinding(t *testing.T) {
 	q := model.AnalyzedQuery{Name: "Read", Command: model.One, SQL: "SELECT $bio;", Parameters: []model.Parameter{{Name: "bio", Type: model.Optional(model.Type{Kind: "Utf8"})}}, ResultSets: []model.ResultSet{{Columns: []model.Column{
 		{Name: "bio", Type: model.Optional(model.Type{Kind: "Utf8"})},

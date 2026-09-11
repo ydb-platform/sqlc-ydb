@@ -3,12 +3,13 @@ package kotlin
 import (
 	"encoding/base64"
 	"fmt"
-	"github.com/ydb-platform/sqlc-ydb/internal/model"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
 func TestGenerateRejectsInvalidContracts(t *testing.T) {
@@ -242,7 +243,11 @@ func TestAllSupportedScalarsCompileAgainstAuthorsMaven(t *testing.T) {
 			columns = append(columns, model.Column{Name: n, Type: typ})
 		}
 	}
-	for _, runtime := range []string{"ydb", "jdbc", "exposed"} {
+	for _, runtime := range []string{"nativeapi", "jdbc", "exposed"} {
+		profile := runtime
+		if profile == "nativeapi" {
+			profile = "ydb"
+		}
 		queries := []model.AnalyzedQuery{}
 		for _, command := range []model.Command{model.One, model.Many, model.Exec} {
 			q := model.AnalyzedQuery{Name: "All" + strings.TrimPrefix(string(command), ":"), SQL: "SELECT 1;", Command: command, Parameters: params}
@@ -251,11 +256,11 @@ func TestAllSupportedScalarsCompileAgainstAuthorsMaven(t *testing.T) {
 			}
 			queries = append(queries, q)
 		}
-		files, err := Generate(&model.AnalysisResult{Queries: queries}, Options{Package: "synthetic." + runtime, Runtime: runtime})
+		files, err := Generate(&model.AnalysisResult{Queries: queries}, Options{Package: "synthetic." + runtime, Runtime: profile})
 		if err != nil {
 			t.Fatal(err)
 		}
-		src := filepath.Join(dir, "src", "generated", "kotlin", "synthetic", runtime)
+		src := filepath.Join(dir, runtime, "synthetic", runtime)
 		if err := os.MkdirAll(src, 0700); err != nil {
 			t.Fatal(err)
 		}
@@ -264,6 +269,11 @@ func TestAllSupportedScalarsCompileAgainstAuthorsMaven(t *testing.T) {
 		}
 	}
 	runMaven(t, maven, dir)
+	for _, runtime := range []string{"nativeapi", "jdbc", "exposed"} {
+		if _, err := os.Stat(filepath.Join(dir, "target", "classes", "synthetic", runtime, "Queries.class")); err != nil {
+			t.Fatalf("Maven did not compile the %s fixture: %v", runtime, err)
+		}
+	}
 }
 
 // Execute generated Kotlin through a Java caller and the real driver parameter binder.
@@ -296,7 +306,7 @@ func TestGeneratedJDBCUsesTypedDriverValuesAndGuardsUnsignedRanges(t *testing.T)
 	}
 	moduleDir := t.TempDir()
 	writeFile(t, filepath.Join(moduleDir, "pom.xml"), pom)
-	packageDir := filepath.Join(moduleDir, "src", "generated", "kotlin", "synthetic", "jdbc")
+	packageDir := filepath.Join(moduleDir, "jdbc", "synthetic", "jdbc")
 	if err := os.MkdirAll(packageDir, 0700); err != nil {
 		t.Fatal(err)
 	}

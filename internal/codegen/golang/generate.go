@@ -27,7 +27,7 @@ func Generate(in *model.AnalysisResult, o Options) ([]model.File, error) {
 		return nil, fmt.Errorf("analysis result is nil")
 	}
 	if len(in.Diagnostics) != 0 {
-		return nil, fmt.Errorf("cannot generate with diagnostics: %s", in.Diagnostics[0])
+		return nil, fmt.Errorf("cannot generate with diagnostics: %w", in.Diagnostics[0])
 	}
 	if o.Package == "" {
 		o.Package = "db"

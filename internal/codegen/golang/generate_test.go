@@ -311,7 +311,7 @@ func TestGeneratedQueryImportsSeparateStandardLibraryAndExternalPackages(t *test
 	in.Queries[2].Parameters[1].Type = model.Type{Kind: "Json"}
 	for _, runtime := range []string{"database/sql", "ydb"} {
 		source := string(generatedSQLSourceForAnalysis(t, runtime, in))
-		want := "\t\"context\"\n\n\t\"github.com/ydb-platform/ydb-go-sdk/v3"
+		var want string
 		if runtime == "database/sql" {
 			want = "\t\"context\"\n\t\"database/sql\"\n\n\t\"github.com/ydb-platform/ydb-go-sdk/v3"
 		} else {

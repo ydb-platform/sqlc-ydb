@@ -13,25 +13,4 @@ examples/**/build/
 examples/node_modules/
 examples/php/vendor/
 
-# Generated example code (handwritten runtime scaffolding remains tracked).
-/examples/*/go/native/
-/examples/*/go/database/sql/
-/examples/authors/python/native/
-/examples/authors/python/dbapi/
-/examples/authors/python/sqlalchemy/
-/examples/*/cpp/*/models.hpp
-/examples/*/cpp/*/queries.hpp
-/examples/*/cpp/*/queries.cpp
-/examples/*/csharp/*/Models.cs
-/examples/*/csharp/*/Queries.cs
-/examples/authors/java/*/src/main/java/
-/examples/*/typescript/native/
-/examples/*/rust/native/
-/examples/*/php/native/
-/examples/*/kotlin/nativeapi/
-/examples/*/kotlin/jdbc/
-/examples/*/kotlin/exposed/
-
 /examples/.typescript-build/
-
-/examples/*/java/jooq/

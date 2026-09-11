@@ -7,9 +7,15 @@ engine-plugin discussions, and the decision to build a standalone tool.
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/ydb-platform/sqlc-ydb.svg?style=flat-square)](https://github.com/ydb-platform/sqlc-ydb/releases)
+[![PkgGoDev](https://pkg.go.dev/badge/github.com/ydb-platform/sqlc-ydb/cmd/sqlc-ydb)](https://pkg.go.dev/github.com/ydb-platform/sqlc-ydb/cmd/sqlc-ydb)
 [![CI](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/ci.yml)
+[![lint](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/lint.yml)
 [![codecov](https://codecov.io/gh/ydb-platform/sqlc-ydb/branch/main/graph/badge.svg?precision=2)](https://app.codecov.io/gh/ydb-platform/sqlc-ydb)
+![Code lines](https://sloc.xyz/github/ydb-platform/sqlc-ydb/?category=code)
 [![View examples](https://img.shields.io/badge/learn-examples-brightgreen.svg)](examples/README.md)
+[![Telegram](https://img.shields.io/badge/chat-on%20Telegram-2ba2d9.svg)](https://t.me/ydb_en)
+[![WebSite](https://img.shields.io/badge/website-ydb.tech-blue.svg)](https://ydb.tech)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](.agents/development.md)
 
 Generate typed query code from YQL for YDB in Go, Python, C++, C#, Java, Kotlin,
 TypeScript, Rust and PHP. One executable contains the parser, semantic analyzer
@@ -24,23 +30,15 @@ for release status. Installation and artifact verification are described in
 
 ## Feature parity with sqlc
 
-| Feature | sqlc-ydb support / difference |
-| --- | --- |
-| `generate`, `compile`, `diff`, `init`, `version` | Supported. |
-| `-f` / `--file`, `-h` / `--help`, `init --v1` / `--v2` | Supported. |
-| `--no-remote` / `--remote` | Local execution only; `--no-remote` is accepted, `--remote` is rejected. |
-| `completion`, `createdb`, `push`, `verify`, `vet` | Not implemented. |
-| Configuration | v2 and basic v1 Go `packages`; generator option coverage is partial. |
-| SQL engines | YDB only. |
-| Parameters | YQL `$parameter`, with `DECLARE` or supported type inference; no `$1`, `?`, or `@name` compatibility layer. |
-| Query annotations | `:one`, `:many`, `:exec`; affected-row counts and other annotations are unsupported. |
-| `sqlc.arg`, `sqlc.narg`, `sqlc.embed`, `sqlc.slice` | Not implemented. |
-| Generators and plugins | [Built-in targets](docs/targets.md); external plugins are intentionally excluded. |
-| Database-assisted analysis | Not implemented. |
-| `version --verbose` | Additional option: reports the build commit. |
+The core `generate`, `compile`, `diff`, `init` and `version` workflow is supported.
+Configuration is a subset of sqlc v2 and basic v1 Go packages; queries use YQL
+parameters and `:one`, `:many`, or `:exec` annotations. Other database engines,
+external plugins, sqlc macros, database-assisted analysis and cloud workflows
+are not supported.
 
-See the [compatibility contract](docs/compatibility.md) for supported options,
-YQL coverage and generated API differences.
+See the [first-release summary](CHANGELOG.md) for the comparison and known
+limitations, and the [compatibility contract](docs/compatibility.md) for the
+exact CLI, option and YQL coverage.
 
 ## Supported targets
 

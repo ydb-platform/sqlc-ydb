@@ -7,10 +7,6 @@ from sqlalchemy import text as _text
 from sqlalchemy.engine import Connection
 
 
-def _typed(value, typ):
-    return (value, typ)
-
-
 class Querier:
     def __init__(self, connection: Connection):
         self._connection = connection

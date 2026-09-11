@@ -6,9 +6,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/antlr4-go/antlr/v4"
+	"github.com/ydb-platform/sqlc-ydb/internal/codegen/jdbc"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
-	yql "github.com/ydb-platform/yql-parsers/go"
 )
 
 type Options struct{ Package, Runtime string }
@@ -108,9 +107,6 @@ func quoted(s string) string {
 	return b.String()
 }
 
-// Raw strings preserve source indentation and newlines without trimIndent.
-// Interpolated character escapes prevent dollars, quotes and controls from
-// becoming Kotlin syntax or being normalized by the source-file reader.
 func sqlLiteral(s string) string {
 	parts := strings.SplitAfter(s, "\n")
 	if len(parts) > 1 && parts[len(parts)-1] == "" {
@@ -230,7 +226,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		var bindings []int
 		if o.Runtime != "ydb" {
 			var text string
-			text, bindings = jdbcSQL(q)
+			text, bindings = jdbc.SQL(q)
 			preparedSQL = sqlLiteral(text)
 		}
 		ret := "Unit"
@@ -295,49 +291,6 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 	b.WriteString("}\n")
 	files = append(files, model.File{Name: "Queries.kt", Content: []byte(b.String())})
 	return files, nil
-}
-
-// jdbcSQL replaces only parameter tokens, preserving text literals, comments,
-// quoted identifiers, and local YQL variables. Bindings retain SQL occurrence
-// order, including repeated parameters.
-func jdbcSQL(q model.AnalyzedQuery) (string, []int) {
-	text := q.SQLWithoutDeclarations
-	if text == "" {
-		text = q.SQL
-	}
-	text = model.WithoutQueryAnnotation(text)
-	parameters := map[string]int{}
-	for i, p := range q.Parameters {
-		parameters[p.Name] = i
-	}
-	lexer := yql.NewYQLLexer(antlr.NewInputStream(text))
-	lexer.RemoveErrorListeners()
-	var tokens []antlr.Token
-	for token := lexer.NextToken(); token.GetTokenType() != antlr.TokenEOF; token = lexer.NextToken() {
-		if token.GetChannel() == antlr.TokenDefaultChannel {
-			tokens = append(tokens, token)
-		}
-	}
-	runes := []rune(text)
-	var b strings.Builder
-	bindings := []int{}
-	cursor := 0
-	for i, token := range tokens {
-		if token.GetTokenType() != yql.YQLLexerDOLLAR || i+1 == len(tokens) {
-			continue
-		}
-		next := tokens[i+1]
-		parameter, ok := parameters[strings.Trim(next.GetText(), "`")]
-		if !ok {
-			continue
-		}
-		b.WriteString(string(runes[cursor:token.GetStart()]))
-		b.WriteByte('?')
-		cursor = next.GetStop() + 1
-		bindings = append(bindings, parameter)
-	}
-	b.WriteString(string(runes[cursor:]))
-	return b.String(), bindings
 }
 
 func parameterValue(p model.Parameter, n string) string {

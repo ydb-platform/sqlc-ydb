@@ -5,10 +5,6 @@ from . import models as _models
 import ydb as _ydb
 
 
-def _typed(value, typ):
-    return _ydb.TypedValue(value, typ)
-
-
 class Querier:
     def __init__(self, executor: Union[_ydb.QuerySessionPool, _ydb.QueryTxContext], *, retry_settings: Optional[_ydb.RetrySettings] = None):
         if retry_settings is not None and not isinstance(executor, _ydb.QuerySessionPool):
@@ -26,7 +22,7 @@ class Querier:
     # -- name: GetAuthor :one
     def get_author(self, author_id: int) -> Optional[_models.Authors]:
         parameters = {
-            "$author_id": _typed(author_id, _ydb.PrimitiveType.Uint64),
+            "$author_id": _ydb.TypedValue(author_id, _ydb.PrimitiveType.Uint64),
         }
         result_sets = self._execute(
             ("DECLARE $author_id AS Uint64;\n"

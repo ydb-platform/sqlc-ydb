@@ -74,10 +74,3 @@ reference their published SDKs and framework APIs without copying those
 implementations. Exact source snapshots and non-obvious API choices are kept in
 the maintainer [SDK evidence](../.agents/sdk-evidence.md); public language guides
 define the generated API, dependency and runtime ownership contracts.
-
-## Kotlin SDK profiles
-
-Kotlin Query SDK, JDBC and Exposed profiles are compiled against the pinned
-application dependencies and exercised against local YDB, including Exposed
-transaction commit and rollback. Published API sources and dependency versions
-are recorded in the [Kotlin contract](kotlin.md#dependencies-and-verification).

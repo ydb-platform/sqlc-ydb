@@ -651,3 +651,56 @@ finally:
 		t.Fatalf("live YDB validation failed: %v\n%s", err, out)
 	}
 }
+
+func TestGeneratedParameterAnnotationsResolve(t *testing.T) {
+	query := model.AnalyzedQuery{Name: "write_types", Command: model.Exec, SQL: "SELECT 1;", Parameters: []model.Parameter{
+		{Name: "day", Type: model.Type{Kind: "Date"}},
+		{Name: "at", Type: model.Type{Kind: "Timestamp"}},
+		{Name: "duration", Type: model.Optional(model.Type{Kind: "Interval"})},
+		{Name: "ids", Type: model.Type{Kind: "List", Elem: &model.Type{Kind: "Uuid"}}},
+	}}
+	for _, runtime := range []string{"ydb", "dbapi", "sqlalchemy"} {
+		t.Run(runtime, func(t *testing.T) {
+			files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{query}}, Options{Runtime: runtime})
+			if err != nil {
+				t.Fatal(err)
+			}
+			dir := t.TempDir()
+			for _, file := range files {
+				path := filepath.Join(dir, "db", file.Name)
+				if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, file.Content, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			// These stubs only let Python import the module; no SDK code is called.
+			for name, content := range map[string]string{
+				"ydb.py": "", "sqlalchemy/__init__.py": "def text(value): return value\n", "sqlalchemy/engine.py": "class Connection: pass\n",
+			} {
+				path := filepath.Join(dir, name)
+				if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			script := `from datetime import date, datetime, timedelta
+from typing import Optional, get_type_hints
+from uuid import UUID
+from db.queries import Querier
+assert get_type_hints(Querier.write_types) == {
+    "day": date, "at": datetime, "duration": Optional[timedelta], "ids": list[UUID], "return": type(None),
+}
+`
+			cmd := exec.Command("python3", "-c", script)
+			cmd.Dir = dir
+			cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("generated annotations cannot be resolved: %v\n%s", err, out)
+			}
+		})
+	}
+}

@@ -49,7 +49,7 @@ func Generate(in *model.AnalysisResult, opts Options) ([]model.File, error) {
 		return nil, fmt.Errorf("php generator: analysis result is nil")
 	}
 	if len(in.Diagnostics) != 0 {
-		return nil, fmt.Errorf("php generator: analysis has diagnostics: %s", in.Diagnostics[0])
+		return nil, fmt.Errorf("php generator: analysis has diagnostics: %w", in.Diagnostics[0])
 	}
 	if opts.Namespace == "" {
 		opts.Namespace = "Db"
@@ -67,9 +67,10 @@ func Generate(in *model.AnalysisResult, opts Options) ([]model.File, error) {
 		return nil, err
 	}
 
+	queries := renderQueries(in, opts.Namespace)
 	files := []model.File{
-		{Name: "Queries.php", Content: []byte(renderQueries(in, opts.Namespace))},
-		{Name: "YdbRuntime.php", Content: []byte(renderRequiredRuntime(opts.Namespace, renderQueries(in, opts.Namespace)))},
+		{Name: "Queries.php", Content: []byte(queries)},
+		{Name: "YdbRuntime.php", Content: []byte(renderRequiredRuntime(opts.Namespace, queries))},
 	}
 	for _, table := range in.Catalog.Tables {
 		name := pascalName(table.Name)

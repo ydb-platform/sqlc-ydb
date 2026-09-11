@@ -7,10 +7,6 @@ from sqlalchemy import text as _text
 from sqlalchemy.engine import Connection
 
 
-def _typed(value, typ):
-    return (value, typ)
-
-
 class Querier:
     def __init__(self, connection: Connection):
         self._connection = connection
@@ -18,7 +14,7 @@ class Querier:
     # -- name: GetAuthor :one
     def get_author(self, author_id: int) -> Optional[_models.Authors]:
         parameters = {
-            "author_id": _typed(author_id, _ydb.PrimitiveType.Uint64),
+            "author_id": (author_id, _ydb.PrimitiveType.Uint64),
         }
         result = self._connection.execute(_text(
             ("SELECT id, name, bio FROM authors WHERE id = :author_id;")), parameters)
@@ -53,7 +49,7 @@ class Querier:
     # -- name: GetAuthorName :one
     def get_author_name(self, author_id: int) -> Optional[_models.GetAuthorNameRow]:
         parameters = {
-            "author_id": _typed(author_id, _ydb.PrimitiveType.Uint64),
+            "author_id": (author_id, _ydb.PrimitiveType.Uint64),
         }
         result = self._connection.execute(_text(
             ("SELECT name FROM authors WHERE id = :author_id;")), parameters)
@@ -70,9 +66,9 @@ class Querier:
     # -- name: CreateAuthor :one
     def create_author(self, author_id: int, author_name: str, biography: Optional[str]) -> Optional[_models.Authors]:
         parameters = {
-            "author_id": _typed(author_id, _ydb.PrimitiveType.Uint64),
-            "author_name": _typed(author_name, _ydb.PrimitiveType.Utf8),
-            "biography": _typed(biography, _ydb.OptionalType(_ydb.PrimitiveType.Utf8)),
+            "author_id": (author_id, _ydb.PrimitiveType.Uint64),
+            "author_name": (author_name, _ydb.PrimitiveType.Utf8),
+            "biography": (biography, _ydb.OptionalType(_ydb.PrimitiveType.Utf8)),
         }
         result = self._connection.execute(_text(
             ("INSERT INTO `authors` (`id`, `name`, `bio`)\n"
@@ -93,9 +89,9 @@ class Querier:
     # -- name: UpsertAuthor :exec
     def upsert_author(self, author_id: int, author_name: str, biography: Optional[str]) -> None:
         parameters = {
-            "author_id": _typed(author_id, _ydb.PrimitiveType.Uint64),
-            "author_name": _typed(author_name, _ydb.PrimitiveType.Utf8),
-            "biography": _typed(biography, _ydb.OptionalType(_ydb.PrimitiveType.Utf8)),
+            "author_id": (author_id, _ydb.PrimitiveType.Uint64),
+            "author_name": (author_name, _ydb.PrimitiveType.Utf8),
+            "biography": (biography, _ydb.OptionalType(_ydb.PrimitiveType.Utf8)),
         }
         result = self._connection.execute(_text(
             ("UPSERT INTO authors (id, name, bio)\n"
@@ -106,7 +102,7 @@ class Querier:
     # -- name: DeleteAuthor :exec
     def delete_author(self, author_id: int) -> None:
         parameters = {
-            "author_id": _typed(author_id, _ydb.PrimitiveType.Uint64),
+            "author_id": (author_id, _ydb.PrimitiveType.Uint64),
         }
         result = self._connection.execute(_text(
             ("DELETE FROM authors WHERE id = :author_id;")), parameters)

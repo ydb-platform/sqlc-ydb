@@ -14,10 +14,11 @@ code grouped by language and runtime.
 | [jets](jets) | Related tables, aggregate counts and limited result sets |
 | [ondeck](ondeck) | Ordered schema migrations, query directories and venue aggregates |
 
-Every family generates Go native SDK and `database/sql`, C# Dapper and
-TypeScript, Rust and PHP APIs. Dependencies and execution harnesses
-are shared by language across the families; `authors` also retains Python,
-C++, C# ADO.NET, Java and Kotlin (Query SDK, JDBC, Exposed) examples. Runtime commands are in
+Every family generates Go native SDK and `database/sql`, C++ native SDK and
+userver, C# Dapper, Java jOOQ, Kotlin Query SDK, TypeScript, Rust and PHP APIs.
+The `authors` family also includes Python (native, DB-API, SQLAlchemy), C# ADO.NET,
+Java native/JDBC, and Kotlin JDBC/Exposed profiles. Dependencies and execution
+harnesses are shared by language. Runtime commands are in
 [development](../.agents/development.md).
 
 From the repository root:

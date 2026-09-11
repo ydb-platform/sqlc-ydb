@@ -443,3 +443,40 @@ async fn main() -> ydb::YdbResult<()> {
 		t.Fatalf("missing required parameter must fail the builder completeness check: %v\n%s", err, out)
 	}
 }
+
+func TestFloatingPointResultsCompileAndRetainPartialComparison(t *testing.T) {
+	var queries []model.AnalyzedQuery
+	for _, kind := range []string{"Float", "Double"} {
+		scalar := model.Type{Kind: kind}
+		for i, typ := range []model.Type{scalar, model.Optional(scalar), {Kind: "List", Elem: &scalar}} {
+			queries = append(queries, model.AnalyzedQuery{
+				Name: fmt.Sprintf("Read%s%d", kind, i), Command: model.One, SQL: "SELECT value FROM readings;",
+				ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "value", Type: typ}}}},
+			})
+		}
+	}
+	files, err := Generate(&model.AnalysisResult{Queries: queries}, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	source := generatedFile(t, files, "models.rs") + `
+fn main() {
+    let x = ReadFloat0Row { value: 1.5 };
+    assert_eq!(x, x.clone());
+    assert!(x < ReadFloat0Row { value: 2.0 });
+    assert_ne!(ReadDouble0Row { value: f64::NAN }, ReadDouble0Row { value: f64::NAN });
+    assert!(ReadFloat2Row { value: vec![1.0] } < ReadFloat2Row { value: vec![2.0] });
+}
+`
+	path, bin := filepath.Join(dir, "main.rs"), filepath.Join(dir, "main")
+	if err := os.WriteFile(path, []byte(source), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("rustc", path, "-o", bin).CombinedOutput(); err != nil {
+		t.Fatalf("floating-point result models do not compile: %v\n%s", err, out)
+	}
+	if out, err := exec.Command(bin).CombinedOutput(); err != nil {
+		t.Fatalf("floating-point comparison contract failed: %v\n%s", err, out)
+	}
+}

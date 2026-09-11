@@ -41,8 +41,8 @@ or simplifying SDK-specific code.
 - [Architecture](architecture.md): current stages and responsibilities.
 - [Development](development.md): contributor commands, CI and runtime validation.
 - [Roadmap](roadmap.md): shared macros and deferred database-assisted analysis.
-- [Release plan](release-plan.md): dated release evidence, ydb.tech documentation,
-  external query corpus, and user-owned SDK reviews and consumer pilots.
+- [Release plan](release-plan.md): publication checks, ydb.tech documentation,
+  production-corpus validation and consumer pilots.
 - [Release operations](releasing.md): packaging, dry runs, publication and recovery.
 - [SDK evidence](sdk-evidence.md), [YQL evidence](yql-evidence.md),
   [C++ development](cpp-development.md) and

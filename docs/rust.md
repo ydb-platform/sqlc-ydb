@@ -18,8 +18,10 @@ let mut queries = generated::queries::Queries::new(&mut query_client);
 
 Each generated method executes one statement through the Query Service API.
 `:exec` uses `QueryClient::exec`; `:one` uses `query_row`, and `:many` uses
-`query_result_set`. `:one` returns the first row, matching the sqlc contract;
-it reports `YdbError::NoRows` for an empty result. With a `QueryClient`, methods
+`query_result_set`. `:one` requires exactly one row: it reports
+`YdbError::NoRows` for an empty result and an SDK error for multiple rows. This
+is stricter than upstream sqlc's first-row contract; use `LIMIT 1` when the query
+intentionally selects one of several matches. With a `QueryClient`, methods
 use the SDK's one-shot operations and retry policy. With a `Transaction`, all
 methods execute in that transaction. Generated code does not begin, commit,
 roll back, or retry transactions; the caller controls their lifetime.
@@ -74,21 +76,25 @@ are returned as `ydb::YdbError`; generated code does not substitute
 defaults.
 
 `:many` decodes rows with a fallible iterator collected into a `Vec`, returning
-the first decoding error. Result structs also derive `Copy` when all their fields
-are copyable, including optional scalars and timestamps.
+the first decoding error. Result structs derive `Debug`, `Clone`, `PartialEq`
+and `PartialOrd`. `Eq`, `Hash` and `Ord` are emitted only when no field contains
+`Float` or `Double`, including inside `Option` or `Vec`; floating-point NaN
+prevents total equality and ordering. Structs also derive `Copy` when every
+field is copyable, including optional scalars and timestamps.
 
 SQL is emitted as readable Rust raw strings without `DECLARE` statements because
 the generated typed SDK parameters supply their YQL types. The delimiter grows
 when the SQL contains quote/hash sequences, and control bytes that Rust source
-cannot hold literally are represented with `concat!` and byte escapes. Apart
-from declaration tokens and their whitespace-only placeholder lines, the
-runtime string preserves the analyzed SQL bytes. Generated Rust source passes
-`rustfmt --check` without a formatting rewrite.
+cannot hold literally are represented with `concat!` and byte escapes. Query
+annotations become Rust comments before methods. Multiline SQL receives leading
+whitespace for alignment; declaration gaps and leading/trailing blank lines are
+removed. Generated Rust source passes `rustfmt --check` without a formatting
+rewrite.
 
 The shared examples pin `ydb` 0.18.2 and require Rust 1.88 or newer, matching
-the SDK's published minimum supported Rust version. `:execrows`, container
-types, decimal values, UUID values, and other unmapped YQL types produce a
-generation error.
+the SDK's published minimum supported Rust version. `:execrows`, containers other than the list parameters described below,
+decimal values, UUID values, and other unmapped YQL types produce a generation
+error.
 Query names that normalize to `new` are rejected because `Queries::new` is the
 generated constructor; choose a different query annotation name.
 

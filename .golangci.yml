@@ -1,0 +1,32 @@
+version: "2"
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  default: standard
+  enable:
+    - errorlint
+    - nolintlint
+  settings:
+    staticcheck:
+      # Correctness and simplification checks; optional style/quick fixes are
+      # not a correctness gate for SQL renderers and identifier allowlists.
+      checks: ["SA*", "S1*"]
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+  exclusions:
+    generated: strict
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: strict
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

@@ -5,10 +5,6 @@ from . import models as _models
 import ydb as _ydb
 
 
-def _typed(value, typ):
-    return _ydb.TypedValue(value, typ)
-
-
 class Querier:
     def __init__(self, executor: Union[_ydb.QuerySessionPool, _ydb.QueryTxContext], *, retry_settings: Optional[_ydb.RetrySettings] = None):
         if retry_settings is not None and not isinstance(executor, _ydb.QuerySessionPool):
@@ -26,9 +22,9 @@ class Querier:
     # -- name: NormalizeProfiles :many
     def normalize_profiles(self, fallback: str, minimum_score: int, use_nickname: bool) -> list[_models.NormalizeProfilesRow]:
         parameters = {
-            "$fallback": _typed(fallback, _ydb.PrimitiveType.Utf8),
-            "$minimum_score": _typed(minimum_score, _ydb.PrimitiveType.Int32),
-            "$use_nickname": _typed(use_nickname, _ydb.PrimitiveType.Bool),
+            "$fallback": _ydb.TypedValue(fallback, _ydb.PrimitiveType.Utf8),
+            "$minimum_score": _ydb.TypedValue(minimum_score, _ydb.PrimitiveType.Int32),
+            "$use_nickname": _ydb.TypedValue(use_nickname, _ydb.PrimitiveType.Bool),
         }
         result_sets = self._execute(
             ("DECLARE $fallback AS Utf8;\n"

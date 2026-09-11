@@ -66,7 +66,7 @@ func hasGeneratedHeader(path string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }() // Read-only descriptor; report read failures below.
 	var header [64]byte
 	n, err := io.ReadFull(file, header[:])
 	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {

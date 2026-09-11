@@ -54,7 +54,7 @@ func Generate(a *model.AnalysisResult, options Options) ([]model.File, error) {
 		return nil, fmt.Errorf("typescript generator: nil analysis result")
 	}
 	if len(a.Diagnostics) != 0 {
-		return nil, fmt.Errorf("typescript generator: analysis has diagnostics: %s", a.Diagnostics[0])
+		return nil, fmt.Errorf("typescript generator: analysis has diagnostics: %w", a.Diagnostics[0])
 	}
 	if options.Runtime == "" {
 		options.Runtime = "ydb"

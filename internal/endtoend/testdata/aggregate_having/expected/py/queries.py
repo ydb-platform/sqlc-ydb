@@ -5,10 +5,6 @@ from . import models as _models
 import ydb as _ydb
 
 
-def _typed(value, typ):
-    return _ydb.TypedValue(value, typ)
-
-
 class Querier:
     def __init__(self, executor: Union[_ydb.QuerySessionPool, _ydb.QueryTxContext], *, retry_settings: Optional[_ydb.RetrySettings] = None):
         if retry_settings is not None and not isinstance(executor, _ydb.QuerySessionPool):
@@ -26,7 +22,7 @@ class Querier:
     # -- name: ColdCities :many
     def cold_cities(self, maximum_temperature: int) -> list[_models.ColdCitiesRow]:
         parameters = {
-            "$maximum_temperature": _typed(maximum_temperature, _ydb.PrimitiveType.Int32),
+            "$maximum_temperature": _ydb.TypedValue(maximum_temperature, _ydb.PrimitiveType.Int32),
         }
         result_sets = self._execute(
             ("DECLARE $maximum_temperature AS Int32;\n"

@@ -7,10 +7,6 @@ from sqlalchemy import text as _text
 from sqlalchemy.engine import Connection
 
 
-def _typed(value, typ):
-    return (value, typ)
-
-
 class Querier:
     def __init__(self, connection: Connection):
         self._connection = connection
@@ -18,7 +14,7 @@ class Querier:
     # -- name: GetAuthor :one
     def get_author(self, id: int) -> Optional[_models.Authors]:
         parameters = {
-            "id": _typed(id, _ydb.PrimitiveType.Uint64),
+            "id": (id, _ydb.PrimitiveType.Uint64),
         }
         result = self._connection.execute(_text(
             ("DECLARE $id AS Uint64;\n"

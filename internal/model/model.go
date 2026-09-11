@@ -169,7 +169,16 @@ func WithoutQueryAnnotation(sql string) string {
 	if !found {
 		return sql
 	}
-	if strings.HasPrefix(strings.TrimSpace(strings.TrimSuffix(line, "\r")), "-- name:") {
+	comment, ok := strings.CutPrefix(strings.TrimSpace(line), "--")
+	if !ok {
+		return sql
+	}
+	comment = strings.TrimSpace(comment)
+	if strings.HasPrefix(strings.ToLower(comment), "sqlc") {
+		comment = strings.TrimSpace(comment[len("sqlc"):])
+		comment = strings.TrimSpace(strings.TrimPrefix(comment, "--"))
+	}
+	if strings.HasPrefix(strings.ToLower(comment), "name:") {
 		return rest
 	}
 	return sql

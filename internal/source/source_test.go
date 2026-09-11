@@ -50,3 +50,22 @@ func TestRollbackMarkerInLiteral(t *testing.T) {
 		}
 	}
 }
+
+func TestRollbackMarkerBoundary(t *testing.T) {
+	const before = "CREATE TABLE a (id Uint64, PRIMARY KEY(id));\n"
+	const after = "\nCREATE TABLE b (id Uint64, PRIMARY KEY(id));"
+	for _, marker := range []string{"-- +goose Down", "-- +migrate Down", "---- create above / drop below ----", "-- migrate:down"} {
+		for _, suffix := range []string{"stream", "_note"} {
+			text := before + marker + suffix + after
+			if got := upMigration(text); got != text {
+				t.Errorf("ordinary comment truncated schema: %q", text)
+			}
+		}
+		for _, suffix := range []string{"", " transaction", "\ttransaction"} {
+			text := before + marker + suffix + after
+			if got := upMigration(text); got != before {
+				t.Errorf("rollback directive was not recognized: %q", text)
+			}
+		}
+	}
+}

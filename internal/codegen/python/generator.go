@@ -23,7 +23,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		return nil, fmt.Errorf("python generator: nil analysis result")
 	}
 	if len(a.Diagnostics) > 0 {
-		return nil, fmt.Errorf("python generator: analysis has diagnostics: %s", a.Diagnostics[0])
+		return nil, fmt.Errorf("python generator: analysis has diagnostics: %w", a.Diagnostics[0])
 	}
 	if o.Runtime == "" {
 		o.Runtime = "ydb"
@@ -237,20 +237,51 @@ func renderQueries(a *model.AnalysisResult, o Options) (string, error) {
 	if o.Runtime == "ydb" {
 		b.WriteString(", Union")
 	}
-	b.WriteString("\nfrom . import models as _models\nimport ydb as _ydb\n")
+	b.WriteString("\n" + parameterTypeImports(a) + "from . import models as _models\nimport ydb as _ydb\n")
 	if o.Runtime == "sqlalchemy" {
 		b.WriteString("from sqlalchemy import text as _text\nfrom sqlalchemy.engine import Connection\n")
 	}
 	b.WriteString("\n")
-	if o.Runtime == "ydb" {
-		b.WriteString(ydbTypedHelper)
-	} else {
-		b.WriteString(tupleTypedHelper)
-	}
 	if err := renderClass(&b, a, o); err != nil {
 		return "", err
 	}
 	return b.String(), nil
+}
+
+// Deferred method annotations must still resolve for type checkers and get_type_hints.
+func parameterTypeImports(a *model.AnalysisResult) string {
+	needed := map[string]bool{}
+	var visit func(model.Type)
+	visit = func(t model.Type) {
+		if primitive, ok := pythonPrimitiveTypes[strings.ToLower(t.Kind)]; ok {
+			needed[primitive.python] = true
+		}
+		if t.Elem != nil {
+			visit(*t.Elem)
+		}
+		if t.Key != nil {
+			visit(*t.Key)
+		}
+	}
+	for _, q := range a.Queries {
+		for _, p := range q.Parameters {
+			visit(p.Type)
+		}
+	}
+	var imports strings.Builder
+	var temporal []string
+	for _, name := range []string{"date", "datetime", "timedelta"} {
+		if needed[name] {
+			temporal = append(temporal, name)
+		}
+	}
+	if len(temporal) != 0 {
+		imports.WriteString("from datetime import " + strings.Join(temporal, ", ") + "\n")
+	}
+	if needed["UUID"] {
+		imports.WriteString("from uuid import UUID\n")
+	}
+	return imports.String()
 }
 
 func sqlalchemySQL(q model.AnalyzedQuery) (string, error) {
@@ -303,17 +334,6 @@ func sqlalchemySQL(q model.AnalyzedQuery) (string, error) {
 	out.WriteString(escape(string(runes[cursor:])))
 	return out.String(), nil
 }
-
-const ydbTypedHelper = `
-def _typed(value, typ):
-    return _ydb.TypedValue(value, typ)
-
-`
-const tupleTypedHelper = `
-def _typed(value, typ):
-    return (value, typ)
-
-`
 
 func renderClass(b *strings.Builder, a *model.AnalysisResult, o Options) error {
 	b.WriteString("\nclass Querier:\n")
@@ -376,7 +396,7 @@ func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQ
 	if o.Runtime == "ydb" {
 		b.WriteString("        parameters = {\n")
 		for i, x := range q.Parameters {
-			value := "_typed(" + fieldName(x.Name) + ", " + typeExprs[i] + ")"
+			value := "_ydb.TypedValue(" + fieldName(x.Name) + ", " + typeExprs[i] + ")"
 			b.WriteString("            " + pyString("$"+x.Name) + ": " + value + ",\n")
 		}
 		b.WriteString("        }\n        result_sets = self._execute(\n            " + literal + ", parameters)\n")
@@ -384,14 +404,14 @@ func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQ
 	if o.Runtime == "dbapi" {
 		b.WriteString("        parameters = {\n")
 		for i, x := range q.Parameters {
-			b.WriteString("            " + pyString("$"+x.Name) + ": _typed(" + fieldName(x.Name) + ", " + typeExprs[i] + "),\n")
+			b.WriteString("            " + pyString("$"+x.Name) + ": (" + fieldName(x.Name) + ", " + typeExprs[i] + "),\n")
 		}
 		b.WriteString("        }\n        cursor = self._connection.cursor()\n        try:\n            cursor.execute(\n                " + strings.ReplaceAll(literal, "\n", "\n    ") + ", parameters)\n")
 	}
 	if o.Runtime == "sqlalchemy" {
 		b.WriteString("        parameters = {\n")
 		for i, x := range q.Parameters {
-			b.WriteString("            " + pyString(x.Name) + ": _typed(" + fieldName(x.Name) + ", " + typeExprs[i] + "),\n")
+			b.WriteString("            " + pyString(x.Name) + ": (" + fieldName(x.Name) + ", " + typeExprs[i] + "),\n")
 		}
 		b.WriteString("        }\n        result = ")
 		b.WriteString("self._connection.execute(_text(\n            " + literal + "), parameters)\n")

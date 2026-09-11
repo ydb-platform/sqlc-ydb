@@ -175,7 +175,7 @@ func Parse(data []byte) (*Config, error) {
 		return nil, err
 	}
 	var extra yaml.Node
-	if err := dec.Decode(&extra); err != io.EOF {
+	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
 		if err != nil {
 			return nil, err
 		}

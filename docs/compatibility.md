@@ -1,8 +1,8 @@
 # Compatibility contract
 
 Compatibility is tracked by individual CLI, configuration and generated API
-contracts. See the [feature table](../README.md#feature-parity-with-sqlc) for
-supported features and differences. sqlc-ydb is independently versioned and does
+contracts. See the [release summary](../CHANGELOG.md#parity-with-upstream-sqlc)
+for a feature comparison. sqlc-ydb is independently versioned and does
 not designate a compatible upstream sqlc version.
 
 ## Intentional differences
@@ -21,7 +21,6 @@ not designate a compatible upstream sqlc version.
   table definitions or DSL translation. See [Kotlin](kotlin.md).
 - `gen.typescript`, `gen.rust`, and `gen.php` use `runtime: ydb` (the default).
   They generate code for the official YDB SDKs.
-- No intermediate AST. ANTLR parse contexts feed semantic analysis directly.
 
 ## Implemented workflow
 
@@ -47,8 +46,8 @@ not designate a compatible upstream sqlc version.
 - Python options `out`, `runtime`, `emit_sync_querier`,
   `emit_async_querier`. Synchronous generation defaults to enabled; requesting
   asynchronous generation currently fails explicitly.
-  The Python package directory is selected by `out`; remove `gen.python.package`
-  from older configurations. That option was ignored and now produces an error.
+  The Python package directory is selected by `out`; `gen.python.package` is
+  unsupported.
 - C++ and C# options `namespace`, `out`, `runtime`;
   Java and Kotlin options `package`, `out`, `runtime`; TypeScript and Rust options
   `out`, `runtime`; PHP options `namespace`, `out`, `runtime`. These are built-in
@@ -56,17 +55,35 @@ not designate a compatible upstream sqlc version.
 - Unknown configuration options produce errors. Generation never silently
   discards an option that has not been implemented.
 
-## Remaining compatibility work
+## Differences from upstream sqlc
 
-This development version does not claim complete sqlc compatibility. Type/name
-overrides, the full generator option inventory, sqlc macros, batch commands,
-`vet`, `verify`, cloud/remote workflows and live database-assisted analysis still
-need implementation. They are not successful no-op commands.
+Only the commands and options above are implemented. In particular:
 
-Query and type coverage evolves independently of configuration compatibility.
-Unsupported YQL must be diagnosed by the analyzer; a resolved type unsupported by
-a language adapter is a generation error. Each supported behavior needs a
-fixture and, for runtime-sensitive behavior, an execution test.
+- No `analyze`, `parse`, `fmt`, `completion`, `createdb`, `push`, `verify` or
+  `vet` commands, database-assisted analysis, or cloud/remote workflow.
+- No `sqlc.arg`, `sqlc.narg`, `sqlc.embed` or `sqlc.slice` macros, type/name
+  overrides, driver batch APIs, COPY helpers or command-tag results.
+- `--no-remote` is accepted because execution is always local; `--remote` and
+  upstream's `--no-database` are unsupported. `init --v1` and `--v2` are
+  supported; `version --verbose` is a sqlc-ydb extension.
+- SQL parameters use YQL `$name` syntax. Driver-specific placeholder rewriting
+  happens during generation; `$1`, `?` and `@name` are not accepted as an
+  alternative input dialect.
+
+These are explicit errors, not successful no-ops. The comparison uses upstream's
+[CLI](https://docs.sqlc.dev/en/latest/reference/cli.html),
+[configuration](https://docs.sqlc.dev/en/latest/reference/config.html),
+[query annotations](https://docs.sqlc.dev/en/latest/reference/query-annotations.html)
+and [macros](https://docs.sqlc.dev/en/latest/reference/macros.html).
+
+Other database engines and external plugins are intentionally excluded. ORM
+entity/CRUD generation for Hibernate, Spring JPA and linq2db is also excluded:
+a query projection does not define an entity lifecycle. TypeScript is the
+supported Node.js target; JavaScript output is not provided.
+
+Query analysis and runtime type support are separate: a resolved type that a
+selected adapter cannot bind or decode is a generation error. Check the
+[target reference](targets.md) before choosing a runtime.
 
 ## Output ownership
 
@@ -91,7 +108,7 @@ inspect outputs. Files are never automatically deleted.
 ## Current analyzer coverage
 
 The analyzer supports explicit `CREATE TABLE` catalogs and the schema migration
-operations listed below, table column
+operations listed above, table column
 projections and `*`, table/column aliases, supported joins and their optional
 sides, supported scalar/aggregate functions, `DECLARE`, direct comparison
 parameter inference, selected scalar local bindings, `INSERT`/`UPSERT ... VALUES`, `UPDATE ... SET`, `DELETE`, and
@@ -145,9 +162,10 @@ versus nonempty groups and nullable arguments. Grouping expressions, windows and
 advanced grouping constructs remain unsupported.
 
 Direct LIMIT/OFFSET parameters infer Uint64. Direct values in a column IN list
-infer the column's type; list parameters used as the IN operand retain their
-explicit List type. These are compiler constraints, independent of a target's
-list binding support.
+infer the column's type; `column IN $values` and `NOT IN $values` infer
+`List<column type>`. An explicit List declaration is also accepted. In contrast,
+`column IN ($value)` contains a scalar parameter. These are compiler constraints,
+independent of a target's list binding support.
 
 This remains a deliberately limited semantic implementation. General computed
 projections, the full CAST matrix, CTEs/subqueries,

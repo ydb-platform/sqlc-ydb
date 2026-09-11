@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
@@ -95,6 +97,13 @@ func upMigration(text string) string {
 		comment := strings.ToLower(strings.TrimSpace(token.GetText()))
 		for _, marker := range []string{"-- +goose down", "-- +migrate down", "---- create above / drop below ----", "-- migrate:down"} {
 			if strings.HasPrefix(comment, marker) {
+				suffix := comment[len(marker):]
+				if suffix != "" {
+					next, _ := utf8.DecodeRuneInString(suffix)
+					if !unicode.IsSpace(next) {
+						continue
+					}
+				}
 				return string([]rune(text)[:token.GetStart()])
 			}
 		}

@@ -18,9 +18,8 @@ See the [quick start](../README.md#quick-start) for the first generation.
 ## Release archives
 
 Check [GitHub Releases](https://github.com/ydb-platform/sqlc-ydb/releases) for
-published versions and assets. Release infrastructure in the repository does
-not by itself mean that a release has been published; build from source if
-the required release is not available.
+published versions and assets. Build from source if a release is not yet
+available.
 
 The packaging format covers these targets:
 

@@ -104,57 +104,61 @@ func parseArgs(args []string) (arguments, error) {
 }
 
 func Run(args []string, stdout, stderr io.Writer) int {
-	a, err := parseArgs(args)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
+	fail := func(err error) int {
+		// The command already failed; reporting that failure is best effort.
+		_, _ = fmt.Fprintln(stderr, err)
 		return 1
 	}
+	a, err := parseArgs(args)
+	if err != nil {
+		return fail(err)
+	}
 	if a.help || a.command == "" || a.command == "help" {
-		fmt.Fprint(stdout, help)
+		if _, err := fmt.Fprint(stdout, help); err != nil {
+			return fail(err)
+		}
 		return 0
 	}
 	if a.command == "version" {
-		fmt.Fprintln(stdout, Version)
+		if _, err := fmt.Fprintln(stdout, Version); err != nil {
+			return fail(err)
+		}
 		if a.verbose {
-			fmt.Fprintf(stdout, "commit: %s\n", Commit)
+			if _, err := fmt.Fprintf(stdout, "commit: %s\n", Commit); err != nil {
+				return fail(err)
+			}
 		}
 		return 0
 	}
 	if a.command == "init" {
 		if err := initialize(a, stdout); err != nil {
-			fmt.Fprintln(stderr, err)
-			return 1
+			return fail(err)
 		}
 		return 0
 	}
 	switch a.command {
 	case "generate", "compile", "diff":
 	default:
-		fmt.Fprintf(stderr, "unknown command %q\n", a.command)
-		return 1
+		return fail(fmt.Errorf("unknown command %q", a.command))
 	}
 	c, err := config.Load(a.file)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
+		return fail(err)
 	}
 	files, err := prepare(c, a.command != "compile")
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
+		return fail(err)
 	}
 	if a.command == "compile" {
 		return 0
 	}
 	if err := checkStaleOutputs(files); err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
+		return fail(err)
 	}
 	if a.command == "diff" {
 		changed, err := compare(files, stdout)
 		if err != nil {
-			fmt.Fprintln(stderr, err)
-			return 1
+			return fail(err)
 		}
 		if changed {
 			return 1
@@ -163,8 +167,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 	for _, f := range files {
 		if err := writeFile(f); err != nil {
-			fmt.Fprintln(stderr, err)
-			return 1
+			return fail(err)
 		}
 	}
 	return 0
@@ -371,12 +374,18 @@ func compare(files []output, w io.Writer) (bool, error) {
 		}
 		changed = true
 		oldLines, newLines := lines(old), lines(f.content)
-		fmt.Fprintf(w, "--- %s\n+++ %s (generated)\n@@ -%d,%d +%d,%d @@\n", f.path, f.path, start(oldLines), len(oldLines), start(newLines), len(newLines))
+		if _, err := fmt.Fprintf(w, "--- %s\n+++ %s (generated)\n@@ -%d,%d +%d,%d @@\n", f.path, f.path, start(oldLines), len(oldLines), start(newLines), len(newLines)); err != nil {
+			return false, err
+		}
 		for _, line := range oldLines {
-			fmt.Fprintf(w, "-%s\n", line)
+			if _, err := fmt.Fprintf(w, "-%s\n", line); err != nil {
+				return false, err
+			}
 		}
 		for _, line := range newLines {
-			fmt.Fprintf(w, "+%s\n", line)
+			if _, err := fmt.Fprintf(w, "+%s\n", line); err != nil {
+				return false, err
+			}
 		}
 	}
 	return changed, nil
@@ -410,13 +419,15 @@ func writeFile(f output) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(file.Name())
+	defer func() {
+		// Keep the write/rename error; a successful rename already removed this path.
+		_ = file.Close()
+		_ = os.Remove(file.Name())
+	}()
 	if _, err = file.Write(f.content); err != nil {
-		file.Close()
 		return err
 	}
 	if err = file.Chmod(0644); err != nil {
-		file.Close()
 		return err
 	}
 	if err = file.Close(); err != nil {
@@ -457,8 +468,8 @@ packages:
 	}
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 	if errors.Is(err, os.ErrExist) {
-		fmt.Fprintf(w, "%s is already created\n", path)
-		return nil
+		_, err = fmt.Fprintf(w, "%s is already created\n", path)
+		return err
 	}
 	if err != nil {
 		return err
@@ -471,6 +482,6 @@ packages:
 	if closeErr != nil {
 		return closeErr
 	}
-	fmt.Fprintf(w, "%s is added. Add schema.sql and query.sql, then run sqlc-ydb generate.\n", path)
-	return nil
+	_, err = fmt.Fprintf(w, "%s is added. Add schema.sql and query.sql, then run sqlc-ydb generate.\n", path)
+	return err
 }

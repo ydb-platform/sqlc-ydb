@@ -12,9 +12,10 @@ make check
 ```
 
 `make test`, `make coverage`, and `make check` generate example outputs locally
-before running tests. Sources, configurations, dependency manifests and handwritten
-harnesses remain in the repository; missing generated example files are recreated
-by `make generate`.
+before running tests. Generated sources, configurations, dependency manifests
+and handwritten harnesses are committed together. Review and stage regenerated
+outputs before running `make check`; it rejects both drift and untracked example
+files.
 
 The fast suite includes a YDB-only golden fixture runner under
 `internal/endtoend`: real CLI generation must match committed output filenames,
@@ -31,6 +32,25 @@ otherwise changing the runtime SQL text.
 
 CI separates offline checks from Linux acceptance jobs. Each acceptance host
 uses one pinned YDB service.
+
+## Lint
+
+`make lint` checks the generator module and handwritten Go example code;
+`make check` includes it. Generated files are excluded by their standard header.
+The version is pinned in Makefile and shared with the lint and publish workflows.
+Install the official binary at that version:
+
+```sh
+curl -sSfL "https://raw.githubusercontent.com/golangci/golangci-lint/$(make lint-version)/install.sh" |
+  sh -s -- -b ./bin "$(make lint-version)"
+export GOLANGCI_LINT="$PWD/bin/golangci-lint"
+make lint
+```
+
+The configuration enables error handling, unused-code, vet and static analysis
+checks, plus gofmt/goimports. Optional staticcheck style and quick-fix checks
+are excluded; SQL diagnostics and identifier guards retain their intended form.
+Suppressions must name a linter and explain the exception.
 
 ## Code coverage
 
@@ -139,14 +159,15 @@ The [examples](../examples/README.md) share one Go module in `examples/`; genera
 code and tests live under each example's `go/` directory. C# framework,
 TypeScript, Rust and PHP examples share dependencies and test harnesses in
 `examples/csharp`, `examples/typescript`, `examples/rust` and `examples/php`.
-TypeScript dependencies resolve from `examples/package.json`. The authors
-example retains the Python, Java, C++ and ADO.NET application builds. Schema,
-queries and generator configuration are shared in each example root. `make
+TypeScript dependencies resolve from `examples/package.json`; the shared jOOQ
+build lives in `examples/java/jooq`. The authors example hosts the Python, Java
+native/JDBC, Kotlin and ADO.NET builds; its C++ CMake project compiles all five
+example families. Schema, queries and generator configuration are shared in each example root. `make
 generate` and `make check-examples` cover every example configuration; the
-release smoke test also compiles, generates and diffs all of them. Both checks
-fail when generation changes tracked files under `examples`, so committed
-generated outputs are still checked for drift. Missing untracked outputs are
-created locally before runtime compilation.
+release smoke test also compiles, generates and diffs all of them.
+`make check-examples` fails if generation changes tracked files or creates
+untracked files under `examples`, so a new generated source cannot be omitted
+from a commit unnoticed.
 
 Check all generated example families against their pinned runtime dependencies:
 
@@ -186,7 +207,8 @@ Recreate disposable local-ydb containers after stopping them when using
 `YDB_USE_IN_MEMORY_PDISKS=true`. Restarting the same container can retain storage
 metadata without the in-memory disk contents and fail schema operations.
 
-C# and the four Java profiles run in successive acceptance steps too. C++ uses
+C# and the three Java profiles (native, JDBC and jOOQ) run in successive
+acceptance steps too. C++ uses
 the pinned userver/SDK development image to compile both executables before
 starting local-ydb; native and userver runtime probes then execute sequentially.
 The test image and its CMake packaging workaround are in
@@ -240,7 +262,6 @@ repository root. Each command covers all five example families:
 ```sh
 YDB_CONNECTION_STRING='Host=localhost;Port=2136;Database=/local' \
   dotnet run --project examples/csharp/GeneratedProfiles.csproj --no-build -- dapper
-YDB_CONNECTION_STRING='Host=localhost;Port=2136;Database=/local' \
 YDB_CONNECTION_STRING=grpc://localhost:2136/local npm run smoke --prefix examples
 YDB_CONNECTION_STRING=grpc://localhost:2136/local CARGO_BUILD_JOBS=1 \
   cargo test --manifest-path examples/rust/Cargo.toml --locked --test live_smoke -- --nocapture

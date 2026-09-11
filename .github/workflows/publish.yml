@@ -99,7 +99,20 @@ jobs:
           printf '### %s\n\nSource: `%s`\n\nRelease commit: `%s`\n' \
             "$release_tag" "$GITHUB_SHA" "$release_commit" >>"$GITHUB_STEP_SUMMARY"
       - name: Run standalone checks
-        run: make check
+        run: make test-release test check-examples
+      - name: Read pinned lint version
+        id: lint-version
+        run: echo "version=$(make lint-version)" >> "$GITHUB_OUTPUT"
+      - name: Lint release source
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: ${{ steps.lint-version.outputs.version }}
+      - name: Lint Go example tests
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: ${{ steps.lint-version.outputs.version }}
+          working-directory: examples
+          args: --config ../.golangci.yml ./...
       - name: Build and verify all six archives sequentially
         run: |
           test "$(go env GOHOSTOS)" = linux

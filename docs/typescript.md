@@ -11,8 +11,8 @@ gen:
 ```
 
 `runtime` defaults to `ydb`; no legacy `ydb-sdk` runtime is generated. The
-application creates and owns a `Driver` and `QueryClient`, then passes its `SQL`
-function to the generated class:
+application creates and owns a `Driver`, then passes the SDK query function
+(`SQL`) to the generated class:
 
 ```ts
 import { Driver } from "@ydbjs/core";
@@ -23,6 +23,7 @@ const connectionString = process.env.YDB_CONNECTION_STRING;
 if (!connectionString) throw new Error("YDB_CONNECTION_STRING is required");
 
 const driver = new Driver(connectionString);
+await driver.ready();
 const client = query(driver);
 const queries = new Queries(client);
 

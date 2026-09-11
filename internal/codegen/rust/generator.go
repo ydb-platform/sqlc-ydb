@@ -23,7 +23,7 @@ func Generate(in *model.AnalysisResult, opts Options) ([]model.File, error) {
 		return nil, fmt.Errorf("rust generator: nil analysis result")
 	}
 	if len(in.Diagnostics) != 0 {
-		return nil, fmt.Errorf("rust generator: analysis has diagnostics: %s", in.Diagnostics[0])
+		return nil, fmt.Errorf("rust generator: analysis has diagnostics: %w", in.Diagnostics[0])
 	}
 	if opts.Runtime == "" {
 		opts.Runtime = "ydb"
@@ -122,13 +122,17 @@ func renderModels(in *model.AnalysisResult) string {
 			continue
 		}
 		copyDerive := ", Copy"
+		comparisonDerives := ", PartialEq, Eq, Hash, PartialOrd, Ord"
 		for _, c := range q.ResultSets[0].Columns {
+			if hasFloat(c.Type) {
+				comparisonDerives = ", PartialEq, PartialOrd"
+			}
 			switch strings.ToLower(c.Type.UnwrapOptional().Kind) {
 			case "utf8", "json", "jsondocument", "string", "yson", "list":
 				copyDerive = ""
 			}
 		}
-		fmt.Fprintf(&b, "#[derive(Debug, Clone%s, PartialEq, Eq, Hash, PartialOrd, Ord)]\npub struct %sRow {\n", copyDerive, pascalName(q.Name))
+		fmt.Fprintf(&b, "#[derive(Debug, Clone%s%s)]\npub struct %sRow {\n", copyDerive, comparisonDerives, pascalName(q.Name))
 		for _, c := range q.ResultSets[0].Columns {
 			t, _ := rustType(c.Type)
 			fmt.Fprintf(&b, "    pub %s: %s,\n", snakeName(c.Name), t)
@@ -136,6 +140,15 @@ func renderModels(in *model.AnalysisResult) string {
 		b.WriteString("}\n\n")
 	}
 	return strings.TrimSuffix(b.String(), "\n")
+}
+
+// Rust floats have partial comparison because NaN is neither equal nor ordered.
+// Optional and collection wrappers retain the element's trait requirements.
+func hasFloat(t model.Type) bool {
+	if strings.EqualFold(t.Kind, "Float") || strings.EqualFold(t.Kind, "Double") {
+		return true
+	}
+	return t.Elem != nil && hasFloat(*t.Elem)
 }
 
 func renderQueries(in *model.AnalysisResult) string {

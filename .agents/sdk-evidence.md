@@ -26,8 +26,8 @@ pinned in the [example Maven build](../examples/authors/java/pom.xml). The
 
 - The SQL-first reference is sqlc's [Kotlin JDBC output](https://github.com/sqlc-dev/sqlc-gen-kotlin/blob/2c6a78075b1b9a075427b403a07b187bc36e7451/examples/src/main/kotlin/com/example/authors/postgresql/QueriesImpl.kt):
   query constants, typed results and a borrowed connection. Its implementation
-  and plugin protocol were not copied. Our `:one` returns the first row, as the
-  other sqlc-ydb adapters do; it does not add Kotlin's multiple-row check.
+  and plugin protocol were not copied. Java native/JDBC `:one` methods return
+  the first row; jOOQ has a separate, stricter result-cardinality contract.
 - Native query execution uses `QueryClient`, `QuerySession`,
   `tools/SessionRetryContext` and `tools/QueryReader` in the SDK's `query` module.
   `SessionRetryContext` owns operation sessions; the caller owns the transport
@@ -41,7 +41,8 @@ pinned in the [example Maven build](../examples/authors/java/pom.xml). The
   binding. Typed setters handle signed primitives, text and bytes; SDK values
   preserve unsigned types. No generated declarations or unwrap are needed.
   `YdbResultSetBase.getObject(index, Class)` returns null for absent values.
-  Kotlin's existing JDBC path still uses named bindings and declarations.
+  Kotlin JDBC and Exposed use the same positional binding contract, including
+  typed SDK values for unsigned integers, Json and Timestamp.
 - Native `ProtoOptionalValueReader.getText/getBytes` return null for absent
   values; primitive getters throw and still need presence checks. Non-null
   SDK values provide `makeOptional()`; null parameters need a typed empty value.
@@ -69,10 +70,13 @@ It accepts explicit YDB typed values. See [C#](../docs/csharp.md) for ownership
 and mapping choices. Dependency pins are shared across all example families.
 
 Rust's public `From<Option<T>> for Value` implementation requires
-`T: Into<Value> + Default`. Small generated wrappers preserve JSON and temporal
-wire types, including typed nulls, without changing the SDK. `query_result_set`
-provides first-row semantics for `:one`; the SDK's stricter `query_row` would
-reject a result containing several rows.
+`T: Into<Value> + Default`. Small generated wrappers preserve JSON and optional
+temporal wire types, including typed nulls, without changing the SDK.
+Rechecked against the pinned 0.18.2 crate and generator on 2026-09-12: `:one`
+uses `query_row`, whose `client_query/builders.rs::take_single_row` rejects
+multiple rows with `YdbError::Custom` and reports `YdbError::NoRows` for none.
+It does not have upstream sqlc's first-row semantics. The generated `:many`
+methods use `query_result_set`.
 
 The [JavaScript SDK](https://github.com/ydb-platform/ydb-js-sdk) was inspected at
 `96793dbf49165581a1d5c21afff47905c720f44d`. Its published modules are
