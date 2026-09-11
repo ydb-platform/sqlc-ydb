@@ -30,9 +30,36 @@ $author = $queries->getAuthor('18446744073709551615');
 Each method uses the SDK session retry helper with a one-shot
 `serializable_read_write` transaction that commits in the same
 `ExecuteDataQuery` request. The generated class does not expose or retain a
-session or an interactive transaction. Calls are marked non-idempotent because
+session or an interactive transaction. Calls default to non-idempotent because
 `:one` can be an `INSERT ... RETURNING` query and the generator cannot infer a
 safe retry policy from the result shape.
+
+Configure a helper instance explicitly for read-only operations:
+
+```php
+$reads = new Authors\Native\Queries(
+    $ydb->table(),
+    idempotent: true,
+    configure: static function (YdbPlatform\Ydb\YdbQuery $query): void {
+        $query->beginTx('snapshot');
+        $query->operationParams(new Ydb\Operations\OperationParams([
+            'operation_timeout' => new Google\Protobuf\Duration(['seconds' => 5]),
+        ]));
+    },
+    retryParams: new YdbPlatform\Ydb\Retry\RetryParams(),
+);
+$author = $reads->getAuthor('1');
+```
+
+These settings apply to every method on this helper instance. Use the default
+instance for writes; do not call mutations through a read-only instance. The
+configuration callback runs for every retry attempt and must not have external
+side effects. Retry parameters and idempotency are forwarded to the SDK unchanged.
+
+**Transaction boundary:** each call owns a separate transaction. Calling a helper
+inside `Table::retryTransaction()` does not enlist it in that transaction and
+cannot make several helper calls atomic. The configuration callback is for
+one-shot query settings, not for attaching an existing transaction identifier.
 
 The pinned SDK's interactive `Session` API keeps its transaction identifier
 private. Its public `Session::query` path also converts results through JSON,

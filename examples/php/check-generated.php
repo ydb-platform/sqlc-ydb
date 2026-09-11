@@ -198,6 +198,7 @@ final class RetryProbeClient
     public int $executions = 0;
     public string $sql = '';
     public bool $keepInCache = false;
+    public string $txMode = "";
 
     public function __construct(private readonly string $kind, array $options = [])
     {
@@ -208,6 +209,7 @@ final class RetryProbeClient
         ++$this->executions;
         $this->sql = $request->getQuery()->getYqlText();
         $this->keepInCache = $request->getQueryCachePolicy()->getKeepInCache();
+        $this->txMode = $request->getTxControl()->getBeginTx()->getTxMode();
         return new RetryProbeCall($this->kind, $request->getSessionId());
     }
 }
@@ -217,6 +219,8 @@ final class RetryProbeTable extends Table
     /** @var list<RetryProbeClient> */
     private array $clients;
     private int $attempt = 0;
+    public bool $lastIdempotent = false;
+    public ?RetryParams $lastRetryParams = null;
     private RetryProbeCredentials $probeCredentials;
     private RetryProbeYdb $probeYdb;
     /** @var list<string> */
@@ -273,6 +277,8 @@ final class RetryProbeTable extends Table
 
     public function retrySession(Closure $userFunc, bool $idempotent = false, RetryParams $params = null)
     {
+        $this->lastIdempotent = $idempotent;
+        $this->lastRetryParams = $params;
         $failure = null;
         for ($attempt = 0; $attempt < 2; ++$attempt) {
             $this->attempt = $attempt;
@@ -326,6 +332,31 @@ try {
     throw new RuntimeException('truncated result was accepted as complete');
 } catch (UnexpectedValueException $error) {
     check(str_contains($error->getMessage(), 'truncated'), 'unexpected truncation error');
+}
+
+$policyTable = new RetryProbeTable();
+$retryParams = new RetryParams();
+$configurations = 0;
+$readQueries = new Authors\Native\Queries(
+    $policyTable,
+    idempotent: true,
+    configure: static function (\YdbPlatform\Ydb\YdbQuery $query) use (&$configurations): void {
+        ++$configurations;
+        $query->beginTx('snapshot');
+    },
+    retryParams: $retryParams,
+);
+try {
+    $readQueries->getAuthor('1');
+} catch (UnexpectedValueException $error) {
+    // The transport probe returns an empty schema, not an Authors result.
+    check(str_contains($error->getMessage(), 'result columns'), 'unexpected read probe error');
+}
+check($policyTable->lastIdempotent, 'caller idempotency policy was not forwarded');
+check($policyTable->lastRetryParams === $retryParams, 'caller retry parameters were not forwarded');
+check($configurations === 2, 'query configuration was not applied to each attempt');
+foreach ($policyTable->clients() as $client) {
+    check($client->txMode === 'snapshot_read_only', 'caller transaction mode was not sent');
 }
 
 echo "Imported and checked generated PHP for all five examples against YDB PHP SDK 1.16.1.\n";
