@@ -52,7 +52,7 @@ Each link opens the authors example for the selected SDK or framework:
 | Python | [YDB native SDK](examples/authors/python/native), [DB-API](examples/authors/python/dbapi), [SQLAlchemy](examples/authors/python/sqlalchemy) |
 | C++ | [YDB native SDK](examples/authors/cpp/native), [userver](examples/authors/cpp/userver) |
 | C# | [ADO.NET](examples/authors/csharp/adonet), [Dapper](examples/authors/csharp/dapper), [linq2db](examples/authors/csharp/linq2db) |
-| Java | [YDB native SDK](examples/authors/java/native), [JDBC](examples/authors/java/jdbc), [Spring JDBC](examples/authors/java/spring), [Hibernate](examples/authors/java/hibernate) |
+| Java | [YDB native SDK](examples/authors/java/native), [JDBC](examples/authors/java/jdbc), [jOOQ](examples/java/jooq) |
 | Kotlin | [YDB Query SDK, JDBC and Exposed](examples/authors/kotlin) |
 | TypeScript | [YDB JavaScript SDK configuration](examples/authors/sqlc.yaml) |
 | Rust | [YDB native SDK](examples/authors/rust/native) |

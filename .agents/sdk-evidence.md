@@ -45,10 +45,11 @@ pinned in the [example Maven build](../examples/authors/java/pom.xml). The
 - SDK constructors for `Uint8/16/32` mask the signed Java carrier. Generated
   range checks prevent truncation; `Uint64` intentionally retains every bit
   of a Java `long`.
-- Spring [JdbcTemplate callbacks](https://docs.spring.io/spring-framework/reference/data-access/jdbc/core.html)
-  and Hibernate [doReturningWork](https://docs.hibernate.org/orm/6.6/javadocs/org/hibernate/SharedSessionContract.html#doReturningWork(org.hibernate.jdbc.ReturningWork))
-  provide the selected SQL execution APIs. The generator does not infer JPA
-  entities from query projections or require Spring Data repository support.
+- Removed experiments used Spring [JdbcTemplate callbacks](https://docs.spring.io/spring-framework/reference/data-access/jdbc/core.html)
+  and Hibernate [doReturningWork](https://docs.hibernate.org/orm/6.6/javadocs/org/hibernate/SharedSessionContract.html#doReturningWork(org.hibernate.jdbc.ReturningWork)).
+  They preserved YQL but only wrapped JDBC; idiomatic ORM/repository alternatives
+  did not preserve the SQL-first contract. Future design is tracked in
+  [issue #12](https://github.com/ydb-platform/sqlc-ydb/issues/12).
 
 ## C#, TypeScript, Rust and PHP references
 

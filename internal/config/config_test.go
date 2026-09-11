@@ -77,9 +77,14 @@ func TestAdditionalBuiltinTargets(t *testing.T) {
 			}
 		}
 	}
-	for _, runtime := range []string{"native", "ydb", "jdbc", "spring", "hibernate", "jooq"} {
+	for _, runtime := range []string{"native", "ydb", "jdbc", "jooq"} {
 		if _, err := Parse([]byte(base + "    java:\n      out: java\n      runtime: " + runtime + "\n")); err != nil {
 			t.Fatalf("Java %s: %v", runtime, err)
+		}
+	}
+	for _, runtime := range []string{"spring", "hibernate"} {
+		if _, err := Parse([]byte(base + "    java:\n      out: java\n      runtime: " + runtime + "\n")); err == nil {
+			t.Errorf("accepted removed Java runtime %s", runtime)
 		}
 	}
 	for _, runtime := range []string{"native", "ydb", "userver"} {

@@ -1,7 +1,7 @@
 # Java generation
 
-The authors example has four independent Java 17 profiles. The generated API is
-SQL first: each profile keeps the query text and produces a final `Queries`
+The authors example has two direct SQL execution profiles plus a separate jOOQ
+prototype. The generated API is SQL first: each direct profile keeps the query text and produces a final `Queries`
 class with top-level row records. `:one` methods return `Optional<Row>`,
 `:many` methods return `List<Row>`, and `:exec` methods return `void`.
 
@@ -15,7 +15,7 @@ gen:
     runtime: ydb
 ```
 
-`runtime` accepts `ydb` (also `native`), `jdbc`, `spring`, `hibernate`, or
+`runtime` accepts `ydb` (also `native`), `jdbc`, or
 `jooq`. The [jOOQ prototype](#jooq-prototype) has its own DSL and runtime contract.
 Files are emitted directly into `out`; match it to your Java package directory.
 Each schema table and query projection gets a record, without ORM annotations.
@@ -36,19 +36,12 @@ states, a `Uint64` whose bit pattern is `2^64-1` (`-1L` in Java), result
 mapping, and deletion. The runner invokes profiles sequentially. Each creates
 and drops its own `authors` table and fails if a table already exists.
 
-Published dependencies are pinned to YDB SDK BOM `2.4.11`, JDBC `2.4.1`, and
-Hibernate YDB dialect `1.7.0`. Spring uses `spring-jdbc` directly.
+Published dependencies are pinned to YDB SDK BOM `2.4.11` and JDBC `2.4.1`.
 
-The native constructor receives a borrowed
-`tech.ydb.query.tools.SessionRetryContext`. The application owns and closes
-`GrpcTransport` and `QueryClient`; generated query methods do not close either.
+The native constructor receives a borrowed `tech.ydb.query.QueryTransaction`.
+The application owns retry, commit, rollback and the transaction lifecycle.
 The JDBC constructor receives a borrowed `java.sql.Connection`; statements and
 result sets are method-owned and the connection remains application-owned.
-The Spring constructor receives a `JdbcTemplate`; the example wraps one
-borrowed connection in `SingleConnectionDataSource`. The Hibernate constructor
-receives an open `org.hibernate.Session` and runs the same typed JDBC operations
-inside `Session.doReturningWork`, so a projection does not require a generated
-JPA entity.
 
 For JDBC, variables are bound through the driver's `YdbPreparedStatement`
 name-based `setObject` with an explicitly typed SDK `Value`. Names omit the
@@ -66,13 +59,9 @@ Java integer cannot be silently truncated by an SDK constructor.
 
 Supported scalar types are `Bool`, signed and unsigned integers, `Float`,
 `Double`, `Utf8`, and `String`, plus one level of `Optional<T>`. Optional
-primitives use boxed Java types; unsupported types fail generation. Native
-query methods execute one transaction per method using `SERIALIZABLE_RW`.
-JDBC, Spring, and Hibernate methods use the caller's transaction; they never
-commit, roll back, or close caller-owned connections or sessions.
-Before using the Hibernate adapter, flush any pending ORM changes that the
-query must see: `doReturningWork` does not infer Hibernate entity flush rules
-from YQL. Transaction boundaries and entity lifecycle remain application-owned.
+primitives use boxed Java types; unsupported types fail generation. Native and
+JDBC methods use the caller's transaction; they never commit, roll back, or
+close caller-owned transactions or connections.
 
 SQL uses Java 17 text blocks with escaped delimiters, control characters, and
 trailing whitespace. Literal tests compile and execute the emitted Java and

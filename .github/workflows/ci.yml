@@ -178,7 +178,7 @@ jobs:
         run: dotnet run --project csharp/adonet/Authors.AdoNet.csproj
       - name: Run jOOQ examples in isolated tables
         run: mvn -B -f examples/java/jooq/pom.xml test
-      - name: Run Java native, JDBC, Spring and Hibernate examples sequentially
+      - name: Run Java native and JDBC examples sequentially
         run: sh examples/authors/java/run-smoke.sh
       - name: Run Kotlin Query SDK, JDBC and Exposed examples sequentially
         run: sh examples/authors/kotlin/run-smoke.sh

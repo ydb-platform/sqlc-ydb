@@ -14,8 +14,6 @@
     <modules>
         <module>native</module>
         <module>jdbc</module>
-        <module>spring</module>
-        <module>hibernate</module>
     </modules>
 
     <properties>
@@ -23,9 +21,6 @@
         <maven.compiler.release>17</maven.compiler.release>
         <ydb.sdk.version>2.4.11</ydb.sdk.version>
         <ydb.jdbc.version>2.4.1</ydb.jdbc.version>
-        <spring.jdbc.version>6.2.0</spring.jdbc.version>
-        <hibernate.version>6.2.7.Final</hibernate.version>
-        <hibernate.ydb.version>1.7.0</hibernate.ydb.version>
     </properties>
 
     <dependencyManagement>

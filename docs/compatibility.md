@@ -14,7 +14,7 @@ not designate a compatible upstream sqlc version.
 - `gen.python` selects a built-in generator. `runtime` chooses `ydb`, `dbapi`, or
   `sqlalchemy`. Go adds `sql_package: ydb` alongside `database/sql`.
 - `gen.cpp` selects `runtime: ydb|userver`; `gen.java` selects
-  `runtime: ydb|jdbc|spring|hibernate`. `native` is an alias for `ydb` in these
+  `runtime: ydb|jdbc|jooq`. `native` is an alias for `ydb` in these
   two targets. `gen.csharp.runtime` selects `adonet` (the default), `dapper`,
   or `linq2db`; all three use the YDB ADO.NET provider.
 - `gen.kotlin` selects `runtime: ydb|jdbc|exposed`; `native` aliases `ydb`.

@@ -107,6 +107,8 @@ func TestGenerateRejectsInvalidContracts(t *testing.T) {
 		{"framework_type_collision", &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "illegal_argument_exception"}}}}, Options{}, "type name collision"},
 		{"package_java_namespace", &model.AnalysisResult{}, Options{Package: "java.sqlc"}, "java packages are reserved"},
 		{"runtime", &model.AnalysisResult{}, Options{Runtime: "unknown"}, "unsupported Java runtime"},
+		{"removed_spring_runtime", &model.AnalysisResult{}, Options{Runtime: "spring"}, "unsupported Java runtime"},
+		{"removed_hibernate_runtime", &model.AnalysisResult{}, Options{Runtime: "hibernate"}, "unsupported Java runtime"},
 		{"unsupported_parameter", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.Exec, Parameters: []model.Parameter{{Name: "p", Type: model.Type{Kind: "Json"}}}}}}, Options{}, "unsupported Java type"},
 		{"unsupported_result", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.One, ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "value", Type: model.Type{Kind: "List"}}}}}}}}, Options{}, "unsupported Java type"},
 		{"execrows", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.ExecRows}}}, Options{}, "does not support"},
@@ -159,8 +161,6 @@ func TestAllSupportedScalarsCompileAgainstAuthorsMavenProfiles(t *testing.T) {
 	profiles := []struct{ runtime, module, pkg string }{
 		{"ydb", "native", "synthetic.nativeapi"},
 		{"jdbc", "jdbc", "synthetic.jdbc"},
-		{"spring", "spring", "synthetic.spring"},
-		{"hibernate", "hibernate", "synthetic.hibernate"},
 	}
 	for _, profile := range profiles {
 		t.Run(profile.runtime, func(t *testing.T) {

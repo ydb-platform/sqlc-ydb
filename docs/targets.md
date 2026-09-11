@@ -18,10 +18,8 @@
 | Kotlin Query SDK | `gen.kotlin.runtime: ydb` | data classes and `Queries(SessionRetryContext)` |
 | Kotlin JDBC | `gen.kotlin.runtime: jdbc` | typed query methods on a borrowed `Connection` |
 | Kotlin Exposed | `gen.kotlin.runtime: exposed` | typed SQL methods on a borrowed `JdbcTransaction` |
-| Java native SDK | `gen.java.runtime: ydb` | `Queries(SessionRetryContext)`, Java 17 records |
+| Java native SDK | `gen.java.runtime: ydb` | `Queries(QueryTransaction)`, Java 17 records |
 | Java JDBC | `gen.java.runtime: jdbc` | `Queries(Connection)`, named YDB prepared statements |
-| Java Spring JDBC | `gen.java.runtime: spring` | `Queries(JdbcTemplate)`, framework-owned connections |
-| Java Hibernate | `gen.java.runtime: hibernate` | `Queries(Session)`, JDBC work inside the session |
 
 `Utf8` is text (`string` / `str`); `String` is binary (`[]byte` / `bytes`).
 Optional values preserve nullability. Go integers retain their widths and signedness;
@@ -43,15 +41,15 @@ and C# uses `ulong`. Binary YQL `String` stays binary in every target.
 
 Type coverage differs by target. Unsupported temporal, decimal, container or
 other unmapped types fail explicitly; see the individual target docs.
-Spring, Hibernate, Dapper and linq2db integrations generate SQL query
+Dapper and linq2db integrations generate SQL query
 projections and methods; they do not infer ORM entities or LINQ expressions
 from query results. See the [C#](csharp.md), [TypeScript](typescript.md),
 [Rust](rust.md) and [PHP](php.md) contracts for supported types and API details.
 
 Generated code uses caller-provided clients/connections. The caller controls
 connection lifetime and credentials. Transaction behavior is target-specific:
-both C++ profiles and native Java execute a transaction per method; C#, JDBC,
-Spring, and Hibernate use the caller's connection or transaction. Generated
+both C++ profiles execute a transaction per method; C#, native Java and JDBC use
+the caller's connection or transaction. Generated
 DB-API code closes its own cursors and does not commit caller-owned transactions.
 The language-specific pages document the remaining runtime ownership contracts.
 

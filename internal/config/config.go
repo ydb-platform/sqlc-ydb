@@ -295,7 +295,7 @@ func Parse(data []byte) (*Config, error) {
 				g.Runtime = "ydb"
 			}
 			switch g.Runtime {
-			case "ydb", "jdbc", "spring", "hibernate", "jooq":
+			case "ydb", "jdbc", "jooq":
 			default:
 				return nil, fmt.Errorf("sql[%d]: unsupported Java runtime %q", i, g.Runtime)
 			}

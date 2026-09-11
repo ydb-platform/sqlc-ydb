@@ -20,7 +20,7 @@ the version and moves these entries into a numbered section at release time.
   Go Decimal/UUID bindings and native per-query execution options.
 - Built-in Go (native SDK, database/sql), Python (native SDK, DB-API, SQLAlchemy),
   C++ (native SDK, userver), C# (ADO.NET, Dapper, linq2db), Java (native SDK,
-  JDBC, Spring JDBC, Hibernate), Kotlin (Query SDK, JDBC, Exposed), TypeScript,
+  JDBC, jOOQ), Kotlin (Query SDK, JDBC, Exposed), TypeScript,
   Rust and PHP generators.
 - Readable SQL literals at execution sites in every language; TypeScript uses
   typed SDK tagged templates with native Date and parsed JSON results. Its DTO

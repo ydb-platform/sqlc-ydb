@@ -44,22 +44,6 @@ sql:
     schema: schema.sql
     queries: queries.sql
     gen:
-      java:
-        package: authors.spring
-        out: java/spring
-        runtime: spring
-  - engine: ydb
-    schema: schema.sql
-    queries: queries.sql
-    gen:
-      java:
-        package: authors.hibernate
-        out: java/hibernate
-        runtime: hibernate
-  - engine: ydb
-    schema: schema.sql
-    queries: queries.sql
-    gen:
       csharp:
         namespace: Authors.Dapper
         out: cs/dapper
