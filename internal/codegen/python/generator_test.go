@@ -355,6 +355,8 @@ class TypedValue:
 class Row(dict): pass
 class ResultSet:
     def __init__(self, rows): self.rows = rows
+class RetrySettings:
+    def __init__(self, max_retries): self.max_retries = max_retries
 class QuerySessionPool: pass
 class QueryTxContext: pass
 `), 0600); err != nil {
@@ -369,7 +371,8 @@ class Pool(ydb.QuerySessionPool):
     def __init__(self, results):
         self.results = results
         self.calls = []
-    def execute_with_retries(self, sql, parameters):
+    def execute_with_retries(self, sql, parameters, retry_settings=None):
+        self.retry_settings = retry_settings
         self.calls.append((sql, parameters))
         return self.results
 
@@ -384,10 +387,12 @@ class Transaction(ydb.QueryTxContext):
 pool = Pool([ydb.ResultSet([ydb.Row({'a.id': 7, 'display_name': None})])])
 row = Querier(pool).get_author(7, 8, 9, 10)
 assert row.id == 7 and row.display_name is None
+assert pool.retry_settings.max_retries == 0
 assert pool.calls[0][1]['$id'].type == ydb.PrimitiveType.Uint64
 assert [pool.calls[0][1]['$' + name].value for name in ('ydb', 'models', 'text')] == [8, 9, 10]
 pool.results = [ydb.ResultSet([ydb.Row({'a.id': 8})])]
-rows = list(Querier(pool).list_authors())
+rows = Querier(pool).list_authors()
+assert isinstance(rows, list)
 assert len(rows) == 1 and rows[0].id == 8
 assert Querier(Pool([ydb.ResultSet([])])).get_author(7, 8, 9, 10) is None
 
@@ -395,13 +400,29 @@ tx = Transaction([ydb.ResultSet([ydb.Row({'a.id': 9, 'display_name': 'transactio
 row = Querier(tx).get_author(7, 8, 9, 10)
 assert row.id == 9 and row.display_name == 'transaction'
 assert len(tx.calls) == 1
+settings = object()
+Querier(pool, retry_settings=settings).list_authors()
+assert pool.retry_settings is settings
+try:
+    Querier(tx, retry_settings=settings)
+except ValueError:
+    pass
+else:
+    raise AssertionError("transaction retry settings were silently ignored")
 
 try:
     Querier(Pool([])).get_author(7, 8, 9, 10)
-except IndexError:
+except ValueError:
     pass
 else:
     raise AssertionError("missing result set was masked as a missing row")
+
+try:
+    Querier(Pool([ydb.ResultSet([]), ydb.ResultSet([])])).get_author(7, 8, 9, 10)
+except ValueError:
+    pass
+else:
+    raise AssertionError("additional result set was silently discarded")
 
 try:
     Querier(Pool([ydb.ResultSet([{0: 7, 1: None}])])).get_author(7, 8, 9, 10)
@@ -464,6 +485,9 @@ class Row:
     def __init__(self, values): self._mapping = values
 class R:
     def __init__(self, fail, values): self.closed = False; self.fail = fail; self.values = values
+    def fetchone(self):
+        if self.fail: raise RuntimeError("fetch failure")
+        return Row(self.values)
     def fetchall(self):
         if self.fail: raise RuntimeError("fetch failure")
         return [Row(self.values)]
@@ -479,7 +503,8 @@ assert c.calls[0][1]['id'][0] == 7
 assert [c.calls[0][1][name][0] for name in ('ydb', 'models', 'text')] == [8, 9, 10]
 assert '-- name:' not in c.calls[0][0] and 'id = :id;' in c.calls[0][0], repr(c.calls[0][0])
 c.values = {'a.id': 8}
-rows = list(Querier(c).list_authors())
+rows = Querier(c).list_authors()
+assert isinstance(rows, list)
 assert len(rows) == 1 and rows[0].id == 8 and c.result.closed
 c.fail = True
 try: Querier(c).get_author(7, 8, 9, 10)
@@ -524,7 +549,8 @@ from db.queries import Querier
 
 class Cursor:
     def execute(self, sql, params): self.params = params
-    def fetchall(self): return [(7, None)]
+    def fetchone(self): return (7, None)
+    def fetchall(self): raise AssertionError("fetchall used for :one")
     def close(self): self.closed = True
 
 class Connection:

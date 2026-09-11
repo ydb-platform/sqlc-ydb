@@ -145,3 +145,15 @@ as ResultQuery query parts with explicit field coercion. The exact compatibility
 contract and commands are in [Java generation](../docs/java.md#jooq-prototype);
 `examples/java/jooq` compiles every example method and executes live checks in
 isolated tables. No upstream source was copied into the generator.
+
+## Python retry and fetch contracts (2026-09-11)
+
+Pinned `ydb==3.29.7` uses `RetrySettings(idempotent=False)` by default, but
+`ydb._errors.check_retriable_error` still retries `ConnectionLost` regardless of
+that flag. Native generated helpers therefore default to `max_retries=0`;
+applications explicitly provide retry settings for safely repeatable operations.
+The smoke test exercises the real SDK retry loop with an injected lost response.
+Transaction-backed helpers do not retry statements independently.
+
+DB-API and SQLAlchemy expose `fetchone()` for first-row queries; generated
+`:many` APIs return eager lists. Full table projections reuse the table model.

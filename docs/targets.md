@@ -29,7 +29,7 @@ selected columns, including aliases. Unsupported type/runtime combinations are
 errors; no generic `Any` fallback is generated.
 
 For `:one`, Go returns a row and error; Python returns a row or `None` when no
-row exists. `:many` returns a Go slice or Python iterable. `:exec` returns only
+row exists. `:many` returns a Go slice or Python list. `:exec` returns only
 execution status. The selected YDB SDK/driver APIs do not expose a portable
 affected-row count, so all generators reject `:execrows`.
 
@@ -106,3 +106,27 @@ without execution options continue to compile.
 
 Kotlin types, nullable results and transaction ownership are documented in
 [Kotlin](kotlin.md). Kotlin examples use the shared authors schema and queries.
+
+### Python result and retry contracts
+
+All Python `:many` methods return an eagerly materialized `list`, not a stream.
+Use bounded queries or keyset pagination for large results. DB-API and SQLAlchemy
+`:one` methods fetch a single row and always close their cursor/result, including
+on conversion failure. Native methods validate that exactly one result set was
+returned. A result matching a complete table reuses the table dataclass; partial
+projections use query row dataclasses.
+
+Native pool-backed helpers default to `RetrySettings(max_retries=0)`. SDK 3.29.7
+retries `ConnectionLost` even with `idempotent=False`, so that flag alone does not
+protect a write whose commit response was lost. Opt in only for operations the
+application can safely repeat:
+
+```python
+reads = Querier(pool, retry_settings=ydb.RetrySettings(idempotent=True))
+```
+
+Settings apply to every call through that helper. Transaction-backed helpers
+never retry individual statements; pass retry settings to the surrounding SDK
+transaction operation. Supplying `retry_settings` to `Querier(transaction)` raises
+`ValueError` instead of silently ignoring them. The Python smoke suite covers
+`INSERT ... RETURNING`, composed rollback, and explicit versus default pool retries.

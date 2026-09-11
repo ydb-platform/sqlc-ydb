@@ -8,8 +8,3 @@ from typing import Optional
 class Authors:
     id: int
     name: Optional[str]
-
-@dataclass
-class Author:
-    id: int
-    name: Optional[str]

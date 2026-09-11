@@ -7,6 +7,8 @@ never dropped if CREATE TABLE fails. Run profiles sequentially with Go smoke.
 """
 
 import os
+from contextlib import contextmanager
+from threading import Event
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -22,13 +24,16 @@ from .sqlalchemy.queries import Querier as SQLAlchemyQuerier
 
 def check(querier):
     author_id = 2**64 - 1
-    querier.upsert_author(author_id, "Автор", None)
+    created = querier.create_author(author_id, "Автор", None)
+    assert created is not None and created.id == author_id
+    assert created.name == "Автор" and created.bio is None
     author = querier.get_author(author_id)
     assert author.id == author_id and author.name == "Автор" and author.bio is None
     assert querier.get_author_name(author_id).name == "Автор"
     querier.upsert_author(author_id, "Автор", "Биография")
     assert querier.get_author(author_id).bio == "Биография"
-    assert len(list(querier.list_authors())) == 1
+    authors = querier.list_authors()
+    assert isinstance(authors, list) and len(authors) == 1
     querier.delete_author(author_id)
     assert querier.get_author(author_id) is None
 
@@ -47,7 +52,42 @@ def check_native_transaction(pool):
     assert NativeQuerier(pool).get_author(author_id) is None
 
 
+def check_retry_policy():
+    class FailingPool(ydb.QuerySessionPool):
+        def __init__(self):
+            self._should_stop = Event()
+            self.attempts = 0
+
+        @contextmanager
+        def checkout(self, timeout=None):
+            yield self
+
+        def execute(self, query, parameters):
+            self.attempts += 1
+            if self.attempts == 1:
+                raise ydb.ConnectionLost("response lost after possible commit")
+            return iter([])
+
+    pool = FailingPool()
+    try:
+        NativeQuerier(pool).delete_author(1)
+    except ydb.ConnectionLost:
+        pass
+    else:
+        raise AssertionError("ambiguous write was automatically replayed")
+    assert pool.attempts == 1
+
+    pool = FailingPool()
+    settings = ydb.RetrySettings(
+        max_retries=1, idempotent=True,
+        slow_backoff_settings=ydb.BackoffSettings(0, 0),
+    )
+    NativeQuerier(pool, retry_settings=settings).delete_author(1)
+    assert pool.attempts == 2
+
+
 def main():
+    check_retry_policy()
     url = urlsplit(os.environ["YDB_CONNECTION_STRING"])
     config = ydb.DriverConfig(
         endpoint=f"{url.scheme}://{url.netloc}", database=url.path,
