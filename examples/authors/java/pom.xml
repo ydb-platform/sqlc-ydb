@@ -16,6 +16,7 @@
         <module>jdbc</module>
         <module>spring</module>
         <module>hibernate</module>
+        <module>hibernate-jpa</module>
     </modules>
 
     <properties>

@@ -12,7 +12,7 @@ cd "$AUTHORS_DIR"
 
 mvn -f java/pom.xml -DskipTests test-compile
 
-for module in native jdbc spring hibernate; do
+for module in native jdbc spring hibernate hibernate-jpa; do
     mvn -q -f "java/$module/pom.xml" dependency:build-classpath \
         -Dmdep.includeScope=test \
         -Dmdep.outputFile="target/smoke-classpath.txt"
@@ -22,6 +22,7 @@ for module in native jdbc spring hibernate; do
         jdbc) class=authors.jdbc.Smoke ;;
         spring) class=authors.spring.Smoke ;;
         hibernate) class=authors.hibernate.Smoke ;;
+        hibernate-jpa) class=authors.hibernate.jpa.Smoke ;;
     esac
     echo "Running $class"
     java -cp "$classpath" "$class"
