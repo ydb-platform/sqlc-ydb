@@ -3,7 +3,8 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.Common;
+using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -34,56 +35,24 @@ public sealed class Queries
     {
         var command = new CommandDefinition(
             "SELECT id, name, bio FROM authors WHERE id = $author_id;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, authorId)), _transaction, cancellationToken: cancellationToken);
-        await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            throw new InvalidOperationException("query returned no rows");
-        }
-        return GetAuthorRowFrom(reader);
+        return await _connection.QueryFirstAsync<GetAuthorRow>(command).ConfigureAwait(false);
     }
-
-    private static GetAuthorRow GetAuthorRowFrom(DbDataReader reader) => new(
-        reader.GetFieldValue<ulong>(0),
-        reader.GetFieldValue<string>(1),
-        reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)
-    );
 
     // -- name: ListAuthors :many
     public async Task<IReadOnlyList<ListAuthorsRow>> ListAuthorsAsync(CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
             "SELECT id, name, bio FROM authors ORDER BY name;", null, _transaction, cancellationToken: cancellationToken);
-        await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
-        var rows = new List<ListAuthorsRow>();
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            rows.Add(ListAuthorsRowFrom(reader));
-        }
-        return rows;
+        return (await _connection.QueryAsync<ListAuthorsRow>(command).ConfigureAwait(false)).AsList();
     }
-
-    private static ListAuthorsRow ListAuthorsRowFrom(DbDataReader reader) => new(
-        reader.GetFieldValue<ulong>(0),
-        reader.GetFieldValue<string>(1),
-        reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)
-    );
 
     // -- name: GetAuthorName :one
     public async Task<GetAuthorNameRow> GetAuthorNameAsync(ulong authorId, CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
             "SELECT name FROM authors WHERE id = $author_id;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, authorId)), _transaction, cancellationToken: cancellationToken);
-        await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            throw new InvalidOperationException("query returned no rows");
-        }
-        return GetAuthorNameRowFrom(reader);
+        return await _connection.QueryFirstAsync<GetAuthorNameRow>(command).ConfigureAwait(false);
     }
-
-    private static GetAuthorNameRow GetAuthorNameRowFrom(DbDataReader reader) => new(
-        reader.GetFieldValue<string>(0)
-    );
 
     // -- name: CreateAuthor :one
     public async Task<CreateAuthorRow> CreateAuthorAsync(CreateAuthorParams args, CancellationToken cancellationToken = default)
@@ -92,19 +61,8 @@ public sealed class Queries
             "INSERT INTO `authors` (`id`, `name`, `bio`)\n" +
             "VALUES ($author_id, $author_name, $biography)\n" +
             "RETURNING `id`, `name`, `bio`;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, args.AuthorID), new YdbParameter("$author_name", DbType.String, args.AuthorName), new YdbParameter("$biography", YdbValue.MakeOptionalUtf8(args.Biography))), _transaction, cancellationToken: cancellationToken);
-        await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            throw new InvalidOperationException("query returned no rows");
-        }
-        return CreateAuthorRowFrom(reader);
+        return await _connection.QueryFirstAsync<CreateAuthorRow>(command).ConfigureAwait(false);
     }
-
-    private static CreateAuthorRow CreateAuthorRowFrom(DbDataReader reader) => new(
-        reader.GetFieldValue<ulong>(0),
-        reader.GetFieldValue<string>(1),
-        reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)
-    );
 
     // -- name: UpsertAuthor :exec
     public async Task UpsertAuthorAsync(UpsertAuthorParams args, CancellationToken cancellationToken = default)

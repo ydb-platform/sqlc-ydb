@@ -3,7 +3,8 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.Common;
+using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -29,6 +30,44 @@ public sealed class Queries
 
     public Queries WithTransaction(YdbTransaction transaction) => new(_connection, transaction ?? throw new ArgumentNullException(nameof(transaction)));
 
+    static Queries()
+    {
+        SqlMapper.SetTypeMap(typeof(ListVenuesRow), new ColumnTypeMap(typeof(ListVenuesRow), new Dictionary<string, string>
+        {
+            ["spotify_playlist"] = nameof(ListVenuesRow.SpotifyPlaylist),
+            ["songkick_id"] = nameof(ListVenuesRow.SongkickID),
+            ["created_at"] = nameof(ListVenuesRow.CreatedAt),
+        }));
+        SqlMapper.SetTypeMap(typeof(GetVenueRow), new ColumnTypeMap(typeof(GetVenueRow), new Dictionary<string, string>
+        {
+            ["spotify_playlist"] = nameof(GetVenueRow.SpotifyPlaylist),
+            ["songkick_id"] = nameof(GetVenueRow.SongkickID),
+            ["created_at"] = nameof(GetVenueRow.CreatedAt),
+        }));
+        SqlMapper.SetTypeMap(typeof(VenueCountByCityRow), new ColumnTypeMap(typeof(VenueCountByCityRow), new Dictionary<string, string>
+        {
+            ["venue_count"] = nameof(VenueCountByCityRow.VenueCount),
+        }));
+    }
+
+    private sealed class ColumnTypeMap : SqlMapper.ITypeMap
+    {
+        private readonly DefaultTypeMap _default;
+        private readonly IReadOnlyDictionary<string, string> _columns;
+
+        public ColumnTypeMap(Type type, IReadOnlyDictionary<string, string> columns)
+        {
+            _default = new DefaultTypeMap(type);
+            _columns = columns;
+        }
+
+        private string MemberName(string column) => _columns.TryGetValue(column, out var member) ? member : column;
+        public ConstructorInfo? FindConstructor(string[] names, Type[] types) => _default.FindConstructor(names.Select(MemberName).ToArray(), types);
+        public ConstructorInfo? FindExplicitConstructor() => _default.FindExplicitConstructor();
+        public SqlMapper.IMemberMap? GetConstructorParameter(ConstructorInfo constructor, string columnName) => _default.GetConstructorParameter(constructor, MemberName(columnName));
+        public SqlMapper.IMemberMap? GetMember(string columnName) => _default.GetMember(MemberName(columnName));
+    }
+
     private static DateTime NormalizeTimestamp(DateTime value) =>
         value.Kind == DateTimeKind.Local ? value.ToUniversalTime() : DateTime.SpecifyKind(value, DateTimeKind.Utc);
 
@@ -42,19 +81,8 @@ public sealed class Queries
             "SELECT slug, name\n" +
             "FROM city\n" +
             "ORDER BY name;", null, _transaction, cancellationToken: cancellationToken);
-        await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
-        var rows = new List<ListCitiesRow>();
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            rows.Add(ListCitiesRowFrom(reader));
-        }
-        return rows;
+        return (await _connection.QueryAsync<ListCitiesRow>(command).ConfigureAwait(false)).AsList();
     }
-
-    private static ListCitiesRow ListCitiesRowFrom(DbDataReader reader) => new(
-        reader.GetFieldValue<string>(0),
-        reader.GetFieldValue<string>(1)
-    );
 
     // -- name: GetCity :one
     public async Task<GetCityRow> GetCityAsync(string slug, CancellationToken cancellationToken = default)
@@ -63,18 +91,8 @@ public sealed class Queries
             "SELECT slug, name\n" +
             "FROM city\n" +
             "WHERE slug = $slug;", new YdbParameters(new YdbParameter("$slug", DbType.String, slug)), _transaction, cancellationToken: cancellationToken);
-        await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            throw new InvalidOperationException("query returned no rows");
-        }
-        return GetCityRowFrom(reader);
+        return await _connection.QueryFirstAsync<GetCityRow>(command).ConfigureAwait(false);
     }
-
-    private static GetCityRow GetCityRowFrom(DbDataReader reader) => new(
-        reader.GetFieldValue<string>(0),
-        reader.GetFieldValue<string>(1)
-    );
 
     // -- name: CreateCity :one
     public async Task<CreateCityRow> CreateCityAsync(CreateCityParams args, CancellationToken cancellationToken = default)
@@ -87,18 +105,8 @@ public sealed class Queries
             "    $name,\n" +
             "    $slug\n" +
             ") RETURNING slug, name;", new YdbParameters(new YdbParameter("$name", DbType.String, args.Name), new YdbParameter("$slug", DbType.String, args.Slug)), _transaction, cancellationToken: cancellationToken);
-        await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            throw new InvalidOperationException("query returned no rows");
-        }
-        return CreateCityRowFrom(reader);
+        return await _connection.QueryFirstAsync<CreateCityRow>(command).ConfigureAwait(false);
     }
-
-    private static CreateCityRow CreateCityRowFrom(DbDataReader reader) => new(
-        reader.GetFieldValue<string>(0),
-        reader.GetFieldValue<string>(1)
-    );
 
     // -- name: UpdateCityName :exec
     public async Task UpdateCityNameAsync(UpdateCityNameParams args, CancellationToken cancellationToken = default)
@@ -118,27 +126,8 @@ public sealed class Queries
             "FROM venue\n" +
             "WHERE city = $city\n" +
             "ORDER BY name;", new YdbParameters(new YdbParameter("$city", DbType.String, city)), _transaction, cancellationToken: cancellationToken);
-        await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
-        var rows = new List<ListVenuesRow>();
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            rows.Add(ListVenuesRowFrom(reader));
-        }
-        return rows;
+        return (await _connection.QueryAsync<ListVenuesRow>(command).ConfigureAwait(false)).AsList();
     }
-
-    private static ListVenuesRow ListVenuesRowFrom(DbDataReader reader) => new(
-        reader.GetFieldValue<ulong>(0),
-        reader.GetFieldValue<string>(1),
-        reader.GetFieldValue<string>(2),
-        reader.GetFieldValue<string>(3),
-        reader.GetFieldValue<string>(4),
-        reader.IsDBNull(5) ? null : reader.GetFieldValue<string>(5),
-        reader.GetFieldValue<string>(6),
-        reader.IsDBNull(7) ? null : reader.GetFieldValue<string>(7),
-        reader.IsDBNull(8) ? null : reader.GetFieldValue<string>(8),
-        reader.IsDBNull(9) ? null : reader.GetFieldValue<DateTime>(9)
-    );
 
     // -- name: DeleteVenue :exec
     public async Task DeleteVenueAsync(string slug, CancellationToken cancellationToken = default)
@@ -156,26 +145,8 @@ public sealed class Queries
             "SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n" +
             "FROM venue\n" +
             "WHERE slug = $slug AND city = $city;", new YdbParameters(new YdbParameter("$slug", DbType.String, args.Slug), new YdbParameter("$city", DbType.String, args.City)), _transaction, cancellationToken: cancellationToken);
-        await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            throw new InvalidOperationException("query returned no rows");
-        }
-        return GetVenueRowFrom(reader);
+        return await _connection.QueryFirstAsync<GetVenueRow>(command).ConfigureAwait(false);
     }
-
-    private static GetVenueRow GetVenueRowFrom(DbDataReader reader) => new(
-        reader.GetFieldValue<ulong>(0),
-        reader.GetFieldValue<string>(1),
-        reader.GetFieldValue<string>(2),
-        reader.GetFieldValue<string>(3),
-        reader.GetFieldValue<string>(4),
-        reader.IsDBNull(5) ? null : reader.GetFieldValue<string>(5),
-        reader.GetFieldValue<string>(6),
-        reader.IsDBNull(7) ? null : reader.GetFieldValue<string>(7),
-        reader.IsDBNull(8) ? null : reader.GetFieldValue<string>(8),
-        reader.IsDBNull(9) ? null : reader.GetFieldValue<DateTime>(9)
-    );
 
     // -- name: CreateVenue :one
     public async Task<CreateVenueRow> CreateVenueAsync(CreateVenueParams args, CancellationToken cancellationToken = default)
@@ -202,17 +173,8 @@ public sealed class Queries
             "    $statuses,\n" +
             "    $tags\n" +
             ") RETURNING id;", new YdbParameters(new YdbParameter("$id", DbType.UInt64, args.ID), new YdbParameter("$slug", DbType.String, args.Slug), new YdbParameter("$name", DbType.String, args.Name), new YdbParameter("$city", DbType.String, args.City), new YdbParameter("$created_at", YdbValue.MakeOptionalTimestamp(NormalizeTimestamp(args.CreatedAt))), new YdbParameter("$spotify_playlist", DbType.String, args.SpotifyPlaylist), new YdbParameter("$status", DbType.String, args.Status), new YdbParameter("$statuses", YdbValue.MakeOptionalJson(args.Statuses)), new YdbParameter("$tags", YdbValue.MakeOptionalJson(args.Tags))), _transaction, cancellationToken: cancellationToken);
-        await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            throw new InvalidOperationException("query returned no rows");
-        }
-        return CreateVenueRowFrom(reader);
+        return await _connection.QueryFirstAsync<CreateVenueRow>(command).ConfigureAwait(false);
     }
-
-    private static CreateVenueRow CreateVenueRowFrom(DbDataReader reader) => new(
-        reader.GetFieldValue<ulong>(0)
-    );
 
     // -- name: UpdateVenueName :one
     public async Task<UpdateVenueNameRow> UpdateVenueNameAsync(UpdateVenueNameParams args, CancellationToken cancellationToken = default)
@@ -222,17 +184,8 @@ public sealed class Queries
             "SET name = $name\n" +
             "WHERE slug = $slug\n" +
             "RETURNING id;", new YdbParameters(new YdbParameter("$name", DbType.String, args.Name), new YdbParameter("$slug", DbType.String, args.Slug)), _transaction, cancellationToken: cancellationToken);
-        await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            throw new InvalidOperationException("query returned no rows");
-        }
-        return UpdateVenueNameRowFrom(reader);
+        return await _connection.QueryFirstAsync<UpdateVenueNameRow>(command).ConfigureAwait(false);
     }
-
-    private static UpdateVenueNameRow UpdateVenueNameRowFrom(DbDataReader reader) => new(
-        reader.GetFieldValue<ulong>(0)
-    );
 
     // -- name: VenueCountByCity :many
     public async Task<IReadOnlyList<VenueCountByCityRow>> VenueCountByCityAsync(CancellationToken cancellationToken = default)
@@ -244,19 +197,8 @@ public sealed class Queries
             "FROM venue\n" +
             "GROUP BY city\n" +
             "ORDER BY city;", null, _transaction, cancellationToken: cancellationToken);
-        await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
-        var rows = new List<VenueCountByCityRow>();
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            rows.Add(VenueCountByCityRowFrom(reader));
-        }
-        return rows;
+        return (await _connection.QueryAsync<VenueCountByCityRow>(command).ConfigureAwait(false)).AsList();
     }
-
-    private static VenueCountByCityRow VenueCountByCityRowFrom(DbDataReader reader) => new(
-        reader.GetFieldValue<string>(0),
-        reader.GetFieldValue<ulong>(1)
-    );
 
     private sealed class YdbParameters : SqlMapper.IDynamicParameters
     {

@@ -3,7 +3,8 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.Common;
+using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -29,41 +30,47 @@ public sealed class Queries
 
     public Queries WithTransaction(YdbTransaction transaction) => new(_connection, transaction ?? throw new ArgumentNullException(nameof(transaction)));
 
+    static Queries()
+    {
+        SqlMapper.SetTypeMap(typeof(CountPilotsRow), new ColumnTypeMap(typeof(CountPilotsRow), new Dictionary<string, string>
+        {
+            ["pilot_count"] = nameof(CountPilotsRow.PilotCount),
+        }));
+    }
+
+    private sealed class ColumnTypeMap : SqlMapper.ITypeMap
+    {
+        private readonly DefaultTypeMap _default;
+        private readonly IReadOnlyDictionary<string, string> _columns;
+
+        public ColumnTypeMap(Type type, IReadOnlyDictionary<string, string> columns)
+        {
+            _default = new DefaultTypeMap(type);
+            _columns = columns;
+        }
+
+        private string MemberName(string column) => _columns.TryGetValue(column, out var member) ? member : column;
+        public ConstructorInfo? FindConstructor(string[] names, Type[] types) => _default.FindConstructor(names.Select(MemberName).ToArray(), types);
+        public ConstructorInfo? FindExplicitConstructor() => _default.FindExplicitConstructor();
+        public SqlMapper.IMemberMap? GetConstructorParameter(ConstructorInfo constructor, string columnName) => _default.GetConstructorParameter(constructor, MemberName(columnName));
+        public SqlMapper.IMemberMap? GetMember(string columnName) => _default.GetMember(MemberName(columnName));
+    }
+
     // -- name: CountPilots :one
     public async Task<CountPilotsRow> CountPilotsAsync(CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
             "SELECT COUNT(*) AS pilot_count FROM pilots;", null, _transaction, cancellationToken: cancellationToken);
-        await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            throw new InvalidOperationException("query returned no rows");
-        }
-        return CountPilotsRowFrom(reader);
+        return await _connection.QueryFirstAsync<CountPilotsRow>(command).ConfigureAwait(false);
     }
-
-    private static CountPilotsRow CountPilotsRowFrom(DbDataReader reader) => new(
-        reader.GetFieldValue<ulong>(0)
-    );
 
     // -- name: ListPilots :many
     public async Task<IReadOnlyList<ListPilotsRow>> ListPilotsAsync(CancellationToken cancellationToken = default)
     {
         var command = new CommandDefinition(
             "SELECT id, name FROM pilots ORDER BY id LIMIT 5;", null, _transaction, cancellationToken: cancellationToken);
-        await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
-        var rows = new List<ListPilotsRow>();
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            rows.Add(ListPilotsRowFrom(reader));
-        }
-        return rows;
+        return (await _connection.QueryAsync<ListPilotsRow>(command).ConfigureAwait(false)).AsList();
     }
-
-    private static ListPilotsRow ListPilotsRowFrom(DbDataReader reader) => new(
-        reader.GetFieldValue<int>(0),
-        reader.GetFieldValue<string>(1)
-    );
 
     // -- name: DeletePilot :exec
     public async Task DeletePilotAsync(int pilotId, CancellationToken cancellationToken = default)

@@ -3,7 +3,8 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.Common;
+using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -29,6 +30,65 @@ public sealed class Queries
 
     public Queries WithTransaction(YdbTransaction transaction) => new(_connection, transaction ?? throw new ArgumentNullException(nameof(transaction)));
 
+    static Queries()
+    {
+        SqlMapper.SetTypeMap(typeof(GetAuthorRow), new ColumnTypeMap(typeof(GetAuthorRow), new Dictionary<string, string>
+        {
+            ["author_id"] = nameof(GetAuthorRow.AuthorID),
+        }));
+        SqlMapper.SetTypeMap(typeof(GetBookRow), new ColumnTypeMap(typeof(GetBookRow), new Dictionary<string, string>
+        {
+            ["book_id"] = nameof(GetBookRow.BookID),
+            ["author_id"] = nameof(GetBookRow.AuthorID),
+            ["book_type"] = nameof(GetBookRow.BookType),
+            ["publication_year"] = nameof(GetBookRow.PublicationYear),
+        }));
+        SqlMapper.SetTypeMap(typeof(BooksByTitleYearRow), new ColumnTypeMap(typeof(BooksByTitleYearRow), new Dictionary<string, string>
+        {
+            ["book_id"] = nameof(BooksByTitleYearRow.BookID),
+            ["author_id"] = nameof(BooksByTitleYearRow.AuthorID),
+            ["book_type"] = nameof(BooksByTitleYearRow.BookType),
+            ["publication_year"] = nameof(BooksByTitleYearRow.PublicationYear),
+        }));
+        SqlMapper.SetTypeMap(typeof(BooksByTagsRow), new ColumnTypeMap(typeof(BooksByTagsRow), new Dictionary<string, string>
+        {
+            ["b.book_id"] = nameof(BooksByTagsRow.BookID),
+            ["b.title"] = nameof(BooksByTagsRow.Title),
+            ["a.name"] = nameof(BooksByTagsRow.Name),
+            ["b.isbn"] = nameof(BooksByTagsRow.Isbn),
+            ["b.tags"] = nameof(BooksByTagsRow.Tags),
+        }));
+        SqlMapper.SetTypeMap(typeof(CreateAuthorRow), new ColumnTypeMap(typeof(CreateAuthorRow), new Dictionary<string, string>
+        {
+            ["author_id"] = nameof(CreateAuthorRow.AuthorID),
+        }));
+        SqlMapper.SetTypeMap(typeof(CreateBookRow), new ColumnTypeMap(typeof(CreateBookRow), new Dictionary<string, string>
+        {
+            ["book_id"] = nameof(CreateBookRow.BookID),
+            ["author_id"] = nameof(CreateBookRow.AuthorID),
+            ["book_type"] = nameof(CreateBookRow.BookType),
+            ["publication_year"] = nameof(CreateBookRow.PublicationYear),
+        }));
+    }
+
+    private sealed class ColumnTypeMap : SqlMapper.ITypeMap
+    {
+        private readonly DefaultTypeMap _default;
+        private readonly IReadOnlyDictionary<string, string> _columns;
+
+        public ColumnTypeMap(Type type, IReadOnlyDictionary<string, string> columns)
+        {
+            _default = new DefaultTypeMap(type);
+            _columns = columns;
+        }
+
+        private string MemberName(string column) => _columns.TryGetValue(column, out var member) ? member : column;
+        public ConstructorInfo? FindConstructor(string[] names, Type[] types) => _default.FindConstructor(names.Select(MemberName).ToArray(), types);
+        public ConstructorInfo? FindExplicitConstructor() => _default.FindExplicitConstructor();
+        public SqlMapper.IMemberMap? GetConstructorParameter(ConstructorInfo constructor, string columnName) => _default.GetConstructorParameter(constructor, MemberName(columnName));
+        public SqlMapper.IMemberMap? GetMember(string columnName) => _default.GetMember(MemberName(columnName));
+    }
+
     private static DateTime NormalizeTimestamp(DateTime value) =>
         value.Kind == DateTimeKind.Local ? value.ToUniversalTime() : DateTime.SpecifyKind(value, DateTimeKind.Utc);
 
@@ -42,18 +102,8 @@ public sealed class Queries
             "SELECT author_id, name\n" +
             "FROM authors\n" +
             "WHERE author_id = $author_id;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, authorId)), _transaction, cancellationToken: cancellationToken);
-        await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            throw new InvalidOperationException("query returned no rows");
-        }
-        return GetAuthorRowFrom(reader);
+        return await _connection.QueryFirstAsync<GetAuthorRow>(command).ConfigureAwait(false);
     }
-
-    private static GetAuthorRow GetAuthorRowFrom(DbDataReader reader) => new(
-        reader.GetFieldValue<ulong>(0),
-        reader.GetFieldValue<string>(1)
-    );
 
     // -- name: GetBook :one
     public async Task<GetBookRow> GetBookAsync(ulong bookId, CancellationToken cancellationToken = default)
@@ -62,24 +112,8 @@ public sealed class Queries
             "SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags\n" +
             "FROM books\n" +
             "WHERE book_id = $book_id;", new YdbParameters(new YdbParameter("$book_id", DbType.UInt64, bookId)), _transaction, cancellationToken: cancellationToken);
-        await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            throw new InvalidOperationException("query returned no rows");
-        }
-        return GetBookRowFrom(reader);
+        return await _connection.QueryFirstAsync<GetBookRow>(command).ConfigureAwait(false);
     }
-
-    private static GetBookRow GetBookRowFrom(DbDataReader reader) => new(
-        reader.GetFieldValue<ulong>(0),
-        reader.GetFieldValue<ulong>(1),
-        reader.GetFieldValue<string>(2),
-        reader.GetFieldValue<string>(3),
-        reader.GetFieldValue<string>(4),
-        reader.GetFieldValue<int>(5),
-        reader.GetFieldValue<DateTime>(6),
-        reader.GetFieldValue<string>(7)
-    );
 
     // -- name: DeleteBook :exec
     public async Task DeleteBookAsync(ulong bookId, CancellationToken cancellationToken = default)
@@ -97,25 +131,8 @@ public sealed class Queries
             "SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags\n" +
             "FROM books\n" +
             "WHERE title = $title AND publication_year = $publication_year;", new YdbParameters(new YdbParameter("$title", DbType.String, args.Title), new YdbParameter("$publication_year", DbType.Int32, args.PublicationYear)), _transaction, cancellationToken: cancellationToken);
-        await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
-        var rows = new List<BooksByTitleYearRow>();
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            rows.Add(BooksByTitleYearRowFrom(reader));
-        }
-        return rows;
+        return (await _connection.QueryAsync<BooksByTitleYearRow>(command).ConfigureAwait(false)).AsList();
     }
-
-    private static BooksByTitleYearRow BooksByTitleYearRowFrom(DbDataReader reader) => new(
-        reader.GetFieldValue<ulong>(0),
-        reader.GetFieldValue<ulong>(1),
-        reader.GetFieldValue<string>(2),
-        reader.GetFieldValue<string>(3),
-        reader.GetFieldValue<string>(4),
-        reader.GetFieldValue<int>(5),
-        reader.GetFieldValue<DateTime>(6),
-        reader.GetFieldValue<string>(7)
-    );
 
     // -- name: BooksByTags :many
     public async Task<IReadOnlyList<BooksByTagsRow>> BooksByTagsAsync(string tags, CancellationToken cancellationToken = default)
@@ -134,22 +151,8 @@ public sealed class Queries
             "    ToSet(Yson::ConvertToStringList(b.tags)),\n" +
             "    Yson::ConvertToStringList($tags)\n" +
             ");", new YdbParameters(new YdbParameter("$tags", YdbValue.MakeJson(tags))), _transaction, cancellationToken: cancellationToken);
-        await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
-        var rows = new List<BooksByTagsRow>();
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            rows.Add(BooksByTagsRowFrom(reader));
-        }
-        return rows;
+        return (await _connection.QueryAsync<BooksByTagsRow>(command).ConfigureAwait(false)).AsList();
     }
-
-    private static BooksByTagsRow BooksByTagsRowFrom(DbDataReader reader) => new(
-        reader.GetFieldValue<ulong>(0),
-        reader.GetFieldValue<string>(1),
-        reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2),
-        reader.GetFieldValue<string>(3),
-        reader.GetFieldValue<string>(4)
-    );
 
     // -- name: CreateAuthor :one
     public async Task<CreateAuthorRow> CreateAuthorAsync(CreateAuthorParams args, CancellationToken cancellationToken = default)
@@ -158,18 +161,8 @@ public sealed class Queries
             "INSERT INTO authors (author_id, name)\n" +
             "VALUES ($author_id, $name)\n" +
             "RETURNING author_id, name;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, args.AuthorID), new YdbParameter("$name", DbType.String, args.Name)), _transaction, cancellationToken: cancellationToken);
-        await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            throw new InvalidOperationException("query returned no rows");
-        }
-        return CreateAuthorRowFrom(reader);
+        return await _connection.QueryFirstAsync<CreateAuthorRow>(command).ConfigureAwait(false);
     }
-
-    private static CreateAuthorRow CreateAuthorRowFrom(DbDataReader reader) => new(
-        reader.GetFieldValue<ulong>(0),
-        reader.GetFieldValue<string>(1)
-    );
 
     // -- name: CreateBook :one
     public async Task<CreateBookRow> CreateBookAsync(CreateBookParams args, CancellationToken cancellationToken = default)
@@ -195,24 +188,8 @@ public sealed class Queries
             "    $tags\n" +
             ")\n" +
             "RETURNING book_id, author_id, isbn, book_type, title, publication_year, available, tags;", new YdbParameters(new YdbParameter("$book_id", DbType.UInt64, args.BookID), new YdbParameter("$author_id", DbType.UInt64, args.AuthorID), new YdbParameter("$isbn", DbType.String, args.Isbn), new YdbParameter("$book_type", DbType.String, args.BookType), new YdbParameter("$title", DbType.String, args.Title), new YdbParameter("$publication_year", DbType.Int32, args.PublicationYear), new YdbParameter("$available", YdbValue.MakeTimestamp(NormalizeTimestamp(args.Available))), new YdbParameter("$tags", YdbValue.MakeJson(args.Tags))), _transaction, cancellationToken: cancellationToken);
-        await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            throw new InvalidOperationException("query returned no rows");
-        }
-        return CreateBookRowFrom(reader);
+        return await _connection.QueryFirstAsync<CreateBookRow>(command).ConfigureAwait(false);
     }
-
-    private static CreateBookRow CreateBookRowFrom(DbDataReader reader) => new(
-        reader.GetFieldValue<ulong>(0),
-        reader.GetFieldValue<ulong>(1),
-        reader.GetFieldValue<string>(2),
-        reader.GetFieldValue<string>(3),
-        reader.GetFieldValue<string>(4),
-        reader.GetFieldValue<int>(5),
-        reader.GetFieldValue<DateTime>(6),
-        reader.GetFieldValue<string>(7)
-    );
 
     // -- name: UpdateBook :exec
     public async Task UpdateBookAsync(UpdateBookParams args, CancellationToken cancellationToken = default)
@@ -248,17 +225,8 @@ public sealed class Queries
     {
         var command = new CommandDefinition(
             "SELECT \"hello \"u || $name AS greeting;", new YdbParameters(new YdbParameter("$name", DbType.String, name)), _transaction, cancellationToken: cancellationToken);
-        await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            throw new InvalidOperationException("query returned no rows");
-        }
-        return SayHelloRowFrom(reader);
+        return await _connection.QueryFirstAsync<SayHelloRow>(command).ConfigureAwait(false);
     }
-
-    private static SayHelloRow SayHelloRowFrom(DbDataReader reader) => new(
-        reader.GetFieldValue<string>(0)
-    );
 
     private sealed class YdbParameters : SqlMapper.IDynamicParameters
     {
