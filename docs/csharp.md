@@ -1,6 +1,6 @@
 # C# generation
 
-The built-in C# generator has `adonet`, `dapper`, and `linq2db` runtime
+The built-in C# generator has `adonet` and `dapper` runtime
 profiles. The default is `adonet`, which preserves the original configuration
 and generated API. Every profile generates `Models.cs` and `Queries.cs`, keeps
 the source YQL in readable exact string fragments, and exposes async `:one`,
@@ -37,26 +37,18 @@ does not create a data source, open a connection, begin a transaction, or
 dispose caller-owned resources.
 
 The `dapper` profile has the same connection and transaction contract. It uses
-Dapper `CommandDefinition`, `ExecuteReaderAsync`, and `ExecuteAsync`. Generated
-`SqlMapper.IDynamicParameters` code adds concrete `YdbParameter` instances, so
-YDB-specific and optional wire types do not depend on Dapper's CLR inference.
-Rows are decoded by generated ordinal mappers; this also makes `snake_case`
-columns and nullable `LEFT JOIN` results independent of Dapper naming settings.
+Dapper `CommandDefinition`, `QueryFirstAsync<Row>`, `QueryAsync<Row>`, and
+`ExecuteAsync`. Dapper constructs the result records; no generated reader loop
+or ordinal row mapper is used. `:many` is buffered and returned as an
+`IReadOnlyList<Row>`; bound large reads explicitly in SQL.
 
-The `linq2db` profile accepts a caller-owned `DataConnection`. Configure it
-with the official YDB provider, for example:
+Rows whose column names differ from their C# members receive a type-specific
+Dapper `ITypeMap` (for example, `book_id` to `BookID`). Registration is scoped to
+those generated record types; `DefaultTypeMap.MatchNamesWithUnderscores` and the
+mapping of application types are not changed. SQL text and aliases are unchanged.
 
-```csharp
-using var db = YdbTools.CreateDataConnection(ydbConnection);
-var queries = new Queries(db);
-```
-
-For a transaction, the caller creates the `DataConnection` with
-`YdbTools.CreateDataConnection(ydbTransaction)`. Generated code uses linq2db's
-raw-SQL `QueryToAsyncEnumerable` for `:one`, `QueryToListAsync` for `:many`,
-and `ExecuteAsync` APIs plus explicit
-`DataParameter` types. It neither creates nor disposes the data connection or
-transaction.
+`SqlMapper.IDynamicParameters` adds concrete `YdbParameter` instances, preserving
+YDB-specific types and typed optional nulls instead of relying on CLR inference.
 
 ## Types and parameters
 
@@ -67,7 +59,7 @@ level of `Optional<T>`. They map to `bool`, the corresponding C# numeric type,
 Unsupported YQL types fail generation; there is no `object` fallback.
 
 All profiles bind explicit YDB types. Standard primitives use their exact
-`DbType` or linq2db `DataType`. `Json` and `Timestamp` use the SDK's
+`DbType`. `Json` and `Timestamp` use the SDK's
 `YdbValue.MakeJson` and `YdbValue.MakeTimestamp` builders. Optional parameters
 use the corresponding typed `YdbValue.MakeOptional*` builder for both present
 and null values. A bare present CLR value would otherwise bind as `T`, while a
@@ -76,12 +68,12 @@ declared YQL parameter requires `Optional<T>`.
 ## Dependencies
 
 The shared example project targets `net8.0` and pins `Ydb.Sdk` 0.35.0,
-Dapper 2.1.79, and linq2db 6.4.0. Runtime packages belong to the generated
+Dapper 2.1.79. Runtime packages belong to the generated
 application. See the [shared C# examples](../examples/csharp/README.md) for
 build and usage entry points.
 
 Timestamp parameters normalize Local values to UTC. Unspecified values are
-interpreted as UTC, matching the linq2db YDB provider. Optional nulls remain null.
+interpreted as UTC. Optional nulls remain null.
 The normalization occurs before constructing a typed YdbValue in every profile.
 
 ADO.NET and Dapper constructors reject transactions belonging to another

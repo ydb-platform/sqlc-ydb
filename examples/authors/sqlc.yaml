@@ -96,15 +96,6 @@ sql:
         namespace: Authors.Dapper
         out: csharp/dapper
         runtime: dapper
-  - name: linq2db
-    engine: ydb
-    schema: schema.sql
-    queries: queries.sql
-    gen:
-      csharp:
-        namespace: Authors.Linq2DB
-        out: csharp/linq2db
-        runtime: linq2db
   - name: jooq
     engine: ydb
     schema: schema.sql

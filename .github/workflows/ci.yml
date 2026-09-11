@@ -73,7 +73,7 @@ jobs:
         run: mvn -B -f examples/java/jooq/pom.xml test
       - name: Compile Kotlin Query SDK, JDBC and Exposed examples
         run: mvn -B -f examples/authors/kotlin/pom.xml test-compile
-      - name: Compile all Dapper and linq2db examples
+      - name: Compile all Dapper examples
         run: dotnet build examples/csharp/GeneratedProfiles.csproj
       - name: Check generated C# timestamp contracts
         env:
@@ -186,12 +186,11 @@ jobs:
         run: sh examples/authors/java/run-smoke.sh
       - name: Run Kotlin Query SDK, JDBC and Exposed examples sequentially
         run: sh examples/authors/kotlin/run-smoke.sh
-      - name: Run Dapper and linq2db examples sequentially
+      - name: Run Dapper examples sequentially
         env:
           YDB_CONNECTION_STRING: Host=localhost;Port=2136;Database=/local
         run: |
           dotnet run --project examples/csharp/GeneratedProfiles.csproj --no-build -- dapper
-          dotnet run --project examples/csharp/GeneratedProfiles.csproj --no-build -- linq2db
       - name: Run all TypeScript examples sequentially
         working-directory: examples
         run: npm run smoke

@@ -48,11 +48,3 @@ sql:
         namespace: Authors.Dapper
         out: cs/dapper
         runtime: dapper
-  - engine: ydb
-    schema: schema.sql
-    queries: queries.sql
-    gen:
-      csharp:
-        namespace: Authors.Linq2DB
-        out: cs/linq2db
-        runtime: linq2db

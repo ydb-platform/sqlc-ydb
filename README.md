@@ -54,8 +54,7 @@ YQL coverage and generated API differences.
 | C++ | YDB Query SDK | [Test](examples/authors/cpp/native/main.cpp#L100) | [Test](examples/authors/cpp/native/main.cpp#L116) |
 | C++ | userver | [Test](examples/authors/cpp/userver/smoke_handler.cpp#L60) | [Test](examples/authors/cpp/userver/smoke_handler.cpp#L80) |
 | C# | ADO.NET | [Test](examples/authors/csharp/adonet/Smoke.cs#L14) | [Test](examples/authors/csharp/adonet/Smoke.cs#L34) |
-| C# | Dapper | [Test](examples/csharp/Program.cs#L167) | [Test](examples/csharp/Program.cs#L178) |
-| C# | linq2db | [Test](examples/csharp/Program.cs#L190) | [Test](examples/csharp/Program.cs#L199) |
+| C# | Dapper | [Test](examples/csharp/Program.cs#L220) | [Test](examples/csharp/Program.cs#L240) |
 | Java | YDB Query SDK | [Test](examples/authors/java/native/src/test/java/authors/nativeapi/Smoke.java#L42) | [Test](examples/authors/java/native/src/test/java/authors/nativeapi/Smoke.java#L31) |
 | Java | JDBC | [Test](examples/authors/java/jdbc/src/test/java/authors/jdbc/Smoke.java#L39) | [Test](examples/authors/java/jdbc/src/test/java/authors/jdbc/Smoke.java#L27) |
 | Java | jOOQ | [Test](examples/java/jooq/src/test/java/LiveTest.java#L73) | [Test](examples/java/jooq/src/test/java/LiveTest.java#L84) |

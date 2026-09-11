@@ -10,11 +10,9 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="../*/csharp/dapper/*.cs" />
-    <Compile Include="../*/csharp/linq2db/*.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Dapper" Version="2.1.79" />
-    <PackageReference Include="linq2db" Version="6.4.0" />
     <PackageReference Include="Ydb.Sdk" Version="0.35.0" />
   </ItemGroup>
 </Project>

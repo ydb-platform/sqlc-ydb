@@ -65,7 +65,7 @@ func TestAdditionalBuiltinTargets(t *testing.T) {
 	if g.CSharp.Runtime != "adonet" || g.TypeScript.Runtime != "ydb" || g.Rust.Runtime != "ydb" || g.PHP.Runtime != "ydb" || g.PHP.Namespace != "Db" {
 		t.Fatalf("unexpected new target defaults: %+v %+v %+v %+v", g.CSharp, g.TypeScript, g.Rust, g.PHP)
 	}
-	for _, runtime := range []string{"adonet", "dapper", "linq2db"} {
+	for _, runtime := range []string{"adonet", "dapper"} {
 		if _, err := Parse([]byte(base + "    csharp:\n      out: cs\n      runtime: " + runtime + "\n")); err != nil {
 			t.Fatalf("C# %s: %v", runtime, err)
 		}

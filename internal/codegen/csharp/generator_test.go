@@ -70,30 +70,13 @@ func TestGenerateUsesConcreteModernYdbAdoSurface(t *testing.T) {
 func TestGenerateDapperProfileUsesDapperExecutionAndTypedYdbParameters(t *testing.T) {
 	_, queries := generatedRuntime(t, authorsAnalysis(), "dapper")
 	for _, want := range []string{
-		"using Dapper;", "new CommandDefinition(" + sqlLiteral(authorsAnalysis().Queries[0].SQL), "_connection.ExecuteReaderAsync(command)",
+		"using Dapper;", "new CommandDefinition(" + sqlLiteral(authorsAnalysis().Queries[0].SQL), "_connection.QueryFirstAsync<GetAuthorRow>(command)",
 		"_connection.ExecuteAsync(command)", "SqlMapper.IDynamicParameters", "command.Parameters.Add(parameter)",
 		"new YdbParameter(\"$biography\", YdbValue.MakeOptionalUtf8(args.Biography))",
 	} {
 		if !strings.Contains(queries, want) {
 			t.Errorf("Dapper Queries.cs missing %q:\n%s", want, queries)
 		}
-	}
-}
-
-func TestGenerateLinq2DBProfileUsesOfficialYdbDataConnection(t *testing.T) {
-	_, queries := generatedRuntime(t, authorsAnalysis(), "linq2db")
-	for _, want := range []string{
-		"using LinqToDB;", "using LinqToDB.Data;", "private readonly DataConnection _connection;",
-		"_connection.QueryToAsyncEnumerable(GetAuthorRowFrom," + sqlLiteral(authorsAnalysis().Queries[0].SQL),
-		"_connection.ExecuteAsync(" + sqlLiteral(authorsAnalysis().Queries[2].SQL) + ", cancellationToken",
-		"new DataParameter(\"$biography\", YdbValue.MakeOptionalUtf8(args.Biography), DataType.NVarChar)",
-	} {
-		if !strings.Contains(queries, want) {
-			t.Errorf("linq2db Queries.cs missing %q:\n%s", want, queries)
-		}
-	}
-	if strings.Contains(queries, "ITable<") || strings.Contains(queries, "GetTable<") {
-		t.Fatalf("SQL-first profile must not infer linq2db entities:\n%s", queries)
 	}
 }
 
@@ -105,7 +88,7 @@ func TestJsonAndTimestampUseRealSDKTypesInEveryRuntime(t *testing.T) {
 		Parameters: []model.Parameter{{Name: "json", Type: jsonType}, {Name: "when", Type: model.Optional(timestampType)}},
 		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "json", Type: model.Optional(jsonType)}, {Name: "when", Type: timestampType}}}},
 	}}}
-	for _, runtime := range []string{"adonet", "dapper", "linq2db"} {
+	for _, runtime := range []string{"adonet", "dapper"} {
 		t.Run(runtime, func(t *testing.T) {
 			models, queries := generatedRuntime(t, in, runtime)
 			for _, want := range []string{"string? Json", "DateTime When"} {
@@ -259,7 +242,6 @@ func TestGeneratedRuntimeProfilesBuildAgainstPublishedPackages(t *testing.T) {
 	}{
 		{"adonet", "", "Build.AdoNet"},
 		{"dapper", `<PackageReference Include="Dapper" Version="2.1.79" />`, "Build.Dapper"},
-		{"linq2db", `<PackageReference Include="linq2db" Version="6.4.0" />`, "Build.Linq2DB"},
 	} {
 		t.Run(tc.runtime, func(t *testing.T) {
 			files, err := Generate(in, Options{Namespace: tc.namespace, Runtime: tc.runtime})
@@ -473,5 +455,11 @@ func TestLocalParameterNames(t *testing.T) {
 		if got := localParameterName(input); got != want {
 			t.Errorf("%s: got %s, want %s", input, got, want)
 		}
+	}
+}
+
+func TestRejectsRemovedLinq2DBRuntime(t *testing.T) {
+	if _, err := Generate(authorsAnalysis(), Options{Runtime: "linq2db"}); err == nil {
+		t.Fatal("removed runtime accepted")
 	}
 }

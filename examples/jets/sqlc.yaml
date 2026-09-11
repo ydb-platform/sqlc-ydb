@@ -41,15 +41,6 @@ sql:
         namespace: Jets.Dapper
         out: csharp/dapper
         runtime: dapper
-  - name: linq2db
-    engine: ydb
-    schema: schema.sql
-    queries: queries.sql
-    gen:
-      csharp:
-        namespace: Jets.Linq2DB
-        out: csharp/linq2db
-        runtime: linq2db
   - name: jooq
     engine: ydb
     schema: schema.sql

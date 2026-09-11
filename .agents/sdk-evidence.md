@@ -62,12 +62,10 @@ Sources inspected for these targets on 2026-09-09:
 | --- | --- | --- |
 | [YDB .NET SDK](https://github.com/ydb-platform/ydb-dotnet-sdk) | `236bfa176940feafbf61f11c1cb9fc000572b237` | `Ydb.Sdk` 0.35.0 |
 | [Dapper](https://github.com/DapperLib/Dapper) | `6d48ef664acc7298c649e2d449d903b3360d5a90` | 2.1.79 |
-| [linq2db](https://github.com/linq2db/linq2db/tree/v6.4.0) | `82fbf0f91399cc8c9cea22d09dcae20e4d7568c6` | 6.4.0 |
 | [YDB Rust SDK](https://github.com/ydb-platform/ydb-rs-sdk) | `fe2d4507781713b634c6584c189e05e58adbc254` | `ydb` 0.18.2 |
 
-Dapper uses `CommandDefinition`, `IDynamicParameters` and reader execution;
-linq2db supplies a YDB provider and `YdbTools` connection/transaction adapters.
-Both accept explicit YDB typed values. See [C#](../docs/csharp.md) for ownership
+Dapper uses `CommandDefinition`, `IDynamicParameters` and typed query methods.
+It accepts explicit YDB typed values. See [C#](../docs/csharp.md) for ownership
 and mapping choices. Dependency pins are shared across all example families.
 
 Rust's public `From<Option<T>> for Value` implementation requires

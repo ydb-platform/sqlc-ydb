@@ -14,18 +14,16 @@ Dapper integration was checked against Dapper main at
 `SqlMapper.IDynamicParameters` contract accepts provider-specific parameters,
 and `CommandDefinition` carries the transaction and cancellation token.
 
-linq2db integration targets `6.4.0`, commit
-`82fbf0f91399cc8c9cea22d09dcae20e4d7568c6`. This release promotes its YDB
-provider to supported status and exposes `YdbTools.CreateDataConnection` for a
-connection or transaction. Its own build pins `Ydb.Sdk` `0.35.0`.
+The generated Dapper profile uses QueryFirstAsync<T> and QueryAsync<T> with
+CommandDefinition carrying transaction and cancellation. Positional records are
+materialized by Dapper. A type-specific ITypeMap forwards exact column/member
+name translations to DefaultTypeMap, including constructor parameter lookup.
+No global underscore setting is changed. YDB-specific parameter values still
+use IDynamicParameters with concrete YdbParameter objects.
 
-The shared example compile project targets `net8.0` and pins `Ydb.Sdk`
-`0.35.0`, Dapper `2.1.79`, and linq2db `6.4.0`. Runtime packages belong to
-generated projects, never to sqlc-ydb's Go module.
+The shared example compile project targets net8.0 and pins Ydb.Sdk 0.35.0 and
+Dapper 2.1.79. Runtime packages belong to generated projects.
 
-On 2026-09-11, linq2db 6.4.0 `CommandInfo.QueryToAsyncEnumerable` was checked:
-it forwards enumerator cancellation and owns its reader with `await using`,
-including early enumeration exit. Generated `:one` returns the first mapped row
-without building a list. `YdbDataProvider.SetParameter` normalizes Local timestamps
-to UTC and treats Unspecified as UTC; generated typed YdbValue bindings now apply
-the same normalization before bypassing provider inference.
+The linq2db profile was removed: the SQL-first wrapper added no useful LINQ API.
+Timestamp normalization remains Local -> UTC and Unspecified -> UTC before
+constructing typed YdbValue values.

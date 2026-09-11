@@ -3,7 +3,8 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.Common;
+using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -35,19 +36,8 @@ public sealed class Queries
         var command = new CommandDefinition(
             "DECLARE $author_id AS Uint64;\n" +
             "SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, authorId)), _transaction, cancellationToken: cancellationToken);
-        await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            throw new InvalidOperationException("query returned no rows");
-        }
-        return GetAuthorRowFrom(reader);
+        return await _connection.QueryFirstAsync<GetAuthorRow>(command).ConfigureAwait(false);
     }
-
-    private static GetAuthorRow GetAuthorRowFrom(DbDataReader reader) => new(
-        reader.GetFieldValue<ulong>(0),
-        reader.GetFieldValue<string>(1),
-        reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)
-    );
 
     private sealed class YdbParameters : SqlMapper.IDynamicParameters
     {

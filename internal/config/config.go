@@ -279,7 +279,7 @@ func Parse(data []byte) (*Config, error) {
 				g.Runtime = "adonet"
 			}
 			switch g.Runtime {
-			case "adonet", "dapper", "linq2db":
+			case "adonet", "dapper":
 			default:
 				return nil, fmt.Errorf("sql[%d]: unsupported C# runtime %q", i, g.Runtime)
 			}

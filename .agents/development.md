@@ -234,14 +234,13 @@ Each creates and drops its own `authors` table only after a successful create.
 Use an otherwise empty disposable database. Java/.NET runtime builds and tests
 are separate from offline SQL generation.
 
-Run the shared Dapper, linq2db, TypeScript, Rust and PHP harnesses from the
+Run the shared Dapper, TypeScript, Rust and PHP harnesses from the
 repository root. Each command covers all five example families:
 
 ```sh
 YDB_CONNECTION_STRING='Host=localhost;Port=2136;Database=/local' \
   dotnet run --project examples/csharp/GeneratedProfiles.csproj --no-build -- dapper
 YDB_CONNECTION_STRING='Host=localhost;Port=2136;Database=/local' \
-  dotnet run --project examples/csharp/GeneratedProfiles.csproj --no-build -- linq2db
 YDB_CONNECTION_STRING=grpc://localhost:2136/local npm run smoke --prefix examples
 YDB_CONNECTION_STRING=grpc://localhost:2136/local CARGO_BUILD_JOBS=1 \
   cargo test --manifest-path examples/rust/Cargo.toml --locked --test live_smoke -- --nocapture

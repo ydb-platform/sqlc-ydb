@@ -11,7 +11,6 @@
 | C++ userver | `gen.cpp.runtime: userver` | `Queries(TableClient&)` or `Queries(TxActor&)`, userver YDB bindings |
 | C# ADO.NET | `gen.csharp.runtime: adonet` | async `Queries(YdbConnection)`, records, cancellation and transactions |
 | C# Dapper | `gen.csharp.runtime: dapper` | async query methods on a borrowed `YdbConnection` |
-| C# linq2db | `gen.csharp.runtime: linq2db` | SQL query methods on a borrowed `DataConnection` |
 | TypeScript | `gen.typescript.runtime: ydb` | query classes, row and parameter type aliases |
 | Rust | `gen.rust.runtime: ydb` | async methods on a borrowed `QueryClient` |
 | PHP | `gen.php.runtime: ydb` | typed query methods for the YDB SDK |
@@ -42,7 +41,7 @@ and C# uses `ulong`. Binary YQL `String` stays binary in every target.
 
 Type coverage differs by target. Unsupported temporal, decimal, container or
 other unmapped types fail explicitly; see the individual target docs.
-Dapper and linq2db integrations generate SQL query
+Dapper integrations generate SQL query
 projections and methods; they do not infer ORM entities or LINQ expressions
 from query results. See the [C#](csharp.md), [TypeScript](typescript.md),
 [Rust](rust.md) and [PHP](php.md) contracts for supported types and API details.
