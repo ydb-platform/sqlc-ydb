@@ -67,7 +67,7 @@ func (q *Queries) BooksByYear(ctx context.Context, arg int32) ([]BooksByYearRow,
 		`, sql.Named("year", arg),
 	)
 	if err != nil {
-		return []BooksByYearRow(nil), err
+		return nil, err
 	}
 	defer rows.Close()
 	items := []BooksByYearRow(nil)
@@ -87,7 +87,10 @@ func (q *Queries) BooksByYear(ctx context.Context, arg int32) ([]BooksByYearRow,
 		}
 		items = append(items, row)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (CreateAuthorRow, error) {

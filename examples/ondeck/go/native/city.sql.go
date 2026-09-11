@@ -21,38 +21,38 @@ func (q *Queries) ListCities(ctx context.Context, opts ...query.ExecuteOption) (
 		`, opts...,
 	)
 	if err != nil {
-		return []ListCitiesRow(nil), err
+		return nil, err
 	}
 	defer result.Close(ctx)
 
 	resultSet, err := result.NextResultSet(ctx)
 	if errors.Is(err, io.EOF) {
-		return []ListCitiesRow(nil), xerrors.WithStackTrace(query.ErrNoResultSets)
+		return nil, xerrors.WithStackTrace(query.ErrNoResultSets)
 	}
 	if err != nil {
-		return []ListCitiesRow(nil), xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
 
 	items := []ListCitiesRow(nil)
 	for r, err := range resultSet.Rows(ctx) {
 		if err != nil {
-			return []ListCitiesRow(nil), xerrors.WithStackTrace(err)
+			return nil, xerrors.WithStackTrace(err)
 		}
 		var row ListCitiesRow
 		if err := r.ScanNamed(
 			query.Named("slug", &row.Slug),
 			query.Named("name", &row.Name),
 		); err != nil {
-			return []ListCitiesRow(nil), xerrors.WithStackTrace(err)
+			return nil, xerrors.WithStackTrace(err)
 		}
 		items = append(items, row)
 	}
 
 	_, err = result.NextResultSet(ctx)
 	if err == nil {
-		return []ListCitiesRow(nil), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+		return nil, xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
 	} else if !errors.Is(err, io.EOF) {
-		return []ListCitiesRow(nil), xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
 
 	return items, nil

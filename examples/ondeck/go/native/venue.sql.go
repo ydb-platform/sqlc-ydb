@@ -28,22 +28,22 @@ func (q *Queries) ListVenues(ctx context.Context, arg string, opts ...query.Exec
 		`, callOptions...,
 	)
 	if err != nil {
-		return []ListVenuesRow(nil), err
+		return nil, err
 	}
 	defer result.Close(ctx)
 
 	resultSet, err := result.NextResultSet(ctx)
 	if errors.Is(err, io.EOF) {
-		return []ListVenuesRow(nil), xerrors.WithStackTrace(query.ErrNoResultSets)
+		return nil, xerrors.WithStackTrace(query.ErrNoResultSets)
 	}
 	if err != nil {
-		return []ListVenuesRow(nil), xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
 
 	items := []ListVenuesRow(nil)
 	for r, err := range resultSet.Rows(ctx) {
 		if err != nil {
-			return []ListVenuesRow(nil), xerrors.WithStackTrace(err)
+			return nil, xerrors.WithStackTrace(err)
 		}
 		var row ListVenuesRow
 		if err := r.ScanNamed(
@@ -58,16 +58,16 @@ func (q *Queries) ListVenues(ctx context.Context, arg string, opts ...query.Exec
 			query.Named("tags", &row.Tags),
 			query.Named("created_at", &row.CreatedAt),
 		); err != nil {
-			return []ListVenuesRow(nil), xerrors.WithStackTrace(err)
+			return nil, xerrors.WithStackTrace(err)
 		}
 		items = append(items, row)
 	}
 
 	_, err = result.NextResultSet(ctx)
 	if err == nil {
-		return []ListVenuesRow(nil), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+		return nil, xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
 	} else if !errors.Is(err, io.EOF) {
-		return []ListVenuesRow(nil), xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
 
 	return items, nil
@@ -222,38 +222,38 @@ func (q *Queries) VenueCountByCity(ctx context.Context, opts ...query.ExecuteOpt
 		`, opts...,
 	)
 	if err != nil {
-		return []VenueCountByCityRow(nil), err
+		return nil, err
 	}
 	defer result.Close(ctx)
 
 	resultSet, err := result.NextResultSet(ctx)
 	if errors.Is(err, io.EOF) {
-		return []VenueCountByCityRow(nil), xerrors.WithStackTrace(query.ErrNoResultSets)
+		return nil, xerrors.WithStackTrace(query.ErrNoResultSets)
 	}
 	if err != nil {
-		return []VenueCountByCityRow(nil), xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
 
 	items := []VenueCountByCityRow(nil)
 	for r, err := range resultSet.Rows(ctx) {
 		if err != nil {
-			return []VenueCountByCityRow(nil), xerrors.WithStackTrace(err)
+			return nil, xerrors.WithStackTrace(err)
 		}
 		var row VenueCountByCityRow
 		if err := r.ScanNamed(
 			query.Named("city", &row.City),
 			query.Named("venue_count", &row.VenueCount),
 		); err != nil {
-			return []VenueCountByCityRow(nil), xerrors.WithStackTrace(err)
+			return nil, xerrors.WithStackTrace(err)
 		}
 		items = append(items, row)
 	}
 
 	_, err = result.NextResultSet(ctx)
 	if err == nil {
-		return []VenueCountByCityRow(nil), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+		return nil, xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
 	} else if !errors.Is(err, io.EOF) {
-		return []VenueCountByCityRow(nil), xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
 
 	return items, nil

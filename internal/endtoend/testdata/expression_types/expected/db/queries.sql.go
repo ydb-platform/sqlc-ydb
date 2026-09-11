@@ -25,7 +25,7 @@ func (q *Queries) NormalizeProfiles(ctx context.Context, arg NormalizeProfilesPa
 		sql.Named("use_nickname", arg.UseNickname),
 	)
 	if err != nil {
-		return []NormalizeProfilesRow(nil), err
+		return nil, err
 	}
 	defer rows.Close()
 	items := []NormalizeProfilesRow(nil)
@@ -42,5 +42,8 @@ func (q *Queries) NormalizeProfiles(ctx context.Context, arg NormalizeProfilesPa
 		}
 		items = append(items, row)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

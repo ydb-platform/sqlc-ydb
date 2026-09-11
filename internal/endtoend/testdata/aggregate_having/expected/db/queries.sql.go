@@ -17,7 +17,7 @@ func (q *Queries) ColdCities(ctx context.Context, arg int32) ([]ColdCitiesRow, e
 		`, sql.Named("maximum_temperature", arg),
 	)
 	if err != nil {
-		return []ColdCitiesRow(nil), err
+		return nil, err
 	}
 	defer rows.Close()
 	items := []ColdCitiesRow(nil)
@@ -32,5 +32,8 @@ func (q *Queries) ColdCities(ctx context.Context, arg int32) ([]ColdCitiesRow, e
 		}
 		items = append(items, row)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

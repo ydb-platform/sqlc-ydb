@@ -19,22 +19,22 @@ func (q *Queries) ListAuthorBooks(ctx context.Context, opts ...query.ExecuteOpti
 		`, opts...,
 	)
 	if err != nil {
-		return []ListAuthorBooksRow(nil), err
+		return nil, err
 	}
 	defer result.Close(ctx)
 
 	resultSet, err := result.NextResultSet(ctx)
 	if errors.Is(err, io.EOF) {
-		return []ListAuthorBooksRow(nil), xerrors.WithStackTrace(query.ErrNoResultSets)
+		return nil, xerrors.WithStackTrace(query.ErrNoResultSets)
 	}
 	if err != nil {
-		return []ListAuthorBooksRow(nil), xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
 
 	items := []ListAuthorBooksRow(nil)
 	for r, err := range resultSet.Rows(ctx) {
 		if err != nil {
-			return []ListAuthorBooksRow(nil), xerrors.WithStackTrace(err)
+			return nil, xerrors.WithStackTrace(err)
 		}
 		var row ListAuthorBooksRow
 		if err := r.ScanNamed(
@@ -42,16 +42,16 @@ func (q *Queries) ListAuthorBooks(ctx context.Context, opts ...query.ExecuteOpti
 			query.Named("author_name", &row.AuthorName),
 			query.Named("book_title", &row.BookTitle),
 		); err != nil {
-			return []ListAuthorBooksRow(nil), xerrors.WithStackTrace(err)
+			return nil, xerrors.WithStackTrace(err)
 		}
 		items = append(items, row)
 	}
 
 	_, err = result.NextResultSet(ctx)
 	if err == nil {
-		return []ListAuthorBooksRow(nil), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+		return nil, xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
 	} else if !errors.Is(err, io.EOF) {
-		return []ListAuthorBooksRow(nil), xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
 
 	return items, nil

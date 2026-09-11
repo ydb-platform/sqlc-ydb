@@ -15,7 +15,7 @@ func (q *Queries) ListCities(ctx context.Context) ([]ListCitiesRow, error) {
 		`,
 	)
 	if err != nil {
-		return []ListCitiesRow(nil), err
+		return nil, err
 	}
 	defer rows.Close()
 	items := []ListCitiesRow(nil)
@@ -29,7 +29,10 @@ func (q *Queries) ListCities(ctx context.Context) ([]ListCitiesRow, error) {
 		}
 		items = append(items, row)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (q *Queries) GetCity(ctx context.Context, arg string) (GetCityRow, error) {

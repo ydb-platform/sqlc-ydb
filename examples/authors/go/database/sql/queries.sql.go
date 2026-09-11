@@ -26,7 +26,7 @@ func (q *Queries) ListAuthors(ctx context.Context) ([]ListAuthorsRow, error) {
 		`,
 	)
 	if err != nil {
-		return []ListAuthorsRow(nil), err
+		return nil, err
 	}
 	defer rows.Close()
 	items := []ListAuthorsRow(nil)
@@ -41,7 +41,10 @@ func (q *Queries) ListAuthors(ctx context.Context) ([]ListAuthorsRow, error) {
 		}
 		items = append(items, row)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (q *Queries) GetAuthorName(ctx context.Context, arg uint64) (GetAuthorNameRow, error) {

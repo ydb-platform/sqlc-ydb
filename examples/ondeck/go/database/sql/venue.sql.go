@@ -18,7 +18,7 @@ func (q *Queries) ListVenues(ctx context.Context, arg string) ([]ListVenuesRow, 
 		`, sql.Named("city", arg),
 	)
 	if err != nil {
-		return []ListVenuesRow(nil), err
+		return nil, err
 	}
 	defer rows.Close()
 	items := []ListVenuesRow(nil)
@@ -40,7 +40,10 @@ func (q *Queries) ListVenues(ctx context.Context, arg string) ([]ListVenuesRow, 
 		}
 		items = append(items, row)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (q *Queries) DeleteVenue(ctx context.Context, arg string) error {
@@ -140,7 +143,7 @@ func (q *Queries) VenueCountByCity(ctx context.Context) ([]VenueCountByCityRow, 
 		`,
 	)
 	if err != nil {
-		return []VenueCountByCityRow(nil), err
+		return nil, err
 	}
 	defer rows.Close()
 	items := []VenueCountByCityRow(nil)
@@ -154,5 +157,8 @@ func (q *Queries) VenueCountByCity(ctx context.Context) ([]VenueCountByCityRow, 
 		}
 		items = append(items, row)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

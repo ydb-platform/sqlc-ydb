@@ -39,38 +39,38 @@ func (q *Queries) ListPilots(ctx context.Context, opts ...query.ExecuteOption) (
 		`, opts...,
 	)
 	if err != nil {
-		return []ListPilotsRow(nil), err
+		return nil, err
 	}
 	defer result.Close(ctx)
 
 	resultSet, err := result.NextResultSet(ctx)
 	if errors.Is(err, io.EOF) {
-		return []ListPilotsRow(nil), xerrors.WithStackTrace(query.ErrNoResultSets)
+		return nil, xerrors.WithStackTrace(query.ErrNoResultSets)
 	}
 	if err != nil {
-		return []ListPilotsRow(nil), xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
 
 	items := []ListPilotsRow(nil)
 	for r, err := range resultSet.Rows(ctx) {
 		if err != nil {
-			return []ListPilotsRow(nil), xerrors.WithStackTrace(err)
+			return nil, xerrors.WithStackTrace(err)
 		}
 		var row ListPilotsRow
 		if err := r.ScanNamed(
 			query.Named("id", &row.ID),
 			query.Named("name", &row.Name),
 		); err != nil {
-			return []ListPilotsRow(nil), xerrors.WithStackTrace(err)
+			return nil, xerrors.WithStackTrace(err)
 		}
 		items = append(items, row)
 	}
 
 	_, err = result.NextResultSet(ctx)
 	if err == nil {
-		return []ListPilotsRow(nil), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+		return nil, xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
 	} else if !errors.Is(err, io.EOF) {
-		return []ListPilotsRow(nil), xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
 
 	return items, nil

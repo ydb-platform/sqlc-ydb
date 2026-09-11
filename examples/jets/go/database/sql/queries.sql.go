@@ -24,7 +24,7 @@ func (q *Queries) ListPilots(ctx context.Context) ([]ListPilotsRow, error) {
 		`,
 	)
 	if err != nil {
-		return []ListPilotsRow(nil), err
+		return nil, err
 	}
 	defer rows.Close()
 	items := []ListPilotsRow(nil)
@@ -38,7 +38,10 @@ func (q *Queries) ListPilots(ctx context.Context) ([]ListPilotsRow, error) {
 		}
 		items = append(items, row)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (q *Queries) DeletePilot(ctx context.Context, arg int32) error {

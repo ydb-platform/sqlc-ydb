@@ -107,22 +107,22 @@ func (q *Queries) BooksByTitleYear(ctx context.Context, arg BooksByTitleYearPara
 		`, callOptions...,
 	)
 	if err != nil {
-		return make([]BooksByTitleYearRow, 0), err
+		return nil, err
 	}
 	defer result.Close(ctx)
 
 	resultSet, err := result.NextResultSet(ctx)
 	if errors.Is(err, io.EOF) {
-		return make([]BooksByTitleYearRow, 0), xerrors.WithStackTrace(query.ErrNoResultSets)
+		return nil, xerrors.WithStackTrace(query.ErrNoResultSets)
 	}
 	if err != nil {
-		return make([]BooksByTitleYearRow, 0), xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
 
 	items := make([]BooksByTitleYearRow, 0)
 	for r, err := range resultSet.Rows(ctx) {
 		if err != nil {
-			return make([]BooksByTitleYearRow, 0), xerrors.WithStackTrace(err)
+			return nil, xerrors.WithStackTrace(err)
 		}
 		var row BooksByTitleYearRow
 		if err := r.ScanNamed(
@@ -135,16 +135,16 @@ func (q *Queries) BooksByTitleYear(ctx context.Context, arg BooksByTitleYearPara
 			query.Named("available", &row.Available),
 			query.Named("tags", &row.Tags),
 		); err != nil {
-			return make([]BooksByTitleYearRow, 0), xerrors.WithStackTrace(err)
+			return nil, xerrors.WithStackTrace(err)
 		}
 		items = append(items, row)
 	}
 
 	_, err = result.NextResultSet(ctx)
 	if err == nil {
-		return make([]BooksByTitleYearRow, 0), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+		return nil, xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
 	} else if !errors.Is(err, io.EOF) {
-		return make([]BooksByTitleYearRow, 0), xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
 
 	return items, nil
@@ -175,22 +175,22 @@ func (q *Queries) BooksByTags(ctx context.Context, arg string, opts ...query.Exe
 		`, callOptions...,
 	)
 	if err != nil {
-		return make([]BooksByTagsRow, 0), err
+		return nil, err
 	}
 	defer result.Close(ctx)
 
 	resultSet, err := result.NextResultSet(ctx)
 	if errors.Is(err, io.EOF) {
-		return make([]BooksByTagsRow, 0), xerrors.WithStackTrace(query.ErrNoResultSets)
+		return nil, xerrors.WithStackTrace(query.ErrNoResultSets)
 	}
 	if err != nil {
-		return make([]BooksByTagsRow, 0), xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
 
 	items := make([]BooksByTagsRow, 0)
 	for r, err := range resultSet.Rows(ctx) {
 		if err != nil {
-			return make([]BooksByTagsRow, 0), xerrors.WithStackTrace(err)
+			return nil, xerrors.WithStackTrace(err)
 		}
 		var row BooksByTagsRow
 		if err := r.ScanNamed(
@@ -200,16 +200,16 @@ func (q *Queries) BooksByTags(ctx context.Context, arg string, opts ...query.Exe
 			query.Named("b.isbn", &row.Isbn),
 			query.Named("b.tags", &row.Tags),
 		); err != nil {
-			return make([]BooksByTagsRow, 0), xerrors.WithStackTrace(err)
+			return nil, xerrors.WithStackTrace(err)
 		}
 		items = append(items, row)
 	}
 
 	_, err = result.NextResultSet(ctx)
 	if err == nil {
-		return make([]BooksByTagsRow, 0), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+		return nil, xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
 	} else if !errors.Is(err, io.EOF) {
-		return make([]BooksByTagsRow, 0), xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
 
 	return items, nil

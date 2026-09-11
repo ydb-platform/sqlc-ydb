@@ -682,7 +682,7 @@ func writeSQL(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 			init = "make([]" + q.Name + "Row, 0)"
 		}
 		call := generatedCall("q.db.QueryContext", []string{"ctx", querySQL(q, false)}, parameters)
-		b.WriteString("rows, err := " + call + "\nif err != nil { return " + init + ", err }; defer rows.Close()\nitems := " + init + "\nfor rows.Next() { var row " + q.Name + "Row\nif err := " + scanCall("rows.Scan", scanDestinations(q.ResultSets[0])) + "; err != nil { return nil, err }; items = append(items, row) }\nreturn items, rows.Err()\n")
+		b.WriteString("rows, err := " + call + "\nif err != nil { return nil, err }; defer rows.Close()\nitems := " + init + "\nfor rows.Next() { var row " + q.Name + "Row\nif err := " + scanCall("rows.Scan", scanDestinations(q.ResultSets[0])) + "; err != nil { return nil, err }; items = append(items, row) }\nif err := rows.Err(); err != nil { return nil, err }\nreturn items, nil\n")
 	}
 }
 func writeYDB(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
@@ -713,21 +713,21 @@ func writeYDB(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 		init = "make([]" + q.Name + "Row, 0)"
 	}
 	b.WriteString("result, err := " + ydbCall("q.db.Query", querySQL(q, true), opt) + "\n")
-	b.WriteString("if err != nil { return " + init + ", err }\n")
+	b.WriteString("if err != nil { return nil, err }\n")
 	b.WriteString("defer result.Close(ctx)\n\n")
 	b.WriteString("resultSet, err := result.NextResultSet(ctx)\n")
-	b.WriteString("if errors.Is(err, io.EOF) { return " + init + ", xerrors.WithStackTrace(query.ErrNoResultSets) }\n")
-	b.WriteString("if err != nil { return " + init + ", xerrors.WithStackTrace(err) }\n\n")
+	b.WriteString("if errors.Is(err, io.EOF) { return nil, xerrors.WithStackTrace(query.ErrNoResultSets) }\n")
+	b.WriteString("if err != nil { return nil, xerrors.WithStackTrace(err) }\n\n")
 	b.WriteString("items := " + init + "\n")
 	b.WriteString("for r, err := range resultSet.Rows(ctx) {\n")
-	b.WriteString("if err != nil { return " + init + ", xerrors.WithStackTrace(err) }\n")
+	b.WriteString("if err != nil { return nil, xerrors.WithStackTrace(err) }\n")
 	b.WriteString("var row " + q.Name + "Row\n")
-	b.WriteString("if err := r.ScanNamed(\n" + scanNamed(q.ResultSets[0]) + ",\n); err != nil { return " + init + ", xerrors.WithStackTrace(err) }\n")
+	b.WriteString("if err := r.ScanNamed(\n" + scanNamed(q.ResultSets[0]) + ",\n); err != nil { return nil, xerrors.WithStackTrace(err) }\n")
 	b.WriteString("items = append(items, row)\n")
 	b.WriteString("}\n\n")
 	b.WriteString("_, err = result.NextResultSet(ctx)\n")
-	b.WriteString("if err == nil { return " + init + ", xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)\n")
-	b.WriteString("} else if !errors.Is(err, io.EOF) { return " + init + ", xerrors.WithStackTrace(err)\n")
+	b.WriteString("if err == nil { return nil, xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)\n")
+	b.WriteString("} else if !errors.Is(err, io.EOF) { return nil, xerrors.WithStackTrace(err)\n")
 	b.WriteString("}\n\n")
 	b.WriteString("return items, nil\n")
 }
@@ -735,7 +735,7 @@ func writeYDB(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 func writeDecimalValidations(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 	for i, p := range q.Parameters {
 		value := varRef(q, p)
-		failure := decimalValidationFailure(q, o)
+		failure := decimalValidationFailure(q)
 		if strings.EqualFold(p.Type.UnwrapOptional().Kind, "Decimal") {
 			precision, scale := decimalArgs(p.Type.UnwrapOptional())
 			if p.Type.IsOptional() {
@@ -760,16 +760,12 @@ func writeDecimalValidations(b *bytes.Buffer, q model.AnalyzedQuery, o Options) 
 	}
 }
 
-func decimalValidationFailure(q model.AnalyzedQuery, o Options) string {
+func decimalValidationFailure(q model.AnalyzedQuery) string {
 	switch q.Command {
 	case model.One:
 		return "return " + q.Name + "Row{}, err"
 	case model.Many:
-		init := "[]" + q.Name + "Row(nil)"
-		if o.EmitEmptySlices {
-			init = "make([]" + q.Name + "Row, 0)"
-		}
-		return "return " + init + ", err"
+		return "return nil, err"
 	default:
 		return "return err"
 	}

@@ -143,38 +143,38 @@ func TestGeneratedYDBManyValidatesOneResultSet(t *testing.T) {
 	source := string(generatedSQLSourceForAnalysis(t, "ydb", in))
 	want := "result, err := q.db.Query(ctx, `\n\t\tSELECT `+\"`id`\"+`, `+\"`name`\"+` FROM `+\"`users`\"+`;\n\t\t`, opts...,\n\t)" + `
 	if err != nil {
-		return []ListUsersRow(nil), err
+		return nil, err
 	}
 	defer result.Close(ctx)
 
 	resultSet, err := result.NextResultSet(ctx)
 	if errors.Is(err, io.EOF) {
-		return []ListUsersRow(nil), xerrors.WithStackTrace(query.ErrNoResultSets)
+		return nil, xerrors.WithStackTrace(query.ErrNoResultSets)
 	}
 	if err != nil {
-		return []ListUsersRow(nil), xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
 
 	items := []ListUsersRow(nil)
 	for r, err := range resultSet.Rows(ctx) {
 		if err != nil {
-			return []ListUsersRow(nil), xerrors.WithStackTrace(err)
+			return nil, xerrors.WithStackTrace(err)
 		}
 		var row ListUsersRow
 		if err := r.ScanNamed(
 			query.Named("id", &row.ID),
 			query.Named("name", &row.Name),
 		); err != nil {
-			return []ListUsersRow(nil), xerrors.WithStackTrace(err)
+			return nil, xerrors.WithStackTrace(err)
 		}
 		items = append(items, row)
 	}
 
 	_, err = result.NextResultSet(ctx)
 	if err == nil {
-		return []ListUsersRow(nil), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+		return nil, xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
 	} else if !errors.Is(err, io.EOF) {
-		return []ListUsersRow(nil), xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
 
 	return items, nil`
@@ -230,7 +230,7 @@ func TestGeneratedYDBInterfaceSupportsClientsSessionsAndTransactions(t *testing.
 	}
 }
 
-func TestGeneratedYDBManyPreservesEmptySliceContractOnErrors(t *testing.T) {
+func TestGeneratedYDBManyEmitsEmptySliceOnlyOnSuccess(t *testing.T) {
 	in := sample()
 	in.Queries = in.Queries[1:2]
 	files, err := Generate(in, Options{Package: "db", Runtime: "ydb", EmitEmptySlices: true})
@@ -245,12 +245,34 @@ func TestGeneratedYDBManyPreservesEmptySliceContractOnErrors(t *testing.T) {
 	}
 	for _, want := range []string{
 		"items := make([]ListUsersRow, 0)",
-		"return make([]ListUsersRow, 0), xerrors.WithStackTrace(query.ErrNoResultSets)",
-		"return make([]ListUsersRow, 0), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)",
+		"return nil, xerrors.WithStackTrace(query.ErrNoResultSets)",
+		"return nil, xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)",
 		"return items, nil",
 	} {
 		if !strings.Contains(source, want) {
-			t.Fatalf("emit_empty_slices error contract misses %q:\n%s", want, source)
+			t.Fatalf("emit_empty_slices contract misses %q:\n%s", want, source)
+		}
+	}
+	if strings.Contains(source, "return make([]ListUsersRow, 0),") {
+		t.Fatalf("emit_empty_slices returned a non-nil slice with an error:\n%s", source)
+	}
+}
+
+func TestGeneratedManyDecimalValidationReturnsNilOnError(t *testing.T) {
+	decimal := model.Type{Kind: "Decimal", Precision: 22, Scale: 9}
+	u64 := model.Type{Kind: "Uint64"}
+	in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name: "FindUsers", Command: model.Many, SQL: "SELECT id FROM users WHERE balance = $balance;",
+		Parameters: []model.Parameter{{Name: "balance", Type: decimal}},
+		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: u64}}}},
+	}}}
+	for _, runtime := range []string{"database/sql", "ydb"} {
+		source := string(generatedSQLSourceForAnalysis(t, runtime, in))
+		if !strings.Contains(source, "if err := validateDecimalParameter(") || !strings.Contains(source, "return nil, err") {
+			t.Fatalf("%s decimal validation does not return a nil slice on error:\n%s", runtime, source)
+		}
+		if strings.Contains(source, "return make([]FindUsersRow, 0), err") {
+			t.Fatalf("%s decimal validation returned an empty slice with an error:\n%s", runtime, source)
 		}
 	}
 }
@@ -687,13 +709,14 @@ var calls []driver.NamedValue
 var closed bool
 var lastSQL string
 var fail bool
+var rowErr bool
 type drv struct{}; func (drv) Open(string)(driver.Conn,error){return conn{},nil}
 type conn struct{}; func (conn) Prepare(string)(driver.Stmt,error){return nil,driver.ErrSkip}; func (conn) Close()error{return nil}; func (conn) Begin()(driver.Tx,error){return nil,driver.ErrSkip}
 func (conn) QueryContext(_ context.Context, q string, a []driver.NamedValue)(driver.Rows,error){ calls=a;lastSQL=q;if fail{return nil,errors.New("query failed")}; if strings.Contains(q,"bio") {return &rows{data:[][]driver.Value{{uint64(7),nil}}},nil}; return &rows{data:[][]driver.Value{{uint64(8),"a"}}},nil }
 func (conn) ExecContext(_ context.Context, _ string, a []driver.NamedValue)(driver.Result,error){calls=a; return result(3),nil}
-type rows struct{data [][]driver.Value; i int}; func (r *rows) Columns()[]string{return []string{"id","bio"}}; func (r *rows) Close()error{closed=true;return nil}; func (r *rows) Next(dst []driver.Value)error{if r.i==len(r.data){return io.EOF};copy(dst,r.data[r.i]);r.i++;return nil}
+type rows struct{data [][]driver.Value; i int}; func (r *rows) Columns()[]string{return []string{"id","bio"}}; func (r *rows) Close()error{closed=true;return nil}; func (r *rows) Next(dst []driver.Value)error{if r.i==len(r.data){if rowErr{return errors.New("rows failed")};return io.EOF};copy(dst,r.data[r.i]);r.i++;return nil}
 type result int64; func (r result) LastInsertId()(int64,error){return 0,nil};func(r result) RowsAffected()(int64,error){return int64(r),nil}
-func TestRuntime(t *testing.T){sql.Register("mock",drv{}); db,err:=sql.Open("mock","");if err!=nil{t.Fatal(err)};q:=New(db); one,err:=q.GetUser(context.Background(),7);if err!=nil||one.ID!=7||one.Bio!=nil{t.Fatalf("one: %#v %v",one,err)};if len(calls)!=1||calls[0].Name!="id"||calls[0].Value.(int64)!=7||!strings.Contains(lastSQL,"$id"){t.Fatalf("args/sql: %#v %q",calls,lastSQL)}; many,err:=q.ListUsers(context.Background());if err!=nil||len(many)!=1||many[0].Name!="a"||!closed{t.Fatalf("many: %#v %v close=%v",many,err,closed)};bio:="b";if err:=q.UpdateUser(context.Background(),UpdateUserParams{Name:"n",Bio:&bio});err!=nil{t.Fatal(err)};if len(calls)!=2||calls[0].Name!="name"||calls[1].Name!="bio"{t.Fatalf("named: %#v",calls)};fail=true;if _,err:=q.GetUser(context.Background(),7);err==nil{t.Fatal("query error was swallowed")}}
+func TestRuntime(t *testing.T){sql.Register("mock",drv{}); db,err:=sql.Open("mock","");if err!=nil{t.Fatal(err)};q:=New(db); one,err:=q.GetUser(context.Background(),7);if err!=nil||one.ID!=7||one.Bio!=nil{t.Fatalf("one: %#v %v",one,err)};if len(calls)!=1||calls[0].Name!="id"||calls[0].Value.(int64)!=7||!strings.Contains(lastSQL,"$id"){t.Fatalf("args/sql: %#v %q",calls,lastSQL)}; many,err:=q.ListUsers(context.Background());if err!=nil||len(many)!=1||many[0].Name!="a"||!closed{t.Fatalf("many: %#v %v close=%v",many,err,closed)};bio:="b";if err:=q.UpdateUser(context.Background(),UpdateUserParams{Name:"n",Bio:&bio});err!=nil{t.Fatal(err)};if len(calls)!=2||calls[0].Name!="name"||calls[1].Name!="bio"{t.Fatalf("named: %#v",calls)};rowErr=true;many,err=q.ListUsers(context.Background());if err==nil||many!=nil{t.Fatalf("rows error: %#v %v",many,err)};rowErr=false;fail=true;many,err=q.ListUsers(context.Background());if err==nil||many!=nil{t.Fatalf("many error: %#v %v",many,err)};if _,err:=q.GetUser(context.Background(),7);err==nil{t.Fatal("query error was swallowed")}}
 `
 
 func compile(t *testing.T, opts Options) {

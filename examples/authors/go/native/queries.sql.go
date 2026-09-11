@@ -19,7 +19,8 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx, `-- name: GetAuthor :one
+	result, err := q.db.QueryRow(ctx, `
+		-- name: GetAuthor :one
 		SELECT id, name, bio FROM authors WHERE id = $author_id;
 		`, callOptions...,
 	)
@@ -40,27 +41,28 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 }
 
 func (q *Queries) ListAuthors(ctx context.Context, opts ...query.ExecuteOption) ([]ListAuthorsRow, error) {
-	result, err := q.db.Query(ctx, `-- name: ListAuthors :many
+	result, err := q.db.Query(ctx, `
+		-- name: ListAuthors :many
 		SELECT id, name, bio FROM authors ORDER BY name;
 		`, opts...,
 	)
 	if err != nil {
-		return make([]ListAuthorsRow, 0), err
+		return nil, err
 	}
 	defer result.Close(ctx)
 
 	resultSet, err := result.NextResultSet(ctx)
 	if errors.Is(err, io.EOF) {
-		return make([]ListAuthorsRow, 0), xerrors.WithStackTrace(query.ErrNoResultSets)
+		return nil, xerrors.WithStackTrace(query.ErrNoResultSets)
 	}
 	if err != nil {
-		return make([]ListAuthorsRow, 0), xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
 
 	items := make([]ListAuthorsRow, 0)
 	for r, err := range resultSet.Rows(ctx) {
 		if err != nil {
-			return make([]ListAuthorsRow, 0), xerrors.WithStackTrace(err)
+			return nil, xerrors.WithStackTrace(err)
 		}
 		var row ListAuthorsRow
 		if err := r.ScanNamed(
@@ -68,16 +70,16 @@ func (q *Queries) ListAuthors(ctx context.Context, opts ...query.ExecuteOption) 
 			query.Named("name", &row.Name),
 			query.Named("bio", &row.Bio),
 		); err != nil {
-			return make([]ListAuthorsRow, 0), xerrors.WithStackTrace(err)
+			return nil, xerrors.WithStackTrace(err)
 		}
 		items = append(items, row)
 	}
 
 	_, err = result.NextResultSet(ctx)
 	if err == nil {
-		return make([]ListAuthorsRow, 0), xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+		return nil, xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
 	} else if !errors.Is(err, io.EOF) {
-		return make([]ListAuthorsRow, 0), xerrors.WithStackTrace(err)
+		return nil, xerrors.WithStackTrace(err)
 	}
 
 	return items, nil
@@ -90,7 +92,8 @@ func (q *Queries) GetAuthorName(ctx context.Context, arg uint64, opts ...query.E
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx, `-- name: GetAuthorName :one
+	result, err := q.db.QueryRow(ctx, `
+		-- name: GetAuthorName :one
 		SELECT name FROM authors WHERE id = $author_id;
 		`, callOptions...,
 	)
@@ -117,7 +120,8 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	result, err := q.db.QueryRow(ctx, `-- name: CreateAuthor :one
+	result, err := q.db.QueryRow(ctx, `
+		-- name: CreateAuthor :one
 		INSERT INTO `+"`authors`"+` (`+"`id`"+`, `+"`name`"+`, `+"`bio`"+`)
 		VALUES ($author_id, $author_name, $biography)
 		RETURNING `+"`id`"+`, `+"`name`"+`, `+"`bio`"+`;
@@ -148,7 +152,8 @@ func (q *Queries) UpsertAuthor(ctx context.Context, arg UpsertAuthorParams, opts
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx, `-- name: UpsertAuthor :exec
+	return q.db.Exec(ctx, `
+		-- name: UpsertAuthor :exec
 		UPSERT INTO authors (id, name, bio)
 		VALUES ($author_id, $author_name, $biography);
 		`, callOptions...,
@@ -162,7 +167,8 @@ func (q *Queries) DeleteAuthor(ctx context.Context, arg uint64, opts ...query.Ex
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx, `-- name: DeleteAuthor :exec
+	return q.db.Exec(ctx, `
+		-- name: DeleteAuthor :exec
 		DELETE FROM authors WHERE id = $author_id;
 		`, callOptions...,
 	)

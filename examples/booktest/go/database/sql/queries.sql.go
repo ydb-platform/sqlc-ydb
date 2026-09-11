@@ -61,7 +61,7 @@ func (q *Queries) BooksByTitleYear(ctx context.Context, arg BooksByTitleYearPara
 		sql.Named("publication_year", arg.PublicationYear),
 	)
 	if err != nil {
-		return []BooksByTitleYearRow(nil), err
+		return nil, err
 	}
 	defer rows.Close()
 	items := []BooksByTitleYearRow(nil)
@@ -81,7 +81,10 @@ func (q *Queries) BooksByTitleYear(ctx context.Context, arg BooksByTitleYearPara
 		}
 		items = append(items, row)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (q *Queries) BooksByTags(ctx context.Context, arg string) ([]BooksByTagsRow, error) {
@@ -102,7 +105,7 @@ func (q *Queries) BooksByTags(ctx context.Context, arg string) ([]BooksByTagsRow
 		`, sql.Named("tags", types.JSONValue(arg)),
 	)
 	if err != nil {
-		return []BooksByTagsRow(nil), err
+		return nil, err
 	}
 	defer rows.Close()
 	items := []BooksByTagsRow(nil)
@@ -119,7 +122,10 @@ func (q *Queries) BooksByTags(ctx context.Context, arg string) ([]BooksByTagsRow
 		}
 		items = append(items, row)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (CreateAuthorRow, error) {

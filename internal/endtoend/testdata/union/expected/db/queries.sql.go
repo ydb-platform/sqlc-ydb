@@ -14,7 +14,7 @@ func (q *Queries) DistinctLabels(ctx context.Context) ([]DistinctLabelsRow, erro
 		`,
 	)
 	if err != nil {
-		return []DistinctLabelsRow(nil), err
+		return nil, err
 	}
 	defer rows.Close()
 	items := []DistinctLabelsRow(nil)
@@ -28,7 +28,10 @@ func (q *Queries) DistinctLabels(ctx context.Context) ([]DistinctLabelsRow, erro
 		}
 		items = append(items, row)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (q *Queries) QualifiedMissing(ctx context.Context) ([]QualifiedMissingRow, error) {
@@ -39,7 +42,7 @@ func (q *Queries) QualifiedMissing(ctx context.Context) ([]QualifiedMissingRow, 
 		`,
 	)
 	if err != nil {
-		return []QualifiedMissingRow(nil), err
+		return nil, err
 	}
 	defer rows.Close()
 	items := []QualifiedMissingRow(nil)
@@ -53,7 +56,10 @@ func (q *Queries) QualifiedMissing(ctx context.Context) ([]QualifiedMissingRow, 
 		}
 		items = append(items, row)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (q *Queries) QualifiedNames(ctx context.Context) ([]QualifiedNamesRow, error) {
@@ -64,7 +70,7 @@ func (q *Queries) QualifiedNames(ctx context.Context) ([]QualifiedNamesRow, erro
 		`,
 	)
 	if err != nil {
-		return []QualifiedNamesRow(nil), err
+		return nil, err
 	}
 	defer rows.Close()
 	items := []QualifiedNamesRow(nil)
@@ -78,7 +84,10 @@ func (q *Queries) QualifiedNames(ctx context.Context) ([]QualifiedNamesRow, erro
 		}
 		items = append(items, row)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (q *Queries) AllLabels(ctx context.Context) ([]AllLabelsRow, error) {
@@ -89,7 +98,7 @@ func (q *Queries) AllLabels(ctx context.Context) ([]AllLabelsRow, error) {
 		`,
 	)
 	if err != nil {
-		return []AllLabelsRow(nil), err
+		return nil, err
 	}
 	defer rows.Close()
 	items := []AllLabelsRow(nil)
@@ -103,5 +112,8 @@ func (q *Queries) AllLabels(ctx context.Context) ([]AllLabelsRow, error) {
 		}
 		items = append(items, row)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
