@@ -87,9 +87,9 @@ public sealed class Queries
     {
         await using var command = new YdbCommand(
             "-- name: CreateAuthor :one\n" +
-            "INSERT INTO authors (id, name, bio)\n" +
+            "INSERT INTO `authors` (`id`, `name`, `bio`)\n" +
             "VALUES ($author_id, $author_name, $biography)\n" +
-            "RETURNING id, name, bio;", _connection) { Transaction = _transaction };
+            "RETURNING `id`, `name`, `bio`;", _connection) { Transaction = _transaction };
         command.Parameters.Add(new YdbParameter("$author_id", DbType.UInt64, args.AuthorID));
         command.Parameters.Add(new YdbParameter("$author_name", DbType.String, args.AuthorName));
         command.Parameters.Add(new YdbParameter("$biography", YdbValue.MakeOptionalUtf8(args.Biography)));

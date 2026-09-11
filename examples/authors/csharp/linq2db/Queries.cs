@@ -72,9 +72,9 @@ public sealed class Queries
     {
         var rows = await _connection.QueryToListAsync(CreateAuthorRowFrom,
             "-- name: CreateAuthor :one\n" +
-            "INSERT INTO authors (id, name, bio)\n" +
+            "INSERT INTO `authors` (`id`, `name`, `bio`)\n" +
             "VALUES ($author_id, $author_name, $biography)\n" +
-            "RETURNING id, name, bio;", cancellationToken, new DataParameter("$author_id", args.AuthorID, DataType.UInt64), new DataParameter("$author_name", args.AuthorName, DataType.NVarChar), new DataParameter("$biography", YdbValue.MakeOptionalUtf8(args.Biography), DataType.NVarChar)).ConfigureAwait(false);
+            "RETURNING `id`, `name`, `bio`;", cancellationToken, new DataParameter("$author_id", args.AuthorID, DataType.UInt64), new DataParameter("$author_name", args.AuthorName, DataType.NVarChar), new DataParameter("$biography", YdbValue.MakeOptionalUtf8(args.Biography), DataType.NVarChar)).ConfigureAwait(false);
         if (rows.Count == 0)
         {
             throw new InvalidOperationException("query returned no rows");

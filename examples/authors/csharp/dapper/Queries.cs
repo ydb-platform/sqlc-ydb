@@ -85,9 +85,9 @@ public sealed class Queries
     {
         var command = new CommandDefinition(
             "-- name: CreateAuthor :one\n" +
-            "INSERT INTO authors (id, name, bio)\n" +
+            "INSERT INTO `authors` (`id`, `name`, `bio`)\n" +
             "VALUES ($author_id, $author_name, $biography)\n" +
-            "RETURNING id, name, bio;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, args.AuthorID), new YdbParameter("$author_name", DbType.String, args.AuthorName), new YdbParameter("$biography", YdbValue.MakeOptionalUtf8(args.Biography))), _transaction, cancellationToken: cancellationToken);
+            "RETURNING `id`, `name`, `bio`;", new YdbParameters(new YdbParameter("$author_id", DbType.UInt64, args.AuthorID), new YdbParameter("$author_name", DbType.String, args.AuthorName), new YdbParameter("$biography", YdbValue.MakeOptionalUtf8(args.Biography))), _transaction, cancellationToken: cancellationToken);
         await using var reader = await _connection.ExecuteReaderAsync(command).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
