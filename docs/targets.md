@@ -20,6 +20,7 @@
 | Kotlin Exposed | `gen.kotlin.runtime: exposed` | typed SQL methods on a borrowed `JdbcTransaction` |
 | Java native SDK | `gen.java.runtime: ydb` | `Queries(QueryTransaction)`, Java 17 records |
 | Java JDBC | `gen.java.runtime: jdbc` | `Queries(Connection)`, named YDB prepared statements |
+| Java jOOQ | `gen.java.runtime: jooq` | `Queries(YdbDSLContext)`, typed jOOQ DSL queries and projection records |
 
 `Utf8` is text (`string` / `str`); `String` is binary (`[]byte` / `bytes`).
 Optional values preserve nullability. Go integers retain their widths and signedness;
