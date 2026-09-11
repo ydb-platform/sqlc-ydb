@@ -13,8 +13,9 @@ gen:
 ```
 
 The [authors example](../examples/authors/kotlin) builds all three profiles from
-the same [SQL](../examples/authors/queries.sql). Run `make generate` before
-building the application. Generated example files are ignored on main and
+the same [SQL](../examples/authors/queries.sql). The `batch`, `booktest`,
+`jets`, and `ondeck` examples generate native Query SDK APIs. Run `make generate`
+before building an application. Generated example files are ignored on main and
 reviewed in a separate Kotlin pull request.
 
 ## Generated API
@@ -34,15 +35,17 @@ Methods created from a native `QueryTransaction`, JDBC and Exposed methods do no
 commit, roll back, close borrowed resources or create nested transactions.
 Exposed output is SQL-first: it does not infer `Table` objects or translate SQL
 into the Exposed DSL. The readable SQL property preserves the declaration-free
-source. JDBC prepares a private companion query with `DECLARE` statements
-synthesized from the resolved parameter types because the driver prepares the
-query before `setObject` supplies those typed values.
+source. JDBC and Exposed use positional `?` parameters and standard
+`PreparedStatement` setters. Unsigned integers, `Json`, and `Timestamp` use
+typed SDK values so the driver receives their YQL types without generated
+`DECLARE` statements or `unwrap`.
 
 ## Type coverage
 
 Supported types are `Bool`, signed and unsigned 8/16/32/64-bit integers,
-`Float`, `Double`, `Utf8`, `String`, and their optional forms. `String` maps to
-`ByteArray`; `Utf8` maps to Kotlin `String`. `Uint8` and `Uint16` use `Int`,
+`Float`, `Double`, `Utf8`, `String`, `Json`, `Timestamp`, and their optional
+forms. `String` maps to `ByteArray`; `Utf8` and `Json` map to Kotlin `String`;
+`Timestamp` maps to `java.time.Instant`. `Uint8` and `Uint16` use `Int`,
 `Uint32` uses `Long`, and `Uint64` uses the full `Long` bit pattern, matching
 the Java SDK. Use `java.lang.Long.toUnsignedString` to format a `Uint64` value.
 Values are bound through the SDK's typed values, including typed empty optionals.

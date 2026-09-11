@@ -6,7 +6,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/antlr4-go/antlr/v4"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
+	yql "github.com/ydb-platform/yql-parsers/go"
 )
 
 type Options struct{ Package, Runtime string }
@@ -19,7 +21,9 @@ var scalars = map[string]scalar{
 	"Uint32": {"Long", "Uint32", "Long"}, "Int64": {"Long", "Int64", "Long"},
 	"Uint64": {"Long", "Uint64", "Long"}, "Float": {"Float", "Float", "Float"},
 	"Double": {"Double", "Double", "Double"}, "Utf8": {"String", "Text", "String"},
-	"String": {"ByteArray", "Bytes", "Bytes"},
+	"String":    {"ByteArray", "Bytes", "Bytes"},
+	"Json":      {"String", "Json", "String"},
+	"Timestamp": {"java.time.Instant", "Timestamp", "Timestamp"},
 }
 
 func typeInfo(t model.Type) (scalar, string, error) {
@@ -223,8 +227,11 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		row += "Row"
 		sql := sqlLiteral(model.WithoutQueryAnnotation(q.SQL))
 		preparedSQL := sql
-		if o.Runtime != "ydb" && len(q.Parameters) > 0 && q.SQLWithoutDeclarations != "" {
-			preparedSQL = sqlLiteral(jdbcSQL(q))
+		var bindings []int
+		if o.Runtime != "ydb" {
+			var text string
+			text, bindings = jdbcSQL(q)
+			preparedSQL = sqlLiteral(text)
 		}
 		ret := "Unit"
 		switch q.Command {
@@ -281,7 +288,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		if o.Runtime == "ydb" {
 			emitNative(&b, q, names, sql, row)
 		} else {
-			emitJDBC(&b, q, names, preparedSQL, row, o.Runtime)
+			emitJDBC(&b, q, names, bindings, preparedSQL, row, o.Runtime)
 		}
 		b.WriteString("    }\n")
 	}
@@ -290,13 +297,47 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 	return files, nil
 }
 
-func jdbcSQL(q model.AnalyzedQuery) string {
-	var b strings.Builder
-	for _, p := range q.Parameters {
-		fmt.Fprintf(&b, "DECLARE $%s AS %s;\n", p.Name, p.Type.String())
+// jdbcSQL replaces only parameter tokens, preserving text literals, comments,
+// quoted identifiers, and local YQL variables. Bindings retain SQL occurrence
+// order, including repeated parameters.
+func jdbcSQL(q model.AnalyzedQuery) (string, []int) {
+	text := q.SQLWithoutDeclarations
+	if text == "" {
+		text = q.SQL
 	}
-	b.WriteString(model.WithoutQueryAnnotation(q.SQLWithoutDeclarations))
-	return b.String()
+	text = model.WithoutQueryAnnotation(text)
+	parameters := map[string]int{}
+	for i, p := range q.Parameters {
+		parameters[p.Name] = i
+	}
+	lexer := yql.NewYQLLexer(antlr.NewInputStream(text))
+	lexer.RemoveErrorListeners()
+	var tokens []antlr.Token
+	for token := lexer.NextToken(); token.GetTokenType() != antlr.TokenEOF; token = lexer.NextToken() {
+		if token.GetChannel() == antlr.TokenDefaultChannel {
+			tokens = append(tokens, token)
+		}
+	}
+	runes := []rune(text)
+	var b strings.Builder
+	bindings := []int{}
+	cursor := 0
+	for i, token := range tokens {
+		if token.GetTokenType() != yql.YQLLexerDOLLAR || i+1 == len(tokens) {
+			continue
+		}
+		next := tokens[i+1]
+		parameter, ok := parameters[strings.Trim(next.GetText(), "`")]
+		if !ok {
+			continue
+		}
+		b.WriteString(string(runes[cursor:token.GetStart()]))
+		b.WriteByte('?')
+		cursor = next.GetStop() + 1
+		bindings = append(bindings, parameter)
+	}
+	b.WriteString(string(runes[cursor:]))
+	return b.String(), bindings
 }
 
 func parameterValue(p model.Parameter, n string) string {
@@ -328,18 +369,15 @@ func emitNative(b *strings.Builder, q model.AnalyzedQuery, names []string, sql, 
 	b.WriteString("        kotlin.check(_query.getResultSetCount() == 1) { \"Expected one result set\" }\n        val _rows = _query.getResultSet(0)\n")
 	emitRows(b, q, row, "        ", true)
 }
-func emitJDBC(b *strings.Builder, q model.AnalyzedQuery, names []string, sql, row, runtime string) {
+func emitJDBC(b *strings.Builder, q model.AnalyzedQuery, names []string, bindings []int, sql, row, runtime string) {
 	connection := "client"
 	if runtime == "exposed" {
 		b.WriteString("        val _connection = client.connection.connection as java.sql.Connection\n")
 		connection = "_connection"
 	}
 	fmt.Fprintf(b, "        %s.prepareStatement(%s).use { _prepared ->\n", connection, sql)
-	if len(q.Parameters) > 0 {
-		b.WriteString("            val _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement::class.java)\n")
-	}
-	for i, p := range q.Parameters {
-		fmt.Fprintf(b, "            _statement.setObject(%s, %s)\n", quoted(p.Name), parameterValue(p, names[i]))
+	for position, parameter := range bindings {
+		emitJDBCParameter(b, q.Parameters[parameter], names[parameter], position+1)
 	}
 	if q.Command == model.Exec {
 		b.WriteString("            _prepared.execute()\n")
@@ -349,6 +387,24 @@ func emitJDBC(b *strings.Builder, q model.AnalyzedQuery, names []string, sql, ro
 		b.WriteString("            }\n")
 	}
 	b.WriteString("        }\n")
+}
+
+func emitJDBCParameter(b *strings.Builder, p model.Parameter, name string, position int) {
+	kind := p.Type.UnwrapOptional().Kind
+	if strings.HasPrefix(kind, "Uint") || kind == "Json" || kind == "Timestamp" {
+		fmt.Fprintf(b, "            _prepared.setObject(%d, %s)\n", position, parameterValue(p, name))
+		return
+	}
+	s, _, _ := typeInfo(p.Type)
+	types := map[string]string{
+		"Bool": "BOOLEAN", "Int8": "TINYINT", "Int16": "SMALLINT", "Int32": "INTEGER",
+		"Int64": "BIGINT", "Float": "REAL", "Double": "DOUBLE",
+	}
+	if p.Type.IsOptional() && types[kind] != "" {
+		fmt.Fprintf(b, "            if (%s == null) _prepared.setNull(%d, java.sql.Types.%s) else _prepared.set%s(%d, %s)\n", name, position, types[kind], s.jdbc, position, name)
+		return
+	}
+	fmt.Fprintf(b, "            _prepared.set%s(%d, %s)\n", s.jdbc, position, name)
 }
 func emitRows(b *strings.Builder, q model.AnalyzedQuery, row, indent string, native bool) {
 	if q.Command == model.One {
@@ -370,8 +426,15 @@ func emitRows(b *strings.Builder, q model.AnalyzedQuery, row, indent string, nat
 			fmt.Fprintf(b, "%sval %s: %s = %s\n", indent, n, typ, value)
 		} else {
 			value := fmt.Sprintf("_rows.get%s(%d)", s.jdbc, i+1)
+			if c.Type.UnwrapOptional().Kind == "Timestamp" {
+				value += ".toInstant()"
+			}
 			if c.Type.IsOptional() {
-				fmt.Fprintf(b, "%sval %sRaw = %s\n%sval %s: %s = if (_rows.wasNull()) null else %sRaw\n", indent, n, value, indent, n, typ, n)
+				if c.Type.UnwrapOptional().Kind == "Timestamp" {
+					fmt.Fprintf(b, "%sval %sRaw = _rows.getTimestamp(%d)\n%sval %s: %s = %sRaw?.toInstant()\n", indent, n, i+1, indent, n, typ, n)
+				} else {
+					fmt.Fprintf(b, "%sval %sRaw = %s\n%sval %s: %s = if (_rows.wasNull()) null else %sRaw\n", indent, n, value, indent, n, typ, n)
+				}
 			} else {
 				fmt.Fprintf(b, "%sval %s: %s = %s\n", indent, n, typ, value)
 			}

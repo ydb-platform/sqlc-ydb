@@ -5,6 +5,10 @@ sql:
     schema: schema.sql
     queries: queries.sql
     gen:
+      kotlin:
+        package: jets.nativeapi
+        out: kotlin/src/generated/kotlin/jets/nativeapi
+        runtime: ydb
       php:
         out: php/native
         namespace: Jets\Native

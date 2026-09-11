@@ -5,6 +5,10 @@ sql:
     schema: schema.sql
     queries: queries.sql
     gen:
+      kotlin:
+        package: booktest.nativeapi
+        out: kotlin/src/generated/kotlin/booktest/nativeapi
+        runtime: ydb
       php:
         out: php/native
         namespace: Booktest\Native

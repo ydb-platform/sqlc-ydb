@@ -5,6 +5,10 @@ sql:
     schema: schema.sql
     queries: queries.sql
     gen:
+      kotlin:
+        package: batch.nativeapi
+        out: kotlin/src/generated/kotlin/batch/nativeapi
+        runtime: ydb
       php:
         out: php/native
         namespace: Batch\Native

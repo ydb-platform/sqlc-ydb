@@ -26,7 +26,7 @@ func TestGenerateRejectsInvalidContracts(t *testing.T) {
 		{"framework_type_collision", &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "illegal_argument_exception"}}}}, Options{}, "type name collision"},
 		{"package_java_namespace", &model.AnalysisResult{}, Options{Package: "java.sqlc"}, "namespaces are reserved"},
 		{"runtime", &model.AnalysisResult{}, Options{Runtime: "unknown"}, "unsupported Kotlin runtime"},
-		{"unsupported_parameter", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.Exec, Parameters: []model.Parameter{{Name: "p", Type: model.Type{Kind: "Json"}}}}}}, Options{}, "unsupported Kotlin type"},
+		{"unsupported_parameter", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.Exec, Parameters: []model.Parameter{{Name: "p", Type: model.Type{Kind: "Decimal", Precision: 22, Scale: 9}}}}}}, Options{}, "unsupported Kotlin type"},
 		{"unsupported_result", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.One, ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "value", Type: model.Type{Kind: "List"}}}}}}}}, Options{}, "unsupported Kotlin type"},
 		{"execrows", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.ExecRows}}}, Options{}, "does not support"},
 		{"one_no_results", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.One}}}, Options{}, "requires one nonempty result set"},
@@ -47,7 +47,7 @@ func TestGenerateRejectsInvalidContracts(t *testing.T) {
 	}
 }
 
-func TestJDBCPreparesWithResolvedParameterDeclarations(t *testing.T) {
+func TestJDBCUsesStandardPositionalParameters(t *testing.T) {
 	querySQL := "-- name: GetAuthor :one\nSELECT id FROM authors WHERE id = $author_id;"
 	files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{
 		Name: "GetAuthor", Command: model.One, SQL: querySQL, SQLWithoutDeclarations: querySQL,
@@ -58,9 +58,14 @@ func TestJDBCPreparesWithResolvedParameterDeclarations(t *testing.T) {
 		t.Fatal(err)
 	}
 	generated := string(files[len(files)-1].Content)
-	wantPrepared := "client.prepareStatement(" + sqlLiteral("DECLARE $author_id AS Uint64;\n"+model.WithoutQueryAnnotation(querySQL)) + ")"
+	for _, unwanted := range []string{"DECLARE ", "unwrap("} {
+		if strings.Contains(generated, unwanted) {
+			t.Fatalf("unexpected %q in generated Kotlin JDBC API:\n%s", unwanted, generated)
+		}
+	}
+	wantPrepared := "client.prepareStatement(" + sqlLiteral("SELECT id FROM authors WHERE id = ?;") + ")"
 	if !strings.Contains(generated, wantPrepared) {
-		t.Fatalf("generated Kotlin JDBC API did not declare resolved parameters for driver preparation:\n%s", generated)
+		t.Fatalf("generated Kotlin JDBC API did not use positional SQL:\n%s", generated)
 	}
 }
 
@@ -83,7 +88,7 @@ func TestNullableScalarModelsAndRuntimeOwnership(t *testing.T) {
 				t.Fatal(source)
 			}
 			if runtime == "jdbc" || runtime == "exposed" {
-				for _, want := range []string{".use { _prepared", ".use { _rows", "setObject(\"id\", PrimitiveValue.newUint64(id))", "if (_rows.wasNull()) null"} {
+				for _, want := range []string{".use { _prepared", ".use { _rows", "setObject(1, PrimitiveValue.newUint64(id))", "if (_rows.wasNull()) null"} {
 					if !strings.Contains(source, want) {
 						t.Errorf("missing %q", want)
 					}
@@ -116,6 +121,30 @@ func TestRejectsMalformedAndNestedOptionalTypes(t *testing.T) {
 		_, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.Exec, Parameters: []model.Parameter{{Name: "v", Type: typ}}}}}, Options{})
 		if err == nil || !strings.Contains(err.Error(), "unsupported Kotlin type") {
 			t.Fatalf("type %s: %v", typ, err)
+		}
+	}
+}
+
+func TestNativeJsonAndTimestampUseSDKTypes(t *testing.T) {
+	json := model.Type{Kind: "Json"}
+	timestamp := model.Type{Kind: "Timestamp"}
+	files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name: "CreateBook", Command: model.One, SQL: "SELECT $tags, $available;",
+		Parameters: []model.Parameter{{Name: "tags", Type: json}, {Name: "available", Type: timestamp}},
+		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "tags", Type: json}, {Name: "available", Type: timestamp}}}},
+	}}}, Options{Package: "books.nativeapi", Runtime: "ydb"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	row, source := string(files[0].Content), string(files[len(files)-1].Content)
+	for _, want := range []string{
+		"val tags: String", "val available: java.time.Instant",
+		"tags: String, available: java.time.Instant",
+		"PrimitiveValue.newJson(tags)", "PrimitiveValue.newTimestamp(available)",
+		"getJson()", "getTimestamp()",
+	} {
+		if !strings.Contains(row+source, want) {
+			t.Fatalf("missing %q in generated Kotlin:\n%s\n%s", want, row, source)
 		}
 	}
 }
@@ -201,7 +230,7 @@ func TestAllSupportedScalarsCompileAgainstAuthorsMaven(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "pom.xml"), pom)
 	var params []model.Parameter
 	var columns []model.Column
-	for _, kind := range []string{"Bool", "Int8", "Uint8", "Int16", "Uint16", "Int32", "Uint32", "Int64", "Uint64", "Float", "Double", "Utf8", "String"} {
+	for _, kind := range []string{"Bool", "Int8", "Uint8", "Int16", "Uint16", "Int32", "Uint32", "Int64", "Uint64", "Float", "Double", "Utf8", "String", "Json", "Timestamp"} {
 		for _, optional := range []bool{false, true} {
 			typ := model.Type{Kind: kind}
 			n := strings.ToLower(kind)
@@ -245,7 +274,7 @@ func TestGeneratedJDBCUsesTypedDriverValuesAndGuardsUnsignedRanges(t *testing.T)
 	}
 	queries := []model.AnalyzedQuery{
 		{
-			Name: "Bind", Command: model.Exec, SQL: "SELECT 1;",
+			Name: "Bind", Command: model.Exec, SQL: "SELECT $author_id, $maybe_id, $title, $payload;",
 			Parameters: []model.Parameter{
 				{Name: "author_id", Type: model.Type{Kind: "Uint64"}},
 				{Name: "maybe_id", Type: model.Optional(model.Type{Kind: "Uint16"})},
@@ -276,28 +305,21 @@ func TestGeneratedJDBCUsesTypedDriverValuesAndGuardsUnsignedRanges(t *testing.T)
 	}
 	const program = `package synthetic.jdbc;
 
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.Types;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Properties;
 
-import tech.ydb.jdbc.YdbPreparedStatement;
 import tech.ydb.jdbc.common.YdbTypes;
 import tech.ydb.jdbc.query.QueryKey;
 import tech.ydb.jdbc.query.YdbQuery;
-import tech.ydb.jdbc.query.params.PreparedQuery;
 import tech.ydb.jdbc.settings.YdbQueryProperties;
 import tech.ydb.table.query.Params;
 import tech.ydb.table.values.DecimalType;
 import tech.ydb.table.values.OptionalType;
 import tech.ydb.table.values.PrimitiveType;
 import tech.ydb.table.values.PrimitiveValue;
-import tech.ydb.table.values.Type;
 
 public final class Main {
     private Main() { }
@@ -312,21 +334,16 @@ public final class Main {
         expectRange(() -> guarded.bad32(4294967296L));
 
         YdbTypes types = new YdbTypes(false, DecimalType.getDefault());
-        YdbQuery query = YdbQuery.parseQuery(new QueryKey("SELECT 1;"), new YdbQueryProperties(new Properties()), types);
-        Map<String, Type> declared = new HashMap<>();
-        declared.put("$author_id", PrimitiveType.Uint64);
-        declared.put("$maybe_id", OptionalType.of(PrimitiveType.Uint16));
-        declared.put("$title", PrimitiveType.Text);
-        declared.put("$payload", PrimitiveType.Bytes);
-        PreparedQuery bound = new PreparedQuery(types, query, declared);
+        YdbQuery query = YdbQuery.parseQuery(new QueryKey("SELECT ?, ?, ?, ?;"), new YdbQueryProperties(new Properties()), types);
+        tech.ydb.jdbc.query.params.InMemoryQuery bound = new tech.ydb.jdbc.query.params.InMemoryQuery(query, false);
         new Queries(bindingConnection(bound)).bind(-1L, null, "typed text", new byte[] { 0, 1, (byte) 255 });
 
         Params values = bound.getCurrentParams();
         check(values.values().size() == 4, "wrong parameter count");
-        check(PrimitiveValue.newUint64(-1L).equals(values.values().get("$author_id")), "Uint64 lost its type or name");
-        check(OptionalType.of(PrimitiveType.Uint16).emptyValue().equals(values.values().get("$maybe_id")), "optional null lost its declared type");
-        check(PrimitiveValue.newText("typed text").equals(values.values().get("$title")), "Utf8 lost its type");
-        check(PrimitiveValue.newBytes(new byte[] { 0, 1, (byte) 255 }).equals(values.values().get("$payload")), "String lost its binary type");
+        check(PrimitiveValue.newUint64(-1L).equals(values.values().get("$jp1")), "Uint64 lost its type or position");
+        check(OptionalType.of(PrimitiveType.Uint16).emptyValue().equals(values.values().get("$jp2")), "optional null lost its declared type");
+        check(PrimitiveValue.newText("typed text").equals(values.values().get("$jp3")), "Utf8 lost its type");
+        check(PrimitiveValue.newBytes(new byte[] { 0, 1, (byte) 255 }).equals(values.values().get("$jp4")), "String lost its binary type");
     }
 
     private static Connection refusingConnection() {
@@ -334,22 +351,19 @@ public final class Main {
                 (proxy, method, args) -> { throw new AssertionError("range guard reached Connection." + method.getName()); });
     }
 
-    private static Connection bindingConnection(PreparedQuery query) {
-        YdbPreparedStatement named = (YdbPreparedStatement) Proxy.newProxyInstance(
-                Main.class.getClassLoader(), new Class<?>[] { YdbPreparedStatement.class }, new InvocationHandler() {
-                    @Override public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-                        if (method.getName().equals("setObject") && args != null && args.length == 2 && args[0] instanceof String) {
-                            query.setParam((String) args[0], args[1], Types.JAVA_OBJECT);
-                            return null;
-                        }
-                        if (method.getName().equals("close")) return null;
-                        throw new AssertionError("unexpected YdbPreparedStatement." + method.getName());
-                    }
-                });
+    private static Connection bindingConnection(tech.ydb.jdbc.query.params.InMemoryQuery query) {
         PreparedStatement statement = (PreparedStatement) Proxy.newProxyInstance(
                 Main.class.getClassLoader(), new Class<?>[] { PreparedStatement.class }, (proxy, method, args) -> {
-                    if (method.getName().equals("unwrap") && args != null && args.length == 1 && args[0] == YdbPreparedStatement.class) return named;
-                    if (method.getName().equals("isWrapperFor")) return args != null && args.length == 1 && args[0] == YdbPreparedStatement.class;
+                    if (method.getName().startsWith("set")) {
+                        int type = switch (method.getName()) {
+                            case "setString" -> Types.VARCHAR;
+                            case "setBytes" -> Types.VARBINARY;
+                            case "setObject" -> Types.JAVA_OBJECT;
+                            default -> throw new AssertionError(method);
+                        };
+                        query.setParam((int) args[0], args[1], type);
+                        return null;
+                    }
                     if (method.getName().equals("execute")) return false;
                     if (method.getName().equals("close")) return null;
                     throw new AssertionError("unexpected PreparedStatement." + method.getName());

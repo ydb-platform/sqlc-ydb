@@ -5,6 +5,10 @@ sql:
     schema: schema
     queries: query
     gen:
+      kotlin:
+        package: ondeck.nativeapi
+        out: kotlin/src/generated/kotlin/ondeck/nativeapi
+        runtime: ydb
       php:
         out: php/native
         namespace: Ondeck\Native
