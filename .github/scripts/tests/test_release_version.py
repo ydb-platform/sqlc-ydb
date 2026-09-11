@@ -147,15 +147,41 @@ class ReleaseVersionTest(unittest.TestCase):
         self.assertEqual((self.repo.root / "notes.md").read_text(), "## v0.0.1\n\n" + PENDING + "\n")
         self.assertIn('var Version = "0.0.1"', (self.repo.root / "internal/cli/cli.go").read_text())
 
-    def test_first_release_rejects_other_parts_and_versions(self):
-        for part, version in (("MINOR", "0.0.1"), ("MAJOR", "0.0.1"), ("PATCH", "0.0.2")):
-            with self.subTest(part=part, version=version):
+    def test_first_release_respects_selected_part(self):
+        versions = {"PATCH": "0.0.1", "MINOR": "0.1.0", "MAJOR": "1.0.0"}
+        for rc in ("true", "false"):
+            for part, version in versions.items():
+                with self.subTest(rc=rc, part=part):
+                    self.repo.clear_tags()
+                    self.repo.write_state("0.0.1", PENDING)
+                    self.repo.tag("v0.0.1-rc3")
+                    before = (self.repo.root / "CHANGELOG.md").read_bytes()
+                    result = self.repo.prepare(part=part, rc=rc)
+                    self.assert_success(result)
+                    suffix = ("-rc4" if part == "PATCH" else "-rc0") if rc == "true" else ""
+                    tag = f"v{version}{suffix}"
+                    self.assertEqual(json.loads(result.stdout)["tag"], tag)
+                    self.assertEqual((self.repo.root / "notes.md").read_text(), f"## {tag}\n\n{PENDING}\n")
+                    if rc == "true":
+                        self.assertEqual((self.repo.root / "CHANGELOG.md").read_bytes(), before)
+                        source_version = "0.0.1"
+                    else:
+                        self.assertIn(f"## {tag}\n", (self.repo.root / "CHANGELOG.md").read_text())
+                        source_version = version
+                    self.assertIn(
+                        f'var Version = "{source_version}"',
+                        (self.repo.root / "internal/cli/cli.go").read_text(),
+                    )
+
+    def test_first_release_rejects_unexpected_source_version(self):
+        for version in ("0.0.0", "0.0.2", "0.1.0"):
+            with self.subTest(version=version):
                 self.repo.clear_tags()
                 self.repo.write_state(version, PENDING)
                 before_changelog = (self.repo.root / "CHANGELOG.md").read_text()
                 before_source = (self.repo.root / "internal/cli/cli.go").read_text()
-                result = self.repo.prepare(part=part)
-                self.assertIn("first release", result.stderr)
+                result = self.repo.prepare(part="MINOR", rc="true")
+                self.assertIn("first", result.stderr)
                 self.assert_failure_without_writes(result, before_changelog, before_source)
 
     def test_patch_minor_and_major_bumps_reset_lower_parts(self):

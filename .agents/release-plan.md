@@ -1,7 +1,7 @@
 # Release readiness
 
-The first stable release is 0.0.1. Its scope is recorded in
-[CHANGELOG.md](../CHANGELOG.md), with the detailed contract in
+The first stable version is selected in the release workflow. Its scope is
+recorded in [CHANGELOG.md](../CHANGELOG.md), with the detailed contract in
 [compatibility](../docs/compatibility.md). Publication steps and recovery rules
 are in [release operations](releasing.md).
 

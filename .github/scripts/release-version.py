@@ -160,9 +160,9 @@ def target_version(
     history: list[tuple[tuple[int, int, int], str]],
 ) -> tuple[int, int, int]:
     if not history:
-        if part != "PATCH" or source != (0, 0, 1):
-            raise ReleaseError("the first release must be PATCH 0.0.1 with CLI Version 0.0.1")
-        return 0, 0, 1
+        if source != (0, 0, 1):
+            raise ReleaseError("CLI Version must remain 0.0.1 before the first stable release")
+        return bump((0, 0, 0), part)
     latest = history[0][0]
     if source != latest:
         raise ReleaseError(

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version-change:
-        description: Version part (use PATCH for the first 0.0.1 release)
+        description: Version part (before the first stable release, increment from 0.0.0)
         required: true
         type: choice
         options: [PATCH, MINOR, MAJOR]

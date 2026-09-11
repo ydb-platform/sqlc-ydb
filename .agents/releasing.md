@@ -25,10 +25,15 @@ The form has three inputs:
 | Release candidate | Enabled by default. Creates the next `-rcN` tag and a **draft prerelease** with all binaries. Leaves the source version and Unreleased entries unchanged. |
 | Dry run | Builds and checks everything without pushing commits, tags or GitHub Releases. Disabled by default. Enable it to rehearse publication. |
 
-The first release requires `PATCH` and produces **0.0.1**, or **0.0.1-rc0** with
-Release candidate enabled. Subsequent RCs use the highest existing suffix plus
-one. After the first stable release, the selected part is incremented from the
-last stable version; RC tags do not advance that base.
+Before the first stable release, the base is **0.0.0**: `PATCH` selects **0.0.1**,
+`MINOR` selects **0.1.0**, and `MAJOR` selects **1.0.0**. The development CLI version
+remains 0.0.1 until stable preparation updates it; RC binaries receive their
+version at build time.
+
+Release candidates use the highest existing suffix for the selected version
+plus one, starting at `rc0`. For example, `v0.0.1-rc3` does not prevent a first
+minor candidate `v0.1.0-rc0`. After the first stable release, the selected part is
+incremented from the last stable version; RC tags do not advance that base.
 
 The maintainer chooses the version part. The workflow computes the number, but
 does not infer compatibility impact from prose. Empty Unreleased sections,
