@@ -2,8 +2,6 @@
 package authors.jdbc;
 
 import tech.ydb.table.values.PrimitiveValue;
-import tech.ydb.table.values.PrimitiveType;
-import tech.ydb.table.values.OptionalType;
 
 // The caller owns the injected client and its lifecycle.
 public final class Queries {
@@ -16,17 +14,14 @@ public final class Queries {
     // -- name: GetAuthor :one
     public java.util.Optional<GetAuthorRow> getAuthor(long authorId) throws java.sql.SQLException {
         try (var _prepared = client.prepareStatement("""
-            DECLARE $author_id AS Uint64;
-            SELECT id, name, bio FROM authors WHERE id = $author_id;\
+            SELECT id, name, bio FROM authors WHERE id = ?;\
             """)) {
-            var _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement.class);
-            _statement.setObject("author_id", PrimitiveValue.newUint64(authorId));
+            _prepared.setObject(1, PrimitiveValue.newUint64(authorId));
             try (var _rows = _prepared.executeQuery()) {
                 if (!_rows.next()) return java.util.Optional.empty();
                 long _value0 = _rows.getLong(1);
                 String _value1 = _rows.getString(2);
                 String _value2 = _rows.getString(3);
-                if (_rows.wasNull()) _value2 = null;
                 return java.util.Optional.of(new GetAuthorRow(_value0, _value1, _value2));
             }
         }
@@ -43,7 +38,6 @@ public final class Queries {
                     long _value0 = _rows.getLong(1);
                     String _value1 = _rows.getString(2);
                     String _value2 = _rows.getString(3);
-                    if (_rows.wasNull()) _value2 = null;
                     _items.add(new ListAuthorsRow(_value0, _value1, _value2));
                 }
                 return _items;
@@ -54,11 +48,9 @@ public final class Queries {
     // -- name: GetAuthorName :one
     public java.util.Optional<GetAuthorNameRow> getAuthorName(long authorId) throws java.sql.SQLException {
         try (var _prepared = client.prepareStatement("""
-            DECLARE $author_id AS Uint64;
-            SELECT name FROM authors WHERE id = $author_id;\
+            SELECT name FROM authors WHERE id = ?;\
             """)) {
-            var _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement.class);
-            _statement.setObject("author_id", PrimitiveValue.newUint64(authorId));
+            _prepared.setObject(1, PrimitiveValue.newUint64(authorId));
             try (var _rows = _prepared.executeQuery()) {
                 if (!_rows.next()) return java.util.Optional.empty();
                 String _value0 = _rows.getString(1);
@@ -70,23 +62,18 @@ public final class Queries {
     // -- name: CreateAuthor :one
     public java.util.Optional<CreateAuthorRow> createAuthor(long authorId, String authorName, String biography) throws java.sql.SQLException {
         try (var _prepared = client.prepareStatement("""
-            DECLARE $author_id AS Uint64;
-            DECLARE $author_name AS Utf8;
-            DECLARE $biography AS Optional<Utf8>;
             INSERT INTO `authors` (`id`, `name`, `bio`)
-            VALUES ($author_id, $author_name, $biography)
+            VALUES (?, ?, ?)
             RETURNING `id`, `name`, `bio`;\
             """)) {
-            var _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement.class);
-            _statement.setObject("author_id", PrimitiveValue.newUint64(authorId));
-            _statement.setObject("author_name", PrimitiveValue.newText(authorName));
-            _statement.setObject("biography", biography == null ? OptionalType.of(PrimitiveType.Text).emptyValue() : OptionalType.of(PrimitiveType.Text).newValue(PrimitiveValue.newText(biography)));
+            _prepared.setObject(1, PrimitiveValue.newUint64(authorId));
+            _prepared.setString(2, authorName);
+            _prepared.setString(3, biography);
             try (var _rows = _prepared.executeQuery()) {
                 if (!_rows.next()) return java.util.Optional.empty();
                 long _value0 = _rows.getLong(1);
                 String _value1 = _rows.getString(2);
                 String _value2 = _rows.getString(3);
-                if (_rows.wasNull()) _value2 = null;
                 return java.util.Optional.of(new CreateAuthorRow(_value0, _value1, _value2));
             }
         }
@@ -95,16 +82,12 @@ public final class Queries {
     // -- name: UpsertAuthor :exec
     public void upsertAuthor(long authorId, String authorName, String biography) throws java.sql.SQLException {
         try (var _prepared = client.prepareStatement("""
-            DECLARE $author_id AS Uint64;
-            DECLARE $author_name AS Utf8;
-            DECLARE $biography AS Optional<Utf8>;
             UPSERT INTO authors (id, name, bio)
-            VALUES ($author_id, $author_name, $biography);\
+            VALUES (?, ?, ?);\
             """)) {
-            var _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement.class);
-            _statement.setObject("author_id", PrimitiveValue.newUint64(authorId));
-            _statement.setObject("author_name", PrimitiveValue.newText(authorName));
-            _statement.setObject("biography", biography == null ? OptionalType.of(PrimitiveType.Text).emptyValue() : OptionalType.of(PrimitiveType.Text).newValue(PrimitiveValue.newText(biography)));
+            _prepared.setObject(1, PrimitiveValue.newUint64(authorId));
+            _prepared.setString(2, authorName);
+            _prepared.setString(3, biography);
             _prepared.execute();
         }
     }
@@ -112,11 +95,9 @@ public final class Queries {
     // -- name: DeleteAuthor :exec
     public void deleteAuthor(long authorId) throws java.sql.SQLException {
         try (var _prepared = client.prepareStatement("""
-            DECLARE $author_id AS Uint64;
-            DELETE FROM authors WHERE id = $author_id;\
+            DELETE FROM authors WHERE id = ?;\
             """)) {
-            var _statement = _prepared.unwrap(tech.ydb.jdbc.YdbPreparedStatement.class);
-            _statement.setObject("author_id", PrimitiveValue.newUint64(authorId));
+            _prepared.setObject(1, PrimitiveValue.newUint64(authorId));
             _prepared.execute();
         }
     }

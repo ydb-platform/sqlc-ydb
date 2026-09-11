@@ -29,7 +29,7 @@ public final class Queries {
         if (!_rows.next()) return java.util.Optional.empty();
         long _value0 = _rows.getColumn(0).getUint64();
         String _value1 = _rows.getColumn(1).getText();
-        String _value2 = _rows.getColumn(2).isOptionalItemPresent() ? _rows.getColumn(2).getOptionalItem().getText() : null;
+        String _value2 = _rows.getColumn(2).getText();
         return java.util.Optional.of(new GetAuthorRow(_value0, _value1, _value2));
     }
 
@@ -46,7 +46,7 @@ public final class Queries {
         while (_rows.next()) {
             long _value0 = _rows.getColumn(0).getUint64();
             String _value1 = _rows.getColumn(1).getText();
-            String _value2 = _rows.getColumn(2).isOptionalItemPresent() ? _rows.getColumn(2).getOptionalItem().getText() : null;
+            String _value2 = _rows.getColumn(2).getText();
             _items.add(new ListAuthorsRow(_value0, _value1, _value2));
         }
         return _items;
@@ -72,7 +72,7 @@ public final class Queries {
         var _params = Params.create();
         _params.put("$author_id", PrimitiveValue.newUint64(authorId));
         _params.put("$author_name", PrimitiveValue.newText(authorName));
-        _params.put("$biography", biography == null ? OptionalType.of(PrimitiveType.Text).emptyValue() : OptionalType.of(PrimitiveType.Text).newValue(PrimitiveValue.newText(biography)));
+        _params.put("$biography", biography == null ? OptionalType.of(PrimitiveType.Text).emptyValue() : PrimitiveValue.newText(biography).makeOptional());
         var _query = QueryReader.readFrom(
                 client.createQuery("""
                     INSERT INTO `authors` (`id`, `name`, `bio`)
@@ -84,7 +84,7 @@ public final class Queries {
         if (!_rows.next()) return java.util.Optional.empty();
         long _value0 = _rows.getColumn(0).getUint64();
         String _value1 = _rows.getColumn(1).getText();
-        String _value2 = _rows.getColumn(2).isOptionalItemPresent() ? _rows.getColumn(2).getOptionalItem().getText() : null;
+        String _value2 = _rows.getColumn(2).getText();
         return java.util.Optional.of(new CreateAuthorRow(_value0, _value1, _value2));
     }
 
@@ -93,7 +93,7 @@ public final class Queries {
         var _params = Params.create();
         _params.put("$author_id", PrimitiveValue.newUint64(authorId));
         _params.put("$author_name", PrimitiveValue.newText(authorName));
-        _params.put("$biography", biography == null ? OptionalType.of(PrimitiveType.Text).emptyValue() : OptionalType.of(PrimitiveType.Text).newValue(PrimitiveValue.newText(biography)));
+        _params.put("$biography", biography == null ? OptionalType.of(PrimitiveType.Text).emptyValue() : PrimitiveValue.newText(biography).makeOptional());
         var _query = QueryReader.readFrom(
                 client.createQuery("""
                     UPSERT INTO authors (id, name, bio)
