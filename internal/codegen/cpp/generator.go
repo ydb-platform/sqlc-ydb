@@ -449,7 +449,7 @@ func renderUserverMethod(out *strings.Builder, query model.AnalyzedQuery, option
 		returnType = "std::vector<" + query.Name + "Row>"
 	}
 	out.WriteString("// " + model.QueryAnnotation(query) + "\n" + returnType + " Queries::" + query.Name + "(" + methodParameters(query, options.Runtime) + ") const {\n")
-	queryLiteral := "::userver::ydb::Query{" + sqlLiteral(model.WithoutQueryAnnotation(query.SQL), "            ", "        ") + ",\n            ::userver::ydb::Query::Name{" + strconv.Quote(query.Name) + "},\n            ::userver::ydb::Query::LogMode::kNameOnly,\n        }"
+	queryLiteral := "::userver::ydb::Query{\n        " + sqlLiteral(model.WithoutQueryAnnotation(query.SQL), "            ", "        ") + ",\n        ::userver::ydb::Query::Name{" + strconv.Quote(query.Name) + "},\n        ::userver::ydb::Query::LogMode::kNameOnly,\n    }"
 	out.WriteString("    const auto sqlc_query = " + queryLiteral + ";\n")
 	args := ""
 	for _, parameter := range query.Parameters {

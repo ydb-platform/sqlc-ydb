@@ -167,11 +167,11 @@ func TestUserverRuntimeQueryConstructor(t *testing.T) {
 	if start < 0 {
 		t.Fatal("missing Query construction")
 	}
-	end := strings.Index(generated[start:], "\n        }")
+	end := strings.Index(generated[start:], "\n    }")
 	if end < 0 {
 		t.Fatal("missing Query initializer end")
 	}
-	query := generated[start : start+end+len("\n        }")]
+	query := generated[start : start+end+len("\n    }")]
 	// The generated runtime Name selects the overload that owns the query text.
 	program := `#include <optional>
 #include <string>
