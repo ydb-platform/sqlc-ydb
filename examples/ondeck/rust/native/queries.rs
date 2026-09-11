@@ -34,15 +34,15 @@ impl<'a> Queries<'a> {
         Self { client }
     }
 
+    // -- name: ListCities :many
     pub async fn list_cities(&mut self) -> ydb::YdbResult<Vec<ListCitiesRow>> {
         let result_set = self
             .client
-            .query_result_set(concat!(
-                concat!(r"-- name: ListCities :many", "\x0a"),
-                concat!(r"SELECT slug, name", "\x0a"),
-                concat!(r"FROM city", "\x0a"),
-                r"ORDER BY name;",
-            ))
+            .query_result_set(
+                r"SELECT slug, name
+FROM city
+ORDER BY name;",
+            )
             .await?;
         let mut rows = Vec::new();
         for mut row in result_set.rows() {
@@ -54,15 +54,15 @@ impl<'a> Queries<'a> {
         Ok(rows)
     }
 
+    // -- name: GetCity :one
     pub async fn city(&mut self, slug: String) -> ydb::YdbResult<GetCityRow> {
         let mut row = self
             .client
-            .query_row(concat!(
-                concat!(r"-- name: GetCity :one", "\x0a"),
-                concat!(r"SELECT slug, name", "\x0a"),
-                concat!(r"FROM city", "\x0a"),
-                r"WHERE slug = $slug;",
-            ))
+            .query_row(
+                r"SELECT slug, name
+FROM city
+WHERE slug = $slug;",
+            )
             .param("$slug", slug)
             .await?;
         Ok(GetCityRow {
@@ -71,6 +71,7 @@ impl<'a> Queries<'a> {
         })
     }
 
+    // -- name: CreateCity :one
     pub async fn create_city(
         &mut self,
         name: String,
@@ -78,16 +79,15 @@ impl<'a> Queries<'a> {
     ) -> ydb::YdbResult<CreateCityRow> {
         let mut row = self
             .client
-            .query_row(concat!(
-                concat!(r"-- name: CreateCity :one", "\x0a"),
-                concat!(r"INSERT INTO city (", "\x0a"),
-                concat!(r"    name,", "\x0a"),
-                concat!(r"    slug", "\x0a"),
-                concat!(r") VALUES (", "\x0a"),
-                concat!(r"    $name,", "\x0a"),
-                concat!(r"    $slug", "\x0a"),
-                r") RETURNING slug, name;",
-            ))
+            .query_row(
+                r"INSERT INTO city (
+    name,
+    slug
+) VALUES (
+    $name,
+    $slug
+) RETURNING slug, name;",
+            )
             .param("$name", name)
             .param("$slug", slug)
             .await?;
@@ -97,29 +97,27 @@ impl<'a> Queries<'a> {
         })
     }
 
+    // -- name: UpdateCityName :exec
     pub async fn update_city_name(&mut self, name: String, slug: String) -> ydb::YdbResult<()> {
         self.client
-            .exec(concat!(
-                concat!(r"-- name: UpdateCityName :exec", "\x0a"),
-                concat!(r"UPDATE city", "\x0a"),
-                concat!(r"SET name = $name", "\x0a"),
-                r"WHERE slug = $slug;",
-            ))
+            .exec(
+                r"UPDATE city
+SET name = $name
+WHERE slug = $slug;",
+            )
             .param("$name", name)
             .param("$slug", slug)
             .await
     }
 
+    // -- name: ListVenues :many
     pub async fn list_venues(&mut self, city: String) -> ydb::YdbResult<Vec<ListVenuesRow>> {
         let result_set = self
             .client
-            .query_result_set(concat!(
-                concat!(r"-- name: ListVenues :many", "\x0a"),
-                concat!(r"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at", "\x0a"),
-                concat!(r"FROM venue", "\x0a"),
-                concat!(r"WHERE city = $city", "\x0a"),
-                r"ORDER BY name;",
-            ))
+            .query_result_set(r"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
+FROM venue
+WHERE city = $city
+ORDER BY name;")
             .param("$city", city).await?;
         let mut rows = Vec::new();
         for mut row in result_set.rows() {
@@ -139,26 +137,24 @@ impl<'a> Queries<'a> {
         Ok(rows)
     }
 
+    // -- name: DeleteVenue :exec
     pub async fn delete_venue(&mut self, slug: String) -> ydb::YdbResult<()> {
         self.client
-            .exec(concat!(
-                concat!(r"-- name: DeleteVenue :exec", "\x0a"),
-                concat!(r"DELETE FROM venue", "\x0a"),
-                r"WHERE slug = $slug AND slug = $slug;",
-            ))
+            .exec(
+                r"DELETE FROM venue
+WHERE slug = $slug AND slug = $slug;",
+            )
             .param("$slug", slug)
             .await
     }
 
+    // -- name: GetVenue :one
     pub async fn venue(&mut self, slug: String, city: String) -> ydb::YdbResult<GetVenueRow> {
         let mut row = self
             .client
-            .query_row(concat!(
-                concat!(r"-- name: GetVenue :one", "\x0a"),
-                concat!(r"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at", "\x0a"),
-                concat!(r"FROM venue", "\x0a"),
-                r"WHERE slug = $slug AND city = $city;",
-            ))
+            .query_row(r"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
+FROM venue
+WHERE slug = $slug AND city = $city;")
             .param("$slug", slug)
             .param("$city", city).await?;
         Ok(GetVenueRow {
@@ -175,6 +171,7 @@ impl<'a> Queries<'a> {
         })
     }
 
+    // -- name: CreateVenue :one
     pub async fn create_venue(
         &mut self,
         id: u64,
@@ -189,30 +186,29 @@ impl<'a> Queries<'a> {
     ) -> ydb::YdbResult<CreateVenueRow> {
         let mut row = self
             .client
-            .query_row(concat!(
-                concat!(r"-- name: CreateVenue :one", "\x0a"),
-                concat!(r"INSERT INTO venue (", "\x0a"),
-                concat!(r"    id,", "\x0a"),
-                concat!(r"    slug,", "\x0a"),
-                concat!(r"    name,", "\x0a"),
-                concat!(r"    city,", "\x0a"),
-                concat!(r"    created_at,", "\x0a"),
-                concat!(r"    spotify_playlist,", "\x0a"),
-                concat!(r"    status,", "\x0a"),
-                concat!(r"    statuses,", "\x0a"),
-                concat!(r"    tags", "\x0a"),
-                concat!(r") VALUES (", "\x0a"),
-                concat!(r"    $id,", "\x0a"),
-                concat!(r"    $slug,", "\x0a"),
-                concat!(r"    $name,", "\x0a"),
-                concat!(r"    $city,", "\x0a"),
-                concat!(r"    $created_at,", "\x0a"),
-                concat!(r"    $spotify_playlist,", "\x0a"),
-                concat!(r"    $status,", "\x0a"),
-                concat!(r"    $statuses,", "\x0a"),
-                concat!(r"    $tags", "\x0a"),
-                r") RETURNING id;",
-            ))
+            .query_row(
+                r"INSERT INTO venue (
+    id,
+    slug,
+    name,
+    city,
+    created_at,
+    spotify_playlist,
+    status,
+    statuses,
+    tags
+) VALUES (
+    $id,
+    $slug,
+    $name,
+    $city,
+    $created_at,
+    $spotify_playlist,
+    $status,
+    $statuses,
+    $tags
+) RETURNING id;",
+            )
             .param("$id", id)
             .param("$slug", slug)
             .param("$name", name)
@@ -228,6 +224,7 @@ impl<'a> Queries<'a> {
         })
     }
 
+    // -- name: UpdateVenueName :one
     pub async fn update_venue_name(
         &mut self,
         name: String,
@@ -235,13 +232,12 @@ impl<'a> Queries<'a> {
     ) -> ydb::YdbResult<UpdateVenueNameRow> {
         let mut row = self
             .client
-            .query_row(concat!(
-                concat!(r"-- name: UpdateVenueName :one", "\x0a"),
-                concat!(r"UPDATE venue", "\x0a"),
-                concat!(r"SET name = $name", "\x0a"),
-                concat!(r"WHERE slug = $slug", "\x0a"),
-                r"RETURNING id;",
-            ))
+            .query_row(
+                r"UPDATE venue
+SET name = $name
+WHERE slug = $slug
+RETURNING id;",
+            )
             .param("$name", name)
             .param("$slug", slug)
             .await?;
@@ -250,18 +246,18 @@ impl<'a> Queries<'a> {
         })
     }
 
+    // -- name: VenueCountByCity :many
     pub async fn venue_count_by_city(&mut self) -> ydb::YdbResult<Vec<VenueCountByCityRow>> {
         let result_set = self
             .client
-            .query_result_set(concat!(
-                concat!(r"-- name: VenueCountByCity :many", "\x0a"),
-                concat!(r"SELECT", "\x0a"),
-                concat!(r"    city,", "\x0a"),
-                concat!(r"    COUNT(*) AS venue_count", "\x0a"),
-                concat!(r"FROM venue", "\x0a"),
-                concat!(r"GROUP BY city", "\x0a"),
-                r"ORDER BY city;",
-            ))
+            .query_result_set(
+                r"SELECT
+    city,
+    COUNT(*) AS venue_count
+FROM venue
+GROUP BY city
+ORDER BY city;",
+            )
             .await?;
         let mut rows = Vec::new();
         for mut row in result_set.rows() {

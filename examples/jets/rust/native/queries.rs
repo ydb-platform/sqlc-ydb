@@ -11,26 +11,22 @@ impl<'a> Queries<'a> {
         Self { client }
     }
 
+    // -- name: CountPilots :one
     pub async fn count_pilots(&mut self) -> ydb::YdbResult<CountPilotsRow> {
         let mut row = self
             .client
-            .query_row(concat!(
-                concat!(r"-- name: CountPilots :one", "\x0a"),
-                r"SELECT COUNT(*) AS pilot_count FROM pilots;",
-            ))
+            .query_row(r"SELECT COUNT(*) AS pilot_count FROM pilots;")
             .await?;
         Ok(CountPilotsRow {
             pilot_count: row.remove_field(0)?.try_into()?,
         })
     }
 
+    // -- name: ListPilots :many
     pub async fn list_pilots(&mut self) -> ydb::YdbResult<Vec<ListPilotsRow>> {
         let result_set = self
             .client
-            .query_result_set(concat!(
-                concat!(r"-- name: ListPilots :many", "\x0a"),
-                r"SELECT id, name FROM pilots ORDER BY id LIMIT 5;",
-            ))
+            .query_result_set(r"SELECT id, name FROM pilots ORDER BY id LIMIT 5;")
             .await?;
         let mut rows = Vec::new();
         for mut row in result_set.rows() {
@@ -42,12 +38,10 @@ impl<'a> Queries<'a> {
         Ok(rows)
     }
 
+    // -- name: DeletePilot :exec
     pub async fn delete_pilot(&mut self, pilot_id: i32) -> ydb::YdbResult<()> {
         self.client
-            .exec(concat!(
-                concat!(r"-- name: DeletePilot :exec", "\x0a"),
-                r"DELETE FROM pilots WHERE id = $pilot_id;",
-            ))
+            .exec(r"DELETE FROM pilots WHERE id = $pilot_id;")
             .param("$pilot_id", pilot_id)
             .await
     }
