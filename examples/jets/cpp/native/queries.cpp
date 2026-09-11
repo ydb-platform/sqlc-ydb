@@ -14,7 +14,8 @@ namespace jets::native {
 std::optional<CountPilotsRow> Queries::CountPilots() const {
     std::optional<NYdb::TResultSet> sqlc_result_set;
     const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 SELECT COUNT(*) AS pilot_count FROM pilots;
             )sql",
             sqlc_tx,
@@ -54,7 +55,8 @@ std::optional<CountPilotsRow> Queries::CountPilots() const {
 std::vector<ListPilotsRow> Queries::ListPilots() const {
     std::optional<NYdb::TResultSet> sqlc_result_set;
     const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 SELECT id, name FROM pilots ORDER BY id LIMIT 5;
             )sql",
             sqlc_tx,
@@ -98,7 +100,8 @@ void Queries::DeletePilot(std::int32_t pilot_id) const {
         auto sqlc_params = NYdb::TParamsBuilder()
             .AddParam("$pilot_id").Int32(pilot_id).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 DELETE FROM pilots WHERE id = $pilot_id;
             )sql",
             sqlc_tx,

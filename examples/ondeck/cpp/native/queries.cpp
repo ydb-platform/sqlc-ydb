@@ -14,7 +14,8 @@ namespace ondeck::native {
 std::vector<ListCitiesRow> Queries::ListCities() const {
     std::optional<NYdb::TResultSet> sqlc_result_set;
     const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 SELECT slug, name
                 FROM city
                 ORDER BY name;
@@ -61,7 +62,8 @@ std::optional<GetCityRow> Queries::GetCity(const std::string& slug) const {
         auto sqlc_params = NYdb::TParamsBuilder()
             .AddParam("$slug").Utf8(slug).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 SELECT slug, name
                 FROM city
                 WHERE slug = $slug;
@@ -109,7 +111,8 @@ std::optional<CreateCityRow> Queries::CreateCity(const std::string& name, const 
             .AddParam("$name").Utf8(name).Build()
             .AddParam("$slug").Utf8(slug).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 INSERT INTO city (
                     name,
                     slug
@@ -160,7 +163,8 @@ void Queries::UpdateCityName(const std::string& name, const std::string& slug) c
             .AddParam("$name").Utf8(name).Build()
             .AddParam("$slug").Utf8(slug).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 UPDATE city
                 SET name = $name
                 WHERE slug = $slug;
@@ -189,7 +193,8 @@ std::vector<ListVenuesRow> Queries::ListVenues(const std::string& city) const {
         auto sqlc_params = NYdb::TParamsBuilder()
             .AddParam("$city").Utf8(city).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
                 FROM venue
                 WHERE city = $city
@@ -245,7 +250,8 @@ void Queries::DeleteVenue(const std::string& slug) const {
         auto sqlc_params = NYdb::TParamsBuilder()
             .AddParam("$slug").Utf8(slug).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 DELETE FROM venue
                 WHERE slug = $slug AND slug = $slug;
             )sql",
@@ -274,7 +280,8 @@ std::optional<GetVenueRow> Queries::GetVenue(const std::string& slug, const std:
             .AddParam("$slug").Utf8(slug).Build()
             .AddParam("$city").Utf8(city).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
                 FROM venue
                 WHERE slug = $slug AND city = $city;
@@ -337,7 +344,8 @@ std::optional<CreateVenueRow> Queries::CreateVenue(std::uint64_t id, const std::
             .AddParam("$statuses").OptionalJson(statuses).Build()
             .AddParam("$tags").OptionalJson(tags).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 INSERT INTO venue (
                     id,
                     slug,
@@ -402,7 +410,8 @@ std::optional<UpdateVenueNameRow> Queries::UpdateVenueName(const std::string& na
             .AddParam("$name").Utf8(name).Build()
             .AddParam("$slug").Utf8(slug).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 UPDATE venue
                 SET name = $name
                 WHERE slug = $slug
@@ -446,7 +455,8 @@ std::optional<UpdateVenueNameRow> Queries::UpdateVenueName(const std::string& na
 std::vector<VenueCountByCityRow> Queries::VenueCountByCity() const {
     std::optional<NYdb::TResultSet> sqlc_result_set;
     const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 SELECT
                     city,
                     COUNT(*) AS venue_count

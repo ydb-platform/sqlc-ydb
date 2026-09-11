@@ -17,7 +17,8 @@ std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
         auto sqlc_params = NYdb::TParamsBuilder()
             .AddParam("$author_id").Uint64(author_id).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 SELECT id, name, bio FROM authors WHERE id = $author_id;
             )sql",
             sqlc_tx,
@@ -60,7 +61,8 @@ std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
 std::vector<ListAuthorsRow> Queries::ListAuthors() const {
     std::optional<NYdb::TResultSet> sqlc_result_set;
     const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 SELECT id, name, bio FROM authors ORDER BY name;
             )sql",
             sqlc_tx,
@@ -106,7 +108,8 @@ std::optional<GetAuthorNameRow> Queries::GetAuthorName(std::uint64_t author_id) 
         auto sqlc_params = NYdb::TParamsBuilder()
             .AddParam("$author_id").Uint64(author_id).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 SELECT name FROM authors WHERE id = $author_id;
             )sql",
             sqlc_tx,
@@ -152,7 +155,8 @@ std::optional<CreateAuthorRow> Queries::CreateAuthor(std::uint64_t author_id, co
             .AddParam("$author_name").Utf8(author_name).Build()
             .AddParam("$biography").OptionalUtf8(biography).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 INSERT INTO `authors` (`id`, `name`, `bio`)
                 VALUES ($author_id, $author_name, $biography)
                 RETURNING `id`, `name`, `bio`;
@@ -201,7 +205,8 @@ void Queries::UpsertAuthor(std::uint64_t author_id, const std::string& author_na
             .AddParam("$author_name").Utf8(author_name).Build()
             .AddParam("$biography").OptionalUtf8(biography).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 UPSERT INTO authors (id, name, bio)
                 VALUES ($author_id, $author_name, $biography);
             )sql",
@@ -228,7 +233,8 @@ void Queries::DeleteAuthor(std::uint64_t author_id) const {
         auto sqlc_params = NYdb::TParamsBuilder()
             .AddParam("$author_id").Uint64(author_id).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 DELETE FROM authors WHERE id = $author_id;
             )sql",
             sqlc_tx,

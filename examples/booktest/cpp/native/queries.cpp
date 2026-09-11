@@ -17,7 +17,8 @@ std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
         auto sqlc_params = NYdb::TParamsBuilder()
             .AddParam("$author_id").Uint64(author_id).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 SELECT author_id, name
                 FROM authors
                 WHERE author_id = $author_id;
@@ -64,7 +65,8 @@ std::optional<GetBookRow> Queries::GetBook(std::uint64_t book_id) const {
         auto sqlc_params = NYdb::TParamsBuilder()
             .AddParam("$book_id").Uint64(book_id).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
                 FROM books
                 WHERE book_id = $book_id;
@@ -116,7 +118,8 @@ void Queries::DeleteBook(std::uint64_t book_id) const {
         auto sqlc_params = NYdb::TParamsBuilder()
             .AddParam("$book_id").Uint64(book_id).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 DELETE FROM books
                 WHERE book_id = $book_id;
             )sql",
@@ -145,7 +148,8 @@ std::vector<BooksByTitleYearRow> Queries::BooksByTitleYear(const std::string& ti
             .AddParam("$title").Utf8(title).Build()
             .AddParam("$publication_year").Int32(publication_year).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
                 FROM books
                 WHERE title = $title AND publication_year = $publication_year;
@@ -199,7 +203,8 @@ std::vector<BooksByTagsRow> Queries::BooksByTags(const std::string& tags) const 
         auto sqlc_params = NYdb::TParamsBuilder()
             .AddParam("$tags").Json(tags).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 DECLARE $tags AS Json;
                 SELECT
                     b.book_id,
@@ -261,7 +266,8 @@ std::optional<CreateAuthorRow> Queries::CreateAuthor(std::uint64_t author_id, co
             .AddParam("$author_id").Uint64(author_id).Build()
             .AddParam("$name").Utf8(name).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 INSERT INTO authors (author_id, name)
                 VALUES ($author_id, $name)
                 RETURNING author_id, name;
@@ -315,7 +321,8 @@ std::optional<CreateBookRow> Queries::CreateBook(std::uint64_t book_id, std::uin
             .AddParam("$available").Timestamp(available).Build()
             .AddParam("$tags").Json(tags).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 INSERT INTO books (
                     book_id,
                     author_id,
@@ -386,7 +393,8 @@ void Queries::UpdateBook(const std::string& title, const std::string& tags, std:
             .AddParam("$tags").Json(tags).Build()
             .AddParam("$book_id").Uint64(book_id).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 UPDATE books
                 SET title = $title, tags = $tags
                 WHERE book_id = $book_id;
@@ -417,7 +425,8 @@ void Queries::UpdateBookISBN(const std::string& title, const std::string& tags, 
             .AddParam("$isbn").Utf8(isbn).Build()
             .AddParam("$book_id").Uint64(book_id).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 UPDATE books
                 SET title = $title, tags = $tags, isbn = $isbn
                 WHERE book_id = $book_id;
@@ -446,7 +455,8 @@ void Queries::DeleteAuthorBeforeYear(std::int32_t publication_year, std::uint64_
             .AddParam("$publication_year").Int32(publication_year).Build()
             .AddParam("$author_id").Uint64(author_id).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 DELETE FROM books
                 WHERE publication_year < $publication_year AND author_id = $author_id;
             )sql",
@@ -474,7 +484,8 @@ std::optional<SayHelloRow> Queries::SayHello(const std::string& name) const {
         auto sqlc_params = NYdb::TParamsBuilder()
             .AddParam("$name").Utf8(name).Build()
             .Build();
-        auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
                 SELECT "hello "u || $name AS greeting;
             )sql",
             sqlc_tx,
