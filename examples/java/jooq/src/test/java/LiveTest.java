@@ -83,6 +83,7 @@ class LiveTest {
             assertTrue(queries.getAuthor(ULong.MAX).isEmpty());
             fixture.connection.setAutoCommit(false);
             queries.upsertAuthor(ULong.valueOf(1), "rollback", null);
+            assertEquals("rollback", queries.getAuthor(ULong.valueOf(1)).orElseThrow().name());
             fixture.connection.rollback();
             fixture.connection.setAutoCommit(true);
             assertTrue(queries.getAuthor(ULong.valueOf(1)).isEmpty());

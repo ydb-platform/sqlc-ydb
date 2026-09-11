@@ -66,6 +66,13 @@ def main():
                 )
                 try:
                     check(DBAPIQuerier(connection))
+                    connection.set_isolation_level(ydb_dbapi.IsolationLevel.SERIALIZABLE)
+                    connection.begin()
+                    transactional = DBAPIQuerier(connection)
+                    transactional.upsert_author(42, "transaction", None)
+                    assert transactional.get_author(42).name == "transaction"
+                    connection.rollback()
+                    assert transactional.get_author(42) is None
                 finally:
                     connection.close()
                 print("DB-API: passed", flush=True)
@@ -73,6 +80,13 @@ def main():
                 try:
                     with engine.begin() as connection:
                         check(SQLAlchemyQuerier(connection))
+                    with engine.connect().execution_options(isolation_level="SERIALIZABLE") as connection:
+                        transaction = connection.begin()
+                        transactional = SQLAlchemyQuerier(connection)
+                        transactional.upsert_author(42, "transaction", None)
+                        assert transactional.get_author(42).name == "transaction"
+                        transaction.rollback()
+                        assert transactional.get_author(42) is None
                 finally:
                     engine.dispose()
                 print("SQLAlchemy: passed", flush=True)

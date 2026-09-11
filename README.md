@@ -44,19 +44,36 @@ YQL coverage and generated API differences.
 
 ## Supported targets
 
-Each link opens the authors example for the selected SDK or framework:
+| Language | Framework | Single Query | Multiple Queries in One Transaction |
+| --- | --- | --- | --- |
+| Go | YDB Query SDK | [Test](examples/authors/go/smoke_test.go#L18) | [Test](examples/authors/go/smoke_test.go#L94) |
+| Go | database/sql | [Test](examples/authors/go/smoke_test.go#L45) | [Test](examples/authors/go/smoke_test.go#L120) |
+| Python | YDB Query SDK | [Test](examples/authors/python/smoke.py#L23) | [Test](examples/authors/python/smoke.py#L36) |
+| Python | DB-API | [Test](examples/authors/python/smoke.py#L68) | [Test](examples/authors/python/smoke.py#L69) |
+| Python | SQLAlchemy | [Test](examples/authors/python/smoke.py#L82) | [Test](examples/authors/python/smoke.py#L83) |
+| C++ | YDB Query SDK | [Test](examples/authors/cpp/native/main.cpp#L100) | [Test](examples/authors/cpp/native/main.cpp#L116) |
+| C++ | userver | [Test](examples/authors/cpp/userver/smoke_handler.cpp#L60) | [Test](examples/authors/cpp/userver/smoke_handler.cpp#L80) |
+| C# | ADO.NET | [Test](examples/authors/csharp/adonet/Smoke.cs#L14) | [Test](examples/authors/csharp/adonet/Smoke.cs#L34) |
+| C# | Dapper | [Test](examples/csharp/Program.cs#L167) | [Test](examples/csharp/Program.cs#L178) |
+| C# | linq2db | [Test](examples/csharp/Program.cs#L190) | [Test](examples/csharp/Program.cs#L199) |
+| Java | YDB Query SDK | [Test](examples/authors/java/native/src/test/java/authors/nativeapi/Smoke.java#L42) | [Test](examples/authors/java/native/src/test/java/authors/nativeapi/Smoke.java#L31) |
+| Java | JDBC | [Test](examples/authors/java/jdbc/src/test/java/authors/jdbc/Smoke.java#L39) | [Test](examples/authors/java/jdbc/src/test/java/authors/jdbc/Smoke.java#L27) |
+| Java | jOOQ | [Test](examples/java/jooq/src/test/java/LiveTest.java#L73) | [Test](examples/java/jooq/src/test/java/LiveTest.java#L84) |
+| Kotlin | YDB Query SDK | [Test](examples/authors/kotlin/src/test/kotlin/authors/smoke/Smoke.kt#L37) | [Test](examples/authors/kotlin/src/test/kotlin/authors/smoke/Smoke.kt#L63) |
+| Kotlin | JDBC | [Test](examples/authors/kotlin/src/test/kotlin/authors/smoke/Smoke.kt#L94) | [Test](examples/authors/kotlin/src/test/kotlin/authors/smoke/Smoke.kt#L95) |
+| Kotlin | Exposed | [Test](examples/authors/kotlin/src/test/kotlin/authors/smoke/Smoke.kt#L122) | [Test](examples/authors/kotlin/src/test/kotlin/authors/smoke/Smoke.kt#L129) |
+| TypeScript | YDB Query SDK | [Test](examples/typescript/smoke.mjs#L34) | [Test](examples/typescript/smoke.mjs#L48) |
+| Rust | YDB Query SDK | [Test](examples/rust/tests/live_smoke.rs#L77) | [Test](examples/rust/tests/live_smoke.rs#L94) |
+| PHP | YDB SDK | [Test](examples/php/live.php#L63) | — |
 
-| Language | SDK / framework examples |
-| --- | --- |
-| Go | [YDB native SDK](examples/authors/go/native), [database/sql](examples/authors/go/database/sql) |
-| Python | [YDB native SDK](examples/authors/python/native), [DB-API](examples/authors/python/dbapi), [SQLAlchemy](examples/authors/python/sqlalchemy) |
-| C++ | [YDB native SDK](examples/authors/cpp/native), [userver](examples/authors/cpp/userver) |
-| C# | [ADO.NET](examples/authors/csharp/adonet), [Dapper](examples/authors/csharp/dapper), [linq2db](examples/authors/csharp/linq2db) |
-| Java | [YDB native SDK](examples/authors/java/native), [JDBC](examples/authors/java/jdbc), [jOOQ](examples/java/jooq) |
-| Kotlin | [YDB Query SDK, JDBC and Exposed](examples/authors/kotlin) |
-| TypeScript | [YDB JavaScript SDK configuration](examples/authors/sqlc.yaml) |
-| Rust | [YDB native SDK](examples/authors/rust/native) |
-| PHP | [YDB native SDK](examples/authors/php/native) |
+Links open integration tests using generated helpers. A single-query example
+shows an individual helper call; a transaction example shares one transaction
+across several calls. The caller owns transaction boundaries and retries.
+These suites run in [CI](.github/workflows/ci.yml) against disposable YDB;
+locally, live tests require `YDB_CONNECTION_STRING`.
+
+A dash means unsupported. [PHP transaction support](docs/php.md) requires a
+raw-result API in the SDK that can join an existing transaction.
 
 All targets are built into the executable. Only the generated application needs
 the selected runtime library. Configuration, generated APIs and type coverage

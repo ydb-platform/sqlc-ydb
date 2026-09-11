@@ -24,6 +24,12 @@ public final class Smoke {
             try {
                 Queries queries = new Queries(connection);
                 exercise(queries);
+                connection.setAutoCommit(false);
+                queries.upsertAuthor(42, "transaction", null);
+                check("transaction".equals(queries.getAuthor(42).orElseThrow().name()), "transaction read");
+                connection.rollback();
+                connection.setAutoCommit(true);
+                check(queries.getAuthor(42).isEmpty(), "transaction rollback");
             } finally {
                 try (var statement = connection.createStatement()) { statement.execute("DROP TABLE authors;"); }
             }

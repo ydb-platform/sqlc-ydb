@@ -1,11 +1,15 @@
 package authors_test
 
 import (
+	"context"
+	"database/sql"
+	"errors"
 	"testing"
 
 	sq "example.com/sqlc-ydb-examples/authors/go/database/sql"
 	native "example.com/sqlc-ydb-examples/authors/go/native"
 	"example.com/sqlc-ydb-examples/internal/testdb"
+	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 
 // TestGeneratedExample executes the actual CLI-generated example. It requires a
@@ -83,5 +87,53 @@ func TestGeneratedExample(t *testing.T) {
 				t.Fatal("expected missing-row error")
 			}
 		})
+	}
+}
+
+// TestSharedTransactions verifies read-your-writes and rollback for both runtimes.
+func TestSharedTransactions(t *testing.T) {
+	db := testdb.Open(t)
+	db.Apply(t, "../schema.sql", "DROP TABLE authors;")
+	ctx := db.Context
+	aborted := errors.New("rollback generated calls")
+	err := db.Native.DoTx(ctx, func(ctx context.Context, tx query.TxActor) error {
+		q := native.New(tx)
+		if err := q.UpsertAuthor(ctx, native.UpsertAuthorParams{AuthorID: 42, AuthorName: "transaction"}); err != nil {
+			return err
+		}
+		row, err := q.GetAuthor(ctx, 42)
+		if err != nil {
+			return err
+		}
+		if row.Name != "transaction" {
+			return errors.New("transaction did not read its write")
+		}
+		return aborted
+	})
+	if !errors.Is(err, aborted) {
+		t.Fatalf("rollback: %v", err)
+	}
+	rows, err := native.New(db.Native).ListAuthors(ctx)
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("native rollback: %v %v", rows, err)
+	}
+	tx, err := db.SQL.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	q := sq.New(db.SQL).WithTx(tx)
+	if err := q.UpsertAuthor(ctx, sq.UpsertAuthorParams{AuthorID: 42, AuthorName: "transaction"}); err != nil {
+		t.Fatal(err)
+	}
+	row, err := q.GetAuthor(ctx, 42)
+	if err != nil || row.Name != "transaction" {
+		t.Fatalf("transaction read: %v %v", row, err)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sq.New(db.SQL).GetAuthor(ctx, 42); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("SQL rollback: %v", err)
 	}
 }

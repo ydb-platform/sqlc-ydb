@@ -54,6 +54,15 @@ executors in addition to their standalone retry clients. C#, native Java and
 JDBC use the caller's connection or transaction. Generated DB-API code closes
 its own cursors and does not commit caller-owned transactions. The
 language-specific pages document the remaining runtime ownership contracts.
+The [README matrix](../README.md#supported-targets) links directly to integration
+tests for individual calls and multiple calls in one transaction.
+
+For Python DB-API, select `IsolationLevel.SERIALIZABLE` and call `begin()` before
+constructing or using the transaction's `Querier`; the driver's default is
+`AUTOCOMMIT`. For SQLAlchemy, set `isolation_level="SERIALIZABLE"` on the connection
+before `begin()`. A transaction block alone does not override the YDB driver's
+autocommit isolation. The [Python smoke](../examples/authors/python/smoke.py)
+checks read-your-writes and rollback for all three runtimes.
 
 Python row decoding follows the selected runtime: native YDB rows are indexed by
 column name, DB-API rows by position, and SQLAlchemy rows through `row._mapping`.

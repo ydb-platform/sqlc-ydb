@@ -173,6 +173,16 @@ internal static class Program
         var fetched = await queries.GetAuthorAsync(id, cancellationToken);
         if (created.ID != id || created.Bio is not null || fetched.Name != "Ada Lovelace" || fetched.Bio != "programmer" || (await queries.ListAuthorsAsync(cancellationToken)).Single().ID != id)
             throw new InvalidOperationException("authors Dapper CRUD mapping changed");
+        await using (var transaction = (YdbTransaction)await connection.BeginTransactionAsync(cancellationToken))
+        {
+            var transactional = queries.WithTransaction(transaction);
+            await transactional.UpsertAuthorAsync(new AuthorsDapper.UpsertAuthorParams(id, "transaction", null), cancellationToken);
+            if ((await transactional.GetAuthorAsync(id, cancellationToken)).Name != "transaction")
+                throw new InvalidOperationException("Dapper transaction did not read its write");
+            await transaction.RollbackAsync(cancellationToken);
+        }
+        if ((await queries.GetAuthorAsync(id, cancellationToken)).Name != "Ada Lovelace")
+            throw new InvalidOperationException("Dapper rollback changed committed data");
         await queries.DeleteAuthorAsync(id, cancellationToken);
         await AssertMissingAsync(() => queries.GetAuthorAsync(id, cancellationToken));
     }
@@ -186,6 +196,15 @@ internal static class Program
         var fetched = await queries.GetAuthorAsync(id, cancellationToken);
         if (created.ID != id || created.Bio is not null || fetched.Name != "Ada Lovelace" || fetched.Bio != "programmer" || (await queries.ListAuthorsAsync(cancellationToken)).Single().ID != id)
             throw new InvalidOperationException("authors linq2db CRUD mapping changed");
+        await using (var transaction = await db.BeginTransactionAsync(cancellationToken))
+        {
+            await queries.UpsertAuthorAsync(new AuthorsLinq2DB.UpsertAuthorParams(id, "transaction", null), cancellationToken);
+            if ((await queries.GetAuthorAsync(id, cancellationToken)).Name != "transaction")
+                throw new InvalidOperationException("linq2db transaction did not read its write");
+            await transaction.RollbackAsync(cancellationToken);
+        }
+        if ((await queries.GetAuthorAsync(id, cancellationToken)).Name != "Ada Lovelace")
+            throw new InvalidOperationException("linq2db rollback changed committed data");
         await queries.DeleteAuthorAsync(id, cancellationToken);
         await AssertMissingAsync(() => queries.GetAuthorAsync(id, cancellationToken));
     }

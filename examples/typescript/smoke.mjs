@@ -44,6 +44,15 @@ async function runAuthors() {
     assert.equal((await queries.getAuthor(id)).bio, "programmer");
     await queries.deleteAuthor(id);
     assert.equal(await queries.getAuthor(id), null);
+    const aborted = new Error("rollback generated calls");
+    await assert.rejects(client.transaction(async (tx, signal) => {
+      const transactional = new AuthorQueries(tx);
+      const configure = (stmt) => { stmt.signal(signal); };
+      await transactional.upsertAuthor({ authorId: id, authorName: "transaction", biography: null }, configure);
+      assert.equal((await transactional.getAuthor(id, configure)).name, "transaction");
+      throw aborted;
+    }), (error) => error.cause === aborted);
+    assert.equal(await queries.getAuthor(id), null);
   } finally {
     await dropTables(["authors"]);
   }

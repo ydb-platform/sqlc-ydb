@@ -31,6 +31,16 @@ public static class Smoke
         IReadOnlyList<ListAuthorsRow> authors = await queries.ListAuthorsAsync(cancellationToken);
         if (!authors.Any(row => row.ID == id && row.Bio == "present"))
             throw new InvalidOperationException(":many mapping changed");
+        await using (var transaction = (YdbTransaction)await connection.BeginTransactionAsync(cancellationToken))
+        {
+            var transactional = queries.WithTransaction(transaction);
+            await transactional.UpsertAuthorAsync(new UpsertAuthorParams(id, "transaction", null), cancellationToken);
+            if ((await transactional.GetAuthorAsync(id, cancellationToken)).Name != "transaction")
+                throw new InvalidOperationException("transaction did not read its write");
+            await transaction.RollbackAsync(cancellationToken);
+        }
+        if ((await queries.GetAuthorAsync(id, cancellationToken)).Name != "sqlc-ydb C# smoke")
+            throw new InvalidOperationException("transaction rollback changed committed data");
         await queries.DeleteAuthorAsync(id, cancellationToken);
         try
         {
