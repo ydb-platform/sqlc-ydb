@@ -72,9 +72,9 @@ impl<'a> Queries<'a> {
             .client
             .query_result_set(concat!(
                 concat!(r"-- name: CreateAuthor :one", "\x0a"),
-                concat!(r"INSERT INTO authors (id, name, bio)", "\x0a"),
+                concat!(r"INSERT INTO `authors` (`id`, `name`, `bio`)", "\x0a"),
                 concat!(r"VALUES ($author_id, $author_name, $biography)", "\x0a"),
-                r"RETURNING id, name, bio;",
+                r"RETURNING `id`, `name`, `bio`;",
             ))
             .param("$author_id", author_id)
             .param("$author_name", author_name)
