@@ -16,7 +16,7 @@ let mut queries = generated::queries::Queries::new(&mut query_client);
 ```
 
 Each generated method executes one statement through the Query Service API.
-`:exec` uses `QueryClient::exec`; `:one` and `:many` use
+`:exec` uses `QueryClient::exec`; `:one` uses `query_row`, and `:many` uses
 `query_result_set`. `:one` returns the first row, matching the sqlc contract;
 it reports `YdbError::NoRows` for an empty result. These one-shot SDK operations acquire their own session,
 choose the server-side transaction mode, drain the response, and apply the
@@ -50,6 +50,10 @@ handles qualified result names produced by joins. Missing columns, nullability
 mismatches, unexpected wire types and no rows for `:one`
 are returned as `ydb::YdbError`; generated code does not substitute
 defaults.
+
+`:many` decodes rows with a fallible iterator collected into a `Vec`, returning
+the first decoding error. Result structs also derive `Copy` when all their fields
+are copyable, including optional scalars and timestamps.
 
 SQL is emitted as readable Rust raw strings without `DECLARE` statements because
 the generated typed SDK parameters supply their YQL types. The delimiter grows

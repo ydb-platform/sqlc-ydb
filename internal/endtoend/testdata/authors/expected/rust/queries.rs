@@ -11,17 +11,13 @@ impl<'a> Queries<'a> {
         Self { client }
     }
 
-    pub async fn get_author(&mut self, author_id: u64) -> ydb::YdbResult<GetAuthorRow> {
-        let call = self
+    // -- name: GetAuthor :one
+    pub async fn author(&mut self, author_id: u64) -> ydb::YdbResult<GetAuthorRow> {
+        let mut row = self
             .client
-            .query_result_set(concat!(
-                concat!(r"-- name: GetAuthor :one", "\x0a"),
-                "\x0a",
-                r"SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;",
-            ))
-            .param("$author_id", author_id);
-        let result_set = call.await?;
-        let mut row = result_set.rows().next().ok_or(ydb::YdbError::NoRows)?;
+            .query_row(r"SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;")
+            .param("$author_id", author_id)
+            .await?;
         Ok(GetAuthorRow {
             id: row.remove_field(0)?.try_into()?,
             name: row.remove_field(1)?.try_into()?,

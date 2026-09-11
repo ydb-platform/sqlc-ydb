@@ -121,7 +121,14 @@ func renderModels(in *model.AnalysisResult) string {
 		if q.Command != model.One && q.Command != model.Many {
 			continue
 		}
-		fmt.Fprintf(&b, "#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]\npub struct %sRow {\n", pascalName(q.Name))
+		copyDerive := ", Copy"
+		for _, c := range q.ResultSets[0].Columns {
+			switch strings.ToLower(c.Type.UnwrapOptional().Kind) {
+			case "utf8", "json", "jsondocument", "string", "yson":
+				copyDerive = ""
+			}
+		}
+		fmt.Fprintf(&b, "#[derive(Debug, Clone%s, PartialEq, Eq, Hash, PartialOrd, Ord)]\npub struct %sRow {\n", copyDerive, pascalName(q.Name))
 		for _, c := range q.ResultSets[0].Columns {
 			t, _ := rustType(c.Type)
 			fmt.Fprintf(&b, "    pub %s: %s,\n", snakeName(c.Name), t)
@@ -212,12 +219,10 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 	}
 	if q.Command == model.One {
 		b.WriteString("        let mut row = ")
-	} else if q.Command == model.Many {
-		b.WriteString("        let result_set = ")
 	} else {
 		b.WriteString("        self.client")
 	}
-	if q.Command != model.Exec {
+	if q.Command == model.One {
 		b.WriteString("self\n            .client")
 	}
 	sql := querySQL(q)
@@ -240,9 +245,9 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 		renderRow(b, q, "")
 		b.WriteString(")\n")
 	case model.Many:
-		b.WriteString("\n            .await?;\n        let mut rows = Vec::new();\n        for mut row in result_set.rows() {\n            rows.push(")
-		renderRow(b, q, "    ")
-		b.WriteString(");\n        }\n        Ok(rows)\n")
+		b.WriteString("\n            .await?\n            .rows()\n            .map(|mut row| {\n                Ok(")
+		renderRow(b, q, "        ")
+		b.WriteString(")\n            })\n            .collect()\n")
 	}
 	b.WriteString("    }\n")
 }

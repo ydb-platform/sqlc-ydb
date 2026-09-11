@@ -50,7 +50,8 @@ func TestGenerateYDBQuerierUsesNativeQueryClientContract(t *testing.T) {
 		`.param("$id", id)`,
 		"row.remove_field(0)?.try_into()?",
 		".query_result_set(",
-		"for mut row in result_set.rows()",
+		".rows()\n            .map(|mut row| {",
+		".collect()",
 		".exec(r\"UPDATE books SET tags = $tags WHERE id = $id;\")",
 		`.param("$tags", JsonParam(tags))`,
 	} {
@@ -62,6 +63,32 @@ func TestGenerateYDBQuerierUsesNativeQueryClientContract(t *testing.T) {
 	for _, want := range []string{"#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]", "pub id: u64", "pub title: String", "pub tags: String", "pub available: std::time::SystemTime", "pub subtitle: Option<String>"} {
 		if !strings.Contains(models, want) {
 			t.Errorf("generated models missing %q:\n%s", want, models)
+		}
+	}
+}
+
+func TestResultCopyDerive(t *testing.T) {
+	for _, kind := range []string{"Bool", "Int64", "Uint64", "Timestamp", "Utf8", "Json", "JsonDocument", "String", "Yson"} {
+		for _, optional := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/optional=%t", kind, optional), func(t *testing.T) {
+				typ := model.Type{Kind: kind}
+				if optional {
+					typ = model.Optional(typ)
+				}
+				in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+					Name: "Result", Command: model.One, SQL: "SELECT value FROM test;",
+					ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "value", Type: typ}}}},
+				}}}
+				files, err := Generate(in, Options{})
+				if err != nil {
+					t.Fatal(err)
+				}
+				wantCopy := kind == "Bool" || kind == "Int64" || kind == "Uint64" || kind == "Timestamp"
+				models := generatedFile(t, files, "models.rs")
+				if strings.Contains(models, ", Copy,") != wantCopy {
+					t.Fatalf("unexpected Copy derive:\n%s", models)
+				}
+			})
 		}
 	}
 }
