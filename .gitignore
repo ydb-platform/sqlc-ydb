@@ -28,7 +28,9 @@ examples/php/vendor/
 /examples/*/typescript/native/
 /examples/*/rust/native/
 /examples/*/php/native/
-/examples/*/kotlin/src/generated/kotlin/
+/examples/*/kotlin/nativeapi/
+/examples/*/kotlin/jdbc/
+/examples/*/kotlin/exposed/
 
 /examples/.typescript-build/
 

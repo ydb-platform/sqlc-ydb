@@ -8,7 +8,7 @@ the resolved SQL types. Select `runtime: ydb` (default), `jdbc`, or `exposed`;
 gen:
   kotlin:
     package: authors.exposed
-    out: kotlin/src/generated/kotlin/authors/exposed
+    out: kotlin/exposed
     runtime: exposed
 ```
 

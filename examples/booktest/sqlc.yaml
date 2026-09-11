@@ -7,7 +7,7 @@ sql:
     gen:
       kotlin:
         package: booktest.nativeapi
-        out: kotlin/src/generated/kotlin/booktest/nativeapi
+        out: kotlin/nativeapi
         runtime: ydb
       php:
         out: php/native

@@ -7,7 +7,7 @@ sql:
     gen:
       kotlin:
         package: jets.nativeapi
-        out: kotlin/src/generated/kotlin/jets/nativeapi
+        out: kotlin/nativeapi
         runtime: ydb
       php:
         out: php/native
