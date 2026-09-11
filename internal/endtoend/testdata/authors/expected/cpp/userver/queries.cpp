@@ -6,10 +6,10 @@
 
 namespace authors::userver {
 
+// -- name: GetAuthor :one
 std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
     auto sqlc_response = this->client_.ExecuteQuery(
         ::userver::ydb::Query{R"sql(
-            -- name: GetAuthor :one
             DECLARE $author_id AS Uint64;
             SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;
         )sql",

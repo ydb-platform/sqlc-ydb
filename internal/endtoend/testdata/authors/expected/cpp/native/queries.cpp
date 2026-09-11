@@ -10,6 +10,7 @@
 
 namespace authors::native {
 
+// -- name: GetAuthor :one
 std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
     std::optional<NYdb::TResultSet> sqlc_result_set;
     const auto sqlc_status = this->client_.RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
@@ -17,7 +18,6 @@ std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
             .AddParam("$author_id").Uint64(author_id).Build()
             .Build();
         auto sqlc_result = sqlc_session.ExecuteQuery(R"sql(
-                -- name: GetAuthor :one
                 DECLARE $author_id AS Uint64;
                 SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;
             )sql",

@@ -15,11 +15,11 @@ class Querier:
     def __init__(self, connection: Connection):
         self._connection = connection
 
+    # -- name: ListAuthorBooks :many
     def list_author_books(self) -> Iterable[_models.ListAuthorBooksRow]:
         parameters = {}
         result = self._connection.execute(_text(
-            ("-- name\\: ListAuthorBooks \\:many\n"
-             "SELECT a.id AS author_id, a.name AS author_name, b.title AS book_title\n"
+            ("SELECT a.id AS author_id, a.name AS author_name, b.title AS book_title\n"
              "FROM authors AS a JOIN books AS b ON a.id = b.author_id;")), parameters)
         try:
             rows = result.fetchall()

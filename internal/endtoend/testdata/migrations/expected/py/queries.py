@@ -15,11 +15,11 @@ class Querier:
     def __init__(self, connection: Connection):
         self._connection = connection
 
+    # -- name: GetAuthor :one
     def get_author(self, id: int) -> Optional[_models.Author]:
         parameters = {"id": _typed(id, _ydb.PrimitiveType.Uint64)}
         result = self._connection.execute(_text(
-            ("-- name\\: GetAuthor \\:one\n"
-             "DECLARE $id AS Uint64;\n"
+            ("DECLARE $id AS Uint64;\n"
              "SELECT * FROM authors WHERE id = :id;")), parameters)
         try:
             rows = result.fetchall()

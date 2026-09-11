@@ -13,10 +13,10 @@ public final class Queries {
         this.client = java.util.Objects.requireNonNull(client);
     }
 
+    // -- name: GetAuthor :one
     public java.util.Optional<GetAuthorRow> getAuthor(long authorId) throws java.sql.SQLException {
         try (var _prepared = client.prepareStatement("""
             DECLARE $author_id AS Uint64;
-            -- name: GetAuthor :one
               \s
             SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;\
             """)) {

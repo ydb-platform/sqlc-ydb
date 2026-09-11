@@ -22,6 +22,7 @@ final class Queries
         }
     }
 
+    // -- name: GetAuthor :one
     public function getAuthor(string $authorId): ?GetAuthorRow
     {
         $parameters = [
@@ -29,7 +30,6 @@ final class Queries
         ];
         $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
-                -- name: GetAuthor :one
                 DECLARE $author_id AS Uint64;
                 SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;
                 SQLC_YDB_YQL)

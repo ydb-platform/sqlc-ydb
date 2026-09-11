@@ -18,9 +18,9 @@ export class Queries {
     this.#sql = sql;
   }
 
+  // -- name: GetAuthor :one
   async getAuthor(authorId: bigint, configure?: ConfigureQuery): Promise<GetAuthorRow | null> {
-    const stmt = this.#sql<[GetAuthorRow]>`-- name: GetAuthor :one
-      SELECT \`id\`, \`name\`, \`bio\` FROM \`authors\` WHERE \`id\` = $author_id;`
+    const stmt = this.#sql<[GetAuthorRow]>`SELECT \`id\`, \`name\`, \`bio\` FROM \`authors\` WHERE \`id\` = $author_id;`
       .parameter("author_id", new Uint64(authorId));
     configure?.(stmt);
     const [rows] = await stmt;

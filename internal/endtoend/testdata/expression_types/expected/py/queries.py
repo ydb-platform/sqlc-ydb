@@ -13,11 +13,11 @@ class Querier:
     def __init__(self, pool: _ydb.QuerySessionPool):
         self._pool = pool
 
+    # -- name: NormalizeProfiles :many
     def normalize_profiles(self, fallback: str, minimum_score: int, use_nickname: bool) -> Iterable[_models.NormalizeProfilesRow]:
         parameters = {"$fallback": _typed(fallback, _ydb.PrimitiveType.Utf8),"$minimum_score": _typed(minimum_score, _ydb.PrimitiveType.Int32),"$use_nickname": _typed(use_nickname, _ydb.PrimitiveType.Bool)}
         result_sets = self._pool.execute_with_retries(
-            ("-- name: NormalizeProfiles :many\n"
-             "DECLARE $fallback AS Utf8;\n"
+            ("DECLARE $fallback AS Utf8;\n"
              "DECLARE $minimum_score AS Int32;\n"
              "DECLARE $use_nickname AS Bool;\n"
              "SELECT\n"

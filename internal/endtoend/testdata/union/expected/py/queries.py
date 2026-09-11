@@ -13,11 +13,11 @@ class Querier:
     def __init__(self, pool: _ydb.QuerySessionPool):
         self._pool = pool
 
+    # -- name: DistinctLabels :many
     def distinct_labels(self) -> Iterable[_models.DistinctLabelsRow]:
         parameters = {}
         result_sets = self._pool.execute_with_retries(
-            ("-- name: DistinctLabels :many\n"
-             "SELECT id, label FROM local_labels\n"
+            ("SELECT id, label FROM local_labels\n"
              "UNION\n"
              "SELECT id, label FROM imported_labels;"), parameters)
         rows = result_sets[0].rows
@@ -26,11 +26,11 @@ class Querier:
             label=row["label"],
         ) for row in rows)
 
+    # -- name: QualifiedMissing :many
     def qualified_missing(self) -> Iterable[_models.QualifiedMissingRow]:
         parameters = {}
         result_sets = self._pool.execute_with_retries(
-            ("-- name: QualifiedMissing :many\n"
-             "SELECT a.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id\n"
+            ("SELECT a.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id\n"
              "UNION ALL\n"
              "SELECT b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id;"), parameters)
         rows = result_sets[0].rows
@@ -39,11 +39,11 @@ class Querier:
             b_id=row["b.id"],
         ) for row in rows)
 
+    # -- name: QualifiedNames :many
     def qualified_names(self) -> Iterable[_models.QualifiedNamesRow]:
         parameters = {}
         result_sets = self._pool.execute_with_retries(
-            ("-- name: QualifiedNames :many\n"
-             "SELECT a.id, b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id\n"
+            ("SELECT a.id, b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id\n"
              "UNION ALL\n"
              "SELECT a.id, b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id;"), parameters)
         rows = result_sets[0].rows
@@ -52,11 +52,11 @@ class Querier:
             b_id=row["b.id"],
         ) for row in rows)
 
+    # -- name: AllLabels :many
     def all_labels(self) -> Iterable[_models.AllLabelsRow]:
         parameters = {}
         result_sets = self._pool.execute_with_retries(
-            ("-- name: AllLabels :many\n"
-             "SELECT id, label FROM local_labels\n"
+            ("SELECT id, label FROM local_labels\n"
              "UNION ALL\n"
              "SELECT id, label FROM imported_labels;"), parameters)
         rows = result_sets[0].rows

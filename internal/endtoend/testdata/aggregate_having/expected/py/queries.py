@@ -13,11 +13,11 @@ class Querier:
     def __init__(self, pool: _ydb.QuerySessionPool):
         self._pool = pool
 
+    # -- name: ColdCities :many
     def cold_cities(self, maximum_temperature: int) -> Iterable[_models.ColdCitiesRow]:
         parameters = {"$maximum_temperature": _typed(maximum_temperature, _ydb.PrimitiveType.Int32)}
         result_sets = self._pool.execute_with_retries(
-            ("-- name: ColdCities :many\n"
-             "DECLARE $maximum_temperature AS Int32;\n"
+            ("DECLARE $maximum_temperature AS Int32;\n"
              "SELECT city, COUNT(*) AS reading_count, MAX(temperature) AS hottest_temperature\n"
              "FROM weather\n"
              "GROUP BY city\n"
