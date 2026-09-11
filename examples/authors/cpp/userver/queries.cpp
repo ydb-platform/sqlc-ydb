@@ -72,9 +72,9 @@ std::optional<CreateAuthorRow> Queries::CreateAuthor(std::uint64_t author_id, co
     auto sqlc_response = this->client_.ExecuteQuery(
         ::userver::ydb::Query{R"sql(
             -- name: CreateAuthor :one
-            INSERT INTO authors (id, name, bio)
+            INSERT INTO `authors` (`id`, `name`, `bio`)
             VALUES ($author_id, $author_name, $biography)
-            RETURNING id, name, bio;
+            RETURNING `id`, `name`, `bio`;
         )sql",
             ::userver::ydb::Query::Name{"CreateAuthor"},
             ::userver::ydb::Query::LogMode::kNameOnly,
