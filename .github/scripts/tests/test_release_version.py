@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -10,6 +11,31 @@ import unittest
 SCRIPT = Path(__file__).resolve().parent.parent / "release-version.py"
 PENDING = "### Added\n\n- New release behavior."
 OLD_SECTION = "## v1.2.3\n\n### Fixed\n\n- Previous fix.\n"
+
+
+class ReleaseBinaryValidationTests(unittest.TestCase):
+    def test_check_skips_remote_version_notice(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binary = root / "sqlc-ydb"
+            binary.write_text(
+                '#!/bin/sh\nprintf "1.2.3\\n"\n'
+                'if [ "$*" != "version --no-remote" ]; then\n'
+                '  printf "New version available: 2.0.0\\n"\nfi\n',
+                encoding="utf-8",
+            )
+            binary.chmod(0o755)
+            changelog = root / "CHANGELOG.md"
+            changelog.write_text("# Changelog\n\n" + OLD_SECTION, encoding="utf-8")
+            result = subprocess.run(
+                ["bash", str(SCRIPT.parent / "release"), "check", "v1.2.3", str(root / "notes.md")],
+                cwd=SCRIPT.parents[2],
+                env={**os.environ, "SQLC_YDB_RELEASE_BINARY": str(binary), "SQLC_YDB_CHANGELOG": str(changelog)},
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Previous fix.", (root / "notes.md").read_text())
 
 
 class ReleaseRepo:

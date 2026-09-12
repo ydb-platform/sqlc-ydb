@@ -216,16 +216,29 @@ func (c *Client) Update(ctx context.Context, current string) (Result, error) {
 	if err := ctx.Err(); err != nil {
 		return result, err
 	}
-	// Do not replace a different file installed while the download was running.
-	now, err := os.Stat(target)
-	if err != nil || !os.SameFile(info, now) {
-		return result, errors.New("executable changed during update; retry the command")
-	}
-	if err := replaceExecutable(staged.Name(), target); err != nil {
-		return result, fmt.Errorf("replace executable: %w", err)
+	if err := install(staged.Name(), target, info); err != nil {
+		return result, err
 	}
 	result.Path, result.Updated = target, true
 	return result, nil
+}
+
+func install(staged, target string, original os.FileInfo) error {
+	// Keep the lock independent of the executable inode, which rename replaces.
+	lock := target + ".update-lock"
+	if err := os.Mkdir(lock, 0700); err != nil {
+		return fmt.Errorf("cannot acquire update lock %s (remove a stale lock only when no updater is running): %w", lock, err)
+	}
+	defer func() { _ = os.Remove(lock) }()
+	// Do not replace a different file installed while the download was running.
+	now, err := os.Stat(target)
+	if err != nil || !os.SameFile(original, now) {
+		return errors.New("executable changed during update; retry the command")
+	}
+	if err := replaceExecutable(staged, target); err != nil {
+		return fmt.Errorf("replace executable: %w", err)
+	}
+	return nil
 }
 
 func artifact(version, goos, goarch string) (string, string, string, error) {

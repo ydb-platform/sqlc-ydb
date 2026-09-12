@@ -80,6 +80,8 @@ Release candidates are for evaluation before a stable release.
 sqlc-ydb version --upgrade
 ```
 
+Concurrent updaters serialize the final identity check and replacement using a `<executable>.update-lock` directory beside the resolved executable. A competing updater fails without replacing the file. If the process is forcibly terminated during this step, remove that directory only after confirming no updater is running, then retry.
+
 This command installs the latest stable release for the executable's operating system and architecture. It does not select prereleases or downgrade a recognized newer version, including a newer RC. A source build with an unrecognized version can be replaced by the latest stable release; unrecognized versions do not trigger automatic update notices.
 
 The command resolves the running executable and any symlinks, verifies the archive against the release's `SHA256SUMS`, and stages the replacement in the same directory. The real executable is replaced; symlinks remain intact, and project files are not modified. The directory must be writable by the current user. The updater does not invoke `sudo` or change permissions to gain access. On Linux and macOS, replacement uses an atomic rename. Windows moves the running image aside first and restores it if installation fails; a locked `.sqlc-ydb-update-*.old` file may remain beside the executable and can be removed after the old process exits.

@@ -139,6 +139,63 @@ func TestChecksums(t *testing.T) {
 	}
 }
 
+func TestConcurrentInstallation(t *testing.T) {
+	target := writeTarget(t)
+	f, err := os.Open(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	original, err := f.Stat()
+	_ = f.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	for i := range 2 {
+		staged := filepath.Join(filepath.Dir(target), fmt.Sprint("staged", i))
+		if err := os.WriteFile(staged, []byte("new binary"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		go func() { <-start; results <- install(staged, target, original) }()
+	}
+	close(start)
+	successes := 0
+	for range 2 {
+		if <-results == nil {
+			successes++
+		}
+	}
+	if successes != 1 {
+		t.Fatalf("installed %d concurrent updates; want exactly one", successes)
+	}
+	if _, err := os.Stat(target + ".update-lock"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("lock not released: %v", err)
+	}
+}
+
+func TestInstallationLockPreservesFiles(t *testing.T) {
+	target := writeTarget(t)
+	info, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock := target + ".update-lock"
+	if err := os.Mkdir(lock, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := install("unused-stage", target, info); err == nil || !strings.Contains(err.Error(), "update lock") {
+		t.Fatalf("%v", err)
+	}
+	data, err := os.ReadFile(target)
+	if err != nil || string(data) != "old executable" {
+		t.Fatalf("%q %v", data, err)
+	}
+	if _, err := os.Stat(lock); err != nil {
+		t.Fatalf("removed another updater's lock: %v", err)
+	}
+}
+
 type failingTransport struct {
 	base   http.RoundTripper
 	suffix string

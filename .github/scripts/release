@@ -71,7 +71,7 @@ check_release() {
   fi
   [[ -x $binary ]] || fail "release binary is not executable: $binary"
   local actual
-  actual=$("$binary" version)
+  actual=$("$binary" version --no-remote)
   [[ $actual == "$version" ]] || fail "tag $tag does not match CLI version $actual"
   local notes_tmp
   if [[ -n $notes ]]; then
