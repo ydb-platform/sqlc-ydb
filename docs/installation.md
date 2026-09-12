@@ -1,5 +1,44 @@
 # Installation
 
+## Linux and macOS
+
+Install the latest stable release without Go or administrator privileges:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ydb-platform/sqlc-ydb/main/install.sh | bash
+```
+
+This permanent URL serves the installer from `main`. The installer downloads
+published release binaries, not development builds. It selects amd64 or arm64,
+verifies the release SHA256 checksum and installs to `~/.local/bin`. If needed,
+it prints a command to update `PATH`; it does not edit shell startup files.
+Run the same command again to update. Download or verification failures leave
+the previous binary intact. Windows users should use the ZIP archives below.
+
+To select a version (including a published RC) or an installation directory:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ydb-platform/sqlc-ydb/main/install.sh | bash -s -- --version v0.1.0 --bin-dir ./bin
+```
+
+Replace `v0.1.0` with a published tag. The default excludes prereleases; if no
+stable release exists, select a published RC explicitly. Draft releases cannot
+be installed. Use `--help` to see available arguments. To uninstall, remove the
+installed executable.
+
+For CI, pin both the installer and binary to a release tag containing
+`install.sh`. Download and execute separately so a failed download fails the
+step even without shell pipeline error handling:
+
+```sh
+set -eu
+version=v0.1.0 # Replace with a published tag containing install.sh.
+curl -fsSL "https://raw.githubusercontent.com/ydb-platform/sqlc-ydb/$version/install.sh" -o install.sh
+bash install.sh --version "$version" --bin-dir ./bin
+./bin/sqlc-ydb version --verbose
+./bin/sqlc-ydb generate
+```
+
 ## Build from source
 
 With Go 1.26 or newer, run from a checkout of this repository:

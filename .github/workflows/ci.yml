@@ -6,6 +6,18 @@ on:
   pull_request:
 
 jobs:
+  installer-macos:
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Test installer on macOS
+        run: python3 -m unittest discover -s .github/scripts/tests -p test_install.py
+
   standalone:
     runs-on: ubuntu-24.04
     permissions:

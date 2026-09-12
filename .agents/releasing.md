@@ -130,3 +130,8 @@ follow the YDB Go SDK's
 inspected at commit `e2334b78e3adee03b9054a79108bae8e6516e9b8`.
 sqlc-ydb also supports the major version choice, explicit Unreleased sections,
 a dry run, and checked binaries for all six targets before pushing release refs.
+
+The consumer installer is `/install.sh`, served at the permanent raw GitHub
+`main/install.sh` URL. Keep this path stable. It resolves stable release tags
+and accepts explicit RC tags; it never installs a development build. Tagged
+source URLs pin the installer for CI. Installer regressions run in `make test-release`.

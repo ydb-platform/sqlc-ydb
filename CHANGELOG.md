@@ -42,6 +42,8 @@ First release of sqlc-ydb, an independent SQL-first code generator for YDB.
   jOOQ translates the supported query subset into typed DSL operations.
   The five example families cover CRUD, joins, JSON filters, aggregates and
   schema migrations. Generated output is checked against these examples.
+- A Linux/macOS installer with automatic architecture selection, SHA256
+  verification, pinned versions and installation without administrator privileges.
 - Release archives for Linux, macOS and Windows on amd64 and arm64, with
   SHA256 checksums and build metadata.
 

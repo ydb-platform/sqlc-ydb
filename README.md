@@ -28,6 +28,17 @@ Supported YQL and configuration options are listed in the
 for release status. Installation and artifact verification are described in
 [installation](docs/installation.md).
 
+## Install
+
+Linux and macOS:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ydb-platform/sqlc-ydb/main/install.sh | bash
+```
+
+See [installation](docs/installation.md) for pinned versions, release candidates,
+Windows downloads and PATH setup.
+
 ## Feature parity with sqlc
 
 The core `generate`, `compile`, `diff`, `init` and `version` workflow is supported.
