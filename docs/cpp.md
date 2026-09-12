@@ -44,18 +44,9 @@ settings.tx_mode = ::userver::ydb::TransactionMode::kSnapshotRO;
 auto author = reads.GetAuthor(id);
 ```
 
-The generator does not infer replay safety from `:one`/`:many` or SQL verbs.
-In particular, do not run `INSERT ... RETURNING` through an idempotent helper
-unless the application guarantees safe replay. Conservative SDK retries still
-handle errors known not to have committed; disabling idempotency does not mean
-all retries are disabled. Inside an existing transaction, retry the entire unit
-of work instead of retrying individual generated calls.
+The generator does not infer replay safety from `:one`/`:many` or SQL verbs. In particular, do not run `INSERT ... RETURNING` through an idempotent helper unless the application guarantees safe replay. Conservative SDK retries still handle errors known not to have committed; disabling idempotency does not mean all retries are disabled. Inside an existing transaction, retry the entire unit of work instead of retrying individual generated calls.
 
-Both profiles currently buffer query results, then construct result DTOs;
-`:many` can hold both representations in memory. Bound production reads in SQL
-or use the SDK streaming API for large scans. Native calls block in
-`GetValueSync`; use the userver profile inside userver coroutine handlers.
-Result-returning helpers require exactly one result set and reject extra sets.
+Both profiles currently buffer query results, then construct result DTOs; `:many` can hold both representations in memory. Bound production reads in SQL or use the SDK streaming API for large scans. Native calls block in `GetValueSync`; use the userver profile inside userver coroutine handlers. Result-returning helpers require exactly one result set and reject extra sets.
 
 ## Types
 
@@ -80,13 +71,6 @@ Identifiers must be ASCII C++ identifiers, must not be C++20 keywords, and must 
 
 ## Dependencies and examples
 
-Generated code requires C++20. Native applications link the SDK `Driver`,
-`Params`, and `Query` components; userver applications link `userver::ydb`.
-The bundled [CMake project](../examples/authors/cpp/CMakeLists.txt) builds both
-profiles for authors, batch, booktest, jets, and ondeck. Its [container environment](../examples/authors/cpp/Dockerfile) pins
-YDB C++ SDK 3.21.1 and userver 3.2-rc.
+Generated code requires C++20. Native applications link the SDK `Driver`, `Params`, and `Query` components; userver applications link `userver::ydb`. The bundled [CMake project](../examples/authors/cpp/CMakeLists.txt) builds both profiles for authors, batch, booktest, jets, and ondeck. Its [container environment](../examples/authors/cpp/Dockerfile) pins YDB C++ SDK 3.21.1 and userver 3.2-rc.
 
-See the [authors configuration](../examples/authors/sqlc.yaml) for both output
-profiles. Instructions for reproducing the pinned example environment and
-its packaging workarounds are in the
-[maintainer build notes](../.agents/cpp-development.md#build-and-smoke).
+See the [authors configuration](../examples/authors/sqlc.yaml) for both output profiles. Instructions for reproducing the pinned example environment and its packaging workarounds are in the [maintainer build notes](../.agents/cpp-development.md#build-and-smoke).

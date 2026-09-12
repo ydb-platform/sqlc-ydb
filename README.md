@@ -1,32 +1,12 @@
 # sqlc-ydb
 
-Inspired by [sqlc](https://github.com/sqlc-dev/sqlc), sqlc-ydb brings its
-SQL-first, typed query workflow to YDB as an independent implementation.
-Read [the project history](docs/history.md) for the upstream YDB proposals,
-engine-plugin discussions, and the decision to build a standalone tool.
+Inspired by [sqlc](https://github.com/sqlc-dev/sqlc), sqlc-ydb brings its SQL-first, typed query workflow to YDB as an independent implementation. Read [the project history](docs/history.md) for the upstream YDB proposals, engine-plugin discussions, and the decision to build a standalone tool.
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/ydb-platform/sqlc-ydb.svg?style=flat-square)](https://github.com/ydb-platform/sqlc-ydb/releases)
-[![PkgGoDev](https://pkg.go.dev/badge/github.com/ydb-platform/sqlc-ydb/cmd/sqlc-ydb)](https://pkg.go.dev/github.com/ydb-platform/sqlc-ydb/cmd/sqlc-ydb)
-[![CI](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/ci.yml)
-[![lint](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/lint.yml)
-[![codecov](https://codecov.io/gh/ydb-platform/sqlc-ydb/branch/main/graph/badge.svg?precision=2)](https://app.codecov.io/gh/ydb-platform/sqlc-ydb)
-![Code lines](https://sloc.xyz/github/ydb-platform/sqlc-ydb/?category=code)
-[![View examples](https://img.shields.io/badge/learn-examples-brightgreen.svg)](examples/README.md)
-[![Telegram](https://img.shields.io/badge/chat-on%20Telegram-2ba2d9.svg)](https://t.me/ydb_en)
-[![WebSite](https://img.shields.io/badge/website-ydb.tech-blue.svg)](https://ydb.tech)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](.agents/development.md)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE) [![Release](https://img.shields.io/github/v/release/ydb-platform/sqlc-ydb.svg?style=flat-square)](https://github.com/ydb-platform/sqlc-ydb/releases) [![PkgGoDev](https://pkg.go.dev/badge/github.com/ydb-platform/sqlc-ydb/cmd/sqlc-ydb)](https://pkg.go.dev/github.com/ydb-platform/sqlc-ydb/cmd/sqlc-ydb) [![CI](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/ci.yml) [![lint](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/lint.yml) [![codecov](https://codecov.io/gh/ydb-platform/sqlc-ydb/branch/main/graph/badge.svg?precision=2)](https://app.codecov.io/gh/ydb-platform/sqlc-ydb) ![Code lines](https://sloc.xyz/github/ydb-platform/sqlc-ydb/?category=code) [![View examples](https://img.shields.io/badge/learn-examples-brightgreen.svg)](examples/README.md) [![Telegram](https://img.shields.io/badge/chat-on%20Telegram-2ba2d9.svg)](https://t.me/ydb_en) [![WebSite](https://img.shields.io/badge/website-ydb.tech-blue.svg)](https://ydb.tech) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](.agents/development.md)
 
-Generate typed query code from YQL for YDB in Go, Python, C++, C#, Java, Kotlin,
-TypeScript, Rust and PHP. One executable contains the parser, semantic analyzer
-and generators. Generation works offline and does not require a running YDB,
-Python, or any separately installed codegen plugin.
+Generate typed query code from YQL for YDB in Go, Python, C++, C#, Java, Kotlin, TypeScript, Rust and PHP. One executable contains the parser, semantic analyzer and generators. Generation works offline and does not require a running YDB, Python, or any separately installed codegen plugin.
 
-Supported YQL and configuration options are listed in the
-[compatibility contract](docs/compatibility.md). See the
-[changelog](CHANGELOG.md) and [GitHub Releases](https://github.com/ydb-platform/sqlc-ydb/releases)
-for release status. Installation and artifact verification are described in
-[installation](docs/installation.md).
+Supported YQL and configuration options are listed in the [compatibility contract](docs/compatibility.md). See the [changelog](CHANGELOG.md) and [GitHub Releases](https://github.com/ydb-platform/sqlc-ydb/releases) for release status. Installation and artifact verification are described in [installation](docs/installation.md).
 
 ## Install
 
@@ -36,20 +16,13 @@ Linux and macOS:
 curl -fsSL https://raw.githubusercontent.com/ydb-platform/sqlc-ydb/main/install.sh | bash
 ```
 
-See [installation](docs/installation.md) for pinned versions, release candidates,
-Windows downloads and PATH setup.
+See [installation](docs/installation.md) for pinned versions, release candidates, Windows downloads and PATH setup.
 
 ## Feature parity with sqlc
 
-The core `generate`, `compile`, `diff`, `init` and `version` workflow is supported.
-Configuration is a subset of sqlc v2; queries use YQL
-parameters and `:one`, `:many`, or `:exec` annotations. Other database engines,
-external plugins, sqlc macros, database-assisted analysis and cloud workflows
-are not supported.
+The core `generate`, `compile`, `diff`, `init` and `version` workflow is supported. Configuration is a subset of sqlc v2; queries use YQL parameters and `:one`, `:many`, or `:exec` annotations. Other database engines, external plugins, sqlc macros, database-assisted analysis and cloud workflows are not supported.
 
-See the [first-release summary](CHANGELOG.md) for the comparison and known
-limitations, and the [compatibility contract](docs/compatibility.md) for the
-exact CLI, option and YQL coverage.
+See the [first-release summary](CHANGELOG.md) for the comparison and known limitations, and the [compatibility contract](docs/compatibility.md) for the exact CLI, option and YQL coverage.
 
 ## Supported targets
 
@@ -74,18 +47,11 @@ exact CLI, option and YQL coverage.
 | Rust | YDB Query SDK | [Test](examples/rust/tests/live_smoke.rs#L77) | [Test](examples/rust/tests/live_smoke.rs#L94) |
 | PHP | YDB SDK | [Test](examples/php/live.php#L63) | — |
 
-Links open integration tests using generated helpers. A single-query example
-shows an individual helper call; a transaction example shares one transaction
-across several calls. The caller owns transaction boundaries and retries.
-These suites run in [CI](.github/workflows/ci.yml) against disposable YDB;
-locally, live tests require `YDB_CONNECTION_STRING`.
+Links open integration tests using generated helpers. A single-query example shows an individual helper call; a transaction example shares one transaction across several calls. The caller owns transaction boundaries and retries. These suites run in [CI](.github/workflows/ci.yml) against disposable YDB; locally, live tests require `YDB_CONNECTION_STRING`.
 
-A dash means unsupported. [PHP transaction support](docs/php.md) requires a
-raw-result API in the SDK that can join an existing transaction.
+A dash means unsupported. [PHP transaction support](docs/php.md) requires a raw-result API in the SDK that can join an existing transaction.
 
-All targets are built into the executable. Only the generated application needs
-the selected runtime library. Configuration, generated APIs and type coverage
-are documented in the [target reference](docs/targets.md).
+All targets are built into the executable. Only the generated application needs the selected runtime library. Configuration, generated APIs and type coverage are documented in the [target reference](docs/targets.md).
 
 ## Quick start
 
@@ -98,14 +64,9 @@ go build -o bin/sqlc-ydb ./cmd/sqlc-ydb
 ./bin/sqlc-ydb diff -f examples/authors/sqlc.yaml
 ```
 
-The authors example shares one [schema](examples/authors/schema.sql),
-[query file](examples/authors/queries.sql) and
-[configuration](examples/authors/sqlc.yaml) across all targets above.
+The authors example shares one [schema](examples/authors/schema.sql), [query file](examples/authors/queries.sql) and [configuration](examples/authors/sqlc.yaml) across all targets above.
 
-[All upstream example families](examples/README.md) are also adapted for YDB:
-authors, batch, booktest, jets and ondeck. Run `make generate` to regenerate them
-and `make check-examples` to verify analysis, generated outputs, Go builds and
-Python syntax.
+[All upstream example families](examples/README.md) are also adapted for YDB: authors, batch, booktest, jets and ondeck. Run `make generate` to regenerate them and `make check-examples` to verify analysis, generated outputs, Go builds and Python syntax.
 
 ```yaml
 version: "2"
@@ -128,14 +89,7 @@ sql:
 SELECT name FROM authors WHERE id = $author_id;
 ```
 
-Use `sqlc-ydb init` for a starting configuration. Input and output paths are
-relative to the configuration file. `generate` completes analysis and rendering
-before writing any files; `compile` writes nothing; `diff` writes nothing and
-exits with status 1 if generated contents differ.
-Renamed queries or models can leave obsolete generated files: `generate` and
-`diff` report these for manual removal in their current output directories.
-See [output ownership](docs/compatibility.md#output-ownership) when moving outputs
-or sharing directories between configurations.
+Use `sqlc-ydb init` for a starting configuration. Input and output paths are relative to the configuration file. `generate` completes analysis and rendering before writing any files; `compile` writes nothing; `diff` writes nothing and exits with status 1 if generated contents differ. Renamed queries or models can leave obsolete generated files: `generate` and `diff` report these for manual removal in their current output directories. See [output ownership](docs/compatibility.md#output-ownership) when moving outputs or sharing directories between configurations.
 
 ## References
 

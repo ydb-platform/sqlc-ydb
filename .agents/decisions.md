@@ -1,8 +1,6 @@
 # Decisions
 
-These choices constrain maintenance; implementation details remain in the linked
-documents. Revisit a decision explicitly rather than letting a local workaround
-change the architecture.
+These choices constrain maintenance; implementation details remain in the linked documents. Revisit a decision explicitly rather than letting a local workaround change the architecture.
 
 | Decision | Reason and reference |
 | --- | --- |
@@ -28,6 +26,4 @@ change the architecture.
 | Final repository and module name | Use `ydb-platform/sqlc-ydb` and `github.com/ydb-platform/sqlc-ydb` throughout source, release tooling and documentation. |
 | Independent versions without an upstream version label | Product differences make a version-level compatibility claim unhelpful. Maintain the feature table; do not add an upstream reference to release notes or CLI metadata. |
 
-SDK-specific behavior should be reviewed with the SDK maintainers when its public
-contract is unclear. They are available within the product team; invented fallback
-behavior is not a substitute for establishing that contract.
+SDK-specific behavior should be reviewed with the SDK maintainers when its public contract is unclear. They are available within the product team; invented fallback behavior is not a substitute for establishing that contract.

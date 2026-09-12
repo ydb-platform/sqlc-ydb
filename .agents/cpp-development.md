@@ -1,8 +1,6 @@
 # C++ SDK evidence and example builds
 
-The public API contract is in [C++ generation](../docs/cpp.md). These notes
-describe the pinned example environment and its maintainer workarounds, not
-a claim about the latest SDK releases.
+The public API contract is in [C++ generation](../docs/cpp.md). These notes describe the pinned example environment and its maintainer workarounds, not a claim about the latest SDK releases.
 
 ## Upstream API evidence
 
@@ -49,40 +47,14 @@ docker run --rm --network host \
   sqlc-ydb-authors-cpp bash examples/authors/cpp/run-smoke.sh
 ```
 
-The runner sets the working directory, executes native first, starts userver,
-waits for its listener, invokes `/smoke` once, and stops the userver process.
-The compiled binaries stay in the mounted `cpp/build` directory and execute
-inside the same SDK image used to build them.
-The smoke config disables userver's optional coroutine stack usage monitor,
-whose `userfaultfd` call is blocked by Docker's default seccomp profile.
-The example runs with ordinary container permissions.
+The runner sets the working directory, executes native first, starts userver, waits for its listener, invokes `/smoke` once, and stops the userver process. The compiled binaries stay in the mounted `cpp/build` directory and execute inside the same SDK image used to build them. The smoke config disables userver's optional coroutine stack usage monitor, whose `userfaultfd` call is blocked by Docker's default seccomp profile. The example runs with ordinary container permissions.
 
 ## PR #8 contract review (2026-09-11)
 
-Checked settings overloads against the pinned installed headers, including
-`TxActor::Execute(ExecuteSettings, Query, ...)` and native `RetryQuerySync`
-with explicit `TRetryOperationSettings`. The generator copies constructor
-settings; standalone calls forward retry/mode/execution settings, while external
-transactions accept execution settings only. See the public C++ contract for
-ownership and defaults.
+Checked settings overloads against the pinned installed headers, including `TxActor::Execute(ExecuteSettings, Query, ...)` and native `RetryQuerySync` with explicit `TRetryOperationSettings`. The generator copies constructor settings; standalone calls forward retry/mode/execution settings, while external transactions accept execution settings only. See the public C++ contract for ownership and defaults.
 
-The upstream [select handler](https://github.com/userver-framework/userver/blob/86759637d175baa64f0b3b01f1a027bfedbf795a/samples/ydb_service/views/select-rows/post/view.cpp)
-uses OperationSettings, named parameters, GetSingleCursor and typed Row::Get.
-Its ExecuteDataQuery API is older than our Query API path. The
-[transaction handler](https://github.com/userver-framework/userver/blob/86759637d175baa64f0b3b01f1a027bfedbf795a/samples/ydb_service/views/upsert-2rows/post/view.cpp)
-uses RetryTx, TxActor::Execute and caller-selected TxAction, matching our
-transaction ownership model. Native execution follows the
-[official example](https://ydb.tech/docs/en/dev/example-app/example-cpp)
-with checked statuses, retry-managed sessions and typed parameter/result APIs.
+The upstream [select handler](https://github.com/userver-framework/userver/blob/86759637d175baa64f0b3b01f1a027bfedbf795a/samples/ydb_service/views/select-rows/post/view.cpp) uses OperationSettings, named parameters, GetSingleCursor and typed Row::Get. Its ExecuteDataQuery API is older than our Query API path. The [transaction handler](https://github.com/userver-framework/userver/blob/86759637d175baa64f0b3b01f1a027bfedbf795a/samples/ydb_service/views/upsert-2rows/post/view.cpp) uses RetryTx, TxActor::Execute and caller-selected TxAction, matching our transaction ownership model. Native execution follows the [official example](https://ydb.tech/docs/en/dev/example-app/example-cpp) with checked statuses, retry-managed sessions and typed parameter/result APIs.
 
-Both smoke tests now execute CreateAuthor with present/null optional values,
-assert every RETURNING column, run configured SnapshotRO reads, and exercise
-request settings in caller-owned transactions with rollback assertions.
+Both smoke tests now execute CreateAuthor with present/null optional values, assert every RETURNING column, run configured SnapshotRO reads, and exercise request settings in caller-owned transactions with rollback assertions.
 
-All five example families now configure both C++ profiles. The existing CMake
-acceptance targets compile their ten adapters. The native and userver smokes
-also run batch Json/optional Json and microsecond Timestamp round-trips,
-including a JSON integer at Uint64 max. Native Json uses std::string and
-Timestamp uses TInstant; userver follows its documented formats::json::Value
-and system_clock::time_point mappings. Other families are compiled, not yet
-exercised by these C++ live smokes.
+All five example families now configure both C++ profiles. The existing CMake acceptance targets compile their ten adapters. The native and userver smokes also run batch Json/optional Json and microsecond Timestamp round-trips, including a JSON integer at Uint64 max. Native Json uses std::string and Timestamp uses TInstant; userver follows its documented formats::json::Value and system_clock::time_point mappings. Other families are compiled, not yet exercised by these C++ live smokes.
