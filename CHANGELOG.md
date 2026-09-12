@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+### Changed
+
 - Group example code by scenario and language; move shared builds and cross-example runtime tests to `tests/examples`.
 
 ## v0.1.0
