@@ -8,7 +8,7 @@ Install the latest stable release without Go or administrator privileges:
 curl -fsSL https://raw.githubusercontent.com/ydb-platform/sqlc-ydb/main/install.sh | bash
 ```
 
-This permanent URL serves the installer from `main`. The installer downloads published release binaries, not development builds. It selects amd64 or arm64, verifies the release SHA256 checksum and installs to `~/.local/bin`. If needed, it prints a command to update `PATH`; it does not edit shell startup files. Run the same command again to update. Download or verification failures leave the previous binary intact. Windows users should use the ZIP archives below.
+This permanent URL serves the installer from `main`. The installer downloads published release binaries, not development builds. It selects amd64 or arm64, verifies the release SHA256 checksum and installs to `~/.local/bin`. If needed, it prints a command to update `PATH`; it does not edit shell startup files. Run `sqlc-ydb self-update` or repeat the installation command to update. Download or verification failures leave the previous binary intact. Windows users should use the ZIP archives below for initial installation.
 
 To select a version (including a published RC) or an installation directory:
 
@@ -70,4 +70,18 @@ On Windows PowerShell, use `Get-FileHash .\ARCHIVE -Algorithm SHA256`. After ext
 
 `sqlc-ydb version` prints the product version, including an RC suffix if any. `sqlc-ydb version --verbose` also prints the embedded source commit for release builds. Ordinary source builds report `unknown` for that field unless linker flags supply it. Include both values when reporting an issue.
 
+Both forms then check GitHub for the latest stable release. If it is newer, an extra line gives its version and the command `sqlc-ydb self-update`. The check has a two-second deadline. Network, TLS, timeout and unavailable-release errors are silent and do not change the exit status. To skip network access and retain machine-readable output, use `sqlc-ydb version --no-remote` (with `--verbose` when needed). Generation commands never check for updates.
+
 Release candidates are for evaluation before a stable release.
+
+## Update the installed executable
+
+```sh
+sqlc-ydb self-update
+```
+
+This command installs the latest stable release for the executable's operating system and architecture. It does not select prereleases or downgrade a recognized newer version, including a newer RC. A source build with an unrecognized version can be replaced by the latest stable release; unrecognized versions do not trigger automatic update notices.
+
+The command resolves the running executable and any symlinks, verifies the archive against the release's `SHA256SUMS`, and stages the replacement in the same directory. The real executable is replaced; symlinks remain intact, and project files are not modified. The directory must be writable by the current user. The updater does not invoke `sudo` or change permissions to gain access. On Linux and macOS, replacement uses an atomic rename. Windows moves the running image aside first and restores it if installation fails; a locked `.sqlc-ydb-update-*.old` file may remain beside the executable and can be removed after the old process exits.
+
+Update downloads have a five-minute deadline. Unlike the optional check in `version`, an explicit update reports errors and returns a nonzero exit status. Failed downloads or verification leave the installed executable unchanged. `self-update --no-remote` is an error because installation requires network access. If another package manager owns the installation, use that manager's upgrade command.

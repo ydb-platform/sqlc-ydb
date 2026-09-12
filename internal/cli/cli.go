@@ -3,6 +3,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -24,6 +25,7 @@ import (
 	"github.com/ydb-platform/sqlc-ydb/internal/config"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 	"github.com/ydb-platform/sqlc-ydb/internal/source"
+	"github.com/ydb-platform/sqlc-ydb/internal/update"
 )
 
 // Version and Commit are set through linker flags in release builds.
@@ -36,15 +38,16 @@ Usage:
   sqlc-ydb <command> [-f sqlc.yaml]
 
 Commands:
-  generate   Analyze queries and generate source code
-  compile    Analyze schema and queries without generating files
-  diff       Compare generated code with existing files (exit 1 on differences)
-  init       Create a sqlc.yaml configuration (version 2)
-  version    Print the version (--verbose includes the build commit)
+  generate     Analyze queries and generate source code
+  compile      Analyze schema and queries without generating files
+  diff         Compare generated code with existing files (exit 1 on differences)
+  init         Create a sqlc.yaml configuration (version 2)
+  version      Print the version and check for updates (--verbose includes the commit)
+  self-update  Install the latest stable release of sqlc-ydb in place
 
 Options:
   -f, --file <path>  Use an alternate configuration file
-  --no-remote       Run locally (all operations are already local)
+  --no-remote       Skip the version update check (generation is always local)
   -h, --help        Print help
 `
 
@@ -52,6 +55,7 @@ type arguments struct {
 	command, file string
 	help          bool
 	verbose       bool
+	noRemote      bool
 }
 
 func parseArgs(args []string) (arguments, error) {
@@ -74,6 +78,7 @@ func parseArgs(args []string) (arguments, error) {
 				return a, errors.New("--file requires a non-empty path")
 			}
 		case arg == "--no-remote":
+			a.noRemote = true
 		case arg == "--remote":
 			return a, errors.New("remote execution is not implemented; sqlc-ydb runs locally")
 		case arg == "--v2":
@@ -95,10 +100,17 @@ func parseArgs(args []string) (arguments, error) {
 	if a.verbose && a.command != "version" {
 		return a, errors.New("--verbose is only valid for version")
 	}
+	if a.noRemote && a.command == "self-update" {
+		return a, errors.New("self-update requires network access; remove --no-remote")
+	}
 	return a, nil
 }
 
 func Run(args []string, stdout, stderr io.Writer) int {
+	return run(args, stdout, stderr, update.NewClient())
+}
+
+func run(args []string, stdout, stderr io.Writer, updater *update.Client) int {
 	fail := func(err error) int {
 		// The command already failed; reporting that failure is best effort.
 		_, _ = fmt.Fprintln(stderr, err)
@@ -122,6 +134,29 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			if _, err := fmt.Fprintf(stdout, "commit: %s\n", Commit); err != nil {
 				return fail(err)
 			}
+		}
+		if !a.noRemote {
+			latest, err := updater.Latest(context.Background())
+			if err == nil && update.Newer(latest, Version) {
+				if _, err := fmt.Fprintf(stdout, "New version available: %s. Run sqlc-ydb self-update to install it.\n", latest); err != nil {
+					return fail(err)
+				}
+			}
+		}
+		return 0
+	}
+	if a.command == "self-update" {
+		result, err := updater.Update(context.Background(), Version)
+		if err != nil {
+			return fail(err)
+		}
+		if result.Updated {
+			_, err = fmt.Fprintf(stdout, "Updated sqlc-ydb to %s.\nLocation: %s\n", result.Version, result.Path)
+		} else {
+			_, err = fmt.Fprintf(stdout, "sqlc-ydb %s is already up to date.\n", result.Version)
+		}
+		if err != nil {
+			return fail(err)
 		}
 		return 0
 	}
