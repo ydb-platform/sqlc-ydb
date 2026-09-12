@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Group example code by scenario and language; move shared builds and cross-example runtime tests to `tests/examples`.
+
 ## v0.1.0
 
 First release of sqlc-ydb, an independent SQL-first code generator for YDB.

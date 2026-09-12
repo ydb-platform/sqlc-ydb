@@ -10,7 +10,7 @@ YDB adaptations of all five families in [sqlc's examples](https://github.com/sql
 | [jets](jets) | Related tables, aggregate counts and limited result sets |
 | [ondeck](ondeck) | Ordered schema migrations, query directories and venue aggregates |
 
-Every family generates Go native SDK and `database/sql`, C++ native SDK and userver, C# Dapper, Java jOOQ, Kotlin Query SDK, TypeScript, Rust and PHP APIs. The `authors` family also includes Python (native, DB-API, SQLAlchemy), C# ADO.NET, Java native/JDBC, and Kotlin JDBC/Exposed profiles. Dependencies and execution harnesses are shared by language. Runtime commands are in [development](../.agents/development.md).
+Every family generates Go native SDK and `database/sql`, C++ native SDK and userver, C# Dapper, Java jOOQ, Kotlin Query SDK, TypeScript, Rust and PHP APIs. The `authors` family also includes Python (native, DB-API, SQLAlchemy), C# ADO.NET, Java native/JDBC, and Kotlin JDBC/Exposed profiles. Shared cross-example builds and test harnesses live in `tests/examples/`, grouped by language. The example directories contain their SQL, generator configuration and code grouped by language and runtime. Runtime commands are in [development](../.agents/development.md).
 
 From the repository root:
 
@@ -22,7 +22,7 @@ make check-examples # analyze SQL, compare outputs, check generated Go and Pytho
 Go tests compile without a database and skip live cases unless `YDB_CONNECTION_STRING` is set. Run the live cases sequentially against a disposable database with none of the example tables already present:
 
 ```sh
-cd examples
+cd tests/examples/go
 YDB_CONNECTION_STRING=grpc://localhost:2136/local go test -p 1 -count=1 -timeout=180s ./... -v
 ```
 

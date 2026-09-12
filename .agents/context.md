@@ -16,7 +16,8 @@ Read [decisions](decisions.md) before changing the analysis/generation boundary 
 | `internal/model` | Resolved query/catalog data, type equality and diagnostic formatting |
 | `internal/codegen/{golang,python,cpp,csharp,java,kotlin,typescript,rust,php}` | Language naming and SDK-specific bindings, decoding and source rendering |
 | `internal/endtoend` | CLI fixtures, expected diagnostics and generated golden files |
-| `examples` | All upstream example families adapted for YDB; shared language dependencies and sequential live tests |
+| `examples` | SQL, configuration and code grouped by example family, then language and runtime |
+| `tests/examples` | Shared runtime builds and sequential cross-example acceptance tests |
 | `.github/workflows` | Offline verification and sequential acceptance steps per host |
 
 ## Public sources of truth

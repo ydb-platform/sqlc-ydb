@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noEmit": true,
+    "skipLibCheck": false,
+    "paths": {
+      "@ydbjs/query": [
+        "./node_modules/@ydbjs/query/dist/index.d.ts"
+      ],
+      "@ydbjs/value/*": [
+        "./node_modules/@ydbjs/value/dist/*.d.ts"
+      ],
+      "@ydbjs/value": [
+        "./node_modules/@ydbjs/value/dist/index.d.ts"
+      ]
+    }
+  },
+  "include": [
+    "../../../examples/*/typescript/native/**/*.ts"
+  ]
+}

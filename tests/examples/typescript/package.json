@@ -1,0 +1,23 @@
+{
+  "name": "sqlc-ydb-typescript-examples",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.19.0",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "check": "npm run typecheck && npm run build && node check-generated.mjs",
+    "smoke": "npm run build && node smoke.mjs",
+    "build": "tsc -p tsconfig.runtime.json"
+  },
+  "dependencies": {
+    "@ydbjs/core": "6.3.1",
+    "@ydbjs/query": "6.3.0",
+    "@ydbjs/value": "6.0.8"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

@@ -54,7 +54,7 @@ Each output contains `Tables.java` (typed fields derived from the local schema),
 
 For jOOQ callback transactions, wrap the callback's transaction-local configuration with `YDB.using(configuration)` and pass that `YdbDSLContext` to `Queries`. A cast from `configuration.dsl()` is invalid because jOOQ returns a plain `DefaultDSLContext` there.
 
-The shared [Maven project](../examples/java/jooq/pom.xml) pins Java 21, jOOQ 3.21.0, YDB jOOQ dialect 2.0.0 and JDBC 2.4.1. Value carriers follow that dialect: Uint64 uses ULong, Json uses JSON, Timestamp uses Instant, Utf8 uses String. DTO members use reference types, including nullable values. There is no automatic conversion to the other Java profiles' long-based Uint64 API.
+The shared [Maven project](../tests/examples/java/jooq/pom.xml) pins Java 21, jOOQ 3.21.0, YDB jOOQ dialect 2.0.0 and JDBC 2.4.1. Value carriers follow that dialect: Uint64 uses ULong, Json uses JSON, Timestamp uses Instant, Utf8 uses String. DTO members use reference types, including nullable values. There is no automatic conversion to the other Java profiles' long-based Uint64 API.
 
 Two details are specific to the pinned dialect:
 
@@ -63,9 +63,9 @@ Two details are specific to the pinned dialect:
 
 ```sh
 make generate
-mvn -f examples/java/jooq/pom.xml test
+mvn -f tests/examples/java/jooq/pom.xml test
 YDB_CONNECTION_STRING=grpc://localhost:2136/local \
-  mvn -f examples/java/jooq/pom.xml test
+  mvn -f tests/examples/java/jooq/pom.xml test
 ```
 
 The offline test invokes every generated example method through the real dialect and a JDBC mock. Live tests use unique mapped table names, verify the mapping before executing queries, and drop only tables they created. They cover nullable values, JSON filters, timestamp microseconds, maximum Uint64, joins, aggregates, LIMIT, RETURNING and caller-owned rollback. SDK compilation and execution must pass before adding new DSL constructs.

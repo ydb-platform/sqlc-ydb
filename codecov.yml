@@ -12,6 +12,7 @@ coverage:
 # coverage of this code; test harnesses, examples and CI tooling are excluded.
 ignore:
   - "examples/**"
+  - "tests/examples/**"
   - "internal/endtoend/**"
   - "**/testdata/**"
   - "**/*_test.go"

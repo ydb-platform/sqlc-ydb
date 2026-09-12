@@ -290,12 +290,12 @@ func mustJSON(value string) []byte {
 
 func transpileModule(t *testing.T, node, source, output string) {
 	t.Helper()
-	compiler, err := filepath.Abs("../../../examples/node_modules/typescript/lib/typescript.js")
+	compiler, err := filepath.Abs("../../../tests/examples/typescript/node_modules/typescript/lib/typescript.js")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(compiler); err != nil {
-		t.Skip("the pinned TypeScript compiler is unavailable; run npm ci --prefix examples")
+		t.Skip("the pinned TypeScript compiler is unavailable; run npm ci --prefix tests/examples/typescript")
 	}
 	script := `import { pathToFileURL } from "node:url";
 const ts = (await import(pathToFileURL(` + string(mustJSON(compiler)) + `))).default;

@@ -73,18 +73,18 @@ Review updated files alongside the SQL, configuration and implementation changes
 
 ## Generated runtime checks
 
-The [examples](../examples/README.md) share one Go module in `examples/`; generated code and tests live under each example's `go/` directory. C# framework, TypeScript, Rust and PHP examples share dependencies and test harnesses in `examples/csharp`, `examples/typescript`, `examples/rust` and `examples/php`. TypeScript dependencies resolve from `examples/package.json`; the shared jOOQ build lives in `examples/java/jooq`. The authors example hosts the Python, Java native/JDBC, Kotlin and ADO.NET builds; its C++ CMake project compiles all five example families. Schema, queries and generator configuration are shared in each example root. `make generate` and `make check-examples` cover every example configuration; the release smoke test also compiles, generates and diffs all of them. `make check-examples` fails if generation changes tracked files or creates untracked files under `examples`, so a new generated source cannot be omitted from a commit unnoticed.
+The [examples](../examples/README.md) share one Go module in `examples/`; generated code lives under each example's `go/` directory. Cross-example Go tests and database helpers live in `tests/examples/go`, with a scoped `go.work` connecting the example module without local replace directives. C# framework, TypeScript, Rust and PHP examples share dependencies and test harnesses in `tests/examples/csharp`, `tests/examples/typescript`, `tests/examples/rust` and `tests/examples/php`. TypeScript dependencies resolve from `tests/examples/typescript/package.json`; the shared jOOQ build lives in `tests/examples/java/jooq`. The authors example hosts the Python, Java native/JDBC, Kotlin and ADO.NET builds; its C++ CMake project compiles all five example families. Schema, queries and generator configuration are shared in each example root. `make generate` and `make check-examples` cover every example configuration; the release smoke test also compiles, generates and diffs all of them. `make check-examples` fails if generation changes tracked files or creates untracked files under `examples`, so a new generated source cannot be omitted from a commit unnoticed.
 
 Check all generated example families against their pinned runtime dependencies:
 
 ```sh
 make check-examples
-dotnet build examples/csharp/GeneratedProfiles.csproj
-npm ci --prefix examples --ignore-scripts
-npm run check --prefix examples
-CARGO_BUILD_JOBS=1 cargo test --manifest-path examples/rust/Cargo.toml --locked
-composer install --working-dir=examples/php
-composer --working-dir=examples/php check
+dotnet build tests/examples/csharp/GeneratedProfiles.csproj
+npm ci --prefix tests/examples/typescript --ignore-scripts
+npm run check --prefix tests/examples/typescript
+CARGO_BUILD_JOBS=1 cargo test --manifest-path tests/examples/rust/Cargo.toml --locked
+composer install --working-dir=tests/examples/php
+composer --working-dir=tests/examples/php check
 ```
 
 Optional live generator tests use `YDB_CONNECTION_STRING` to select an isolated YDB database. Use a disposable development database: tests create and drop uniquely named tables. No live tests run when the variable is absent.
@@ -113,9 +113,9 @@ For Python live generator tests, install the pinned example requirements for `py
 Each Go example executes the actual CLI-generated queries against a disposable database, including JSON and timestamp bindings, joins, aggregates and migrations. The database must not already contain any example tables. Cleanup is registered after successful schema files; a failed file can leave partially created tables, but must never drop a pre-existing table. Run all example packages sequentially:
 
 ```sh
-cd examples
+cd tests/examples/go
 YDB_CONNECTION_STRING=grpc://localhost:2136/local go test -p 1 -count=1 -timeout=180s -v ./...
-cd authors
+cd ../../../examples/authors
 YDB_CONNECTION_STRING=grpc://localhost:2136/local python -m python.smoke
 ```
 
@@ -135,11 +135,11 @@ Run the shared Dapper, TypeScript, Rust and PHP harnesses from the repository ro
 
 ```sh
 YDB_CONNECTION_STRING='Host=localhost;Port=2136;Database=/local' \
-  dotnet run --project examples/csharp/GeneratedProfiles.csproj --no-build -- dapper
-YDB_CONNECTION_STRING=grpc://localhost:2136/local npm run smoke --prefix examples
+  dotnet run --project tests/examples/csharp/GeneratedProfiles.csproj --no-build -- dapper
+YDB_CONNECTION_STRING=grpc://localhost:2136/local npm run smoke --prefix tests/examples/typescript
 YDB_CONNECTION_STRING=grpc://localhost:2136/local CARGO_BUILD_JOBS=1 \
-  cargo test --manifest-path examples/rust/Cargo.toml --locked --test live_smoke -- --nocapture
-YDB_CONNECTION_STRING=grpc://localhost:2136/local composer --working-dir=examples/php smoke
+  cargo test --manifest-path tests/examples/rust/Cargo.toml --locked --test live_smoke -- --nocapture
+YDB_CONNECTION_STRING=grpc://localhost:2136/local composer --working-dir=tests/examples/php smoke
 ```
 
 The [TypeScript](../docs/typescript.md), [Rust](../docs/rust.md) and [PHP](../docs/php.md) pages define their value representations, dependencies and runtime ownership.

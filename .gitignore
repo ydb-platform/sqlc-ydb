@@ -10,7 +10,8 @@ __pycache__/
 **/obj/
 examples/**/bin/
 examples/**/build/
-examples/node_modules/
-examples/php/vendor/
+tests/examples/typescript/node_modules/
+tests/examples/php/vendor/
 
-/examples/.typescript-build/
+/tests/examples/typescript/.typescript-build/
+tests/examples/**/bin/
