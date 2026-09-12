@@ -3,7 +3,7 @@
 ## Unreleased
 
 - `version` checks for a newer stable release and prints an update command when available. Offline and failed checks are silent; `--no-remote` skips the check.
-- `self-update` downloads and verifies the latest stable release, then replaces the running executable at its real location, preserving symlinks.
+- `version --upgrade` downloads and verifies the latest stable release, then replaces the running executable at its real location, preserving symlinks.
 
 ### Changed
 

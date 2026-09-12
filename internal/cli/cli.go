@@ -43,9 +43,9 @@ Commands:
   diff         Compare generated code with existing files (exit 1 on differences)
   init         Create a sqlc.yaml configuration (version 2)
   version      Print the version and check for updates (--verbose includes the commit)
-  self-update  Install the latest stable release of sqlc-ydb in place
 
 Options:
+  --upgrade         Install the latest stable release in place (version only)
   -f, --file <path>  Use an alternate configuration file
   --no-remote       Skip the version update check (generation is always local)
   -h, --help        Print help
@@ -56,6 +56,7 @@ type arguments struct {
 	help          bool
 	verbose       bool
 	noRemote      bool
+	upgrade       bool
 }
 
 func parseArgs(args []string) (arguments, error) {
@@ -85,6 +86,8 @@ func parseArgs(args []string) (arguments, error) {
 			v2 = true
 		case arg == "--verbose":
 			a.verbose = true
+		case arg == "--upgrade":
+			a.upgrade = true
 		case strings.HasPrefix(arg, "-"):
 			return a, fmt.Errorf("unknown option %q", arg)
 		default:
@@ -100,8 +103,11 @@ func parseArgs(args []string) (arguments, error) {
 	if a.verbose && a.command != "version" {
 		return a, errors.New("--verbose is only valid for version")
 	}
-	if a.noRemote && a.command == "self-update" {
-		return a, errors.New("self-update requires network access; remove --no-remote")
+	if a.upgrade && a.command != "version" {
+		return a, errors.New("--upgrade is only valid for version")
+	}
+	if a.noRemote && a.upgrade {
+		return a, errors.New("--upgrade requires network access; remove --no-remote")
 	}
 	return a, nil
 }
@@ -126,7 +132,7 @@ func run(args []string, stdout, stderr io.Writer, updater *update.Client) int {
 		}
 		return 0
 	}
-	if a.command == "version" {
+	if a.command == "version" && !a.upgrade {
 		if _, err := fmt.Fprintln(stdout, Version); err != nil {
 			return fail(err)
 		}
@@ -138,14 +144,14 @@ func run(args []string, stdout, stderr io.Writer, updater *update.Client) int {
 		if !a.noRemote {
 			latest, err := updater.Latest(context.Background())
 			if err == nil && update.Newer(latest, Version) {
-				if _, err := fmt.Fprintf(stdout, "New version available: %s. Run sqlc-ydb self-update to install it.\n", latest); err != nil {
+				if _, err := fmt.Fprintf(stdout, "New version available: %s. Run sqlc-ydb version --upgrade to install it.\n", latest); err != nil {
 					return fail(err)
 				}
 			}
 		}
 		return 0
 	}
-	if a.command == "self-update" {
+	if a.upgrade {
 		result, err := updater.Update(context.Background(), Version)
 		if err != nil {
 			return fail(err)
