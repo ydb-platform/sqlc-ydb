@@ -3,7 +3,6 @@ package update
 
 import (
 	"archive/tar"
-	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -134,6 +133,9 @@ type Result struct {
 // Update stages a verified executable beside the real running binary before
 // replacing it. Symlinks retain their paths and contents.
 func (c *Client) Update(ctx context.Context, current string) (Result, error) {
+	if runtime.GOOS == "windows" {
+		return Result{}, errors.New("automatic upgrades are not supported on Windows")
+	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 	latest, err := c.Latest(ctx)
@@ -161,8 +163,7 @@ func (c *Client) Update(ctx context.Context, current string) (Result, error) {
 	if err != nil {
 		return result, err
 	}
-	// Stat the open handle: on Windows os.Stat loads file identity lazily by
-	// pathname, which could already refer to a concurrent replacement later.
+	// Capture the identity before downloading to detect concurrent replacement.
 	original, err := os.Open(target)
 	if err != nil {
 		return result, err
@@ -201,7 +202,7 @@ func (c *Client) Update(ctx context.Context, current string) (Result, error) {
 	if !bytes.Equal(actual[:], expected) {
 		return result, errors.New("update checksum mismatch")
 	}
-	if err := extract(staged, data, base+"/"+binary, extension); err != nil {
+	if err := extract(staged, data, base+"/"+binary); err != nil {
 		return result, fmt.Errorf("extract update: %w", err)
 	}
 	if err := staged.Chmod(info.Mode().Perm()); err != nil {
@@ -227,7 +228,7 @@ func install(staged, target string, original os.FileInfo) error {
 	// Keep the lock independent of the executable inode, which rename replaces.
 	lock := target + ".update-lock"
 	if err := os.Mkdir(lock, 0700); err != nil {
-		return fmt.Errorf("cannot acquire update lock %s (confirm no updater is running; preserve previous.exe for recovery before removing a stale lock): %w", lock, err)
+		return fmt.Errorf("cannot acquire update lock %s (confirm no updater is running; remove the empty directory only if no updater is running): %w", lock, err)
 	}
 	defer func() { _ = os.Remove(lock) }()
 	// Do not replace a different file installed while the download was running.
@@ -235,20 +236,17 @@ func install(staged, target string, original os.FileInfo) error {
 	if err != nil || !os.SameFile(original, now) {
 		return errors.New("executable changed during update; retry the command")
 	}
-	if err := replaceExecutable(staged, target); err != nil {
+	if err := os.Rename(staged, target); err != nil {
 		return fmt.Errorf("replace executable: %w", err)
 	}
 	return nil
 }
 
 func artifact(version, goos, goarch string) (string, string, string, error) {
-	if (goos != "linux" && goos != "darwin" && goos != "windows") || (goarch != "amd64" && goarch != "arm64") {
+	if (goos != "linux" && goos != "darwin") || (goarch != "amd64" && goarch != "arm64") {
 		return "", "", "", fmt.Errorf("no release binary for %s/%s", goos, goarch)
 	}
 	base := "sqlc-ydb_" + version + "_" + goos + "_" + goarch
-	if goos == "windows" {
-		return base, "sqlc-ydb.exe", ".zip", nil
-	}
 	return base, "sqlc-ydb", ".tar.gz", nil
 }
 
@@ -271,7 +269,7 @@ func checksum(sums []byte, name string) ([]byte, error) {
 	return found, nil
 }
 
-func extract(dst io.Writer, data []byte, name, extension string) error {
+func extract(dst io.Writer, data []byte, name string) error {
 	found := false
 	copyBinary := func(src io.Reader, size int64) error {
 		if found || size <= 0 || size > maxBinary {
@@ -284,52 +282,28 @@ func extract(dst io.Writer, data []byte, name, extension string) error {
 		}
 		return err
 	}
-	if extension == ".zip" {
-		reader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	gz, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = gz.Close() }()
+	reader := tar.NewReader(io.LimitReader(gz, maxArchive+1))
+	for {
+		header, err := reader.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
 		if err != nil {
 			return err
 		}
-		for _, file := range reader.File {
-			if file.Name != name {
-				continue
-			}
-			if !file.Mode().IsRegular() || file.UncompressedSize64 > maxBinary {
-				return errors.New("invalid executable in ZIP update")
-			}
-			src, err := file.Open()
-			if err != nil {
-				return err
-			}
-			err = copyBinary(src, int64(file.UncompressedSize64))
-			_ = src.Close()
-			if err != nil {
-				return err
-			}
+		if header.Name != name {
+			continue
 		}
-	} else {
-		gz, err := gzip.NewReader(bytes.NewReader(data))
-		if err != nil {
+		if header.Typeflag != tar.TypeReg {
+			return errors.New("executable in update is not a regular file")
+		}
+		if err := copyBinary(reader, header.Size); err != nil {
 			return err
-		}
-		defer func() { _ = gz.Close() }()
-		reader := tar.NewReader(io.LimitReader(gz, maxArchive+1))
-		for {
-			header, err := reader.Next()
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			if err != nil {
-				return err
-			}
-			if header.Name != name {
-				continue
-			}
-			if header.Typeflag != tar.TypeReg {
-				return errors.New("executable in update is not a regular file")
-			}
-			if err := copyBinary(reader, header.Size); err != nil {
-				return err
-			}
 		}
 	}
 	if !found {

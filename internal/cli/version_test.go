@@ -2,7 +2,6 @@ package cli
 
 import (
 	"archive/tar"
-	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
@@ -61,42 +60,30 @@ func TestVersionUpdateNotice(t *testing.T) {
 }
 
 func TestVersionUpgradeInstallsBinary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("manual upgrade instructions are tested separately")
+	}
 	for _, outputFails := range []bool{false, true} {
 		t.Run(fmt.Sprint("output failure=", outputFails), func(t *testing.T) {
 			const version = "999.0.0"
 			const binary = "replacement binary"
 			base := "sqlc-ydb_" + version + "_" + runtime.GOOS + "_" + runtime.GOARCH
 			var archive bytes.Buffer
-			if runtime.GOOS == "windows" {
-				z := zip.NewWriter(&archive)
-				w, err := z.Create(base + "/sqlc-ydb.exe")
-				if err != nil {
-					t.Fatal(err)
-				}
-				if _, err := io.WriteString(w, binary); err != nil {
-					t.Fatal(err)
-				}
-				if err := z.Close(); err != nil {
-					t.Fatal(err)
-				}
-				base += ".zip"
-			} else {
-				gz := gzip.NewWriter(&archive)
-				tw := tar.NewWriter(gz)
-				if err := tw.WriteHeader(&tar.Header{Name: base + "/sqlc-ydb", Mode: 0755, Size: int64(len(binary))}); err != nil {
-					t.Fatal(err)
-				}
-				if _, err := io.WriteString(tw, binary); err != nil {
-					t.Fatal(err)
-				}
-				if err := tw.Close(); err != nil {
-					t.Fatal(err)
-				}
-				if err := gz.Close(); err != nil {
-					t.Fatal(err)
-				}
-				base += ".tar.gz"
+			gz := gzip.NewWriter(&archive)
+			tw := tar.NewWriter(gz)
+			if err := tw.WriteHeader(&tar.Header{Name: base + "/sqlc-ydb", Mode: 0755, Size: int64(len(binary))}); err != nil {
+				t.Fatal(err)
 			}
+			if _, err := io.WriteString(tw, binary); err != nil {
+				t.Fatal(err)
+			}
+			if err := tw.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if err := gz.Close(); err != nil {
+				t.Fatal(err)
+			}
+			base += ".tar.gz"
 			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch r.URL.Path {
 				case "/latest":
@@ -168,6 +155,9 @@ func TestVersionNetworkFailureIsSilent(t *testing.T) {
 }
 
 func TestSelfUpdateCommand(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("manual upgrade instructions are tested separately")
+	}
 	if code, _, stderr := invoke("version", "--upgrade", "--verbose"); code != 1 || !strings.Contains(stderr, "--verbose cannot be combined with --upgrade") {
 		t.Fatalf("%d %q", code, stderr)
 	}

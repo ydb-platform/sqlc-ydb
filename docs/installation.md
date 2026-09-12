@@ -80,36 +80,16 @@ Release candidates are for evaluation before a stable release.
 sqlc-ydb version --upgrade
 ```
 
-Concurrent updaters serialize the final identity check and replacement using a `<executable>.update-lock` directory beside the resolved executable. A competing updater fails without replacing the file. After a forcibly terminated updater, confirm no updater is running before recovery. On Linux and macOS, remove the empty lock directory and retry. On Windows, follow the recovery procedure below before removing the lock.
+Concurrent updaters serialize the final identity check and replacement using a `<executable>.update-lock` directory beside the resolved executable. A competing updater fails without replacing the file. After a forcibly terminated updater, confirm no updater is running before recovery. Remove the empty lock directory and retry.
 
-This command installs the latest stable release for the executable's operating system and architecture. It does not select prereleases or downgrade a recognized newer version, including a newer RC. A source build with an unrecognized version can be replaced by the latest stable release; unrecognized versions do not trigger automatic update notices.
+On Linux and macOS, this command installs the latest stable release for the executable’s operating system and architecture. It does not select prereleases or downgrade a recognized newer version, including a newer RC. A source build with an unrecognized version can be replaced by the latest stable release; unrecognized versions do not trigger automatic update notices.
 
-The command resolves the running executable and any symlinks, verifies the archive against the release's `SHA256SUMS`, and stages the replacement in the same directory. The real executable is replaced; symlinks remain intact, and project files are not modified. The directory must be writable by the current user. The updater does not invoke `sudo` or change permissions to gain access. On Linux and macOS, replacement uses an atomic rename. Windows moves the running image to `<executable>.update-lock/previous.exe` first and attempts to restore it if installation fails. A process termination between the two renames requires manual recovery; Windows replacement is not atomic. When upgrading the running executable on Windows, its backup remains locked until the old process exits. The backup and lock directory are not automatically removed after exit; use the cleanup procedure below before the next upgrade.
+The command resolves the running executable and any symlinks, verifies the archive against the release's `SHA256SUMS`, and stages the replacement in the same directory. The real executable is replaced; symlinks remain intact, and project files are not modified. The directory must be writable by the current user. The updater does not invoke `sudo` or change permissions to gain access. On Linux and macOS, replacement uses an atomic rename. Windows does not replace the running executable; it prints manual upgrade instructions.
 
 Checksums detect corrupted downloads; they do not authenticate a release independently. The archive and `SHA256SUMS` are fetched over HTTPS from the same GitHub release, so installation trusts this repository, its maintainers and its release pipeline. Detached signatures are not currently published or verified.
 
-### Windows recovery
+### Windows manual upgrade
 
-After confirming no updater or old executable process is running, set `$target` to the real installation path (the symlink destination, if applicable). If the executable is missing, restore its recorded backup before retrying. If the executable exists, verify that it runs before deleting the leftover backup. These commands never overwrite an existing executable:
-
-```powershell
-$ErrorActionPreference = 'Stop'
-$target = 'C:\path\to\sqlc-ydb.exe'
-$lock = "$target.update-lock"
-$backup = Join-Path $lock 'previous.exe'
-if (!(Test-Path -LiteralPath $target)) {
-    Move-Item -LiteralPath $backup -Destination $target -ErrorAction Stop
-}
-& $target version --no-remote
-if ($LASTEXITCODE -ne 0) { throw 'Executable verification failed; preserve the backup.' }
-if (Test-Path -LiteralPath $backup) {
-    Remove-Item -LiteralPath $backup -ErrorAction Stop
-}
-if (Test-Path -LiteralPath $lock) {
-    Remove-Item -LiteralPath $lock -ErrorAction Stop
-}
-```
-
-If both the executable and the backup are missing, reinstall from a release archive. Do not recursively delete a recovery directory or choose a random staging file as the backup.
+`sqlc-ydb version --upgrade` prints instructions without downloading or modifying files. Download the Windows ZIP for your architecture and `SHA256SUMS` from the [latest release](https://github.com/ydb-platform/sqlc-ydb/releases/latest). Compare `Get-FileHash -Algorithm SHA256` for the ZIP with its entry in `SHA256SUMS`, then extract `sqlc-ydb.exe`. After the command exits, close any other running sqlc-ydb processes and replace the installed executable. If you launch through a symlink, replace its target and preserve the link.
 
 Update downloads have a five-minute deadline. Unlike the optional check in `version`, an explicit update reports errors and returns a nonzero exit status. Failed downloads or verification leave the installed executable unchanged. `version --upgrade --no-remote` is an error because installation requires network access. If another package manager owns the installation, use that manager's upgrade command. `--upgrade` also rejects `--verbose`; request the installed version and commit separately with `version --verbose`.

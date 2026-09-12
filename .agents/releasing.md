@@ -47,7 +47,7 @@ The release matrix is exactly:
 
 Each archive contains `sqlc-ydb` (or `sqlc-ydb.exe`) and `LICENSE` in a directory named `sqlc-ydb_VERSION_OS_ARCH`. `SHA256SUMS` covers all six archives. Builds use `CGO_ENABLED=0`; applications using generated code still need their SDKs.
 
-`sqlc-ydb version` prints the version, including any RC suffix, and may append an update notice. `sqlc-ydb version --verbose` also prints the embedded commit. Installer and release verification use `--no-remote` to skip the network check and compare deterministic output. Release builds carry the exact prepared source commit. Ordinary source builds report `unknown` for the commit unless linker flags supply it. `version --upgrade` downloads stable artifacts and verifies SHA256 before replacing the real executable; symlink paths remain intact.
+`sqlc-ydb version` prints the version, including any RC suffix, and may append an update notice. `sqlc-ydb version --verbose` also prints the embedded commit. Installer and release verification use `--no-remote` to skip the network check and compare deterministic output. Release builds carry the exact prepared source commit. Ordinary source builds report `unknown` for the commit unless linker flags supply it. `version --upgrade` downloads stable artifacts and verifies SHA256 before replacing the real executable; symlink paths remain intact. Automatic in-place upgrades are supported on Linux and macOS. On Windows, `version --upgrade` prints manual upgrade instructions.
 
 ## Local checks
 

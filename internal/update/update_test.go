@@ -2,7 +2,6 @@ package update
 
 import (
 	"archive/tar"
-	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -45,59 +44,38 @@ type entry struct {
 	symlink    bool
 }
 
-func archive(t *testing.T, extension string, entries ...entry) []byte {
+func archive(t *testing.T, entries ...entry) []byte {
 	t.Helper()
 	var out bytes.Buffer
-	if extension == ".zip" {
-		w := zip.NewWriter(&out)
-		for _, e := range entries {
-			h := &zip.FileHeader{Name: e.name, Method: zip.Deflate}
-			h.SetMode(0755)
-			if e.symlink {
-				h.SetMode(os.ModeSymlink | 0755)
-			}
-			f, err := w.CreateHeader(h)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := io.WriteString(f, e.body); err != nil {
-				t.Fatal(err)
-			}
+	gz := gzip.NewWriter(&out)
+	w := tar.NewWriter(gz)
+	for _, e := range entries {
+		h := &tar.Header{Name: e.name, Mode: 0755, Size: int64(len(e.body)), Typeflag: tar.TypeReg}
+		if e.symlink {
+			h.Typeflag = tar.TypeSymlink
+			h.Size = 0
+			h.Linkname = "elsewhere"
 		}
-		if err := w.Close(); err != nil {
+		if err := w.WriteHeader(h); err != nil {
 			t.Fatal(err)
 		}
-	} else {
-		gz := gzip.NewWriter(&out)
-		w := tar.NewWriter(gz)
-		for _, e := range entries {
-			h := &tar.Header{Name: e.name, Mode: 0755, Size: int64(len(e.body)), Typeflag: tar.TypeReg}
-			if e.symlink {
-				h.Typeflag = tar.TypeSymlink
-				h.Size = 0
-				h.Linkname = "elsewhere"
-			}
-			if err := w.WriteHeader(h); err != nil {
+		if !e.symlink {
+			if _, err := io.WriteString(w, e.body); err != nil {
 				t.Fatal(err)
 			}
-			if !e.symlink {
-				if _, err := io.WriteString(w, e.body); err != nil {
-					t.Fatal(err)
-				}
-			}
 		}
-		if err := w.Close(); err != nil {
-			t.Fatal(err)
-		}
-		if err := gz.Close(); err != nil {
-			t.Fatal(err)
-		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
 	}
 	return out.Bytes()
 }
 
 func TestExtraction(t *testing.T) {
-	for _, ext := range []string{".tar.gz", ".zip"} {
+	{
 		for _, tc := range []struct {
 			name    string
 			entries []entry
@@ -110,9 +88,9 @@ func TestExtraction(t *testing.T) {
 			{"duplicate", []entry{{name: "base/sqlc-ydb", body: "one"}, {name: "base/sqlc-ydb", body: "two"}}, false},
 			{"symlink", []entry{{name: "base/sqlc-ydb", symlink: true}}, false},
 		} {
-			t.Run(ext+tc.name, func(t *testing.T) {
+			t.Run(tc.name, func(t *testing.T) {
 				var out bytes.Buffer
-				err := extract(&out, archive(t, ext, tc.entries...), "base/sqlc-ydb", ext)
+				err := extract(&out, archive(t, tc.entries...), "base/sqlc-ydb")
 				if (err == nil) != tc.valid {
 					t.Fatalf("extract: %v", err)
 				}
@@ -121,7 +99,7 @@ func TestExtraction(t *testing.T) {
 				}
 			})
 		}
-		if err := extract(io.Discard, []byte("broken"), "base/sqlc-ydb", ext); err == nil {
+		if err := extract(io.Discard, []byte("broken"), "base/sqlc-ydb"); err == nil {
 			t.Fatal("accepted broken archive")
 		}
 	}
@@ -209,6 +187,9 @@ func (f failingTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 
 func TestDownloadFailuresKeepInstallation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("automatic upgrades are not supported on Windows")
+	}
 	_, _, extension, err := artifact("0.2.0", runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		t.Fatal(err)
@@ -258,27 +239,25 @@ func TestMalformedTarBody(t *testing.T) {
 	if err := gz.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := extract(io.Discard, data.Bytes(), "sqlc-ydb", ".tar.gz"); err == nil {
+	if err := extract(io.Discard, data.Bytes(), "sqlc-ydb"); err == nil {
 		t.Fatal("accepted invalid tar body")
 	}
 }
 
 func TestArtifactMatrix(t *testing.T) {
-	for _, osName := range []string{"linux", "darwin", "windows"} {
+	for _, osName := range []string{"linux", "darwin"} {
 		for _, arch := range []string{"amd64", "arm64"} {
 			base, bin, ext, err := artifact("1.2.3", osName, arch)
 			if err != nil || base != "sqlc-ydb_1.2.3_"+osName+"_"+arch {
 				t.Fatal(base, err)
 			}
-			if osName == "windows" && (bin != "sqlc-ydb.exe" || ext != ".zip") {
-				t.Fatal(bin, ext)
-			}
-			if osName != "windows" && (bin != "sqlc-ydb" || ext != ".tar.gz") {
+
+			if bin != "sqlc-ydb" || ext != ".tar.gz" {
 				t.Fatal(bin, ext)
 			}
 		}
 	}
-	for _, pair := range [][2]string{{"linux", "386"}, {"freebsd", "amd64"}} {
+	for _, pair := range [][2]string{{"linux", "386"}, {"freebsd", "amd64"}, {"windows", "amd64"}} {
 		if _, _, _, err := artifact("1.2.3", pair[0], pair[1]); err == nil {
 			t.Fatal("unsupported platform")
 		}
@@ -291,7 +270,7 @@ func fixture(t *testing.T, target string, mutate func(string, []byte) []byte) *C
 	if err != nil {
 		t.Skip(err)
 	}
-	data := archive(t, ext, entry{name: base + "/" + bin, body: "new executable"})
+	data := archive(t, entry{name: base + "/" + bin, body: "new executable"})
 	sums := fmt.Sprintf("%x  %s\n", sha256.Sum256(data), base+ext)
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -328,6 +307,9 @@ func writeTarget(t *testing.T) string {
 }
 
 func TestUpdate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("automatic upgrades are not supported on Windows")
+	}
 	for _, symlink := range []bool{false, true} {
 		t.Run(fmt.Sprint("symlink=", symlink), func(t *testing.T) {
 			target := writeTarget(t)
@@ -365,6 +347,9 @@ func TestUpdate(t *testing.T) {
 }
 
 func TestUpdateFailuresPreserveExecutable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("automatic upgrades are not supported on Windows")
+	}
 	for _, failure := range []string{"checksum", "download", "archive", "changed", "executable", "symlink", "directory", "stage"} {
 		t.Run(failure, func(t *testing.T) {
 			target := writeTarget(t)
@@ -429,6 +414,9 @@ func TestUpdateFailuresPreserveExecutable(t *testing.T) {
 }
 
 func TestNoDowngradeOrUnnecessaryInstall(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("automatic upgrades are not supported on Windows")
+	}
 	for _, version := range []string{"0.2.0", "0.3.0", "0.3.0-rc1"} {
 		c := fixture(t, "", func(string, []byte) []byte { t.Error("downloaded an unnecessary update"); return nil })
 		c.Executable = func() (string, error) { t.Error("looked up executable unnecessarily"); return "", nil }
@@ -485,7 +473,7 @@ func TestLatestAndNetworkErrors(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := c.Update(ctx, "0.1.0"); !errors.Is(err, context.Canceled) {
+	if _, err := c.Update(ctx, "0.1.0"); runtime.GOOS != "windows" && !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
 	c.ReleasesURL = "http://example.invalid"
@@ -502,8 +490,11 @@ func TestDownloadSizeLimit(t *testing.T) {
 }
 
 // Exercise replacement while the target executable is actually running,
-// including Windows image locks. The child uses a trusted local TLS fixture.
+// on supported platforms. The child uses a trusted local TLS fixture.
 func TestRunningExecutable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("automatic upgrades are not supported on Windows")
+	}
 	if url := os.Getenv("SQLC_UPDATE_TEST_SERVER"); url != "" {
 		c := NewClient()
 		c.ReleasesURL = url

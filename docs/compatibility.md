@@ -15,7 +15,7 @@ Compatibility is tracked by individual CLI, configuration and generated API cont
 
 - `generate`, `compile`, `diff`, `init`, `version`, `--help`, `-f` / `--file`.
 - `version` prints the version and optionally a newer-stable-release notification; `version --verbose` also prints the commit embedded by release builds. Ordinary source builds report `unknown` unless the commit is supplied through linker flags. The update check times out after two seconds and hides failures. Use `--no-remote` for version output without a network check.
-- `version --upgrade` replaces the running executable with the verified latest stable release, resolving symlinks and preserving their paths. Download and verification failures preserve the installed binary. See [installation](installation.md#update-the-installed-executable).
+- `version --upgrade` replaces the running executable with the verified latest stable release, resolving symlinks and preserving their paths. Download and verification failures preserve the installed binary. See [installation](installation.md#update-the-installed-executable). Automatic in-place upgrades are supported on Linux and macOS. On Windows, `version --upgrade` prints manual upgrade instructions.
 - `sqlc.yaml`, `sqlc.yml`, and `sqlc.json`; configuration version 2. Paths resolve relative to the configuration.
 - File paths, lists, nonrecursive directories, and ordinary glob patterns. Explicit list order is retained; directory entries and glob matches use lexical order. Hidden files and `*.down.sql` are excluded.
 - Schema rollback sections for goose, sql-migrate, tern and dbmate are excluded. Migration markers inside string literals are preserved.

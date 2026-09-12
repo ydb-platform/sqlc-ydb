@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -155,6 +156,13 @@ func run(args []string, stdout, stderr io.Writer, updater *update.Client) int {
 		return 0
 	}
 	if a.upgrade {
+		if runtime.GOOS == "windows" {
+			_, err := fmt.Fprintln(stdout, "Automatic upgrades are not supported on Windows.\nDownload the Windows ZIP for your architecture and SHA256SUMS from:\nhttps://github.com/ydb-platform/sqlc-ydb/releases/latest\nVerify the ZIP with Get-FileHash -Algorithm SHA256 and extract sqlc-ydb.exe.\nAfter this command exits, close other sqlc-ydb processes and replace the installed executable (the symlink target, if applicable).")
+			if err != nil {
+				return fail(err)
+			}
+			return 0
+		}
 		result, err := updater.Update(context.Background(), Version)
 		if err != nil {
 			return fail(err)
