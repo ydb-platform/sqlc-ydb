@@ -227,7 +227,7 @@ func install(staged, target string, original os.FileInfo) error {
 	// Keep the lock independent of the executable inode, which rename replaces.
 	lock := target + ".update-lock"
 	if err := os.Mkdir(lock, 0700); err != nil {
-		return fmt.Errorf("cannot acquire update lock %s (remove a stale lock only when no updater is running): %w", lock, err)
+		return fmt.Errorf("cannot acquire update lock %s (confirm no updater is running; preserve previous.exe for recovery before removing a stale lock): %w", lock, err)
 	}
 	defer func() { _ = os.Remove(lock) }()
 	// Do not replace a different file installed while the download was running.

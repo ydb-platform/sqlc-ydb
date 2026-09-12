@@ -4,13 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 func replaceExecutable(staged, target string) error {
 	// Windows can rename a running executable but cannot replace it directly.
-	// Use the unique staging name so a previous backup is never overwritten.
-	// The old image may remain locked until this process exits.
-	backup := staged + ".old"
+	// Keep the backup in the per-target lock directory so an interrupted rename
+	// has an unambiguous recovery path. A nonempty lock survives deferred cleanup.
+	backup := filepath.Join(target+".update-lock", "previous.exe")
 	if _, err := os.Lstat(backup); !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("update backup path is not available: %s", backup)
 	}

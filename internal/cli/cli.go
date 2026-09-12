@@ -109,6 +109,9 @@ func parseArgs(args []string) (arguments, error) {
 	if a.noRemote && a.upgrade {
 		return a, errors.New("--upgrade requires network access; remove --no-remote")
 	}
+	if a.verbose && a.upgrade {
+		return a, errors.New("--verbose cannot be combined with --upgrade")
+	}
 	return a, nil
 }
 

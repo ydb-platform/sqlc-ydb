@@ -168,6 +168,9 @@ func TestVersionNetworkFailureIsSilent(t *testing.T) {
 }
 
 func TestSelfUpdateCommand(t *testing.T) {
+	if code, _, stderr := invoke("version", "--upgrade", "--verbose"); code != 1 || !strings.Contains(stderr, "--verbose cannot be combined with --upgrade") {
+		t.Fatalf("%d %q", code, stderr)
+	}
 	if code, _, stderr := invoke("version", "--upgrade"); code != 1 || !strings.Contains(stderr, "check for updates") {
 		t.Fatalf("%d %q", code, stderr)
 	}

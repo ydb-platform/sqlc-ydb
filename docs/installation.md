@@ -80,10 +80,34 @@ Release candidates are for evaluation before a stable release.
 sqlc-ydb version --upgrade
 ```
 
-Concurrent updaters serialize the final identity check and replacement using a `<executable>.update-lock` directory beside the resolved executable. A competing updater fails without replacing the file. If the process is forcibly terminated during this step, remove that directory only after confirming no updater is running, then retry.
+Concurrent updaters serialize the final identity check and replacement using a `<executable>.update-lock` directory beside the resolved executable. A competing updater fails without replacing the file. After a forcibly terminated updater, confirm no updater is running before recovery. On Linux and macOS, remove the empty lock directory and retry. On Windows, follow the recovery procedure below before removing the lock.
 
 This command installs the latest stable release for the executable's operating system and architecture. It does not select prereleases or downgrade a recognized newer version, including a newer RC. A source build with an unrecognized version can be replaced by the latest stable release; unrecognized versions do not trigger automatic update notices.
 
-The command resolves the running executable and any symlinks, verifies the archive against the release's `SHA256SUMS`, and stages the replacement in the same directory. The real executable is replaced; symlinks remain intact, and project files are not modified. The directory must be writable by the current user. The updater does not invoke `sudo` or change permissions to gain access. On Linux and macOS, replacement uses an atomic rename. Windows moves the running image aside first and restores it if installation fails; a locked `.sqlc-ydb-update-*.old` file may remain beside the executable and can be removed after the old process exits.
+The command resolves the running executable and any symlinks, verifies the archive against the release's `SHA256SUMS`, and stages the replacement in the same directory. The real executable is replaced; symlinks remain intact, and project files are not modified. The directory must be writable by the current user. The updater does not invoke `sudo` or change permissions to gain access. On Linux and macOS, replacement uses an atomic rename. Windows moves the running image to `<executable>.update-lock/previous.exe` first and attempts to restore it if installation fails. A process termination between the two renames requires manual recovery; Windows replacement is not atomic. A locked backup may also remain after a successful upgrade until the old process exits.
 
-Update downloads have a five-minute deadline. Unlike the optional check in `version`, an explicit update reports errors and returns a nonzero exit status. Failed downloads or verification leave the installed executable unchanged. `version --upgrade --no-remote` is an error because installation requires network access. If another package manager owns the installation, use that manager's upgrade command.
+### Windows recovery
+
+After confirming no updater or old executable process is running, set `$target` to the real installation path (the symlink destination, if applicable). If the executable is missing, restore its recorded backup before retrying. If the executable exists, verify that it runs before deleting the leftover backup. These commands never overwrite an existing executable:
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$target = 'C:\path\to\sqlc-ydb.exe'
+$lock = "$target.update-lock"
+$backup = Join-Path $lock 'previous.exe'
+if (!(Test-Path -LiteralPath $target)) {
+    Move-Item -LiteralPath $backup -Destination $target -ErrorAction Stop
+}
+& $target version --no-remote
+if ($LASTEXITCODE -ne 0) { throw 'Executable verification failed; preserve the backup.' }
+if (Test-Path -LiteralPath $backup) {
+    Remove-Item -LiteralPath $backup -ErrorAction Stop
+}
+if (Test-Path -LiteralPath $lock) {
+    Remove-Item -LiteralPath $lock -ErrorAction Stop
+}
+```
+
+If both the executable and the backup are missing, reinstall from a release archive. Do not recursively delete a recovery directory or choose a random staging file as the backup.
+
+Update downloads have a five-minute deadline. Unlike the optional check in `version`, an explicit update reports errors and returns a nonzero exit status. Failed downloads or verification leave the installed executable unchanged. `version --upgrade --no-remote` is an error because installation requires network access. If another package manager owns the installation, use that manager's upgrade command. `--upgrade` also rejects `--verbose`; request the installed version and commit separately with `version --verbose`.
