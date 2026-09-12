@@ -18,6 +18,8 @@ curl -fsSL https://raw.githubusercontent.com/ydb-platform/sqlc-ydb/main/install.
 
 See [installation](docs/installation.md) for pinned versions, release candidates, Windows downloads and PATH setup.
 
+Run `sqlc-ydb version` to check for a newer release and `sqlc-ydb version --upgrade` to update the installed executable in place. Automatic in-place upgrades are supported on Linux and macOS. On Windows, `version --upgrade` prints manual upgrade instructions.
+
 ## Feature parity with sqlc
 
 The core `generate`, `compile`, `diff`, `init` and `version` workflow is supported. Configuration is a subset of sqlc v2; queries use YQL parameters and `:one`, `:many`, or `:exec` annotations. Other database engines, external plugins, sqlc macros, database-assisted analysis and cloud workflows are not supported.

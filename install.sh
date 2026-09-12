@@ -79,7 +79,7 @@ install_sqlc_ydb() (
     # Extract only the executable as bytes, without trusting archive paths or modes.
     tar -xzOf "$work/$archive" "$base/sqlc-ydb" > "$work/sqlc-ydb"
     chmod 755 "$work/sqlc-ydb"
-    [[ $("$work/sqlc-ydb" version) == "${version#v}" ]] || fail 'downloaded binary reports an unexpected version'
+    [[ $("$work/sqlc-ydb" version --no-remote) == "${version#v}" ]] || fail 'downloaded binary reports an unexpected version'
 
     mkdir -p -- "$bin_dir"
     bin_dir=$(cd -- "$bin_dir" && pwd)

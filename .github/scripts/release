@@ -71,7 +71,7 @@ check_release() {
   fi
   [[ -x $binary ]] || fail "release binary is not executable: $binary"
   local actual
-  actual=$("$binary" version)
+  actual=$("$binary" version --no-remote)
   [[ $actual == "$version" ]] || fail "tag $tag does not match CLI version $actual"
   local notes_tmp
   if [[ -n $notes ]]; then
@@ -167,9 +167,9 @@ smoke_archive() {
   fi
   local executable="$temporary/smoke/$base/$binary"
   local actual verbose config
-  actual=$("$executable" version)
+  actual=$("$executable" version --no-remote)
   [[ $actual == "$version" ]] || fail "host smoke returned version $actual, expected $version"
-  verbose=$("$executable" version --verbose)
+  verbose=$("$executable" version --verbose --no-remote)
   [[ $verbose == *"$version"* && $verbose == *"$commit"* ]] || \
     fail "host verbose version does not contain version and commit"
   for config in examples/*/sqlc.yaml; do
