@@ -66,7 +66,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: examples/package-lock.json
+          cache-dependency-path: tests/examples/typescript/package-lock.json
       - uses: dtolnay/rust-toolchain@1.95.0
         with:
           components: rustfmt
@@ -107,12 +107,18 @@ jobs:
         uses: golangci/golangci-lint-action@v9
         with:
           version: ${{ steps.lint-version.outputs.version }}
-      - name: Lint Go example tests
+      - name: Lint Go examples
         uses: golangci/golangci-lint-action@v9
         with:
           version: ${{ steps.lint-version.outputs.version }}
           working-directory: examples
           args: --config ../.golangci.yml ./...
+      - name: Lint Go example tests
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: ${{ steps.lint-version.outputs.version }}
+          working-directory: tests/examples/go
+          args: --config ../../../.golangci.yml ./...
       - name: Build and verify all six archives sequentially
         run: |
           test "$(go env GOHOSTOS)" = linux

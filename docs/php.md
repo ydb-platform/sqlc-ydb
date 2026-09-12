@@ -83,6 +83,6 @@ The shared examples pin `ydb-platform/ydb-php-sdk` 1.16.1. Inspected SDK source 
 
 SDK 1.16.1 fixes `google/protobuf` at 3.15.8. On PHP 8.2 that protobuf runtime emits deprecation notices for legacy interface return types and dynamic properties; a deprecation-clean PHP 8.2 run requires the SDK to update its protobuf dependency.
 
-Use the repository's [development commands](../.agents/development.md) for generated-code and live checks. The [shared PHP example harness](../examples/php/README.md) documents its generated-class loading layout.
+Use the repository's [development commands](../.agents/development.md) for generated-code and live checks. The [shared PHP example harness](../tests/examples/php/README.md) documents its generated-class loading layout.
 
 Primary references: the YDB documentation for [installing an SDK](https://ydb.tech/docs/en/reference/ydb-sdk/install) and the official [`ydb-platform/ydb-php-sdk`](https://github.com/ydb-platform/ydb-php-sdk).

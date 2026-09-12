@@ -41,4 +41,4 @@ Timestamp parameters normalize Local values to UTC; Unspecified values are inter
 
 ## Dependencies
 
-The shared example project targets `net8.0` and pins `Ydb.Sdk` 0.35.0 and Dapper 2.1.79. Runtime packages belong to the generated application. See the [shared C# examples](../examples/csharp/README.md) for build and usage entry points.
+The shared example project targets `net8.0` and pins `Ydb.Sdk` 0.35.0 and Dapper 2.1.79. Runtime packages belong to the generated application. See the [shared C# examples](../tests/examples/csharp/README.md) for build and usage entry points.

@@ -1,0 +1,30 @@
+{
+  "name": "ydb-platform/sqlc-ydb-php-examples",
+  "description": "Shared runtime checks for sqlc-ydb generated PHP examples",
+  "type": "project",
+  "license": "Apache-2.0",
+  "require": {
+    "php": ">=8.2",
+    "ext-bcmath": "*",
+    "ext-curl": "*",
+    "ext-grpc": "*",
+    "ext-json": "*",
+    "ydb-platform/ydb-php-sdk": "1.16.1"
+  },
+  "autoload": {
+    "classmap": [
+      "../../../examples/authors/php/native",
+      "../../../examples/batch/php/native",
+      "../../../examples/booktest/php/native",
+      "../../../examples/jets/php/native",
+      "../../../examples/ondeck/php/native"
+    ]
+  },
+  "scripts": {
+    "check": "@php check-generated.php",
+    "smoke": "@php live.php"
+  },
+  "config": {
+    "sort-packages": true
+  }
+}

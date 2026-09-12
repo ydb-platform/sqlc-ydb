@@ -25,9 +25,15 @@ jobs:
         uses: golangci/golangci-lint-action@v9
         with:
           version: ${{ steps.version.outputs.version }}
-      - name: Lint Go example tests
+      - name: Lint Go examples
         uses: golangci/golangci-lint-action@v9
         with:
           version: ${{ steps.version.outputs.version }}
           working-directory: examples
           args: --config ../.golangci.yml ./...
+      - name: Lint Go example tests
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: ${{ steps.version.outputs.version }}
+          working-directory: tests/examples/go
+          args: --config ../../../.golangci.yml ./...

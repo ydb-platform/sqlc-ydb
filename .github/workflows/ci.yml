@@ -42,7 +42,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: examples/package-lock.json
+          cache-dependency-path: tests/examples/typescript/package-lock.json
       - uses: dtolnay/rust-toolchain@1.95.0
         with:
           components: rustfmt
@@ -82,27 +82,27 @@ jobs:
           DOTNET_CLI_TELEMETRY_OPTOUT: '1'
         run: go test -p 1 -count=1 ./internal/codegen/csharp ./internal/codegen/java ./internal/codegen/kotlin ./internal/codegen/rust
       - name: Compile and test all jOOQ examples
-        run: mvn -B -f examples/java/jooq/pom.xml test
+        run: mvn -B -f tests/examples/java/jooq/pom.xml test
       - name: Compile Kotlin Query SDK, JDBC and Exposed examples
         run: mvn -B -f examples/authors/kotlin/pom.xml test-compile
       - name: Compile all Dapper examples
-        run: dotnet build examples/csharp/GeneratedProfiles.csproj
+        run: dotnet build tests/examples/csharp/GeneratedProfiles.csproj
       - name: Check generated C# timestamp contracts
         env:
           TZ: Europe/Moscow
-        run: dotnet run --project examples/csharp/GeneratedProfiles.csproj --no-build -- contracts
+        run: dotnet run --project tests/examples/csharp/GeneratedProfiles.csproj --no-build -- contracts
       - name: Install TypeScript example dependencies
-        working-directory: examples
+        working-directory: tests/examples/typescript
         run: npm ci --ignore-scripts
       - name: Test TypeScript generation against the pinned compiler
         run: go test -count=1 ./internal/codegen/typescript
       - name: Check TypeScript examples against the pinned SDK
-        working-directory: examples
+        working-directory: tests/examples/typescript
         run: npm run check
       - name: Compile and test Rust examples against the pinned SDK
-        run: cargo test --manifest-path examples/rust/Cargo.toml --locked
+        run: cargo test --manifest-path tests/examples/rust/Cargo.toml --locked
       - name: Check PHP examples against the pinned SDK
-        working-directory: examples/php
+        working-directory: tests/examples/php
         run: |
           composer install --no-interaction --prefer-dist
           composer check
@@ -148,7 +148,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: examples/package-lock.json
+          cache-dependency-path: tests/examples/typescript/package-lock.json
       - uses: dtolnay/rust-toolchain@1.95.0
       - uses: shivammathur/setup-php@v2
         with:
@@ -165,10 +165,10 @@ jobs:
         run: make generate
       - name: Install and compile new runtime examples
         run: |
-          dotnet build examples/csharp/GeneratedProfiles.csproj
-          npm ci --prefix examples --ignore-scripts
-          cargo test --manifest-path examples/rust/Cargo.toml --locked --no-run
-          composer install --working-dir=examples/php --no-interaction --prefer-dist
+          dotnet build tests/examples/csharp/GeneratedProfiles.csproj
+          npm ci --prefix tests/examples/typescript --ignore-scripts
+          cargo test --manifest-path tests/examples/rust/Cargo.toml --locked --no-run
+          composer install --working-dir=tests/examples/php --no-interaction --prefer-dist
       - name: Install tested Python runtimes
         run: python3 -m pip install -r examples/authors/python/requirements.txt
       # Keep local-ydb acceptance sequential: concurrent tests/compilers can
@@ -181,7 +181,7 @@ jobs:
         run: go test -p 1 -count=1 -timeout=180s -covermode=atomic -coverpkg=./... -coverprofile=coverage-python-live.out ./internal/codegen/python -run TestLiveYDB -v
       - name: Execute all Go examples sequentially
         run: |
-          cd examples
+          cd tests/examples/go
           go test -p 1 -count=1 -timeout=180s ./... -v
       - name: Run Python authors example
         working-directory: examples/authors
@@ -193,7 +193,7 @@ jobs:
           DOTNET_CLI_TELEMETRY_OPTOUT: '1'
         run: dotnet run --project csharp/adonet/Authors.AdoNet.csproj
       - name: Run jOOQ examples in isolated tables
-        run: mvn -B -f examples/java/jooq/pom.xml test
+        run: mvn -B -f tests/examples/java/jooq/pom.xml test
       - name: Run Java native and JDBC examples sequentially
         run: sh examples/authors/java/run-smoke.sh
       - name: Run Kotlin Query SDK, JDBC and Exposed examples sequentially
@@ -202,14 +202,14 @@ jobs:
         env:
           YDB_CONNECTION_STRING: Host=localhost;Port=2136;Database=/local
         run: |
-          dotnet run --project examples/csharp/GeneratedProfiles.csproj --no-build -- dapper
+          dotnet run --project tests/examples/csharp/GeneratedProfiles.csproj --no-build -- dapper
       - name: Run all TypeScript examples sequentially
-        working-directory: examples
+        working-directory: tests/examples/typescript
         run: npm run smoke
       - name: Run all Rust examples sequentially
-        run: cargo test --manifest-path examples/rust/Cargo.toml --locked --test live_smoke -- --nocapture
+        run: cargo test --manifest-path tests/examples/rust/Cargo.toml --locked --test live_smoke -- --nocapture
       - name: Run all PHP examples sequentially
-        working-directory: examples/php
+        working-directory: tests/examples/php
         run: composer smoke
       - name: Save integration coverage reports
         uses: actions/upload-artifact@v4
