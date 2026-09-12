@@ -139,6 +139,73 @@ func TestChecksums(t *testing.T) {
 	}
 }
 
+type failingTransport struct {
+	base   http.RoundTripper
+	suffix string
+}
+
+func (f failingTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	if strings.HasSuffix(r.URL.Path, f.suffix) {
+		return nil, io.ErrUnexpectedEOF
+	}
+	return f.base.RoundTrip(r)
+}
+
+func TestDownloadFailuresKeepInstallation(t *testing.T) {
+	_, _, extension, err := artifact("0.2.0", runtime.GOOS, runtime.GOARCH)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, suffix := range []string{"SHA256SUMS", extension} {
+		t.Run(suffix, func(t *testing.T) {
+			target := writeTarget(t)
+			client := fixture(t, target, nil)
+			client.HTTP.Transport = failingTransport{client.HTTP.Transport, suffix}
+			if _, err := client.Update(context.Background(), "0.1.0"); !errors.Is(err, io.ErrUnexpectedEOF) {
+				t.Fatalf("unexpected failure: %v", err)
+			}
+			data, err := os.ReadFile(target)
+			if err != nil || string(data) != "old executable" {
+				t.Fatalf("%q %v", data, err)
+			}
+			staged, err := filepath.Glob(filepath.Join(filepath.Dir(target), ".sqlc-ydb-update-*"))
+			if err != nil || len(staged) != 0 {
+				t.Fatalf("staging files leaked: %v %v", staged, err)
+			}
+		})
+	}
+}
+
+func TestRejectInvalidReleaseURLAndRedirectLoop(t *testing.T) {
+	client := NewClient()
+	if _, err := client.get(context.Background(), "https://invalid\x00host"); err == nil {
+		t.Fatal("accepted invalid URL")
+	}
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/latest", http.StatusFound)
+	}))
+	defer server.Close()
+	client.HTTP.Transport = server.Client().Transport
+	client.ReleasesURL = server.URL
+	if _, err := client.Latest(context.Background()); err == nil || !strings.Contains(err.Error(), "excessive release redirect") {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestMalformedTarBody(t *testing.T) {
+	var data bytes.Buffer
+	gz := gzip.NewWriter(&data)
+	if _, err := gz.Write([]byte("truncated tar header")); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := extract(io.Discard, data.Bytes(), "sqlc-ydb", ".tar.gz"); err == nil {
+		t.Fatal("accepted invalid tar body")
+	}
+}
+
 func TestArtifactMatrix(t *testing.T) {
 	for _, osName := range []string{"linux", "darwin", "windows"} {
 		for _, arch := range []string{"amd64", "arm64"} {

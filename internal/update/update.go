@@ -161,7 +161,14 @@ func (c *Client) Update(ctx context.Context, current string) (Result, error) {
 	if err != nil {
 		return result, err
 	}
-	info, err := os.Stat(target)
+	// Stat the open handle: on Windows os.Stat loads file identity lazily by
+	// pathname, which could already refer to a concurrent replacement later.
+	original, err := os.Open(target)
+	if err != nil {
+		return result, err
+	}
+	info, err := original.Stat()
+	_ = original.Close()
 	if err != nil {
 		return result, err
 	}

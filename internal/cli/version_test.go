@@ -1,10 +1,18 @@
 package cli
 
 import (
+	"archive/tar"
+	"archive/zip"
 	"bytes"
+	"compress/gzip"
+	"crypto/sha256"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -47,6 +55,93 @@ func TestVersionUpdateNotice(t *testing.T) {
 			}
 			if code != 0 || stderr.Len() != 0 || out.String() != want {
 				t.Fatalf("%d %q %q", code, out.String(), stderr.String())
+			}
+		})
+	}
+}
+
+func TestVersionUpgradeInstallsBinary(t *testing.T) {
+	for _, outputFails := range []bool{false, true} {
+		t.Run(fmt.Sprint("output failure=", outputFails), func(t *testing.T) {
+			const version = "999.0.0"
+			const binary = "replacement binary"
+			base := "sqlc-ydb_" + version + "_" + runtime.GOOS + "_" + runtime.GOARCH
+			var archive bytes.Buffer
+			if runtime.GOOS == "windows" {
+				z := zip.NewWriter(&archive)
+				w, err := z.Create(base + "/sqlc-ydb.exe")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := io.WriteString(w, binary); err != nil {
+					t.Fatal(err)
+				}
+				if err := z.Close(); err != nil {
+					t.Fatal(err)
+				}
+				base += ".zip"
+			} else {
+				gz := gzip.NewWriter(&archive)
+				tw := tar.NewWriter(gz)
+				if err := tw.WriteHeader(&tar.Header{Name: base + "/sqlc-ydb", Mode: 0755, Size: int64(len(binary))}); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := io.WriteString(tw, binary); err != nil {
+					t.Fatal(err)
+				}
+				if err := tw.Close(); err != nil {
+					t.Fatal(err)
+				}
+				if err := gz.Close(); err != nil {
+					t.Fatal(err)
+				}
+				base += ".tar.gz"
+			}
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/latest":
+					http.Redirect(w, r, "/tag/v"+version, http.StatusFound)
+				case "/tag/v" + version:
+				case "/download/v" + version + "/SHA256SUMS":
+					_, _ = fmt.Fprintf(w, "%x  %s\n", sha256.Sum256(archive.Bytes()), base)
+				case "/download/v" + version + "/" + base:
+					_, _ = w.Write(archive.Bytes())
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+			target := filepath.Join(t.TempDir(), "sqlc-ydb")
+			if err := os.WriteFile(target, []byte("old binary"), 0755); err != nil {
+				t.Fatal(err)
+			}
+			client := update.NewClient()
+			client.HTTP.Transport = server.Client().Transport
+			client.ReleasesURL = server.URL
+			client.Executable = func() (string, error) { return target, nil }
+			var out, stderr bytes.Buffer
+			var stdout io.Writer = &out
+			if outputFails {
+				stdout = brokenWriter{}
+			}
+			code := run([]string{"version", "--upgrade"}, stdout, &stderr, client)
+			if outputFails {
+				if code != 1 || !strings.Contains(stderr.String(), io.ErrClosedPipe.Error()) {
+					t.Fatalf("%d %q", code, stderr.String())
+				}
+			} else {
+				realTarget, err := filepath.EvalSymlinks(target)
+				if err != nil {
+					t.Fatal(err)
+				}
+				want := "Updated sqlc-ydb to " + version + ".\nLocation: " + realTarget + "\n"
+				if code != 0 || stderr.Len() != 0 || out.String() != want {
+					t.Fatalf("%d %q %q", code, out.String(), stderr.String())
+				}
+			}
+			data, err := os.ReadFile(target)
+			if err != nil || string(data) != binary {
+				t.Fatalf("installed %q: %v", data, err)
 			}
 		})
 	}
