@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.1.0
+
 First release of sqlc-ydb, an independent SQL-first code generator for YDB.
 
 ### Capabilities
