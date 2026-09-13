@@ -69,3 +69,5 @@ Pinned runtime: jooq 3.21.0, jooq-ydb-dialect 2.0.0, ydb-jdbc-driver 2.4.1, Java
 Pinned `ydb==3.29.7` uses `RetrySettings(idempotent=False)` by default, but `ydb._errors.check_retriable_error` still retries `ConnectionLost` regardless of that flag. Native generated helpers therefore default to `max_retries=0`; applications explicitly provide retry settings for safely repeatable operations. The smoke test exercises the real SDK retry loop with an injected lost response. Transaction-backed helpers do not retry statements independently.
 
 DB-API and SQLAlchemy expose `fetchone()` for first-row queries; generated `:many` APIs return eager lists. Full table projections reuse the table model.
+
+`Session::take()` marks a session busy; the default memory pool selects only idle sessions. `withTx()` takes the session, and bound raw requests do not release it, including after errors. SDK `commitTransaction()` and `rollbackTransaction()` use `Session::request()`, which releases the session. The live suite verifies that pool acquisition between bound calls selects a different session and that both transaction completion paths release the original.

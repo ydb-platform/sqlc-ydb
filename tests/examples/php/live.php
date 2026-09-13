@@ -89,9 +89,14 @@ function runAuthors(Table $table): void
             check(is_string($txId) && $txId !== '', 'beginTransaction must return the transaction ID');
             try {
                 $txQueries = $queries->withTx($session, $txId);
+                check($session->isBusy(), 'bound session is not reserved');
                 $txQueries->upsertAuthor(new Authors\Native\UpsertAuthorParams($id, 'Transaction', null));
                 check($txQueries->getAuthor($id)?->name === 'Transaction', 'transaction cannot read its own write');
                 check(count($txQueries->listAuthors()) === 1, 'transaction :many failed');
+                check($session->isBusy(), 'bound query released the transaction session');
+                $otherSession = $table->session();
+                check($otherSession->id() !== $session->id(), 'pool reused the active transaction session');
+                $otherSession->release();
                 if ($commit) {
                     $session->commitTransaction();
                 } else {
@@ -104,11 +109,14 @@ function runAuthors(Table $table): void
                 }
                 throw $error;
             }
+            check($session->isIdle(), 'commit/rollback did not release the session');
             check(($queries->getAuthor($id) !== null) === $commit, 'transaction commit/rollback visibility failed');
             try {
                 $txQueries->getAuthor($id);
                 throw new RuntimeException('completed transaction helper silently started a new transaction');
             } catch (\YdbPlatform\Ydb\Exception) {
+            } finally {
+                $session->release();
             }
         }
         $queries->deleteAuthor($id);

@@ -89,7 +89,7 @@ func TestGenerateUsesLosslessOfficialSDKContract(t *testing.T) {
 		"YdbValueCodec::typedJson($params->tags, 'tags')",
 		"$session->newQuery(<<<'SQLC_YDB_YQL'",
 		"->beginTx('serializable_read_write')",
-		"return (new YdbRawExecutor($this->table))->execute($session, $query);",
+		"return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);",
 	} {
 		if !strings.Contains(queries, want) {
 			t.Errorf("Queries.php missing %q:\n%s", want, queries)

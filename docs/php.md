@@ -47,7 +47,7 @@ These settings apply to every method on this helper instance. Use the default in
 
 ## Caller-owned transactions
 
-`withTx(Session $session, string $txId)` returns a new helper bound to an existing transaction. The original helper is unchanged. Save the non-empty transaction ID returned by the SDK's `Session::beginTransaction()` and pass it together with that same session and its owning `Table`:
+`withTx(Session $session, string $txId)` returns a new helper bound to an existing transaction. The original helper is unchanged. Binding reserves the session with the SDK's `Session::take()`; bound requests keep it reserved until the caller invokes SDK commit or rollback, which releases it. Save the non-empty transaction ID returned by the SDK's `Session::beginTransaction()` and pass it together with that same session and its owning `Table`:
 
 ```php
 $queries = new Authors\Native\Queries($table);
@@ -68,7 +68,7 @@ try {
 }
 ```
 
-Bound methods execute on the supplied session with the supplied transaction ID, preserve raw protobuf decoding, and never begin, commit, roll back or retry a transaction. The caller owns the session and transaction lifetime: do not share the session with concurrent operations, and discard the bound helper after commit, rollback or a transaction failure. The helper cannot inspect the SDK's protected transaction state; a stale or mismatched ID produces an SDK/server error and never falls back to a new transaction. The caller must ensure that the Table, session and ID belong together.
+Bound methods execute on the supplied session with the supplied transaction ID, preserve raw protobuf decoding, and never begin, commit, roll back or retry a transaction. The caller owns the session and transaction lifetime: do not share the session with concurrent operations or mix bound calls with other SDK session operations that release it, and discard the bound helper after commit, rollback or a transaction failure. The helper cannot inspect the SDK's protected transaction state; a stale or mismatched ID produces an SDK/server error and never falls back to a new transaction. The caller must ensure that the Table, session and ID belong together.
 
 The configuration callback still runs, so query timeouts and statistics can be configured. Changing transaction control on a bound helper throws `LogicException` before execution. Idempotency and retry parameters apply only to unbound calls. If retries are needed, retry the entire operation, beginning a fresh transaction and creating a new bound helper on every attempt.
 

@@ -47,11 +47,11 @@ See the [first-release summary](CHANGELOG.md) for the comparison and known limit
 | Kotlin | Exposed | [Test](examples/authors/kotlin/src/test/kotlin/authors/smoke/Smoke.kt#L122) | [Test](examples/authors/kotlin/src/test/kotlin/authors/smoke/Smoke.kt#L129) |
 | TypeScript | YDB Query SDK | [Test](tests/examples/typescript/smoke.mjs#L34) | [Test](tests/examples/typescript/smoke.mjs#L48) |
 | Rust | YDB Query SDK | [Test](tests/examples/rust/tests/live_smoke.rs#L77) | [Test](tests/examples/rust/tests/live_smoke.rs#L94) |
-| PHP | YDB SDK | [Test](tests/examples/php/live.php#L63) | — |
+| PHP | YDB SDK | [Test](tests/examples/php/live.php#L63) | [Test](tests/examples/php/live.php#L86) |
 
 Links open integration tests using generated helpers. A single-query example shows an individual helper call; a transaction example shares one transaction across several calls. The caller owns transaction boundaries and retries. These suites run in [CI](.github/workflows/ci.yml) against disposable YDB; locally, live tests require `YDB_CONNECTION_STRING`.
 
-A dash means unsupported. [PHP transaction support](docs/php.md) requires a raw-result API in the SDK that can join an existing transaction.
+[PHP transaction support](docs/php.md#caller-owned-transactions) binds generated calls to an explicit session and transaction ID.
 
 All targets are built into the executable. Only the generated application needs the selected runtime library. Configuration, generated APIs and type coverage are documented in the [target reference](docs/targets.md).
 

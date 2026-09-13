@@ -243,7 +243,7 @@ func renderQueries(in *model.AnalysisResult, namespace string) string {
             throw new \InvalidArgumentException('Transaction ID must not be empty');
         }
         $queries = clone $this;
-        $queries->session = $session;
+        $queries->session = $session->take();
         $queries->txId = $txId;
         return $queries;
     }
@@ -357,7 +357,7 @@ func renderMethod(b *strings.Builder, query model.AnalyzedQuery) {
                 throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
             }
 
-            return (new YdbRawExecutor($this->table))->execute($session, $query);
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
         });
 `)
 	if query.Command == model.Exec {
@@ -476,7 +476,7 @@ final class YdbRawExecutor
         $this->logger = $table->getLogger() ?? new NullLogger();
     }
 
-    public function execute(Session $session, YdbQuery $query): ExecuteQueryResult
+    public function execute(Session $session, YdbQuery $query, bool $releaseSession = true): ExecuteQueryResult
     {
         $data = $query->getRequestData();
         $data['session_id'] = $session->id();
@@ -484,7 +484,9 @@ final class YdbRawExecutor
         try {
             $result = $this->doRequest('Table', 'ExecuteDataQuery', $data);
         } finally {
-            $session->release();
+            if ($releaseSession) {
+                $session->release();
+            }
         }
         if (!$result instanceof ExecuteQueryResult) {
             throw new UnexpectedValueException('YDB ExecuteDataQuery returned an unexpected result');

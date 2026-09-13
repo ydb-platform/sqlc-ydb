@@ -38,7 +38,7 @@ final class Queries
             throw new \InvalidArgumentException('Transaction ID must not be empty');
         }
         $queries = clone $this;
-        $queries->session = $session;
+        $queries->session = $session->take();
         $queries->txId = $txId;
         return $queries;
     }
@@ -75,7 +75,7 @@ final class Queries
                 throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
             }
 
-            return (new YdbRawExecutor($this->table))->execute($session, $query);
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
         });
 
         $rows = $this->decodeRows(
@@ -117,7 +117,7 @@ final class Queries
                 throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
             }
 
-            return (new YdbRawExecutor($this->table))->execute($session, $query);
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
         });
 
         $rows = $this->decodeRows(
@@ -161,7 +161,7 @@ final class Queries
                 throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
             }
 
-            return (new YdbRawExecutor($this->table))->execute($session, $query);
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
         });
     }
 
