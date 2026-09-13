@@ -3,12 +3,15 @@ package db
 
 import (
 	"fmt"
+
+	"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xerrors"
 	"github.com/ydb-platform/ydb-go-sdk/v3/types"
 )
 
 func validateDecimalParameter(name string, value types.Decimal, precision, scale uint32) error {
 	if value.Precision != precision || value.Scale != scale {
-		return fmt.Errorf("Decimal parameter %s expects Decimal(%d,%d), got Decimal(%d,%d)", name, precision, scale, value.Precision, value.Scale)
+		return xerrors.WithStackTrace(fmt.Errorf("Decimal parameter %s expects Decimal(%d,%d), got Decimal(%d,%d)", name, precision, scale, value.Precision, value.Scale))
 	}
+
 	return nil
 }

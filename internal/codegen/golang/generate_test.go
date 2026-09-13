@@ -157,7 +157,7 @@ func TestGeneratedYDBManyValidatesOneResultSet(t *testing.T) {
 	source := string(generatedSQLSourceForAnalysis(t, "ydb", in))
 	want := "result, err := q.db.Query(ctx, \"\"+\n\t\t\"SELECT `id`, `name` FROM `users`;\",\n\t\topts...,\n\t)" + `
 	if err != nil {
-		return nil, err
+		return nil, xerrors.WithStackTrace(err)
 	}
 	defer result.Close(ctx)
 
@@ -211,7 +211,7 @@ func TestGeneratedYDBWithoutManyOmitsStreamingImports(t *testing.T) {
 	in := sample()
 	in.Queries = []model.AnalyzedQuery{in.Queries[0], in.Queries[2]}
 	source := string(generatedSQLSourceForAnalysis(t, "ydb", in))
-	for _, unwanted := range []string{`"errors"`, `"io"`, `pkg/xerrors`} {
+	for _, unwanted := range []string{`"errors"`, `"io"`} {
 		if strings.Contains(source, unwanted) {
 			t.Fatalf("native source without :many imports %s:\n%s", unwanted, source)
 		}
@@ -282,7 +282,11 @@ func TestGeneratedManyDecimalValidationReturnsNilOnError(t *testing.T) {
 	}}}
 	for _, runtime := range []string{"database/sql", "ydb"} {
 		source := string(generatedSQLSourceForAnalysis(t, runtime, in))
-		if !strings.Contains(source, "if err := validateDecimalParameter(") || !strings.Contains(source, "return nil, err") {
+		wantReturn := "return nil, err"
+		if runtime == "ydb" {
+			wantReturn = "return nil, xerrors.WithStackTrace(err)"
+		}
+		if !strings.Contains(source, "if err := validateDecimalParameter(") || !strings.Contains(source, wantReturn) {
 			t.Fatalf("%s decimal validation does not return a nil slice on error:\n%s", runtime, source)
 		}
 		if strings.Contains(source, "return make([]FindUsersRow, 0), err") {
@@ -1009,13 +1013,13 @@ func runGeneratedRuntimeTest(t *testing.T, input *model.AnalysisResult, opts Opt
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(mod), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "decimal_test.go"), []byte(source), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "runtime_test.go"), []byte(source), 0600); err != nil {
 		t.Fatal(err)
 	}
 	cmd := exec.Command("go", "test", "-mod=mod", ".")
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("generated %s decimal validation failed:\n%s", opts.Runtime, out)
+		t.Fatalf("generated %s runtime behavior failed:\n%s", opts.Runtime, out)
 	}
 }
 
@@ -1051,11 +1055,11 @@ func TestNativeOptionsAreForwardedAndCannotReplaceTypedArguments(t *testing.T) {
 	}
 	for _, want := range []string{
 		"func (q *Queries) Ping(ctx context.Context, opts ...query.ExecuteOption) error",
-		"return q.db.Exec(ctx, \"\",\n\t\topts...,\n\t)",
+		"err := q.db.Exec(ctx, \"\",\n\t\topts...,\n\t)\n\n\treturn xerrors.WithStackTrace(err)",
 		"func (q *Queries) Put(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error",
 		"callOptions := append([]query.ExecuteOption(nil), opts...)",
 		"callOptions = append(callOptions, query.WithParameters(parameters.Build()))",
-		"return q.db.Exec(ctx, \"\",\n\t\tcallOptions...,\n\t)",
+		"err := q.db.Exec(ctx, \"\",\n\t\tcallOptions...,\n\t)\n\n\treturn xerrors.WithStackTrace(err)",
 	} {
 		if !strings.Contains(source, want) {
 			t.Fatalf("native option forwarding lacks %q:\n%s", want, source)

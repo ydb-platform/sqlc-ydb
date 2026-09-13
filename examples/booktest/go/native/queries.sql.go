@@ -27,7 +27,7 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 		callOptions...,
 	)
 	if err != nil {
-		return GetAuthorRow{}, err
+		return GetAuthorRow{}, xerrors.WithStackTrace(err)
 	}
 
 	var row GetAuthorRow
@@ -35,7 +35,7 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 		query.Named("author_id", &row.AuthorID),
 		query.Named("name", &row.Name),
 	); err != nil {
-		return GetAuthorRow{}, err
+		return GetAuthorRow{}, xerrors.WithStackTrace(err)
 	}
 
 	return row, nil
@@ -56,7 +56,7 @@ func (q *Queries) GetBook(ctx context.Context, arg uint64, opts ...query.Execute
 		callOptions...,
 	)
 	if err != nil {
-		return GetBookRow{}, err
+		return GetBookRow{}, xerrors.WithStackTrace(err)
 	}
 
 	var row GetBookRow
@@ -70,7 +70,7 @@ func (q *Queries) GetBook(ctx context.Context, arg uint64, opts ...query.Execute
 		query.Named("available", &row.Available),
 		query.Named("tags", &row.Tags),
 	); err != nil {
-		return GetBookRow{}, err
+		return GetBookRow{}, xerrors.WithStackTrace(err)
 	}
 
 	return row, nil
@@ -84,11 +84,13 @@ func (q *Queries) DeleteBook(ctx context.Context, arg uint64, opts ...query.Exec
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx, ""+
+	err := q.db.Exec(ctx, ""+
 		"DELETE FROM books "+
 		"WHERE book_id = $book_id;",
 		callOptions...,
 	)
+
+	return xerrors.WithStackTrace(err)
 }
 
 // -- name: BooksByTitleYear :many
@@ -107,7 +109,7 @@ func (q *Queries) BooksByTitleYear(ctx context.Context, arg BooksByTitleYearPara
 		callOptions...,
 	)
 	if err != nil {
-		return nil, err
+		return nil, xerrors.WithStackTrace(err)
 	}
 	defer result.Close(ctx)
 
@@ -174,7 +176,7 @@ func (q *Queries) BooksByTags(ctx context.Context, arg string, opts ...query.Exe
 		callOptions...,
 	)
 	if err != nil {
-		return nil, err
+		return nil, xerrors.WithStackTrace(err)
 	}
 	defer result.Close(ctx)
 
@@ -230,7 +232,7 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts
 		callOptions...,
 	)
 	if err != nil {
-		return CreateAuthorRow{}, err
+		return CreateAuthorRow{}, xerrors.WithStackTrace(err)
 	}
 
 	var row CreateAuthorRow
@@ -238,7 +240,7 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts
 		query.Named("author_id", &row.AuthorID),
 		query.Named("name", &row.Name),
 	); err != nil {
-		return CreateAuthorRow{}, err
+		return CreateAuthorRow{}, xerrors.WithStackTrace(err)
 	}
 
 	return row, nil
@@ -283,7 +285,7 @@ func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams, opts ...
 		callOptions...,
 	)
 	if err != nil {
-		return CreateBookRow{}, err
+		return CreateBookRow{}, xerrors.WithStackTrace(err)
 	}
 
 	var row CreateBookRow
@@ -297,7 +299,7 @@ func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams, opts ...
 		query.Named("available", &row.Available),
 		query.Named("tags", &row.Tags),
 	); err != nil {
-		return CreateBookRow{}, err
+		return CreateBookRow{}, xerrors.WithStackTrace(err)
 	}
 
 	return row, nil
@@ -313,12 +315,14 @@ func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams, opts ...
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx, ""+
+	err := q.db.Exec(ctx, ""+
 		"UPDATE books "+
 		"SET title = $title, tags = $tags "+
 		"WHERE book_id = $book_id;",
 		callOptions...,
 	)
+
+	return xerrors.WithStackTrace(err)
 }
 
 // -- name: UpdateBookISBN :exec
@@ -332,12 +336,14 @@ func (q *Queries) UpdateBookISBN(ctx context.Context, arg UpdateBookISBNParams, 
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx, ""+
+	err := q.db.Exec(ctx, ""+
 		"UPDATE books "+
 		"SET title = $title, tags = $tags, isbn = $isbn "+
 		"WHERE book_id = $book_id;",
 		callOptions...,
 	)
+
+	return xerrors.WithStackTrace(err)
 }
 
 // -- name: DeleteAuthorBeforeYear :exec
@@ -349,11 +355,13 @@ func (q *Queries) DeleteAuthorBeforeYear(ctx context.Context, arg DeleteAuthorBe
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx, ""+
+	err := q.db.Exec(ctx, ""+
 		"DELETE FROM books "+
 		"WHERE publication_year < $publication_year AND author_id = $author_id;",
 		callOptions...,
 	)
+
+	return xerrors.WithStackTrace(err)
 }
 
 // -- name: SayHello :one
@@ -369,14 +377,14 @@ func (q *Queries) SayHello(ctx context.Context, arg string, opts ...query.Execut
 		callOptions...,
 	)
 	if err != nil {
-		return SayHelloRow{}, err
+		return SayHelloRow{}, xerrors.WithStackTrace(err)
 	}
 
 	var row SayHelloRow
 	if err := result.ScanNamed(
 		query.Named("greeting", &row.Greeting),
 	); err != nil {
-		return SayHelloRow{}, err
+		return SayHelloRow{}, xerrors.WithStackTrace(err)
 	}
 
 	return row, nil

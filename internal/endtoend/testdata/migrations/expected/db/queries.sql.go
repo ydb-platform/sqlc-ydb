@@ -6,6 +6,7 @@ import (
 	"context"
 
 	ydb "github.com/ydb-platform/ydb-go-sdk/v3"
+	"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xerrors"
 	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 
@@ -22,7 +23,7 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 		callOptions...,
 	)
 	if err != nil {
-		return GetAuthorRow{}, err
+		return GetAuthorRow{}, xerrors.WithStackTrace(err)
 	}
 
 	var row GetAuthorRow
@@ -30,7 +31,7 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 		query.Named("id", &row.ID),
 		query.Named("name", &row.Name),
 	); err != nil {
-		return GetAuthorRow{}, err
+		return GetAuthorRow{}, xerrors.WithStackTrace(err)
 	}
 
 	return row, nil
