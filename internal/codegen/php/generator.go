@@ -352,10 +352,10 @@ func renderMethod(b *strings.Builder, query model.AnalyzedQuery) {
 	fmt.Fprintf(b, "            $query = $session->newQuery(%s)\n                ->parameters($parameters)\n                ->keepInCache(count($parameters) > 0);\n", literal)
 	b.WriteString(`            if ($this->txId !== null) {
                 $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
             } else {
                 $query->beginTx('serializable_read_write');
             }
-            $txControl = $query->getRequestData()['tx_control']->serializeToString();
             if ($this->configure !== null) {
                 ($this->configure)($query);
             }

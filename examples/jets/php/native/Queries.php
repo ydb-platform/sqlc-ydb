@@ -69,10 +69,10 @@ final class Queries
                 ->keepInCache(count($parameters) > 0);
             if ($this->txId !== null) {
                 $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
             } else {
                 $query->beginTx('serializable_read_write');
             }
-            $txControl = $query->getRequestData()['tx_control']->serializeToString();
             if ($this->configure !== null) {
                 ($this->configure)($query);
             }
@@ -112,10 +112,10 @@ final class Queries
                 ->keepInCache(count($parameters) > 0);
             if ($this->txId !== null) {
                 $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
             } else {
                 $query->beginTx('serializable_read_write');
             }
-            $txControl = $query->getRequestData()['tx_control']->serializeToString();
             if ($this->configure !== null) {
                 ($this->configure)($query);
             }
@@ -157,10 +157,10 @@ final class Queries
                 ->keepInCache(count($parameters) > 0);
             if ($this->txId !== null) {
                 $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
             } else {
                 $query->beginTx('serializable_read_write');
             }
-            $txControl = $query->getRequestData()['tx_control']->serializeToString();
             if ($this->configure !== null) {
                 ($this->configure)($query);
             }
