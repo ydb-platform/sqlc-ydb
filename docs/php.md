@@ -47,7 +47,7 @@ These settings apply to every method on this helper instance. Use the default in
 
 ## Caller-owned transactions
 
-`withTx(Session $session, string $txId)` returns a new helper bound to an existing transaction. The original helper is unchanged. Binding reserves the session with the SDK's `Session::take()`; bound requests keep it reserved until the caller invokes SDK commit or rollback, which releases it. Save the non-empty transaction ID returned by the SDK's `Session::beginTransaction()` and pass it together with that same session and its owning `Table`:
+`withTx(Session $session, string $txId)` returns a new helper bound to an existing transaction. The original helper is unchanged. Calling `withTx()` on an already-bound helper throws `LogicException` before changing any session reservation; start from the original unbound helper for each transaction. Binding reserves the session with the SDK's `Session::take()`; bound requests keep it reserved until the caller invokes SDK commit or rollback, which releases it. Save the non-empty transaction ID returned by the SDK's `Session::beginTransaction()` and pass it together with that same session and its owning `Table`:
 
 ```php
 $queries = new Authors\Native\Queries($table);

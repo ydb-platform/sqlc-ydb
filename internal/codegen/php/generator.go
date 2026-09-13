@@ -239,6 +239,9 @@ func renderQueries(in *model.AnalysisResult, namespace string) string {
     /** Bind to a caller-owned transaction; this helper never commits or retries it. */
     public function withTx(Session $session, string $txId): self
     {
+        if ($this->session !== null) {
+            throw new \LogicException('Queries is already bound to a transaction; call withTx on an unbound helper');
+        }
         if ($txId === '') {
             throw new \InvalidArgumentException('Transaction ID must not be empty');
         }

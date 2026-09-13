@@ -372,6 +372,19 @@ $txSession = new Session($txTable, 'session-0');
 $txQueries = $baseQueries->withTx($txSession, 'caller-tx');
 check($txQueries !== $baseQueries, 'withTx mutated the original helper');
 check($txSession->isBusy(), 'withTx did not reserve the session');
+$otherTxSession = new Session($txTable, 'other-session');
+$takenBeforeRebind = $txTable->taken;
+foreach ([$txSession, $otherTxSession] as $replacementSession) {
+    try {
+        $txQueries->withTx($replacementSession, 'replacement-tx');
+        throw new RuntimeException('transaction-bound helper accepted rebinding');
+    } catch (LogicException $error) {
+        check(str_contains($error->getMessage(), 'already bound'), 'unclear rebinding error');
+    }
+}
+check($txTable->taken === $takenBeforeRebind, 'rejected rebinding changed session reservations');
+check($txSession->isBusy() && $otherTxSession->isIdle(), 'rejected rebinding changed session availability');
+
 try {
     $txQueries->deleteAuthor('1');
     throw new RuntimeException('transaction transport failure was swallowed');
