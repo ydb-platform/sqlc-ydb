@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.1.1
+
 ### Added
 
 - `version` checks for a newer stable release and prints an update command when available. Offline and failed checks are silent; `--no-remote` skips the check.
