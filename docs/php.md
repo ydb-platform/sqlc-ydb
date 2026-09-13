@@ -50,6 +50,7 @@ These settings apply to every method on this helper instance. Use the default in
 `withTx(Session $session, string $txId)` returns a new helper bound to an existing transaction. The original helper is unchanged. Calling `withTx()` on an already-bound helper throws `LogicException` before changing any session reservation; start from the original unbound helper for each transaction. Binding reserves the session with the SDK's `Session::take()`; bound requests keep it reserved until the caller invokes SDK commit or rollback, which releases it. Save the non-empty transaction ID returned by the SDK's `Session::beginTransaction()` and pass it together with that same session and its owning `Table`:
 
 ```php
+$table = $ydb->table();
 $queries = new Authors\Native\Queries($table);
 $session = $table->session();
 $txId = $session->beginTransaction();
@@ -67,6 +68,8 @@ try {
     throw $error;
 }
 ```
+
+After commit or rollback, the session stays in the SDK pool as an idle session available for reuse; the application does not need to delete it. For the next transaction, acquire a session through `$table->session()` again and bind a fresh helper from the original unbound `Queries`. Do not keep using a released session directly, because the pool may have handed it to another operation.
 
 Bound methods execute on the supplied session with the supplied transaction ID, preserve raw protobuf decoding, and never begin, commit, roll back or retry a transaction. The caller owns the session and transaction lifetime: do not share the session with concurrent operations or mix bound calls with other SDK session operations that release it, and discard the bound helper after commit, rollback or a transaction failure. The helper cannot inspect the SDK's protected transaction state; a stale or mismatched ID produces an SDK/server error and never falls back to a new transaction. The caller must ensure that the Table, session and ID belong together.
 

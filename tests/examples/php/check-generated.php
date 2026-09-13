@@ -399,7 +399,13 @@ check($txTable->clients()[1]->commitTx && $txTable->clients()[1]->txId === '', '
 $configuredTx = new Authors\Native\Queries($txTable, configure: static function (\YdbPlatform\Ydb\YdbQuery $query): void {
     $query->collectStats(2);
 });
-$configuredTx->withTx(new Session($txTable, 'session-1'), 'second-tx')->deleteAuthor('1');
+$configuredSession = new Session($txTable, 'session-1');
+$boundConfiguredTx = $configuredTx->withTx($configuredSession, 'second-tx');
+$takenBeforeSuccess = count($txTable->taken);
+$releasedBeforeSuccess = $txTable->released;
+$boundConfiguredTx->deleteAuthor('1');
+check(count($txTable->taken) === $takenBeforeSuccess + 1 && end($txTable->taken) === 'session-1', 'bound request did not take its session exactly once');
+check($txTable->released === $releasedBeforeSuccess && $configuredSession->isBusy(), 'successful bound request released its reserved session');
 check($txTable->clients()[1]->txId === 'second-tx' && !$txTable->clients()[1]->commitTx, 'query configuration lost the transaction binding');
 check($txTable->clients()[1]->collectStats === 2, 'withTx lost the configuration callback');
 

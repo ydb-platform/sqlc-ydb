@@ -100,7 +100,8 @@ func validate(in *model.AnalysisResult) error {
 		"ydbrawexecutor": "generated runtime class", "ydbvaluecodec": "generated runtime class",
 		"retryparams": "imported YDB SDK RetryParams class",
 		"table":       "imported YDB SDK Table class", "session": "imported YDB SDK Session class",
-		"ydbquery": "imported YDB SDK YdbQuery class", "executequeryresult": "imported YDB protobuf ExecuteQueryResult class",
+		"transactioncontrol": "imported YDB protobuf TransactionControl class",
+		"ydbquery":           "imported YDB SDK YdbQuery class", "executequeryresult": "imported YDB protobuf ExecuteQueryResult class",
 	}
 	methods := map[string]string{"__construct": "generated constructor", "decoderows": "generated row decoder", "withtx": "generated transaction binding", "execute": "generated executor"}
 	add := func(set map[string]string, name, original, kind string) error {
@@ -232,7 +233,7 @@ func renderQueries(in *model.AnalysisResult, namespace string) string {
 	b.WriteString(generatedHeader)
 	b.WriteString("declare(strict_types=1);\n\nnamespace " + namespace + ";\n\n")
 	b.WriteString("require_once __DIR__ . '/YdbRuntime.php';\n\n")
-	b.WriteString("use Closure;\nuse UnexpectedValueException;\nuse Ydb\\Table\\ExecuteQueryResult;\nuse Ydb\\Type\\PrimitiveTypeId;\nuse YdbPlatform\\Ydb\\Retry\\RetryParams;\nuse YdbPlatform\\Ydb\\Session;\nuse YdbPlatform\\Ydb\\Table;\n\n")
+	b.WriteString("use Closure;\nuse UnexpectedValueException;\nuse Ydb\\Table\\ExecuteQueryResult;\nuse Ydb\\Table\\TransactionControl;\nuse Ydb\\Type\\PrimitiveTypeId;\nuse YdbPlatform\\Ydb\\Retry\\RetryParams;\nuse YdbPlatform\\Ydb\\Session;\nuse YdbPlatform\\Ydb\\Table;\n\n")
 	b.WriteString("final class Queries\n{\n    private ?Session $session = null;\n    private ?string $txId = null;\n\n")
 	b.WriteString("    public function __construct(\n        private readonly Table $table,\n        private readonly bool $idempotent = false,\n        private readonly ?Closure $configure = null,\n        private readonly ?RetryParams $retryParams = null,\n    )\n    {\n        if (PHP_INT_SIZE !== 8) {\n            throw new \\LogicException('sqlc-ydb generated PHP code requires a 64-bit PHP runtime');\n        }\n    }\n")
 	b.WriteString(`
@@ -348,9 +349,11 @@ func renderMethod(b *strings.Builder, query model.AnalyzedQuery) {
 		b.WriteString("$result = ")
 	}
 	b.WriteString("$this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {\n")
-	fmt.Fprintf(b, "            $query = $session->newQuery(%s)\n                ->parameters($parameters)\n                ->keepInCache(count($parameters) > 0)\n                ->beginTx('serializable_read_write');\n", literal)
+	fmt.Fprintf(b, "            $query = $session->newQuery(%s)\n                ->parameters($parameters)\n                ->keepInCache(count($parameters) > 0);\n", literal)
 	b.WriteString(`            if ($this->txId !== null) {
-                $query->txControl(new \Ydb\Table\TransactionControl(['tx_id' => $this->txId]));
+                $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+            } else {
+                $query->beginTx('serializable_read_write');
             }
             $txControl = $query->getRequestData()['tx_control']->serializeToString();
             if ($this->configure !== null) {

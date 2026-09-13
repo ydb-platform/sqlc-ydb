@@ -9,6 +9,7 @@ require_once __DIR__ . '/YdbRuntime.php';
 use Closure;
 use UnexpectedValueException;
 use Ydb\Table\ExecuteQueryResult;
+use Ydb\Table\TransactionControl;
 use Ydb\Type\PrimitiveTypeId;
 use YdbPlatform\Ydb\Retry\RetryParams;
 use YdbPlatform\Ydb\Session;
@@ -67,10 +68,11 @@ final class Queries
                 SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
-                ->keepInCache(count($parameters) > 0)
-                ->beginTx('serializable_read_write');
+                ->keepInCache(count($parameters) > 0);
             if ($this->txId !== null) {
-                $query->txControl(new \Ydb\Table\TransactionControl(['tx_id' => $this->txId]));
+                $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+            } else {
+                $query->beginTx('serializable_read_write');
             }
             $txControl = $query->getRequestData()['tx_control']->serializeToString();
             if ($this->configure !== null) {
