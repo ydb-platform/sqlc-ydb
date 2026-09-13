@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,9 +24,15 @@ func TestInitHelp(t *testing.T) {
 		if code != 0 || stderr != "" {
 			t.Fatalf("%v: %d %s", args, code, stderr)
 		}
-		for _, language := range []string{"go", "python", "cpp", "csharp", "java", "kotlin", "typescript", "rust", "php"} {
-			if !strings.Contains(out, language) {
-				t.Errorf("%v: missing language %s", args, language)
+		for _, generator := range config.Generators() {
+			want := fmt.Sprintf("%-12s %s (default: %s)", generator.Language, strings.Join(generator.Runtimes, ", "), generator.DefaultRuntime)
+			if !strings.Contains(out, want) {
+				t.Errorf("%v: missing discovery entry %q", args, want)
+			}
+			for alias, canonical := range generator.RuntimeAliases {
+				if !strings.Contains(out, alias+" is an alias for "+canonical) {
+					t.Errorf("%v: missing alias %s for %s", args, alias, generator.Language)
+				}
 			}
 		}
 		if strings.Contains(strings.Join(args, " "), "go") {
@@ -61,8 +69,26 @@ func TestInitEveryRuntime(t *testing.T) {
 						t.Errorf("config missing option %s", option.Name)
 					}
 				}
-				if code, out, stderr := invoke(append(args, "--help")...); code != 0 || !strings.Contains(out, "gen."+generator.Language) {
+				code, out, stderr := invoke(append(args, "--help")...)
+				if code != 0 || !strings.Contains(out, "gen."+generator.Language) {
 					t.Fatalf("runtime help: %d %s %s", code, out, stderr)
+				}
+				if !strings.Contains(out, "Selected for this configuration: "+runtime) {
+					t.Errorf("help omitted selected runtime %s", runtime)
+				}
+				for _, option := range generator.Options {
+					heading := fmt.Sprintf("%s (%s; default: %s)", option.Name, option.Type, option.Default)
+					if option.Required {
+						heading = fmt.Sprintf("%s (%s; required)", option.Name, option.Type)
+					}
+					for _, want := range []string{heading, option.Description} {
+						if !strings.Contains(out, want) {
+							t.Errorf("help omitted %q", want)
+						}
+					}
+					if len(option.Values) > 0 && !strings.Contains(out, "Values: "+strings.Join(option.Values, ", ")) {
+						t.Errorf("help omitted supported values for %s", option.Name)
+					}
 				}
 				if code, _, stderr := invoke(append(args, "--all-options")...); code != 0 {
 					t.Fatal(stderr)
@@ -73,6 +99,16 @@ func TestInitEveryRuntime(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestInitializeRejectsInvalidGenerator(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sqlc.yaml")
+	if err := initialize(arguments{file: path, language: "unknown"}, io.Discard); err == nil {
+		t.Fatal("accepted unsupported generator")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("invalid generator touched config: %v", err)
 	}
 }
 
