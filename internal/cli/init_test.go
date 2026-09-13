@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -101,16 +100,6 @@ func TestInitEveryRuntime(t *testing.T) {
 				}
 			})
 		}
-	}
-}
-
-func TestInitializeRejectsInvalidGenerator(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "sqlc.yaml")
-	if err := initialize(arguments{file: path, language: "unknown"}, io.Discard); err == nil {
-		t.Fatal("accepted unsupported generator")
-	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Fatalf("invalid generator touched config: %v", err)
 	}
 }
 

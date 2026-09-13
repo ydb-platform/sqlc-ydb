@@ -4,7 +4,7 @@
 
 ### Added
 
-- `init --language <language> --runtime <runtime>` creates a complete generator configuration with comments. `init --help` lists languages and runtimes; profile-specific help describes every YAML option. `--all-options` explicitly selects the full configuration already produced by default. The CLI and generator option reference share the configuration catalog.
+- `init` supports language/runtime selection, complete configurations with comments, and generator-specific help. See the [generator options](docs/targets.md#generator-options).
 
 ## v0.1.3
 

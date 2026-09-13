@@ -14,7 +14,7 @@ Compatibility is tracked by individual CLI, configuration and generated API cont
 ## Implemented workflow
 
 - `generate`, `compile`, `diff`, `init`, `version`, `--help`, `-f` / `--file`.
-- `init --help` lists languages and runtimes. `init --language <language> --runtime <runtime> --help` describes the selected generator's YAML options. Without `--help`, it writes every option with explanatory comments; `--all-options` explicitly selects this default behavior. See the [generator option reference](targets.md#generator-options).
+- `init` supports `--language`, `--runtime`, `--all-options`, and generator-specific help. See the [generator option reference](targets.md#generator-options).
 - `version` prints the version and optionally a newer-stable-release notification; `version --verbose` also prints the commit embedded by release builds. Ordinary source builds report `unknown` unless the commit is supplied through linker flags. The update check times out after two seconds and hides failures. Use `--no-remote` for version output without a network check.
 - `version --upgrade` replaces the running executable with the verified latest stable release, resolving symlinks and preserving their paths. Download and verification failures preserve the installed binary. See [installation](installation.md#update-the-installed-executable). Automatic in-place upgrades are supported on Linux and macOS. On Windows, `version --upgrade` prints manual upgrade instructions.
 - `sqlc.yaml`, `sqlc.yml`, and `sqlc.json`; configuration version 2. Paths resolve relative to the configuration.
@@ -22,7 +22,7 @@ Compatibility is tracked by individual CLI, configuration and generated API cont
 - Schema rollback sections for goose, sql-migrate, tern and dbmate are excluded. Migration markers inside string literals are preserved.
 - Schema migrations update an in-memory catalog in input order. Supported DDL: `CREATE TABLE [IF NOT EXISTS]`, `DROP TABLE [IF EXISTS]`, and `ALTER TABLE` with `ADD [COLUMN]`, `DROP [COLUMN]`, or table `RENAME TO`.
 - Query annotations `-- name: QueryName :one|:many|:exec`. `:execrows` is parsed but generation rejects it: the selected YDB APIs cannot provide its required affected-row count.
-- Supported generator keys and their defaults are listed in the [generator option reference](targets.md#generator-options), generated from the same catalog as `init --help`. These are built-in options, not external plugin options. The Python package directory is selected by `out`; `gen.python.package` is unsupported. Go's default `sql_package` is `database/sql`, matching upstream sqlc.
+- The Python package directory is selected by `out`; `gen.python.package` is unsupported. Go's default `sql_package` is `database/sql`, matching upstream sqlc.
 - Unknown configuration options produce errors. Generation never silently discards an option that has not been implemented.
 
 ## Differences from upstream sqlc

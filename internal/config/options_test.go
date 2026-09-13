@@ -17,7 +17,7 @@ func TestInitProfiles(t *testing.T) {
 		}
 		for _, runtime := range runtimes {
 			t.Run(g.Language+"/"+runtime, func(t *testing.T) {
-				data, err := InitYAML(g.Language, runtime)
+				data, err := initYAML(g.Language, runtime)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -38,7 +38,7 @@ func TestInitProfiles(t *testing.T) {
 }
 
 func TestInitDefaultSelection(t *testing.T) {
-	data, err := InitYAML("", "")
+	data, err := initYAML("", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,33 +54,15 @@ func TestInitDefaultSelection(t *testing.T) {
 
 func TestInitInvalidSelection(t *testing.T) {
 	for _, args := range [][2]string{{"", "ydb"}, {"javascript", ""}, {"go", "native"}, {"python", "native"}, {"java", "hibernate"}, {"csharp", "linq2db"}} {
-		if _, err := InitYAML(args[0], args[1]); err == nil {
-			t.Errorf("InitYAML(%q, %q) accepted an unsupported selection", args[0], args[1])
+		if _, err := initYAML(args[0], args[1]); err == nil {
+			t.Errorf("initYAML(%q, %q) accepted an unsupported selection", args[0], args[1])
 		}
 	}
 }
 
-func TestUnknownOptionDefault(t *testing.T) {
-	for _, language := range []string{"go", "unknown"} {
-		if _, err := optionDefault(language, "missing"); err == nil {
-			t.Fatalf("accepted missing option for %s", language)
-		}
-	}
+func TestUnknownRuntimeLanguage(t *testing.T) {
 	if runtime, err := resolveRuntime("unknown", ""); err == nil || runtime != "" {
 		t.Fatalf("unknown language resolved: %q, %v", runtime, err)
-	}
-}
-
-func TestInvalidGoAndPythonRuntimes(t *testing.T) {
-	for _, language := range []string{"go", "python"} {
-		g, err := GeneratorFor(language)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, err = Parse([]byte(fmt.Sprintf("version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: query.sql\n  gen:\n    %s:\n      out: db\n      %s: unsupported\n", language, g.RuntimeKey)))
-		if err == nil || !strings.Contains(err.Error(), "unsupported") {
-			t.Fatalf("invalid %s runtime: %v", language, err)
-		}
 	}
 }
 
@@ -115,7 +97,7 @@ func TestOptionCatalogCoversConfigFields(t *testing.T) {
 			}
 			expected[name] = true
 		}
-		data, err := InitYAML(language, "")
+		data, err := initYAML(language, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -144,4 +126,12 @@ func TestOptionCatalogCoversConfigFields(t *testing.T) {
 			t.Fatalf("%s options missing from catalog: %v", language, expected)
 		}
 	}
+}
+
+func initYAML(language, runtime string) ([]byte, error) {
+	profiles, err := InitProfiles(language, runtime)
+	if err != nil {
+		return nil, err
+	}
+	return InitYAML(profiles)
 }

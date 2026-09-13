@@ -6,9 +6,19 @@ import (
 	"bytes"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
+)
+
+const (
+	defaultCPPNamespace    = "db"
+	defaultCSharpNamespace = "Db"
+	defaultJavaPackage     = "db"
+	defaultKotlinPackage   = "db"
+	defaultPHPNamespace    = "Db"
+	defaultSyncQuerier     = true
 )
 
 // Option describes one supported key inside sql[].gen.<language>.
@@ -43,20 +53,20 @@ func Generators() []Generator {
 			Option{Name: "emit_empty_slices", Type: "boolean", Default: "false", Description: "Return empty slices instead of nil for successful :many queries with no rows."}),
 		generator("python", "runtime", "ydb", []string{"ydb", "dbapi", "sqlalchemy"}, false,
 			out,
-			Option{Name: "emit_sync_querier", Type: "boolean", Default: "true", Description: "Generate synchronous query helpers; must remain true while asynchronous generation is unsupported."},
+			Option{Name: "emit_sync_querier", Type: "boolean", Default: strconv.FormatBool(defaultSyncQuerier), Description: "Generate synchronous query helpers; must remain true while asynchronous generation is unsupported."},
 			Option{Name: "emit_async_querier", Type: "boolean", Default: "false", Description: "Asynchronous generation is unsupported; true produces a generation error."}),
 		generator("cpp", "runtime", "ydb", []string{"ydb", "userver"}, true, out,
-			Option{Name: "namespace", Type: "string", Default: "db", Description: "Namespace containing the generated C++ types and helpers."}),
+			Option{Name: "namespace", Type: "string", Default: defaultCPPNamespace, Description: "Namespace containing the generated C++ types and helpers."}),
 		generator("csharp", "runtime", "adonet", []string{"adonet", "dapper"}, false, out,
-			Option{Name: "namespace", Type: "string", Default: "Db", Description: "Namespace containing the generated C# types and helpers."}),
+			Option{Name: "namespace", Type: "string", Default: defaultCSharpNamespace, Description: "Namespace containing the generated C# types and helpers."}),
 		generator("java", "runtime", "ydb", []string{"ydb", "jdbc", "jooq"}, true, out,
-			Option{Name: "package", Type: "string", Default: "db", Description: "Package containing the generated Java types and helpers."}),
+			Option{Name: "package", Type: "string", Default: defaultJavaPackage, Description: "Package containing the generated Java types and helpers."}),
 		generator("kotlin", "runtime", "ydb", []string{"ydb", "jdbc", "exposed"}, true, out,
-			Option{Name: "package", Type: "string", Default: "db", Description: "Package containing the generated Kotlin types and helpers."}),
+			Option{Name: "package", Type: "string", Default: defaultKotlinPackage, Description: "Package containing the generated Kotlin types and helpers."}),
 		generator("typescript", "runtime", "ydb", []string{"ydb"}, false, out),
 		generator("rust", "runtime", "ydb", []string{"ydb"}, false, out),
 		generator("php", "runtime", "ydb", []string{"ydb"}, false, out,
-			Option{Name: "namespace", Type: "string", Default: "Db", Description: "Namespace containing the generated PHP types and helpers."}),
+			Option{Name: "namespace", Type: "string", Default: defaultPHPNamespace, Description: "Namespace containing the generated PHP types and helpers."}),
 	}
 }
 
@@ -82,19 +92,6 @@ func GeneratorFor(language string) (Generator, error) {
 	return Generator{}, fmt.Errorf("unsupported language %q; use sqlc-ydb init --help to list supported languages", language)
 }
 
-func optionDefault(language, name string) (string, error) {
-	g, err := GeneratorFor(language)
-	if err != nil {
-		return "", err
-	}
-	for _, option := range g.Options {
-		if option.Name == name {
-			return option.Default, nil
-		}
-	}
-	return "", fmt.Errorf("unknown generator option: %s.%s", language, name)
-}
-
 func resolveRuntime(language, runtime string) (string, error) {
 	g, err := GeneratorFor(language)
 	if err != nil {
@@ -116,9 +113,14 @@ func (g Generator) ResolveRuntime(runtime string) (string, error) {
 	return "", fmt.Errorf("unsupported %s runtime %q (use %s)", g.Language, runtime, strings.Join(g.Runtimes, ", "))
 }
 
-// InitYAML creates a complete, commented configuration for the selected generator.
-// With no selection, it preserves init's Go/YDB and Python/YDB starter configuration.
-func InitYAML(language, runtime string) ([]byte, error) {
+// InitProfile contains a validated generator selection and its starter output directory.
+type InitProfile struct {
+	Generator Generator
+	Runtime   string
+	Out       string
+}
+
+func InitProfiles(language, runtime string) ([]InitProfile, error) {
 	if language == "" && runtime != "" {
 		return nil, fmt.Errorf("--runtime requires --language")
 	}
@@ -127,7 +129,7 @@ func InitYAML(language, runtime string) ([]byte, error) {
 		selected = []string{"go", "python"}
 		runtime = "ydb"
 	}
-	gen := &yaml.Node{Kind: yaml.MappingNode}
+	profiles := make([]InitProfile, 0, len(selected))
 	for _, name := range selected {
 		g, err := GeneratorFor(name)
 		if err != nil {
@@ -137,19 +139,30 @@ func InitYAML(language, runtime string) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+		out := "db"
+		if language == "" && name == "python" {
+			out = "queries"
+		}
+		profiles = append(profiles, InitProfile{Generator: g, Runtime: resolved, Out: out})
+	}
+	return profiles, nil
+}
+
+// InitYAML renders complete, commented configurations for validated profiles.
+func InitYAML(profiles []InitProfile) ([]byte, error) {
+	gen := &yaml.Node{Kind: yaml.MappingNode}
+	for _, profile := range profiles {
+		g := profile.Generator
 		options := &yaml.Node{Kind: yaml.MappingNode}
 		for _, option := range g.Options {
 			value := option.Default
 			switch option.Name {
 			case g.RuntimeKey:
-				value = resolved
+				value = profile.Runtime
 			case "out":
-				value = "db"
-				if language == "" && name == "python" {
-					value = "queries"
-				}
+				value = profile.Out
 			case "package":
-				if name == "go" {
+				if g.Language == "go" {
 					value = "db"
 				}
 			}
@@ -161,7 +174,7 @@ func InitYAML(language, runtime string) ([]byte, error) {
 			}
 			options.Content = append(options.Content, key, node)
 		}
-		gen.Content = append(gen.Content, scalar(name), options)
+		gen.Content = append(gen.Content, scalar(g.Language), options)
 	}
 	querySet := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{
 		scalar("engine"), scalar("ydb"),

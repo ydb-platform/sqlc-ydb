@@ -61,6 +61,7 @@ type arguments struct {
 	language      string
 	runtime       string
 	allOptions    bool
+	initProfiles  []config.InitProfile
 }
 
 func parseArgs(args []string) (arguments, error) {
@@ -133,15 +134,10 @@ func parseArgs(args []string) (arguments, error) {
 	if (a.language != "" || a.runtime != "" || a.allOptions) && a.command != "init" {
 		return a, errors.New("--language, --runtime and --all-options are only valid for init")
 	}
-	if a.runtime != "" && a.language == "" {
-		return a, errors.New("--runtime requires --language")
-	}
-	if a.language != "" {
-		generator, err := config.GeneratorFor(a.language)
+	if a.command == "init" {
+		var err error
+		a.initProfiles, err = config.InitProfiles(a.language, a.runtime)
 		if err != nil {
-			return a, err
-		}
-		if _, err := generator.ResolveRuntime(a.runtime); err != nil {
 			return a, err
 		}
 	}
@@ -536,7 +532,7 @@ func initialize(a arguments, w io.Writer) error {
 	if path == "" {
 		path = "sqlc.yaml"
 	}
-	text, err := config.InitYAML(a.language, a.runtime)
+	text, err := config.InitYAML(a.initProfiles)
 	if err != nil {
 		return err
 	}

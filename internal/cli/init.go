@@ -41,9 +41,8 @@ Languages and runtimes:
 		b.WriteString("\nExample: sqlc-ydb init --language go --runtime ydb --help\n")
 		return b.String()
 	}
-	// parseArgs has already validated the selected language and runtime.
-	generator, _ := config.GeneratorFor(a.language)
-	runtime, _ := generator.ResolveRuntime(a.runtime)
+	profile := a.initProfiles[0]
+	generator, runtime := profile.Generator, profile.Runtime
 	fmt.Fprintf(&b, "\nYAML options for gen.%s (runtime: %s):\n", generator.Language, runtime)
 	b.WriteString("Edit these fields in sqlc.yaml after init; they are not command-line flags.\n")
 	for _, option := range generator.Options {
