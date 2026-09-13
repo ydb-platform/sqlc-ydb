@@ -8,7 +8,7 @@ Install the latest stable release without Go or administrator privileges:
 curl -fsSL https://raw.githubusercontent.com/ydb-platform/sqlc-ydb/main/install.sh | bash
 ```
 
-This permanent URL serves the installer from `main`. The installer downloads published release binaries, not development builds. It selects amd64 or arm64, verifies the release SHA256 checksum and installs to `~/.local/bin`. If needed, it prints a command to update `PATH`; it does not edit shell startup files. Run the same command again to update. Download or verification failures leave the previous binary intact. Windows users should use the ZIP archives below.
+This permanent URL serves the installer from `main`. The installer downloads published release binaries, not development builds. It selects amd64 or arm64, verifies the release SHA256 checksum and installs to `~/.local/bin`. If needed, it prints a command to update `PATH`; it does not edit shell startup files. Run `sqlc-ydb version --upgrade` or repeat the installation command to update. Download or verification failures leave the previous binary intact. Windows users should use the ZIP archives below for initial installation.
 
 To select a version (including a published RC) or an installation directory:
 
@@ -70,4 +70,26 @@ On Windows PowerShell, use `Get-FileHash .\ARCHIVE -Algorithm SHA256`. After ext
 
 `sqlc-ydb version` prints the product version, including an RC suffix if any. `sqlc-ydb version --verbose` also prints the embedded source commit for release builds. Ordinary source builds report `unknown` for that field unless linker flags supply it. Include both values when reporting an issue.
 
+Both forms then check GitHub for the latest stable release. If it is newer, an extra line gives its version and the command `sqlc-ydb version --upgrade`. The check has a two-second deadline. Network, TLS, timeout and unavailable-release errors are silent and do not change the exit status. To skip network access and retain machine-readable output, use `sqlc-ydb version --no-remote` (with `--verbose` when needed). Generation commands never check for updates.
+
 Release candidates are for evaluation before a stable release.
+
+## Update the installed executable
+
+```sh
+sqlc-ydb version --upgrade
+```
+
+Concurrent updaters serialize the final identity check and replacement using a `<executable>.update-lock` directory beside the resolved executable. A competing updater fails without replacing the file. After a forcibly terminated updater, confirm no updater is running before recovery. Remove the empty lock directory and retry.
+
+On Linux and macOS, this command installs the latest stable release for the executable’s operating system and architecture. It does not select prereleases or downgrade a recognized newer version, including a newer RC. A source build with an unrecognized version can be replaced by the latest stable release; unrecognized versions do not trigger automatic update notices.
+
+The command resolves the running executable and any symlinks, verifies the archive against the release's `SHA256SUMS`, and stages the replacement in the same directory. The real executable is replaced; symlinks remain intact, and project files are not modified. The directory must be writable by the current user. The updater does not invoke `sudo` or change permissions to gain access. On Linux and macOS, replacement uses an atomic rename. Windows does not replace the running executable; it prints manual upgrade instructions.
+
+Checksums detect corrupted downloads; they do not authenticate a release independently. The archive and `SHA256SUMS` are fetched over HTTPS from the same GitHub release, so installation trusts this repository, its maintainers and its release pipeline. Detached signatures are not currently published or verified.
+
+### Windows manual upgrade
+
+`sqlc-ydb version --upgrade` prints instructions without downloading or modifying files. Download the Windows ZIP for your architecture and `SHA256SUMS` from the [latest release](https://github.com/ydb-platform/sqlc-ydb/releases/latest). Compare `Get-FileHash -Algorithm SHA256` for the ZIP with its entry in `SHA256SUMS`, then extract `sqlc-ydb.exe`. After the command exits, close any other running sqlc-ydb processes and replace the installed executable. If you launch through a symlink, replace its target and preserve the link.
+
+Update downloads have a five-minute deadline. Unlike the optional check in `version`, an explicit update reports errors and returns a nonzero exit status. Failed downloads or verification leave the installed executable unchanged. `version --upgrade --no-remote` is an error because installation requires network access. If another package manager owns the installation, use that manager's upgrade command. `--upgrade` also rejects `--verbose`; request the installed version and commit separately with `version --verbose`.

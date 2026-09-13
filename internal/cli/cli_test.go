@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ydb-platform/sqlc-ydb/internal/update"
 )
 
 type brokenWriter struct{}
@@ -33,8 +36,16 @@ func TestCLIReportsOutputFailures(t *testing.T) {
 
 func invoke(args ...string) (int, string, string) {
 	var out, err bytes.Buffer
-	code := Run(args, &out, &err)
+	client := update.NewClient()
+	client.HTTP.Transport = offlineTransport{}
+	code := run(args, &out, &err, client)
 	return code, out.String(), err.String()
+}
+
+type offlineTransport struct{}
+
+func (offlineTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("offline")
 }
 func put(t *testing.T, path, text string) {
 	t.Helper()

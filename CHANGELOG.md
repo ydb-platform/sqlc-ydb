@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- `version` checks for a newer stable release and prints an update command when available. Offline and failed checks are silent; `--no-remote` skips the check.
+- `version --upgrade` downloads and verifies the latest stable release, then replaces the running executable at its real location, preserving symlinks. Automatic in-place upgrades are supported on Linux and macOS. On Windows, `version --upgrade` prints manual upgrade instructions.
+
 ### Changed
 
 - Group example code by scenario and language; move shared builds and cross-example runtime tests to `tests/examples`.

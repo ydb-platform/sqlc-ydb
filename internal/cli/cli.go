@@ -3,11 +3,13 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -24,6 +26,7 @@ import (
 	"github.com/ydb-platform/sqlc-ydb/internal/config"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 	"github.com/ydb-platform/sqlc-ydb/internal/source"
+	"github.com/ydb-platform/sqlc-ydb/internal/update"
 )
 
 // Version and Commit are set through linker flags in release builds.
@@ -36,15 +39,16 @@ Usage:
   sqlc-ydb <command> [-f sqlc.yaml]
 
 Commands:
-  generate   Analyze queries and generate source code
-  compile    Analyze schema and queries without generating files
-  diff       Compare generated code with existing files (exit 1 on differences)
-  init       Create a sqlc.yaml configuration (version 2)
-  version    Print the version (--verbose includes the build commit)
+  generate     Analyze queries and generate source code
+  compile      Analyze schema and queries without generating files
+  diff         Compare generated code with existing files (exit 1 on differences)
+  init         Create a sqlc.yaml configuration (version 2)
+  version      Print the version and check for updates (--verbose includes the commit)
 
 Options:
+  --upgrade         Install the latest stable release in place (version only)
   -f, --file <path>  Use an alternate configuration file
-  --no-remote       Run locally (all operations are already local)
+  --no-remote       Skip the version update check (generation is always local)
   -h, --help        Print help
 `
 
@@ -52,6 +56,8 @@ type arguments struct {
 	command, file string
 	help          bool
 	verbose       bool
+	noRemote      bool
+	upgrade       bool
 }
 
 func parseArgs(args []string) (arguments, error) {
@@ -74,12 +80,15 @@ func parseArgs(args []string) (arguments, error) {
 				return a, errors.New("--file requires a non-empty path")
 			}
 		case arg == "--no-remote":
+			a.noRemote = true
 		case arg == "--remote":
 			return a, errors.New("remote execution is not implemented; sqlc-ydb runs locally")
 		case arg == "--v2":
 			v2 = true
 		case arg == "--verbose":
 			a.verbose = true
+		case arg == "--upgrade":
+			a.upgrade = true
 		case strings.HasPrefix(arg, "-"):
 			return a, fmt.Errorf("unknown option %q", arg)
 		default:
@@ -95,10 +104,23 @@ func parseArgs(args []string) (arguments, error) {
 	if a.verbose && a.command != "version" {
 		return a, errors.New("--verbose is only valid for version")
 	}
+	if a.upgrade && a.command != "version" {
+		return a, errors.New("--upgrade is only valid for version")
+	}
+	if a.noRemote && a.upgrade {
+		return a, errors.New("--upgrade requires network access; remove --no-remote")
+	}
+	if a.verbose && a.upgrade {
+		return a, errors.New("--verbose cannot be combined with --upgrade")
+	}
 	return a, nil
 }
 
 func Run(args []string, stdout, stderr io.Writer) int {
+	return run(args, stdout, stderr, update.NewClient())
+}
+
+func run(args []string, stdout, stderr io.Writer, updater *update.Client) int {
 	fail := func(err error) int {
 		// The command already failed; reporting that failure is best effort.
 		_, _ = fmt.Fprintln(stderr, err)
@@ -114,7 +136,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	if a.command == "version" {
+	if a.command == "version" && !a.upgrade {
 		if _, err := fmt.Fprintln(stdout, Version); err != nil {
 			return fail(err)
 		}
@@ -122,6 +144,36 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			if _, err := fmt.Fprintf(stdout, "commit: %s\n", Commit); err != nil {
 				return fail(err)
 			}
+		}
+		if !a.noRemote {
+			latest, err := updater.Latest(context.Background())
+			if err == nil && update.Newer(latest, Version) {
+				if _, err := fmt.Fprintf(stdout, "New version available: %s. Run sqlc-ydb version --upgrade to install it.\n", latest); err != nil {
+					return fail(err)
+				}
+			}
+		}
+		return 0
+	}
+	if a.upgrade {
+		if runtime.GOOS == "windows" {
+			_, err := fmt.Fprintln(stdout, "Automatic upgrades are not supported on Windows.\nDownload the Windows ZIP for your architecture and SHA256SUMS from:\nhttps://github.com/ydb-platform/sqlc-ydb/releases/latest\nVerify the ZIP with Get-FileHash -Algorithm SHA256 and extract sqlc-ydb.exe.\nAfter this command exits, close other sqlc-ydb processes and replace the installed executable (the symlink target, if applicable).")
+			if err != nil {
+				return fail(err)
+			}
+			return 0
+		}
+		result, err := updater.Update(context.Background(), Version)
+		if err != nil {
+			return fail(err)
+		}
+		if result.Updated {
+			_, err = fmt.Fprintf(stdout, "Updated sqlc-ydb to %s.\nLocation: %s\n", result.Version, result.Path)
+		} else {
+			_, err = fmt.Fprintf(stdout, "sqlc-ydb %s is already up to date.\n", result.Version)
+		}
+		if err != nil {
+			return fail(err)
 		}
 		return 0
 	}
