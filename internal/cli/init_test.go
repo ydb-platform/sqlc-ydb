@@ -16,6 +16,8 @@ func TestInitHelp(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sqlc.yaml")
 	for _, args := range [][]string{
 		{"init", "--help"},
+		{"help", "init"},
+		{"help", "init", "--language", "go", "--runtime", "ydb"},
 		{"--help", "init"},
 		{"init", "--help", "--language", "go", "--runtime", "ydb"},
 		{"init", "--language=go", "--runtime=ydb", "--help"},

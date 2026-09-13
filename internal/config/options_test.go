@@ -66,8 +66,8 @@ func TestUnknownOptionDefault(t *testing.T) {
 			t.Fatalf("accepted missing option for %s", language)
 		}
 	}
-	if runtime, ok := resolveRuntime("unknown", ""); ok || runtime != "" {
-		t.Fatalf("unknown language resolved: %q, %v", runtime, ok)
+	if runtime, err := resolveRuntime("unknown", ""); err == nil || runtime != "" {
+		t.Fatalf("unknown language resolved: %q, %v", runtime, err)
 	}
 }
 
@@ -80,6 +80,15 @@ func TestInvalidGoAndPythonRuntimes(t *testing.T) {
 		_, err = Parse([]byte(fmt.Sprintf("version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: query.sql\n  gen:\n    %s:\n      out: db\n      %s: unsupported\n", language, g.RuntimeKey)))
 		if err == nil || !strings.Contains(err.Error(), "unsupported") {
 			t.Fatalf("invalid %s runtime: %v", language, err)
+		}
+	}
+}
+
+func TestRuntimeErrorsUseCatalog(t *testing.T) {
+	for _, g := range Generators() {
+		_, err := Parse([]byte(fmt.Sprintf("version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: query.sql\n  gen:\n    %s:\n      out: db\n      %s: unsupported\n", g.Language, g.RuntimeKey)))
+		if err == nil || !strings.Contains(err.Error(), "sql[0]:") || !strings.Contains(err.Error(), "use "+strings.Join(g.Runtimes, ", ")) {
+			t.Errorf("%s runtime error does not describe catalog values: %v", g.Language, err)
 		}
 	}
 }

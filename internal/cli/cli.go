@@ -47,7 +47,7 @@ Commands:
 
 Options:
   --upgrade         Install the latest stable release in place (version only)
-  -f, --file <path>  Use an alternate configuration file
+  -f, --file <path>  Use an alternate configuration file; use --file=-name or ./-name for leading dashes
   --no-remote       Skip the version update check (generation is always local)
   -h, --help        Print help
 `
@@ -117,6 +117,10 @@ func parseArgs(args []string) (arguments, error) {
 		case strings.HasPrefix(arg, "-"):
 			return a, fmt.Errorf("unknown option %q", arg)
 		default:
+			if a.command == "help" && arg == "init" {
+				a.command, a.help = "init", true
+				continue
+			}
 			if a.command != "" {
 				return a, fmt.Errorf("unexpected argument %q", arg)
 			}

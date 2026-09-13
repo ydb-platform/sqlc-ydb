@@ -20,8 +20,8 @@ Options:
   --language <language>  Select a generator (listed below)
   --runtime <runtime>    Select its framework; requires --language
   --all-options          Include every option (the default; accepted explicitly)
-  -f, --file <path>       Write an alternate configuration file; use --file=-name or ./-name for leading dashes
-  --v2                   Use config version 2 (the default)
+  -f, --file <path>      Write an alternate configuration file; use --file=-name or ./-name for leading dashes
+  --v2                  Use config version 2 (the default)
   -h, --help             Show help; select a language for its YAML options
 
 Languages and runtimes:

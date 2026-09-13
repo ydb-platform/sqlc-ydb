@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -195,9 +196,9 @@ func Parse(data []byte) (*Config, error) {
 			if g.Package == "" {
 				g.Package = filepath.Base(filepath.Clean(g.Out))
 			}
-			resolved, ok := resolveRuntime("go", g.SQLPackage)
-			if !ok {
-				return nil, fmt.Errorf("sql[%d]: unsupported Go sql_package %q (use ydb or database/sql)", i, g.SQLPackage)
+			resolved, err := resolveRuntime("go", g.SQLPackage)
+			if err != nil {
+				return nil, fmt.Errorf("sql[%d]: %w", i, err)
 			}
 			g.SQLPackage = resolved
 		}
@@ -208,9 +209,9 @@ func Parse(data []byte) (*Config, error) {
 			if p.Out == "" {
 				return nil, fmt.Errorf("sql[%d].gen.python.out is required", i)
 			}
-			resolved, ok := resolveRuntime("python", p.Runtime)
-			if !ok {
-				return nil, fmt.Errorf("sql[%d]: unsupported Python runtime %q", i, p.Runtime)
+			resolved, err := resolveRuntime("python", p.Runtime)
+			if err != nil {
+				return nil, fmt.Errorf("sql[%d]: %w", i, err)
 			}
 			p.Runtime = resolved
 			if p.EmitSyncQuerier == nil {
@@ -218,7 +219,10 @@ func Parse(data []byte) (*Config, error) {
 				if err != nil {
 					return nil, err
 				}
-				v := value == "true"
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return nil, fmt.Errorf("invalid emit_sync_querier default: %w", err)
+				}
 				p.EmitSyncQuerier = &v
 			}
 			if !*p.EmitSyncQuerier && !p.EmitAsyncQuerier {
@@ -236,9 +240,9 @@ func Parse(data []byte) (*Config, error) {
 				}
 				g.Namespace = value
 			}
-			resolved, ok := resolveRuntime("cpp", g.Runtime)
-			if !ok {
-				return nil, fmt.Errorf("sql[%d]: unsupported C++ runtime %q", i, g.Runtime)
+			resolved, err := resolveRuntime("cpp", g.Runtime)
+			if err != nil {
+				return nil, fmt.Errorf("sql[%d]: %w", i, err)
 			}
 			g.Runtime = resolved
 		}
@@ -253,9 +257,9 @@ func Parse(data []byte) (*Config, error) {
 				}
 				g.Namespace = value
 			}
-			resolved, ok := resolveRuntime("csharp", g.Runtime)
-			if !ok {
-				return nil, fmt.Errorf("sql[%d]: unsupported C# runtime %q", i, g.Runtime)
+			resolved, err := resolveRuntime("csharp", g.Runtime)
+			if err != nil {
+				return nil, fmt.Errorf("sql[%d]: %w", i, err)
 			}
 			g.Runtime = resolved
 		}
@@ -270,9 +274,9 @@ func Parse(data []byte) (*Config, error) {
 				}
 				g.Package = value
 			}
-			resolved, ok := resolveRuntime("java", g.Runtime)
-			if !ok {
-				return nil, fmt.Errorf("sql[%d]: unsupported Java runtime %q", i, g.Runtime)
+			resolved, err := resolveRuntime("java", g.Runtime)
+			if err != nil {
+				return nil, fmt.Errorf("sql[%d]: %w", i, err)
 			}
 			g.Runtime = resolved
 		}
@@ -287,9 +291,9 @@ func Parse(data []byte) (*Config, error) {
 				}
 				g.Package = value
 			}
-			resolved, ok := resolveRuntime("kotlin", g.Runtime)
-			if !ok {
-				return nil, fmt.Errorf("sql[%d]: unsupported Kotlin runtime %q (use ydb, jdbc or exposed)", i, g.Runtime)
+			resolved, err := resolveRuntime("kotlin", g.Runtime)
+			if err != nil {
+				return nil, fmt.Errorf("sql[%d]: %w", i, err)
 			}
 			g.Runtime = resolved
 		}
@@ -297,9 +301,9 @@ func Parse(data []byte) (*Config, error) {
 			if g.Out == "" {
 				return nil, fmt.Errorf("sql[%d].gen.typescript.out is required", i)
 			}
-			resolved, ok := resolveRuntime("typescript", g.Runtime)
-			if !ok {
-				return nil, fmt.Errorf("sql[%d]: unsupported TypeScript runtime %q", i, g.Runtime)
+			resolved, err := resolveRuntime("typescript", g.Runtime)
+			if err != nil {
+				return nil, fmt.Errorf("sql[%d]: %w", i, err)
 			}
 			g.Runtime = resolved
 		}
@@ -307,9 +311,9 @@ func Parse(data []byte) (*Config, error) {
 			if g.Out == "" {
 				return nil, fmt.Errorf("sql[%d].gen.rust.out is required", i)
 			}
-			resolved, ok := resolveRuntime("rust", g.Runtime)
-			if !ok {
-				return nil, fmt.Errorf("sql[%d]: unsupported Rust runtime %q", i, g.Runtime)
+			resolved, err := resolveRuntime("rust", g.Runtime)
+			if err != nil {
+				return nil, fmt.Errorf("sql[%d]: %w", i, err)
 			}
 			g.Runtime = resolved
 		}
@@ -324,9 +328,9 @@ func Parse(data []byte) (*Config, error) {
 				}
 				g.Namespace = value
 			}
-			resolved, ok := resolveRuntime("php", g.Runtime)
-			if !ok {
-				return nil, fmt.Errorf("sql[%d]: unsupported PHP runtime %q", i, g.Runtime)
+			resolved, err := resolveRuntime("php", g.Runtime)
+			if err != nil {
+				return nil, fmt.Errorf("sql[%d]: %w", i, err)
 			}
 			g.Runtime = resolved
 		}

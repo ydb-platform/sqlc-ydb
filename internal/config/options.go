@@ -95,13 +95,12 @@ func optionDefault(language, name string) (string, error) {
 	return "", fmt.Errorf("unknown generator option: %s.%s", language, name)
 }
 
-func resolveRuntime(language, runtime string) (string, bool) {
+func resolveRuntime(language, runtime string) (string, error) {
 	g, err := GeneratorFor(language)
 	if err != nil {
-		return "", false
+		return "", err
 	}
-	resolved, err := g.ResolveRuntime(runtime)
-	return resolved, err == nil
+	return g.ResolveRuntime(runtime)
 }
 
 func (g Generator) ResolveRuntime(runtime string) (string, error) {
