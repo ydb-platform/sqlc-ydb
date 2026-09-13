@@ -9,6 +9,7 @@ require_once __DIR__ . '/YdbRuntime.php';
 use Closure;
 use UnexpectedValueException;
 use Ydb\Table\ExecuteQueryResult;
+use Ydb\Table\TransactionControl;
 use Ydb\Type\PrimitiveTypeId;
 use YdbPlatform\Ydb\Retry\RetryParams;
 use YdbPlatform\Ydb\Session;
@@ -16,6 +17,9 @@ use YdbPlatform\Ydb\Table;
 
 final class Queries
 {
+    private ?Session $session = null;
+    private ?string $txId = null;
+
     public function __construct(
         private readonly Table $table,
         private readonly bool $idempotent = false,
@@ -26,6 +30,29 @@ final class Queries
         if (PHP_INT_SIZE !== 8) {
             throw new \LogicException('sqlc-ydb generated PHP code requires a 64-bit PHP runtime');
         }
+    }
+
+    /** Bind to a caller-owned transaction; this helper never commits or retries it. */
+    public function withTx(Session $session, string $txId): self
+    {
+        if ($this->session !== null) {
+            throw new \LogicException('Queries is already bound to a transaction; call withTx on an unbound helper');
+        }
+        if ($txId === '') {
+            throw new \InvalidArgumentException('Transaction ID must not be empty');
+        }
+        $queries = clone $this;
+        $queries->session = $session->take();
+        $queries->txId = $txId;
+        return $queries;
+    }
+
+    private function execute(Closure $operation): ExecuteQueryResult
+    {
+        if ($this->session !== null) {
+            return $operation($this->session);
+        }
+        return $this->table->retrySession($operation, $this->idempotent, $this->retryParams);
     }
 
     // -- name: BindValues :one
@@ -45,21 +72,29 @@ final class Queries
             '$json_optional' => YdbValueCodec::typedOptionalJson($params->jsonOptional, 'json_optional'),
         ];
 
-        $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+        $result = $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 INSERT INTO values_test (id, float, float_optional, double, double_optional, uint64, uint64_optional, timestamp, timestamp_optional, json, json_optional)
                 VALUES ($id, $float, $float_optional, $double, $double_optional, $uint64, $uint64_optional, $timestamp, $timestamp_optional, $json, $json_optional)
                 RETURNING id, float, float_optional, double, double_optional, uint64, uint64_optional, timestamp, timestamp_optional, json, json_optional;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
-                ->keepInCache(count($parameters) > 0)
-                ->beginTx('serializable_read_write');
+                ->keepInCache(count($parameters) > 0);
+            if ($this->txId !== null) {
+                $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
+            } else {
+                $query->beginTx('serializable_read_write');
+            }
             if ($this->configure !== null) {
                 ($this->configure)($query);
             }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
 
-            return (new YdbRawExecutor($this->table))->execute($session, $query);
-        }, $this->idempotent, $this->retryParams);
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
+        });
 
         $rows = $this->decodeRows(
             $result,

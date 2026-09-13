@@ -89,7 +89,7 @@ func TestGenerateUsesLosslessOfficialSDKContract(t *testing.T) {
 		"YdbValueCodec::typedJson($params->tags, 'tags')",
 		"$session->newQuery(<<<'SQLC_YDB_YQL'",
 		"->beginTx('serializable_read_write')",
-		"return (new YdbRawExecutor($this->table))->execute($session, $query);",
+		"return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);",
 	} {
 		if !strings.Contains(queries, want) {
 			t.Errorf("Queries.php missing %q:\n%s", want, queries)
@@ -229,7 +229,10 @@ func TestRejectsUnsupportedInputsAndCollisions(t *testing.T) {
 			{Name: "foo_bar", Command: model.Exec, SQL: "SELECT 1;"},
 			{Name: "FooBar", Command: model.Exec, SQL: "SELECT 1;"},
 		}}, want: "method name collision"},
+		{name: "transaction method collision", a: &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "WithTx", Command: model.Exec, SQL: "SELECT 1;"}}}, want: "method name collision"},
+		{name: "executor method collision", a: &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Execute", Command: model.Exec, SQL: "SELECT 1;"}}}, want: "method name collision"},
 		{name: "reserved class", a: &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "int"}}}}, want: `invalid generated class name "Int"`},
+		{name: "transaction control import", a: &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "transaction_control"}}}}, want: `class name collision "TransactionControl"`},
 		{name: "sdk import class", a: &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "table"}}}}, want: `class name collision "Table"`},
 		{name: "this parameter", a: &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
 			Name: "Write", Command: model.Exec, SQL: "SELECT $this;",

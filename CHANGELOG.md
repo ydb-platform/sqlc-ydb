@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- PHP `Queries::withTx(Session, string)` binds generated queries to a caller-owned transaction, preserving exact result decoding without per-query retries or automatic commits.
+
 ## v0.1.2
 
 ### Fixed

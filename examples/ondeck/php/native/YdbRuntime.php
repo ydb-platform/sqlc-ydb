@@ -40,7 +40,7 @@ final class YdbRawExecutor
         $this->logger = $table->getLogger() ?? new NullLogger();
     }
 
-    public function execute(Session $session, YdbQuery $query): ExecuteQueryResult
+    public function execute(Session $session, YdbQuery $query, bool $releaseSession = true): ExecuteQueryResult
     {
         $data = $query->getRequestData();
         $data['session_id'] = $session->id();
@@ -48,7 +48,9 @@ final class YdbRawExecutor
         try {
             $result = $this->doRequest('Table', 'ExecuteDataQuery', $data);
         } finally {
-            $session->release();
+            if ($releaseSession) {
+                $session->release();
+            }
         }
         if (!$result instanceof ExecuteQueryResult) {
             throw new UnexpectedValueException('YDB ExecuteDataQuery returned an unexpected result');
