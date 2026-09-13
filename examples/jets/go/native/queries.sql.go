@@ -19,14 +19,14 @@ func (q *Queries) CountPilots(ctx context.Context, opts ...query.ExecuteOption) 
 		opts...,
 	)
 	if err != nil {
-		return CountPilotsRow{}, err
+		return CountPilotsRow{}, xerrors.WithStackTrace(err)
 	}
 
 	var row CountPilotsRow
 	if err := result.ScanNamed(
 		query.Named("pilot_count", &row.PilotCount),
 	); err != nil {
-		return CountPilotsRow{}, err
+		return CountPilotsRow{}, xerrors.WithStackTrace(err)
 	}
 
 	return row, nil
@@ -39,7 +39,7 @@ func (q *Queries) ListPilots(ctx context.Context, opts ...query.ExecuteOption) (
 		opts...,
 	)
 	if err != nil {
-		return nil, err
+		return nil, xerrors.WithStackTrace(err)
 	}
 	defer result.Close(ctx)
 
@@ -84,8 +84,10 @@ func (q *Queries) DeletePilot(ctx context.Context, arg int32, opts ...query.Exec
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx, ""+
+	err := q.db.Exec(ctx, ""+
 		"DELETE FROM pilots WHERE id = $pilot_id;",
 		callOptions...,
 	)
+
+	return xerrors.WithStackTrace(err)
 }

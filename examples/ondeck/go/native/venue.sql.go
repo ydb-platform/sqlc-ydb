@@ -28,7 +28,7 @@ func (q *Queries) ListVenues(ctx context.Context, arg string, opts ...query.Exec
 		callOptions...,
 	)
 	if err != nil {
-		return nil, err
+		return nil, xerrors.WithStackTrace(err)
 	}
 	defer result.Close(ctx)
 
@@ -81,11 +81,13 @@ func (q *Queries) DeleteVenue(ctx context.Context, arg string, opts ...query.Exe
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx, ""+
+	err := q.db.Exec(ctx, ""+
 		"DELETE FROM venue "+
 		"WHERE slug = $slug AND slug = $slug;",
 		callOptions...,
 	)
+
+	return xerrors.WithStackTrace(err)
 }
 
 // -- name: GetVenue :one
@@ -104,7 +106,7 @@ func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams, opts ...quer
 		callOptions...,
 	)
 	if err != nil {
-		return GetVenueRow{}, err
+		return GetVenueRow{}, xerrors.WithStackTrace(err)
 	}
 
 	var row GetVenueRow
@@ -120,7 +122,7 @@ func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams, opts ...quer
 		query.Named("tags", &row.Tags),
 		query.Named("created_at", &row.CreatedAt),
 	); err != nil {
-		return GetVenueRow{}, err
+		return GetVenueRow{}, xerrors.WithStackTrace(err)
 	}
 
 	return row, nil
@@ -167,14 +169,14 @@ func (q *Queries) CreateVenue(ctx context.Context, arg CreateVenueParams, opts .
 		callOptions...,
 	)
 	if err != nil {
-		return CreateVenueRow{}, err
+		return CreateVenueRow{}, xerrors.WithStackTrace(err)
 	}
 
 	var row CreateVenueRow
 	if err := result.ScanNamed(
 		query.Named("id", &row.ID),
 	); err != nil {
-		return CreateVenueRow{}, err
+		return CreateVenueRow{}, xerrors.WithStackTrace(err)
 	}
 
 	return row, nil
@@ -197,14 +199,14 @@ func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams
 		callOptions...,
 	)
 	if err != nil {
-		return UpdateVenueNameRow{}, err
+		return UpdateVenueNameRow{}, xerrors.WithStackTrace(err)
 	}
 
 	var row UpdateVenueNameRow
 	if err := result.ScanNamed(
 		query.Named("id", &row.ID),
 	); err != nil {
-		return UpdateVenueNameRow{}, err
+		return UpdateVenueNameRow{}, xerrors.WithStackTrace(err)
 	}
 
 	return row, nil
@@ -222,7 +224,7 @@ func (q *Queries) VenueCountByCity(ctx context.Context, opts ...query.ExecuteOpt
 		opts...,
 	)
 	if err != nil {
-		return nil, err
+		return nil, xerrors.WithStackTrace(err)
 	}
 	defer result.Close(ctx)
 

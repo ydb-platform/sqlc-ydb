@@ -4,6 +4,10 @@ This maintainer reference records API snapshots and non-obvious SDK behavior use
 
 Language-level generated API, value mappings and ownership contracts remain in the public guides under `docs/`. C++ build details are in [C++ development](cpp-development.md), and additional C# source evidence is in [C# SDK evidence](csharp-sdk-evidence.md).
 
+## Go error stack traces
+
+Checked against the pinned Go SDK 3.151.1 on 2026-09-13: [`pkg/xerrors.WithStackTrace`](https://github.com/ydb-platform/ydb-go-sdk/blob/v3.151.1/pkg/xerrors/stacktrace.go) delegates to the [internal wrapper](https://github.com/ydb-platform/ydb-go-sdk/blob/v3.151.1/internal/xerrors/stacktrace.go), which returns `nil` for `nil`, records the caller location and exposes the original error through `Unwrap`. Generated native methods and Decimal validation helpers wrap returned errors; `database/sql` retains its error behavior. `TestGeneratedYDBErrorStackTraces` compiles separate `:one`, `:many` and `:exec` files against this SDK and executes failure paths to verify generated locations, `errors.Is`/`errors.As`, Decimal validation and successful `Exec` returning `nil`.
+
 ## Java SDK and framework references
 
 Source snapshots inspected on 2026-09-07:

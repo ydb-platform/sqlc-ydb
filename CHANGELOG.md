@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- Native Go query methods attach stack traces to returned execution, scan and Decimal validation errors while preserving error unwrapping.
+
 ## v0.1.1
 
 ### Added

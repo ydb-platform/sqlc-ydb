@@ -45,6 +45,8 @@ Both Go adapters map `Decimal(P,S)` to `types.Decimal` and `Uuid` to `uuid.UUID`
 
 Native Go query methods and generated interfaces accept trailing `opts ...query.ExecuteOption`. Options are forwarded without changing the caller's slice. Generated typed parameters are applied last, so a caller option cannot replace the bindings represented by the method arguments.
 
+Native Go methods wrap returned errors with the SDK's `xerrors.WithStackTrace`, including execution, row decoding and Decimal validation errors. The error records the generated return location and preserves the original error for `errors.Is` and `errors.As`.
+
 Kotlin types, nullable results and transaction ownership are documented in [Kotlin](kotlin.md). Kotlin examples use the shared authors schema and queries.
 
 ### Python result and retry contracts

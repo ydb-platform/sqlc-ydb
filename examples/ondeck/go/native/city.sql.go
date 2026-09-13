@@ -21,7 +21,7 @@ func (q *Queries) ListCities(ctx context.Context, opts ...query.ExecuteOption) (
 		opts...,
 	)
 	if err != nil {
-		return nil, err
+		return nil, xerrors.WithStackTrace(err)
 	}
 	defer result.Close(ctx)
 
@@ -73,7 +73,7 @@ func (q *Queries) GetCity(ctx context.Context, arg string, opts ...query.Execute
 		callOptions...,
 	)
 	if err != nil {
-		return GetCityRow{}, err
+		return GetCityRow{}, xerrors.WithStackTrace(err)
 	}
 
 	var row GetCityRow
@@ -81,7 +81,7 @@ func (q *Queries) GetCity(ctx context.Context, arg string, opts ...query.Execute
 		query.Named("slug", &row.Slug),
 		query.Named("name", &row.Name),
 	); err != nil {
-		return GetCityRow{}, err
+		return GetCityRow{}, xerrors.WithStackTrace(err)
 	}
 
 	return row, nil
@@ -107,7 +107,7 @@ func (q *Queries) CreateCity(ctx context.Context, arg CreateCityParams, opts ...
 		callOptions...,
 	)
 	if err != nil {
-		return CreateCityRow{}, err
+		return CreateCityRow{}, xerrors.WithStackTrace(err)
 	}
 
 	var row CreateCityRow
@@ -115,7 +115,7 @@ func (q *Queries) CreateCity(ctx context.Context, arg CreateCityParams, opts ...
 		query.Named("slug", &row.Slug),
 		query.Named("name", &row.Name),
 	); err != nil {
-		return CreateCityRow{}, err
+		return CreateCityRow{}, xerrors.WithStackTrace(err)
 	}
 
 	return row, nil
@@ -130,10 +130,12 @@ func (q *Queries) UpdateCityName(ctx context.Context, arg UpdateCityNameParams, 
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	return q.db.Exec(ctx, ""+
+	err := q.db.Exec(ctx, ""+
 		"UPDATE city "+
 		"SET name = $name "+
 		"WHERE slug = $slug;",
 		callOptions...,
 	)
+
+	return xerrors.WithStackTrace(err)
 }

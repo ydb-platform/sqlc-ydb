@@ -19,7 +19,7 @@ func (q *Queries) ListAuthorBooks(ctx context.Context, opts ...query.ExecuteOpti
 		opts...,
 	)
 	if err != nil {
-		return nil, err
+		return nil, xerrors.WithStackTrace(err)
 	}
 	defer result.Close(ctx)
 

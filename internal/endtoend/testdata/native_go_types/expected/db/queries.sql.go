@@ -6,6 +6,7 @@ import (
 	"context"
 
 	ydb "github.com/ydb-platform/ydb-go-sdk/v3"
+	"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xerrors"
 	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 	"github.com/ydb-platform/ydb-go-sdk/v3/types"
 )
@@ -13,7 +14,7 @@ import (
 // -- name: BindNativeTypes :one
 func (q *Queries) BindNativeTypes(ctx context.Context, arg BindNativeTypesParams, opts ...query.ExecuteOption) (BindNativeTypesRow, error) {
 	if err := validateDecimalParameter("$amount", arg.Amount, 22, 9); err != nil {
-		return BindNativeTypesRow{}, err
+		return BindNativeTypesRow{}, xerrors.WithStackTrace(err)
 	}
 	parameters := ydb.ParamsBuilder()
 	if len(arg.Ids) == 0 {
@@ -45,7 +46,7 @@ func (q *Queries) BindNativeTypes(ctx context.Context, arg BindNativeTypesParams
 		callOptions...,
 	)
 	if err != nil {
-		return BindNativeTypesRow{}, err
+		return BindNativeTypesRow{}, xerrors.WithStackTrace(err)
 	}
 
 	var row BindNativeTypesRow
@@ -55,7 +56,7 @@ func (q *Queries) BindNativeTypes(ctx context.Context, arg BindNativeTypesParams
 		query.Named("amount", &row.Amount),
 		query.Named("id", &row.ID),
 	); err != nil {
-		return BindNativeTypesRow{}, err
+		return BindNativeTypesRow{}, xerrors.WithStackTrace(err)
 	}
 
 	return row, nil
