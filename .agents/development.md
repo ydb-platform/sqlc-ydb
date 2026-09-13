@@ -61,6 +61,8 @@ These compile generated scalar and nullable bindings using the real .NET, Java a
 
 ## Golden fixtures
 
+Generator option descriptions and defaults live in `internal/config`. After changing them, run `go generate ./internal/config` to refresh the tables in `docs/targets.md`. The Go suite rejects a stale reference; CLI tests exercise the generated configurations and profile-specific help.
+
 Each directory in `internal/endtoend/testdata` is a standalone current YDB input. Positive fixtures contain `expected/` generated files; negative fixtures contain `stderr.txt`. The runner copies inputs into a temporary directory and invokes the real CLI, checking output filenames, contents and diagnostics together.
 
 ```sh

@@ -135,7 +135,7 @@ func TestKotlinConfiguration(t *testing.T) {
 	}
 	for _, tc := range []struct{ name, options, want string }{
 		{"missing output", "      package: db\n", "gen.kotlin.out is required"},
-		{"unsupported runtime", "      out: kt\n      runtime: spring\n", "unsupported Kotlin runtime"},
+		{"unsupported runtime", "      out: kt\n      runtime: spring\n", "unsupported kotlin runtime"},
 		{"unknown option", "      out: kt\n      emit_async: true\n", "field emit_async"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

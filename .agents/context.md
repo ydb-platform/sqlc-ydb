@@ -10,7 +10,7 @@ Read [decisions](decisions.md) before changing the analysis/generation boundary 
 | --- | --- |
 | `cmd/sqlc-ydb`, `internal/cli` | Commands, pipeline orchestration, output validation and file IO |
 | `internal/update` | Stable-release checks, SHA256-verified downloads and replacement of the real executable |
-| `internal/config` | Strict version 2 config parsing, supported options and defaults |
+| `internal/config` | Strict version 2 config parsing and the shared option catalog for defaults, init, help and generated documentation |
 | `internal/source` | Input ordering and migration Up sections |
 | `internal/analyzer` | Direct YQL parse contexts, catalog evolution, name/type resolution and diagnostics |
 | `internal/yql/builtins` | Strict supported YQL function, cast and common-type rules |

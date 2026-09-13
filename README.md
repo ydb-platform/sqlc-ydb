@@ -91,7 +91,9 @@ sql:
 SELECT name FROM authors WHERE id = $author_id;
 ```
 
-Use `sqlc-ydb init` for a starting configuration. Input and output paths are relative to the configuration file. `generate` completes analysis and rendering before writing any files; `compile` writes nothing; `diff` writes nothing and exits with status 1 if generated contents differ. Renamed queries or models can leave obsolete generated files: `generate` and `diff` report these for manual removal in their current output directories. See [output ownership](docs/compatibility.md#output-ownership) when moving outputs or sharing directories between configurations.
+Use `sqlc-ydb init --help` to choose a language and runtime, then create a configuration with, for example, `sqlc-ydb init --language go --runtime ydb`. See the [generator options](docs/targets.md#generator-options) for configuration details and help commands.
+
+Input and output paths are relative to the configuration file. `generate` completes analysis and rendering before writing any files; `compile` writes nothing; `diff` writes nothing and exits with status 1 if generated contents differ. Renamed queries or models can leave obsolete generated files: `generate` and `diff` report these for manual removal in their current output directories. See [output ownership](docs/compatibility.md#output-ownership) when moving outputs or sharing directories between configurations.
 
 ## References
 

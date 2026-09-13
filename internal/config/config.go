@@ -195,14 +195,11 @@ func Parse(data []byte) (*Config, error) {
 			if g.Package == "" {
 				g.Package = filepath.Base(filepath.Clean(g.Out))
 			}
-			if g.SQLPackage == "" {
-				g.SQLPackage = "database/sql"
+			resolved, err := resolveRuntime("go", g.SQLPackage)
+			if err != nil {
+				return nil, fmt.Errorf("sql[%d]: %w", i, err)
 			}
-			switch g.SQLPackage {
-			case "ydb", "database/sql":
-			default:
-				return nil, fmt.Errorf("sql[%d]: unsupported Go sql_package %q (use ydb or database/sql)", i, g.SQLPackage)
-			}
+			g.SQLPackage = resolved
 		}
 		if p := s.Gen.Python; p != nil {
 			if p.Package.Kind != 0 {
@@ -211,16 +208,13 @@ func Parse(data []byte) (*Config, error) {
 			if p.Out == "" {
 				return nil, fmt.Errorf("sql[%d].gen.python.out is required", i)
 			}
-			if p.Runtime == "" {
-				p.Runtime = "ydb"
+			resolved, err := resolveRuntime("python", p.Runtime)
+			if err != nil {
+				return nil, fmt.Errorf("sql[%d]: %w", i, err)
 			}
-			switch p.Runtime {
-			case "ydb", "dbapi", "sqlalchemy":
-			default:
-				return nil, fmt.Errorf("sql[%d]: unsupported Python runtime %q", i, p.Runtime)
-			}
+			p.Runtime = resolved
 			if p.EmitSyncQuerier == nil {
-				v := true
+				v := defaultSyncQuerier
 				p.EmitSyncQuerier = &v
 			}
 			if !*p.EmitSyncQuerier && !p.EmitAsyncQuerier {
@@ -232,98 +226,85 @@ func Parse(data []byte) (*Config, error) {
 				return nil, fmt.Errorf("sql[%d].gen.cpp.out is required", i)
 			}
 			if g.Namespace == "" {
-				g.Namespace = "db"
+				g.Namespace = defaultCPPNamespace
 			}
-			if g.Runtime == "" || g.Runtime == "native" {
-				g.Runtime = "ydb"
+			resolved, err := resolveRuntime("cpp", g.Runtime)
+			if err != nil {
+				return nil, fmt.Errorf("sql[%d]: %w", i, err)
 			}
-			if g.Runtime != "ydb" && g.Runtime != "userver" {
-				return nil, fmt.Errorf("sql[%d]: unsupported C++ runtime %q", i, g.Runtime)
-			}
+			g.Runtime = resolved
 		}
 		if g := s.Gen.CSharp; g != nil {
 			if g.Out == "" {
 				return nil, fmt.Errorf("sql[%d].gen.csharp.out is required", i)
 			}
 			if g.Namespace == "" {
-				g.Namespace = "Db"
+				g.Namespace = defaultCSharpNamespace
 			}
-			if g.Runtime == "" {
-				g.Runtime = "adonet"
+			resolved, err := resolveRuntime("csharp", g.Runtime)
+			if err != nil {
+				return nil, fmt.Errorf("sql[%d]: %w", i, err)
 			}
-			switch g.Runtime {
-			case "adonet", "dapper":
-			default:
-				return nil, fmt.Errorf("sql[%d]: unsupported C# runtime %q", i, g.Runtime)
-			}
+			g.Runtime = resolved
 		}
 		if g := s.Gen.Java; g != nil {
 			if g.Out == "" {
 				return nil, fmt.Errorf("sql[%d].gen.java.out is required", i)
 			}
 			if g.Package == "" {
-				g.Package = "db"
+				g.Package = defaultJavaPackage
 			}
-			if g.Runtime == "" || g.Runtime == "native" {
-				g.Runtime = "ydb"
+			resolved, err := resolveRuntime("java", g.Runtime)
+			if err != nil {
+				return nil, fmt.Errorf("sql[%d]: %w", i, err)
 			}
-			switch g.Runtime {
-			case "ydb", "jdbc", "jooq":
-			default:
-				return nil, fmt.Errorf("sql[%d]: unsupported Java runtime %q", i, g.Runtime)
-			}
+			g.Runtime = resolved
 		}
 		if g := s.Gen.Kotlin; g != nil {
 			if g.Out == "" {
 				return nil, fmt.Errorf("sql[%d].gen.kotlin.out is required", i)
 			}
 			if g.Package == "" {
-				g.Package = "db"
+				g.Package = defaultKotlinPackage
 			}
-			if g.Runtime == "" || g.Runtime == "native" {
-				g.Runtime = "ydb"
+			resolved, err := resolveRuntime("kotlin", g.Runtime)
+			if err != nil {
+				return nil, fmt.Errorf("sql[%d]: %w", i, err)
 			}
-			switch g.Runtime {
-			case "ydb", "jdbc", "exposed":
-			default:
-				return nil, fmt.Errorf("sql[%d]: unsupported Kotlin runtime %q (use ydb, jdbc or exposed)", i, g.Runtime)
-			}
+			g.Runtime = resolved
 		}
 		if g := s.Gen.TypeScript; g != nil {
 			if g.Out == "" {
 				return nil, fmt.Errorf("sql[%d].gen.typescript.out is required", i)
 			}
-			if g.Runtime == "" {
-				g.Runtime = "ydb"
+			resolved, err := resolveRuntime("typescript", g.Runtime)
+			if err != nil {
+				return nil, fmt.Errorf("sql[%d]: %w", i, err)
 			}
-			if g.Runtime != "ydb" {
-				return nil, fmt.Errorf("sql[%d]: unsupported TypeScript runtime %q", i, g.Runtime)
-			}
+			g.Runtime = resolved
 		}
 		if g := s.Gen.Rust; g != nil {
 			if g.Out == "" {
 				return nil, fmt.Errorf("sql[%d].gen.rust.out is required", i)
 			}
-			if g.Runtime == "" {
-				g.Runtime = "ydb"
+			resolved, err := resolveRuntime("rust", g.Runtime)
+			if err != nil {
+				return nil, fmt.Errorf("sql[%d]: %w", i, err)
 			}
-			if g.Runtime != "ydb" {
-				return nil, fmt.Errorf("sql[%d]: unsupported Rust runtime %q", i, g.Runtime)
-			}
+			g.Runtime = resolved
 		}
 		if g := s.Gen.PHP; g != nil {
 			if g.Out == "" {
 				return nil, fmt.Errorf("sql[%d].gen.php.out is required", i)
 			}
 			if g.Namespace == "" {
-				g.Namespace = "Db"
+				g.Namespace = defaultPHPNamespace
 			}
-			if g.Runtime == "" {
-				g.Runtime = "ydb"
+			resolved, err := resolveRuntime("php", g.Runtime)
+			if err != nil {
+				return nil, fmt.Errorf("sql[%d]: %w", i, err)
 			}
-			if g.Runtime != "ydb" {
-				return nil, fmt.Errorf("sql[%d]: unsupported PHP runtime %q", i, g.Runtime)
-			}
+			g.Runtime = resolved
 		}
 	}
 	return &c, nil

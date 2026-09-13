@@ -47,7 +47,7 @@ Commands:
 
 Options:
   --upgrade         Install the latest stable release in place (version only)
-  -f, --file <path>  Use an alternate configuration file
+  -f, --file <path>  Use an alternate configuration file; use --file=-name or ./-name for leading dashes
   --no-remote       Skip the version update check (generation is always local)
   -h, --help        Print help
 `
@@ -58,6 +58,10 @@ type arguments struct {
 	verbose       bool
 	noRemote      bool
 	upgrade       bool
+	language      string
+	runtime       string
+	allOptions    bool
+	initProfiles  []config.InitProfile
 }
 
 func parseArgs(args []string) (arguments, error) {
@@ -70,7 +74,7 @@ func parseArgs(args []string) (arguments, error) {
 			a.help = true
 		case arg == "-f" || arg == "--file":
 			i++
-			if i == len(args) || args[i] == "" {
+			if i == len(args) || args[i] == "" || strings.HasPrefix(args[i], "-") {
 				return a, errors.New("--file requires a non-empty path")
 			}
 			a.file = args[i]
@@ -85,6 +89,28 @@ func parseArgs(args []string) (arguments, error) {
 			return a, errors.New("remote execution is not implemented; sqlc-ydb runs locally")
 		case arg == "--v2":
 			v2 = true
+		case arg == "--language" || arg == "--runtime":
+			i++
+			if i == len(args) || args[i] == "" || strings.HasPrefix(args[i], "-") {
+				return a, fmt.Errorf("%s requires a non-empty value", arg)
+			}
+			if arg == "--language" {
+				a.language = args[i]
+			} else {
+				a.runtime = args[i]
+			}
+		case strings.HasPrefix(arg, "--language=") || strings.HasPrefix(arg, "--runtime="):
+			name, value, _ := strings.Cut(arg, "=")
+			if value == "" {
+				return a, fmt.Errorf("%s requires a non-empty value", name)
+			}
+			if name == "--language" {
+				a.language = value
+			} else {
+				a.runtime = value
+			}
+		case arg == "--all-options":
+			a.allOptions = true
 		case arg == "--verbose":
 			a.verbose = true
 		case arg == "--upgrade":
@@ -92,6 +118,10 @@ func parseArgs(args []string) (arguments, error) {
 		case strings.HasPrefix(arg, "-"):
 			return a, fmt.Errorf("unknown option %q", arg)
 		default:
+			if a.command == "help" && arg == "init" {
+				a.command, a.help = "init", true
+				continue
+			}
 			if a.command != "" {
 				return a, fmt.Errorf("unexpected argument %q", arg)
 			}
@@ -100,6 +130,16 @@ func parseArgs(args []string) (arguments, error) {
 	}
 	if v2 && a.command != "init" {
 		return a, errors.New("--v2 is only valid for init")
+	}
+	if (a.language != "" || a.runtime != "" || a.allOptions) && a.command != "init" {
+		return a, errors.New("--language, --runtime and --all-options are only valid for init")
+	}
+	if a.command == "init" {
+		var err error
+		a.initProfiles, err = config.InitProfiles(a.language, a.runtime)
+		if err != nil {
+			return a, err
+		}
 	}
 	if a.verbose && a.command != "version" {
 		return a, errors.New("--verbose is only valid for version")
@@ -131,7 +171,11 @@ func run(args []string, stdout, stderr io.Writer, updater *update.Client) int {
 		return fail(err)
 	}
 	if a.help || a.command == "" || a.command == "help" {
-		if _, err := fmt.Fprint(stdout, help); err != nil {
+		text := help
+		if a.command == "init" {
+			text = initHelp(a)
+		}
+		if _, err := fmt.Fprint(stdout, text); err != nil {
 			return fail(err)
 		}
 		return 0
@@ -488,20 +532,10 @@ func initialize(a arguments, w io.Writer) error {
 	if path == "" {
 		path = "sqlc.yaml"
 	}
-	text := `version: "2"
-sql:
-  - engine: ydb
-    schema: schema.sql
-    queries: query.sql
-    gen:
-      go:
-        package: db
-        out: db
-        sql_package: ydb
-      python:
-        out: queries
-        runtime: ydb
-`
+	text, err := config.InitYAML(a.initProfiles)
+	if err != nil {
+		return err
+	}
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 	if errors.Is(err, os.ErrExist) {
 		_, err = fmt.Fprintf(w, "%s is already created\n", path)
@@ -510,7 +544,7 @@ sql:
 	if err != nil {
 		return err
 	}
-	_, writeErr := io.WriteString(file, text)
+	_, writeErr := file.Write(text)
 	closeErr := file.Close()
 	if writeErr != nil {
 		return writeErr

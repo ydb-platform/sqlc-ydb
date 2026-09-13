@@ -1,5 +1,91 @@
 # Built-in targets
 
+## Generator options
+
+Use `sqlc-ydb init --help` to list languages and their runtimes. For the options of a specific generator, run `sqlc-ydb init --language go --runtime ydb --help`. The help describes YAML keys, their defaults and effects; edit these keys in `sqlc.yaml`.
+
+`sqlc-ydb init --language go --runtime ydb` creates a configuration with every option of the selected generator and explanatory comments. `--all-options` explicitly requests the same full output. When `--runtime` is omitted, the selected language uses its default from the tables below. Without `--language`, `init` creates a Go YDB and Python YDB configuration. Existing files are never overwritten.
+
+<!-- BEGIN GENERATED GENERATOR OPTIONS -->
+
+### gen.go
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `out` | string | Required | Output directory, relative to sqlc.yaml. |
+| `package` | string | `basename(out)` | Generated Go package name; defaults to the output directory's base name. |
+| `emit_json_tags` | boolean | `false` | Add JSON tags to generated struct fields. |
+| `emit_interface` | boolean | `false` | Generate the Querier interface implemented by Queries. |
+| `emit_empty_slices` | boolean | `false` | Return empty slices instead of nil for successful :many queries with no rows. |
+| `sql_package` | enum | `database/sql` | SDK or framework used by the generated helpers. Values: `database/sql`, `ydb`. |
+
+### gen.python
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `out` | string | Required | Output directory, relative to sqlc.yaml. |
+| `emit_sync_querier` | boolean | `true` | Generate synchronous query helpers; must remain true while asynchronous generation is unsupported. |
+| `emit_async_querier` | boolean | `false` | Asynchronous generation is unsupported; true produces a generation error. |
+| `runtime` | enum | `ydb` | SDK or framework used by the generated helpers. Values: `ydb`, `dbapi`, `sqlalchemy`. |
+
+### gen.cpp
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `out` | string | Required | Output directory, relative to sqlc.yaml. |
+| `namespace` | string | `db` | Namespace containing the generated C++ types and helpers. |
+| `runtime` | enum | `ydb` | SDK or framework used by the generated helpers. native is an alias for ydb. Values: `ydb`, `userver`, `native`. |
+
+### gen.csharp
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `out` | string | Required | Output directory, relative to sqlc.yaml. |
+| `namespace` | string | `Db` | Namespace containing the generated C# types and helpers. |
+| `runtime` | enum | `adonet` | SDK or framework used by the generated helpers. Values: `adonet`, `dapper`. |
+
+### gen.java
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `out` | string | Required | Output directory, relative to sqlc.yaml. |
+| `package` | string | `db` | Package containing the generated Java types and helpers. |
+| `runtime` | enum | `ydb` | SDK or framework used by the generated helpers. native is an alias for ydb. Values: `ydb`, `jdbc`, `jooq`, `native`. |
+
+### gen.kotlin
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `out` | string | Required | Output directory, relative to sqlc.yaml. |
+| `package` | string | `db` | Package containing the generated Kotlin types and helpers. |
+| `runtime` | enum | `ydb` | SDK or framework used by the generated helpers. native is an alias for ydb. Values: `ydb`, `jdbc`, `exposed`, `native`. |
+
+### gen.typescript
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `out` | string | Required | Output directory, relative to sqlc.yaml. |
+| `runtime` | enum | `ydb` | SDK or framework used by the generated helpers. Values: `ydb`. |
+
+### gen.rust
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `out` | string | Required | Output directory, relative to sqlc.yaml. |
+| `runtime` | enum | `ydb` | SDK or framework used by the generated helpers. Values: `ydb`. |
+
+### gen.php
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `out` | string | Required | Output directory, relative to sqlc.yaml. |
+| `namespace` | string | `Db` | Namespace containing the generated PHP types and helpers. |
+| `runtime` | enum | `ydb` | SDK or framework used by the generated helpers. Values: `ydb`. |
+
+<!-- END GENERATED GENERATOR OPTIONS -->
+
+## Runtime contracts
+
 | Target | Configuration | Generated API |
 |---|---|---|
 | Go native SDK | `gen.go.sql_package: ydb` | `New`, `Queries`, context-aware query methods |
