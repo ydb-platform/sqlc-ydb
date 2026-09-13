@@ -69,7 +69,7 @@ func TestUnknownRuntimeLanguage(t *testing.T) {
 func TestRuntimeErrorsUseCatalog(t *testing.T) {
 	for _, g := range Generators() {
 		_, err := Parse([]byte(fmt.Sprintf("version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: query.sql\n  gen:\n    %s:\n      out: db\n      %s: unsupported\n", g.Language, g.RuntimeKey)))
-		if err == nil || !strings.Contains(err.Error(), "sql[0]:") || !strings.Contains(err.Error(), "use "+strings.Join(g.Runtimes, ", ")) {
+		if err == nil || !strings.Contains(err.Error(), "sql[0]:") || !strings.Contains(err.Error(), "unsupported "+g.Language+" "+g.RuntimeKey) || !strings.Contains(err.Error(), "use "+strings.Join(g.Runtimes, ", ")) {
 			t.Errorf("%s runtime error does not describe catalog values: %v", g.Language, err)
 		}
 	}

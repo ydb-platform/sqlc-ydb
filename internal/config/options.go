@@ -110,7 +110,7 @@ func (g Generator) ResolveRuntime(runtime string) (string, error) {
 	if slices.Contains(g.Runtimes, runtime) {
 		return runtime, nil
 	}
-	return "", fmt.Errorf("unsupported %s runtime %q (use %s)", g.Language, runtime, strings.Join(g.Runtimes, ", "))
+	return "", fmt.Errorf("unsupported %s %s %q (use %s)", g.Language, g.RuntimeKey, runtime, strings.Join(g.Runtimes, ", "))
 }
 
 // InitProfile contains a validated generator selection and its starter output directory.
