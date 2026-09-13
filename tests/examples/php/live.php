@@ -83,16 +83,51 @@ function runAuthors(Table $table): void
         check($queries->getAuthor($id)?->bio === 'programmer', 'authors: upsert failed');
         $queries->deleteAuthor($id);
         check($queries->getAuthor($id) === null, 'authors: delete failed');
+        foreach ([false, true] as $commit) {
+            $session = $table->session();
+            $txId = $session->beginTransaction();
+            check(is_string($txId) && $txId !== '', 'beginTransaction must return the transaction ID');
+            try {
+                $txQueries = $queries->withTx($session, $txId);
+                $txQueries->upsertAuthor(new Authors\Native\UpsertAuthorParams($id, 'Transaction', null));
+                check($txQueries->getAuthor($id)?->name === 'Transaction', 'transaction cannot read its own write');
+                check(count($txQueries->listAuthors()) === 1, 'transaction :many failed');
+                if ($commit) {
+                    $session->commitTransaction();
+                } else {
+                    $session->rollbackTransaction();
+                }
+            } catch (Throwable $error) {
+                try {
+                    $session->rollbackTransaction();
+                } catch (Throwable) {
+                }
+                throw $error;
+            }
+            check(($queries->getAuthor($id) !== null) === $commit, 'transaction commit/rollback visibility failed');
+            try {
+                $txQueries->getAuthor($id);
+                throw new RuntimeException('completed transaction helper silently started a new transaction');
+            } catch (\YdbPlatform\Ydb\Exception) {
+            }
+        }
+        $queries->deleteAuthor($id);
+
     } finally {
         dropTables($table, $createdTables);
     }
 }
 
-function runBatch(Table $table): void
+function runBatch(Table $table, bool $transaction = false): void
 {
     $createdTables = createTables($table, source('batch/schema.sql'), ['authors', 'books']);
+    $session = null;
     try {
         $queries = new Batch\Native\Queries($table);
+        if ($transaction) {
+            $session = $table->session();
+            $queries = $queries->withTx($session, $session->beginTransaction());
+        }
         $authorId = '18446744073709551615';
         $bookId = '18446744073709551614';
         $author = $queries->createAuthor(new Batch\Native\CreateAuthorParams(
@@ -125,6 +160,17 @@ function runBatch(Table $table): void
         $queries->deleteBookNamedFunc($bookId);
         $queries->deleteBookNamedSign($bookId);
         check($queries->getAuthor($authorId)?->authorId === $authorId, 'batch: author read failed');
+        if ($session !== null) {
+            $session->commitTransaction();
+        }
+    } catch (Throwable $error) {
+        if ($session !== null) {
+            try {
+                $session->rollbackTransaction();
+            } catch (Throwable) {
+            }
+        }
+        throw $error;
     } finally {
         dropTables($table, $createdTables);
     }
@@ -280,6 +326,7 @@ $table = $ydb->table();
 
 runAuthors($table);
 runBatch($table);
+runBatch($table, true);
 runBooktest($table);
 runJets($table);
 runOndeck($table);

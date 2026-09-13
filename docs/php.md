@@ -24,7 +24,7 @@ $queries = new Authors\Native\Queries($ydb->table());
 $author = $queries->getAuthor('18446744073709551615');
 ```
 
-Each method uses the SDK session retry helper with a one-shot `serializable_read_write` transaction that commits in the same `ExecuteDataQuery` request. The generated class does not expose or retain a session or an interactive transaction. Calls default to non-idempotent because `:one` can be an `INSERT ... RETURNING` query and the generator cannot infer a safe retry policy from the result shape.
+Each method uses the SDK session retry helper with a one-shot `serializable_read_write` transaction that commits in the same `ExecuteDataQuery` request. By default, the generated class does not retain a session or an interactive transaction. Calls default to non-idempotent because `:one` can be an `INSERT ... RETURNING` query and the generator cannot infer a safe retry policy from the result shape.
 
 Configure a helper instance explicitly for read-only operations:
 
@@ -45,9 +45,35 @@ $author = $reads->getAuthor('1');
 
 These settings apply to every method on this helper instance. Use the default instance for writes; do not call mutations through a read-only instance. The configuration callback runs for every retry attempt and must not have external side effects. Retry parameters and idempotency are forwarded to the SDK unchanged.
 
-**Transaction boundary:** each call owns a separate transaction. Calling a helper inside `Table::retryTransaction()` does not enlist it in that transaction and cannot make several helper calls atomic. The configuration callback is for one-shot query settings, not for attaching an existing transaction identifier.
+## Caller-owned transactions
 
-The pinned SDK's interactive `Session` API keeps its transaction identifier private. Its public `Session::query` path also converts results through JSON, which loses exact JSON text and timestamp microseconds. Consequently generated helpers cannot join an interactive transaction while retaining the target's lossless result contract. This requires a PHP SDK API that executes a query in the current transaction and exposes the raw `ExecuteQueryResult` protobuf.
+`withTx(Session $session, string $txId)` returns a new helper bound to an existing transaction. The original helper is unchanged. Save the non-empty transaction ID returned by the SDK's `Session::beginTransaction()` and pass it together with that same session and its owning `Table`:
+
+```php
+$queries = new Authors\Native\Queries($table);
+$session = $table->session();
+$txId = $session->beginTransaction();
+try {
+    $txQueries = $queries->withTx($session, $txId);
+    $txQueries->upsertAuthor(new Authors\Native\UpsertAuthorParams('1', 'Ada', null));
+    $author = $txQueries->getAuthor('1');
+    $session->commitTransaction();
+} catch (\Throwable $error) {
+    try {
+        $session->rollbackTransaction();
+    } catch (\Throwable) {
+        // Preserve the original failure if rollback also fails.
+    }
+    throw $error;
+}
+```
+
+Bound methods execute on the supplied session with the supplied transaction ID, preserve raw protobuf decoding, and never begin, commit, roll back or retry a transaction. The caller owns the session and transaction lifetime: do not share the session with concurrent operations, and discard the bound helper after commit, rollback or a transaction failure. The helper cannot inspect the SDK's protected transaction state; a stale or mismatched ID produces an SDK/server error and never falls back to a new transaction. The caller must ensure that the Table, session and ID belong together.
+
+The configuration callback still runs, so query timeouts and statistics can be configured. Changing transaction control on a bound helper throws `LogicException` before execution. Idempotency and retry parameters apply only to unbound calls. If retries are needed, retry the entire operation, beginning a fresh transaction and creating a new bound helper on every attempt.
+
+Calling an unbound helper inside `Table::retryTransaction()` does not enlist it in that transaction. The SDK callback provides a session but does not expose its current transaction ID; this API requires an ID saved from an explicit `beginTransaction()` call.
+
 
 `:one` returns a typed row object or `null` when the result is empty. `:many` returns a list of typed row objects, and `:exec` returns `void`. A method with a single parameter accepts that scalar directly; a method with several parameters accepts a generated immutable `*Params` object. `:execrows` is rejected because the SDK does not expose a portable affected-row count.
 

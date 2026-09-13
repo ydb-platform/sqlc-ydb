@@ -199,6 +199,8 @@ final class RetryProbeClient
     public string $sql = '';
     public bool $keepInCache = false;
     public string $txMode = "";
+    public string $txId = "";
+    public bool $commitTx = false;
 
     public function __construct(private readonly string $kind, array $options = [])
     {
@@ -209,7 +211,9 @@ final class RetryProbeClient
         ++$this->executions;
         $this->sql = $request->getQuery()->getYqlText();
         $this->keepInCache = $request->getQueryCachePolicy()->getKeepInCache();
-        $this->txMode = $request->getTxControl()->getBeginTx()->getTxMode();
+        $this->txMode = $request->getTxControl()->getBeginTx()?->getTxMode() ?? "";
+        $this->txId = $request->getTxControl()->getTxId();
+        $this->commitTx = $request->getTxControl()->getCommitTx();
         return new RetryProbeCall($this->kind, $request->getSessionId());
     }
 }
@@ -357,6 +361,43 @@ check($policyTable->lastRetryParams === $retryParams, 'caller retry parameters w
 check($configurations === 2, 'query configuration was not applied to each attempt');
 foreach ($policyTable->clients() as $client) {
     check($client->txMode === 'snapshot_read_only', 'caller transaction mode was not sent');
+}
+
+
+$txTable = new RetryProbeTable();
+$baseQueries = new Authors\Native\Queries($txTable, idempotent: true);
+$txSession = new Session($txTable, 'session-0');
+$txQueries = $baseQueries->withTx($txSession, 'caller-tx');
+check($txQueries !== $baseQueries, 'withTx mutated the original helper');
+try {
+    $txQueries->deleteAuthor('1');
+    throw new RuntimeException('transaction transport failure was swallowed');
+} catch (\YdbPlatform\Ydb\Exception) {
+}
+check($txTable->clients()[0]->executions === 1 && $txTable->clients()[1]->executions === 0, 'transaction query was retried');
+check($txTable->clients()[0]->txId === 'caller-tx', 'transaction ID was not forwarded');
+check(!$txTable->clients()[0]->commitTx && $txTable->clients()[0]->txMode === '', 'transaction query began or committed a transaction');
+$baseQueries->deleteAuthor('1');
+check($txTable->clients()[1]->commitTx && $txTable->clients()[1]->txId === '', 'withTx changed the original helper transaction policy');
+$configuredTx = new Authors\Native\Queries($txTable, configure: static function (\YdbPlatform\Ydb\YdbQuery $query): void {
+    $query->collectStats(1);
+});
+$configuredTx->withTx(new Session($txTable, 'session-1'), 'second-tx')->deleteAuthor('1');
+check($txTable->clients()[1]->txId === 'second-tx' && !$txTable->clients()[1]->commitTx, 'query configuration lost the transaction binding');
+
+try {
+    $baseQueries->withTx($txSession, '');
+    throw new RuntimeException('empty transaction ID accepted');
+} catch (InvalidArgumentException) {
+}
+$badConfig = new Authors\Native\Queries($txTable, configure: static function (\YdbPlatform\Ydb\YdbQuery $query): void {
+    $query->beginTx('snapshot');
+});
+try {
+    $badConfig->withTx($txSession, 'caller-tx')->deleteAuthor('1');
+    throw new RuntimeException('configure replaced the caller transaction');
+} catch (LogicException $error) {
+    check(str_contains($error->getMessage(), 'transaction control'), 'unclear transaction configuration error');
 }
 
 echo "Imported and checked generated PHP for all five examples against YDB PHP SDK 1.16.1.\n";

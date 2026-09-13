@@ -16,6 +16,9 @@ use YdbPlatform\Ydb\Table;
 
 final class Queries
 {
+    private ?Session $session = null;
+    private ?string $txId = null;
+
     public function __construct(
         private readonly Table $table,
         private readonly bool $idempotent = false,
@@ -28,6 +31,26 @@ final class Queries
         }
     }
 
+    /** Bind to a caller-owned transaction; this helper never commits or retries it. */
+    public function withTx(Session $session, string $txId): self
+    {
+        if ($txId === '') {
+            throw new \InvalidArgumentException('Transaction ID must not be empty');
+        }
+        $queries = clone $this;
+        $queries->session = $session;
+        $queries->txId = $txId;
+        return $queries;
+    }
+
+    private function execute(Closure $operation): ExecuteQueryResult
+    {
+        if ($this->session !== null) {
+            return $operation($this->session);
+        }
+        return $this->table->retrySession($operation, $this->idempotent, $this->retryParams);
+    }
+
     // -- name: GetAuthor :one
     public function getAuthor(string $authorId): ?GetAuthorRow
     {
@@ -35,7 +58,7 @@ final class Queries
             '$author_id' => YdbValueCodec::typedUint64($authorId, 'author_id'),
         ];
 
-        $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+        $result = $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 SELECT author_id, name, biography FROM authors
                 WHERE author_id = $author_id;
@@ -43,12 +66,19 @@ final class Queries
                 ->parameters($parameters)
                 ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
+            if ($this->txId !== null) {
+                $query->txControl(new \Ydb\Table\TransactionControl(['tx_id' => $this->txId]));
+            }
+            $txControl = $query->getRequestData()['tx_control']->serializeToString();
             if ($this->configure !== null) {
                 ($this->configure)($query);
             }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
 
             return (new YdbRawExecutor($this->table))->execute($session, $query);
-        }, $this->idempotent, $this->retryParams);
+        });
 
         $rows = $this->decodeRows(
             $result,
@@ -75,7 +105,7 @@ final class Queries
             '$book_id' => YdbValueCodec::typedUint64($bookId, 'book_id'),
         ];
 
-        $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+        $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 DELETE FROM books
                 WHERE book_id = $book_id;
@@ -83,12 +113,19 @@ final class Queries
                 ->parameters($parameters)
                 ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
+            if ($this->txId !== null) {
+                $query->txControl(new \Ydb\Table\TransactionControl(['tx_id' => $this->txId]));
+            }
+            $txControl = $query->getRequestData()['tx_control']->serializeToString();
             if ($this->configure !== null) {
                 ($this->configure)($query);
             }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
 
             return (new YdbRawExecutor($this->table))->execute($session, $query);
-        }, $this->idempotent, $this->retryParams);
+        });
     }
 
     // -- name: DeleteBook :exec
@@ -98,7 +135,7 @@ final class Queries
             '$book_id' => YdbValueCodec::typedUint64($bookId, 'book_id'),
         ];
 
-        $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+        $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 DELETE FROM books
                 WHERE book_id = $book_id;
@@ -106,12 +143,19 @@ final class Queries
                 ->parameters($parameters)
                 ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
+            if ($this->txId !== null) {
+                $query->txControl(new \Ydb\Table\TransactionControl(['tx_id' => $this->txId]));
+            }
+            $txControl = $query->getRequestData()['tx_control']->serializeToString();
             if ($this->configure !== null) {
                 ($this->configure)($query);
             }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
 
             return (new YdbRawExecutor($this->table))->execute($session, $query);
-        }, $this->idempotent, $this->retryParams);
+        });
     }
 
     // -- name: DeleteBookNamedFunc :exec
@@ -121,7 +165,7 @@ final class Queries
             '$book_id' => YdbValueCodec::typedUint64($bookId, 'book_id'),
         ];
 
-        $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+        $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 DELETE FROM books
                 WHERE book_id = $book_id;
@@ -129,12 +173,19 @@ final class Queries
                 ->parameters($parameters)
                 ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
+            if ($this->txId !== null) {
+                $query->txControl(new \Ydb\Table\TransactionControl(['tx_id' => $this->txId]));
+            }
+            $txControl = $query->getRequestData()['tx_control']->serializeToString();
             if ($this->configure !== null) {
                 ($this->configure)($query);
             }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
 
             return (new YdbRawExecutor($this->table))->execute($session, $query);
-        }, $this->idempotent, $this->retryParams);
+        });
     }
 
     // -- name: DeleteBookNamedSign :exec
@@ -144,7 +195,7 @@ final class Queries
             '$book_id' => YdbValueCodec::typedUint64($bookId, 'book_id'),
         ];
 
-        $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+        $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 DELETE FROM books
                 WHERE book_id = $book_id;
@@ -152,12 +203,19 @@ final class Queries
                 ->parameters($parameters)
                 ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
+            if ($this->txId !== null) {
+                $query->txControl(new \Ydb\Table\TransactionControl(['tx_id' => $this->txId]));
+            }
+            $txControl = $query->getRequestData()['tx_control']->serializeToString();
             if ($this->configure !== null) {
                 ($this->configure)($query);
             }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
 
             return (new YdbRawExecutor($this->table))->execute($session, $query);
-        }, $this->idempotent, $this->retryParams);
+        });
     }
 
     /** @return list<BooksByYearRow> */
@@ -168,7 +226,7 @@ final class Queries
             '$year' => YdbValueCodec::typedInt32($year, 'year'),
         ];
 
-        $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+        $result = $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 SELECT book_id, author_id, isbn, book_type, title, year, available, tags
                 FROM books
@@ -177,12 +235,19 @@ final class Queries
                 ->parameters($parameters)
                 ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
+            if ($this->txId !== null) {
+                $query->txControl(new \Ydb\Table\TransactionControl(['tx_id' => $this->txId]));
+            }
+            $txControl = $query->getRequestData()['tx_control']->serializeToString();
             if ($this->configure !== null) {
                 ($this->configure)($query);
             }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
 
             return (new YdbRawExecutor($this->table))->execute($session, $query);
-        }, $this->idempotent, $this->retryParams);
+        });
 
         $rows = $this->decodeRows(
             $result,
@@ -221,7 +286,7 @@ final class Queries
             '$biography' => YdbValueCodec::typedOptionalJson($params->biography, 'biography'),
         ];
 
-        $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+        $result = $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 INSERT INTO authors (author_id, name, biography)
                 VALUES ($author_id, $name, $biography)
@@ -230,12 +295,19 @@ final class Queries
                 ->parameters($parameters)
                 ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
+            if ($this->txId !== null) {
+                $query->txControl(new \Ydb\Table\TransactionControl(['tx_id' => $this->txId]));
+            }
+            $txControl = $query->getRequestData()['tx_control']->serializeToString();
             if ($this->configure !== null) {
                 ($this->configure)($query);
             }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
 
             return (new YdbRawExecutor($this->table))->execute($session, $query);
-        }, $this->idempotent, $this->retryParams);
+        });
 
         $rows = $this->decodeRows(
             $result,
@@ -269,7 +341,7 @@ final class Queries
             '$tags' => YdbValueCodec::typedJson($params->tags, 'tags'),
         ];
 
-        $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+        $result = $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)
                 VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)
@@ -278,12 +350,19 @@ final class Queries
                 ->parameters($parameters)
                 ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
+            if ($this->txId !== null) {
+                $query->txControl(new \Ydb\Table\TransactionControl(['tx_id' => $this->txId]));
+            }
+            $txControl = $query->getRequestData()['tx_control']->serializeToString();
             if ($this->configure !== null) {
                 ($this->configure)($query);
             }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
 
             return (new YdbRawExecutor($this->table))->execute($session, $query);
-        }, $this->idempotent, $this->retryParams);
+        });
 
         $rows = $this->decodeRows(
             $result,
@@ -322,7 +401,7 @@ final class Queries
             '$book_id' => YdbValueCodec::typedUint64($params->bookId, 'book_id'),
         ];
 
-        $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+        $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 UPDATE books
                 SET title = $title, tags = $tags
@@ -331,12 +410,19 @@ final class Queries
                 ->parameters($parameters)
                 ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
+            if ($this->txId !== null) {
+                $query->txControl(new \Ydb\Table\TransactionControl(['tx_id' => $this->txId]));
+            }
+            $txControl = $query->getRequestData()['tx_control']->serializeToString();
             if ($this->configure !== null) {
                 ($this->configure)($query);
             }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
 
             return (new YdbRawExecutor($this->table))->execute($session, $query);
-        }, $this->idempotent, $this->retryParams);
+        });
     }
 
     // -- name: GetBiography :one
@@ -346,7 +432,7 @@ final class Queries
             '$author_id' => YdbValueCodec::typedUint64($authorId, 'author_id'),
         ];
 
-        $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+        $result = $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 SELECT biography FROM authors
                 WHERE author_id = $author_id;
@@ -354,12 +440,19 @@ final class Queries
                 ->parameters($parameters)
                 ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
+            if ($this->txId !== null) {
+                $query->txControl(new \Ydb\Table\TransactionControl(['tx_id' => $this->txId]));
+            }
+            $txControl = $query->getRequestData()['tx_control']->serializeToString();
             if ($this->configure !== null) {
                 ($this->configure)($query);
             }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
 
             return (new YdbRawExecutor($this->table))->execute($session, $query);
-        }, $this->idempotent, $this->retryParams);
+        });
 
         $rows = $this->decodeRows(
             $result,

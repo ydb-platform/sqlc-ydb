@@ -16,6 +16,9 @@ use YdbPlatform\Ydb\Table;
 
 final class Queries
 {
+    private ?Session $session = null;
+    private ?string $txId = null;
+
     public function __construct(
         private readonly Table $table,
         private readonly bool $idempotent = false,
@@ -28,25 +31,52 @@ final class Queries
         }
     }
 
+    /** Bind to a caller-owned transaction; this helper never commits or retries it. */
+    public function withTx(Session $session, string $txId): self
+    {
+        if ($txId === '') {
+            throw new \InvalidArgumentException('Transaction ID must not be empty');
+        }
+        $queries = clone $this;
+        $queries->session = $session;
+        $queries->txId = $txId;
+        return $queries;
+    }
+
+    private function execute(Closure $operation): ExecuteQueryResult
+    {
+        if ($this->session !== null) {
+            return $operation($this->session);
+        }
+        return $this->table->retrySession($operation, $this->idempotent, $this->retryParams);
+    }
+
     // -- name: CountPilots :one
     public function countPilots(): ?CountPilotsRow
     {
         $parameters = [
         ];
 
-        $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+        $result = $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 SELECT COUNT(*) AS pilot_count FROM pilots;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
+            if ($this->txId !== null) {
+                $query->txControl(new \Ydb\Table\TransactionControl(['tx_id' => $this->txId]));
+            }
+            $txControl = $query->getRequestData()['tx_control']->serializeToString();
             if ($this->configure !== null) {
                 ($this->configure)($query);
             }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
 
             return (new YdbRawExecutor($this->table))->execute($session, $query);
-        }, $this->idempotent, $this->retryParams);
+        });
 
         $rows = $this->decodeRows(
             $result,
@@ -69,19 +99,26 @@ final class Queries
         $parameters = [
         ];
 
-        $result = $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+        $result = $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 SELECT id, name FROM pilots ORDER BY id LIMIT 5;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
+            if ($this->txId !== null) {
+                $query->txControl(new \Ydb\Table\TransactionControl(['tx_id' => $this->txId]));
+            }
+            $txControl = $query->getRequestData()['tx_control']->serializeToString();
             if ($this->configure !== null) {
                 ($this->configure)($query);
             }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
 
             return (new YdbRawExecutor($this->table))->execute($session, $query);
-        }, $this->idempotent, $this->retryParams);
+        });
 
         $rows = $this->decodeRows(
             $result,
@@ -106,19 +143,26 @@ final class Queries
             '$pilot_id' => YdbValueCodec::typedInt32($pilotId, 'pilot_id'),
         ];
 
-        $this->table->retrySession(function (Session $session) use ($parameters): ExecuteQueryResult {
+        $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
             $query = $session->newQuery(<<<'SQLC_YDB_YQL'
                 DELETE FROM pilots WHERE id = $pilot_id;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
                 ->keepInCache(count($parameters) > 0)
                 ->beginTx('serializable_read_write');
+            if ($this->txId !== null) {
+                $query->txControl(new \Ydb\Table\TransactionControl(['tx_id' => $this->txId]));
+            }
+            $txControl = $query->getRequestData()['tx_control']->serializeToString();
             if ($this->configure !== null) {
                 ($this->configure)($query);
             }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
 
             return (new YdbRawExecutor($this->table))->execute($session, $query);
-        }, $this->idempotent, $this->retryParams);
+        });
     }
 
     /**

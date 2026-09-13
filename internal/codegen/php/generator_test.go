@@ -229,6 +229,8 @@ func TestRejectsUnsupportedInputsAndCollisions(t *testing.T) {
 			{Name: "foo_bar", Command: model.Exec, SQL: "SELECT 1;"},
 			{Name: "FooBar", Command: model.Exec, SQL: "SELECT 1;"},
 		}}, want: "method name collision"},
+		{name: "transaction method collision", a: &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "WithTx", Command: model.Exec, SQL: "SELECT 1;"}}}, want: "method name collision"},
+		{name: "executor method collision", a: &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Execute", Command: model.Exec, SQL: "SELECT 1;"}}}, want: "method name collision"},
 		{name: "reserved class", a: &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "int"}}}}, want: `invalid generated class name "Int"`},
 		{name: "sdk import class", a: &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "table"}}}}, want: `class name collision "Table"`},
 		{name: "this parameter", a: &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
