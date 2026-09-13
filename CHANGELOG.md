@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.1.4
+
 ### Added
 
 - `init` supports language/runtime selection, complete configurations with comments, and generator-specific help. See the [generator options](docs/targets.md#generator-options).
