@@ -82,18 +82,24 @@ func GeneratorFor(language string) (Generator, error) {
 	return Generator{}, fmt.Errorf("unsupported language %q; use sqlc-ydb init --help to list supported languages", language)
 }
 
-func optionDefault(language, name string) string {
-	g, _ := GeneratorFor(language)
+func optionDefault(language, name string) (string, error) {
+	g, err := GeneratorFor(language)
+	if err != nil {
+		return "", err
+	}
 	for _, option := range g.Options {
 		if option.Name == name {
-			return option.Default
+			return option.Default, nil
 		}
 	}
-	panic("unknown generator option: " + language + "." + name)
+	return "", fmt.Errorf("unknown generator option: %s.%s", language, name)
 }
 
 func resolveRuntime(language, runtime string) (string, bool) {
-	g, _ := GeneratorFor(language)
+	g, err := GeneratorFor(language)
+	if err != nil {
+		return "", false
+	}
 	resolved, err := g.ResolveRuntime(runtime)
 	return resolved, err == nil
 }

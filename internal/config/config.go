@@ -214,7 +214,11 @@ func Parse(data []byte) (*Config, error) {
 			}
 			p.Runtime = resolved
 			if p.EmitSyncQuerier == nil {
-				v := optionDefault("python", "emit_sync_querier") == "true"
+				value, err := optionDefault("python", "emit_sync_querier")
+				if err != nil {
+					return nil, err
+				}
+				v := value == "true"
 				p.EmitSyncQuerier = &v
 			}
 			if !*p.EmitSyncQuerier && !p.EmitAsyncQuerier {
@@ -226,7 +230,11 @@ func Parse(data []byte) (*Config, error) {
 				return nil, fmt.Errorf("sql[%d].gen.cpp.out is required", i)
 			}
 			if g.Namespace == "" {
-				g.Namespace = optionDefault("cpp", "namespace")
+				value, err := optionDefault("cpp", "namespace")
+				if err != nil {
+					return nil, err
+				}
+				g.Namespace = value
 			}
 			resolved, ok := resolveRuntime("cpp", g.Runtime)
 			if !ok {
@@ -239,7 +247,11 @@ func Parse(data []byte) (*Config, error) {
 				return nil, fmt.Errorf("sql[%d].gen.csharp.out is required", i)
 			}
 			if g.Namespace == "" {
-				g.Namespace = optionDefault("csharp", "namespace")
+				value, err := optionDefault("csharp", "namespace")
+				if err != nil {
+					return nil, err
+				}
+				g.Namespace = value
 			}
 			resolved, ok := resolveRuntime("csharp", g.Runtime)
 			if !ok {
@@ -252,7 +264,11 @@ func Parse(data []byte) (*Config, error) {
 				return nil, fmt.Errorf("sql[%d].gen.java.out is required", i)
 			}
 			if g.Package == "" {
-				g.Package = optionDefault("java", "package")
+				value, err := optionDefault("java", "package")
+				if err != nil {
+					return nil, err
+				}
+				g.Package = value
 			}
 			resolved, ok := resolveRuntime("java", g.Runtime)
 			if !ok {
@@ -265,7 +281,11 @@ func Parse(data []byte) (*Config, error) {
 				return nil, fmt.Errorf("sql[%d].gen.kotlin.out is required", i)
 			}
 			if g.Package == "" {
-				g.Package = optionDefault("kotlin", "package")
+				value, err := optionDefault("kotlin", "package")
+				if err != nil {
+					return nil, err
+				}
+				g.Package = value
 			}
 			resolved, ok := resolveRuntime("kotlin", g.Runtime)
 			if !ok {
@@ -298,7 +318,11 @@ func Parse(data []byte) (*Config, error) {
 				return nil, fmt.Errorf("sql[%d].gen.php.out is required", i)
 			}
 			if g.Namespace == "" {
-				g.Namespace = optionDefault("php", "namespace")
+				value, err := optionDefault("php", "namespace")
+				if err != nil {
+					return nil, err
+				}
+				g.Namespace = value
 			}
 			resolved, ok := resolveRuntime("php", g.Runtime)
 			if !ok {

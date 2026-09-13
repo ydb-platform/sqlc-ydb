@@ -2,8 +2,10 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -16,12 +18,28 @@ const (
 )
 
 func main() {
-	path := flag.String("file", "docs/targets.md", "Target reference to update")
-	flag.Parse()
-	if err := update(*path); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	os.Exit(run(os.Args[1:], os.Stderr))
+}
+
+func run(args []string, stderr io.Writer) int {
+	flags := flag.NewFlagSet("gendocs", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	path := flags.String("file", "docs/targets.md", "Target reference to update")
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 1
 	}
+	if flags.NArg() != 0 {
+		_, _ = fmt.Fprintln(stderr, "gendocs does not accept positional arguments")
+		return 1
+	}
+	if err := update(*path); err != nil {
+		_, _ = fmt.Fprintln(stderr, err)
+		return 1
+	}
+	return 0
 }
 
 func update(path string) error {

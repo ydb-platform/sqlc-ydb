@@ -22,7 +22,7 @@ Compatibility is tracked by individual CLI, configuration and generated API cont
 - Schema rollback sections for goose, sql-migrate, tern and dbmate are excluded. Migration markers inside string literals are preserved.
 - Schema migrations update an in-memory catalog in input order. Supported DDL: `CREATE TABLE [IF NOT EXISTS]`, `DROP TABLE [IF EXISTS]`, and `ALTER TABLE` with `ADD [COLUMN]`, `DROP [COLUMN]`, or table `RENAME TO`.
 - Query annotations `-- name: QueryName :one|:many|:exec`. `:execrows` is parsed but generation rejects it: the selected YDB APIs cannot provide its required affected-row count.
-- Supported generator keys and their defaults are listed in the [generator option reference](targets.md#generator-options), generated from the same catalog as `init --help`. These are built-in options, not external plugin options. The Python package directory is selected by `out`; `gen.python.package` is unsupported.
+- Supported generator keys and their defaults are listed in the [generator option reference](targets.md#generator-options), generated from the same catalog as `init --help`. These are built-in options, not external plugin options. The Python package directory is selected by `out`; `gen.python.package` is unsupported. Go's default `sql_package` is `database/sql`, matching upstream sqlc.
 - Unknown configuration options produce errors. Generation never silently discards an option that has not been implemented.
 
 ## Differences from upstream sqlc

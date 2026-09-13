@@ -1,7 +1,7 @@
 package main
 
 import (
-	"flag"
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,11 +14,10 @@ func TestCommandUpdatesOnlyOptionSection(t *testing.T) {
 	if err := os.WriteFile(path, []byte(input), 0600); err != nil {
 		t.Fatal(err)
 	}
-	oldArgs, oldFlags := os.Args, flag.CommandLine
-	t.Cleanup(func() { os.Args, flag.CommandLine = oldArgs, oldFlags })
-	os.Args = []string{"gendocs", "-file", path}
-	flag.CommandLine = flag.NewFlagSet("gendocs", flag.ContinueOnError)
-	main()
+	var stderr bytes.Buffer
+	if code := run([]string{"-file", path}, &stderr); code != 0 || stderr.Len() != 0 {
+		t.Fatalf("run: %d %s", code, stderr.String())
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -32,6 +31,26 @@ func TestCommandUpdatesOnlyOptionSection(t *testing.T) {
 	again, err := os.ReadFile(path)
 	if err != nil || string(again) != string(data) {
 		t.Fatalf("update is not idempotent: %v", err)
+	}
+}
+
+func TestCommandErrorsAndHelp(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing.md")
+	for _, tc := range []struct {
+		args    []string
+		code    int
+		message string
+	}{
+		{[]string{"-help"}, 0, "Target reference to update"},
+		{[]string{"-unknown"}, 1, "flag provided but not defined"},
+		{[]string{"-file"}, 1, "flag needs an argument"},
+		{[]string{"unexpected"}, 1, "does not accept positional arguments"},
+		{[]string{"-file", missing}, 1, "missing.md"},
+	} {
+		var stderr bytes.Buffer
+		if code := run(tc.args, &stderr); code != tc.code || !strings.Contains(stderr.String(), tc.message) {
+			t.Errorf("run(%v): %d %q", tc.args, code, stderr.String())
+		}
 	}
 }
 

@@ -61,12 +61,14 @@ func TestInitInvalidSelection(t *testing.T) {
 }
 
 func TestUnknownOptionDefault(t *testing.T) {
-	defer func() {
-		if got := recover(); got != "unknown generator option: go.missing" {
-			t.Fatalf("unexpected missing-option failure: %v", got)
+	for _, language := range []string{"go", "unknown"} {
+		if _, err := optionDefault(language, "missing"); err == nil {
+			t.Fatalf("accepted missing option for %s", language)
 		}
-	}()
-	optionDefault("go", "missing")
+	}
+	if runtime, ok := resolveRuntime("unknown", ""); ok || runtime != "" {
+		t.Fatalf("unknown language resolved: %q, %v", runtime, ok)
+	}
 }
 
 func TestInvalidGoAndPythonRuntimes(t *testing.T) {

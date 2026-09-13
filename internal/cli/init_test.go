@@ -112,6 +112,18 @@ func TestInitializeRejectsInvalidGenerator(t *testing.T) {
 	}
 }
 
+func TestExplicitDashPrefixedFile(t *testing.T) {
+	for _, args := range [][]string{
+		{"init", "--file=-cfg.yaml"},
+		{"init", "-f", "./-cfg.yaml"},
+	} {
+		parsed, err := parseArgs(args)
+		if err != nil || filepath.Base(parsed.file) != "-cfg.yaml" {
+			t.Fatalf("explicit dash-prefixed path %v: %q, %v", args, parsed.file, err)
+		}
+	}
+}
+
 func TestInitInvalidSelectionDoesNotWrite(t *testing.T) {
 	cases := []struct {
 		args []string
