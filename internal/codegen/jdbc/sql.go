@@ -18,7 +18,7 @@ func SQL(q model.AnalyzedQuery) (string, []int) {
 		var declarations strings.Builder
 		for _, p := range q.Parameters {
 			if !q.IsDeclaredParameter(p.Name) {
-				declarations.WriteString("DECLARE $" + p.Name + " AS " + p.Type.String() + ";\n")
+				declarations.WriteString("DECLARE $" + declarationName(p.Name) + " AS " + p.Type.String() + ";\n")
 			}
 		}
 		return declarations.String() + text, nil
@@ -59,3 +59,12 @@ func SQL(q model.AnalyzedQuery) (string, []int) {
 
 // HasDeclarations selects named driver binding without rewriting source declarations.
 func HasDeclarations(q model.AnalyzedQuery) bool { return len(q.DeclaredParameters) != 0 }
+
+func declarationName(name string) string {
+	for i, r := range name {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '_' || (i > 0 && r >= '0' && r <= '9')) {
+			return "`" + strings.ReplaceAll(name, "`", "``") + "`"
+		}
+	}
+	return name
+}

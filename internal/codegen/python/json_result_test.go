@@ -37,13 +37,24 @@ func TestJSONResultAnnotationsFollowRuntime(t *testing.T) {
 sys.modules["ydb"]=types.ModuleType("ydb")
 sys.modules["sqlalchemy"]=types.SimpleNamespace(text=lambda value:value)
 sys.modules["sqlalchemy.engine"]=types.SimpleNamespace(Connection=object)
-from typing import get_type_hints, Optional
+from typing import get_type_hints, get_args, get_origin, Optional
 from generated import models
 from generated.queries import Querier
 assert get_type_hints(Querier.read_j_s_o_n)["document"] is str
 `
 			if runtime == "ydb" {
-				script += `assert get_type_hints(models.ReadJSONRow)=={"document":models.JSONValue,"optional_document":Optional[models.JSONValue],"documents":list[Optional[models.JSONValue]]}
+				script += `# Python 3.12+ resolves the recursive strings inside builtin generic aliases;
+# Python 3.9 leaves them unchanged. Compare raw annotations to the alias and
+# check the resolved wrapper relationships rather than alias object equality.
+assert models.ReadJSONRow.__annotations__=={"document":models.JSONValue,"optional_document":Optional[models.JSONValue],"documents":list[Optional[models.JSONValue]]}
+branches=get_args(models.JSONValue)
+assert set(branch for branch in branches if get_origin(branch) is None)=={type(None),bool,int,float,str}
+assert [get_args(branch) for branch in branches if get_origin(branch) is list]==[("JSONValue",)]
+assert [get_args(branch) for branch in branches if get_origin(branch) is dict]==[(str,"JSONValue")]
+hints=get_type_hints(models.ReadJSONRow)
+assert hints["optional_document"]==hints["document"]
+assert get_origin(hints["documents"]) is list
+assert get_args(hints["documents"])[0]==hints["document"]
 row=models.ReadJSONRow({"object":[1, True, None]},None,[{"nested":1},None])
 assert row.document=={"object":[1,True,None]} and row.documents==[{"nested":1},None]
 `

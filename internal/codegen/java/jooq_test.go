@@ -123,3 +123,26 @@ func TestJooqExplicitDeclarationsKeepNamedSQLAndTableMapping(t *testing.T) {
 		}
 	}
 }
+
+func TestJooqDeclaredDMLMapsQualifiedTargetColumns(t *testing.T) {
+	for _, statement := range []string{"UPDATE books SET title = $title WHERE books.id = $id;", "DELETE FROM books WHERE books.id = $id;", "DELETE FROM books WHERE (books.id = $id);"} {
+		sql := "-- name: Declared :exec\nDECLARE $id AS Uint64;\n" + statement
+		analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE books (id Uint64 NOT NULL, title Utf8 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "queries.sql", Text: sql}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		files, err := Generate(analysis, Options{Runtime: "jooq"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var code string
+		for _, file := range files {
+			if file.Name == "Queries.java" {
+				code = string(file.Content)
+			}
+		}
+		if strings.Count(code, "dsl.render(BOOKS)") != 2 || strings.Contains(code, "books.id") {
+			t.Fatal("target qualifier was not mapped", code)
+		}
+	}
+}

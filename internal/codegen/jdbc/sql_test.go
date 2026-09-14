@@ -28,3 +28,11 @@ func TestDeclaredParametersPreserveSourceAndAddOnlyInferredTypes(t *testing.T) {
 		t.Fatalf("got %q bindings %v", got, bindings)
 	}
 }
+
+func TestMixedDeclarationsQuoteInferredParameterName(t *testing.T) {
+	q := model.AnalyzedQuery{SQL: "DECLARE $z AS Uint64;\nSELECT $z, $`a-b`;", DeclaredParameters: []string{"z"}, Parameters: []model.Parameter{{Name: "z", Type: model.Type{Kind: "Uint64"}}, {Name: "a-b", Type: model.Type{Kind: "Utf8"}}}}
+	got, _ := SQL(q)
+	if want := "DECLARE $`a-b` AS Utf8;\n" + q.SQL; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}

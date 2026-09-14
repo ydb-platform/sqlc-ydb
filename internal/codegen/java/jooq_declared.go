@@ -51,10 +51,27 @@ func jooqDeclaredSQL(q model.AnalyzedQuery, sql string) (string, error) {
 			}
 		}
 	}
+	targets := map[string]bool{}
 	for _, ref := range jooqNodes[*parser.Simple_table_ref_coreContext](q.Syntax.Root) {
 		if err := add(ref, false); err != nil {
 			return "", err
 		}
+		targets[jooqID(ref.GetText())] = true
+	}
+	// DML targets have no SELECT alias to retain the original qualifier after mapping.
+	terminals := jooqNodes[antlr.TerminalNode](q.Syntax.Root)
+	for i, ref := range terminals {
+		token := ref.GetSymbol()
+		binding, ok := q.Syntax.Columns[token.GetTokenIndex()]
+		if !ok || !targets[binding.Table] || binding.Alias != binding.Table || i+1 == len(terminals) || terminals[i+1].GetText() != "." || seen[token.GetStart()] {
+			continue
+		}
+		constant, err := jooqConstant(binding.Table)
+		if err != nil {
+			return "", err
+		}
+		replacements = append(replacements, replacement{token.GetStart() + shift, token.GetStop() + 1 + shift, "dsl.render(" + constant + ")"})
+		seen[token.GetStart()] = true
 	}
 	sort.Slice(replacements, func(i, j int) bool { return replacements[i].start < replacements[j].start })
 	runes := []rune(sql)
