@@ -146,12 +146,8 @@ pool=ydb.QuerySessionPool(driver)
 table=%q
 pool.execute_with_retries("CREATE TABLE %%s (book_id Uint64 NOT NULL, tags Json NOT NULL, title Utf8, PRIMARY KEY(book_id));" %% table)
 def check_empty(query, runtime):
-    # Record the database response; typed empty batches must reach the executor.
-    try:
-        query.create_books([])
-        print(runtime + " empty: accepted")
-    except Exception as error:
-        print(runtime + " empty: " + str(error))
+    query.create_books([])
+    print(runtime + " empty: accepted")
 try:
     y=YQuerier(pool)
     check_empty(y,"native")
@@ -199,4 +195,69 @@ finally:
 		t.Fatalf("live batch: %v\n%s", err, out)
 	}
 	t.Log(string(out))
+}
+
+func TestStructListDunderFieldsUseSafeNamesAndKeepWireNames(t *testing.T) {
+	in := structInput()
+	names := []string{"__dict__", "__weakref__", "__init__", "__post_init__", "__annotations__", "self"}
+	var fields []model.StructField
+	for _, name := range names {
+		fields = append(fields, model.StructField{Name: name, Type: model.Type{Kind: "Utf8"}})
+	}
+	in.Queries[0].Parameters[0].Type.Elem.Fields = fields
+	files, err := Generate(in, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	pkg := filepath.Join(dir, "generated")
+	if err := os.Mkdir(pkg, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if err := os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	script := `import sys, types
+class StructType:
+    def add_member(self, name, typ): return self
+sys.modules["ydb"] = types.SimpleNamespace(StructType=StructType, ListType=lambda typ: typ, PrimitiveType=types.SimpleNamespace(Utf8="Utf8"), TypedValue=lambda value, typ: value)
+from generated.models import CreateBooksBooksItem
+from generated.queries import Querier
+row=CreateBooksBooksItem(dict="dict",weakref="weakref",init="init",post_init="post_init",annotations="annotations",self="self")
+assert row.__dict__ == {"dict":"dict","weakref":"weakref","init":"init","post_init":"post_init","annotations":"annotations","self":"self"}
+q=Querier.__new__(Querier)
+captured=[]
+q._execute=lambda sql, parameters: captured.append(parameters)
+q.create_books([row])
+assert captured == [{"$books":[{"__dict__":"dict","__weakref__":"weakref","__init__":"init","__post_init__":"post_init","__annotations__":"annotations","self":"self"}]}]
+`
+	cmd := exec.Command("python3", "-c", script)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("dunder fields: %v\n%s", err, out)
+	}
+}
+
+func TestStructListNamesCollideAfterNormalization(t *testing.T) {
+	for _, names := range [][]string{{"__dict__", "dict"}, {"__weakref__", "weakref"}, {"__init__", "init"}, {"__post_init__", "post_init"}} {
+		in := structInput()
+		var fields []model.StructField
+		for _, name := range names {
+			fields = append(fields, model.StructField{Name: name, Type: model.Type{Kind: "Utf8"}})
+		}
+		in.Queries[0].Parameters[0].Type.Elem.Fields = fields
+		_, err := Generate(in, Options{})
+		if err == nil || !strings.Contains(err.Error(), "colliding field") {
+			t.Fatalf("%v: %v", names, err)
+		}
+	}
+	in := structInput()
+	in.Catalog.Tables = []model.Table{{Name: "create_books_books_item", Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}}}}}
+	_, err := Generate(in, Options{})
+	if err == nil || !strings.Contains(err.Error(), "name collision") {
+		t.Fatalf("class namespace collision: %v", err)
+	}
 }
