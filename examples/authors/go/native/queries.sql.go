@@ -122,8 +122,8 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx, ""+
-		"INSERT INTO `authors` (`id`, `name`, `bio`) "+
-		"VALUES ($author_id, $author_name, $biography) "+
+		"INSERT INTO `authors` (`id`, `name`, `bio`)\n"+
+		"VALUES ($author_id, $author_name, $biography)\n"+
 		"RETURNING `id`, `name`, `bio`;",
 		callOptions...,
 	)
@@ -154,7 +154,7 @@ func (q *Queries) UpsertAuthor(ctx context.Context, arg UpsertAuthorParams, opts
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	err := q.db.Exec(ctx, ""+
-		"UPSERT INTO authors (id, name, bio) "+
+		"UPSERT INTO authors (id, name, bio)\n"+
 		"VALUES ($author_id, $author_name, $biography);",
 		callOptions...,
 	)

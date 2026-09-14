@@ -136,12 +136,7 @@ func validate(a *model.AnalysisResult) error {
 				return fmt.Errorf("typescript generator: query %q parameter %q: %w", query.Name, parameter.Name, err)
 			}
 		}
-		if len(query.Parameters) != 0 && query.SQLWithoutDeclarations == "" {
-			return fmt.Errorf("typescript generator: query %q: analyzer did not provide SQL without declarations required for typed SDK parameters", query.Name)
-		}
-		if !utf8.ValidString(query.SQLWithoutDeclarations) {
-			return fmt.Errorf("typescript generator: query %q: SQL without declarations is not valid UTF-8", query.Name)
-		}
+
 		if query.Command == model.One || query.Command == model.Many {
 			if len(query.ResultSets) != 1 {
 				return fmt.Errorf("typescript generator: query %q: expected one result set, got %d", query.Name, len(query.ResultSets))
@@ -283,23 +278,6 @@ func renderTypeScript(a *model.AnalysisResult) (string, error) {
 	return b.String(), nil
 }
 
-// DECLARE removal leaves whitespace so analyzer source offsets stay stable.
-// Omit only the emptied lines, retaining original blank lines and comments.
-func omitDeclarationLines(original, executable string) string {
-	originalLines, lines := strings.Split(original, "\n"), strings.Split(executable, "\n")
-	if len(originalLines) != len(lines) {
-		return executable
-	}
-	kept := make([]string, 0, len(lines))
-	for i, line := range lines {
-		if strings.TrimSpace(line) == "" && strings.TrimSpace(originalLines[i]) != "" {
-			continue
-		}
-		kept = append(kept, line)
-	}
-	return strings.Join(kept, "\n")
-}
-
 func renderRowType(b *strings.Builder, name string, q model.AnalyzedQuery) {
 	b.WriteString(name + " = {\n")
 	for _, c := range q.ResultSets[0].Columns {
@@ -345,20 +323,38 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 	b.WriteString("\n  // " + model.QueryAnnotation(q) + "\n")
 	b.WriteString("  async " + method + "(" + params + "configure?: ConfigureQuery): Promise<" + ret + "> {\n")
 
-	sql := q.SQL
-	if len(q.Parameters) > 0 {
-		sql = omitDeclarationLines(q.SQL, q.SQLWithoutDeclarations)
-	}
-	sql = model.WithoutQueryAnnotation(sql)
+	sql := model.WithoutQueryAnnotation(q.SQL)
 	b.WriteString("    const stmt = this.#sql" + generic + sqlLiteral(strings.TrimSpace(sql)))
+	declared := len(q.DeclaredParameters) > 0
 	for _, p := range q.Parameters {
+		if q.IsDeclaredParameter(p.Name) {
+			continue
+		}
 		field, _ := identifier(p.Name, false)
 		if len(q.Parameters) > 1 {
 			field = "args." + field
 		}
 		b.WriteString("\n      .parameter(" + strconv.Quote(p.Name) + ", " + bindExpression(p.Type, field) + ")")
 	}
-	b.WriteString(";\n    configure?.(stmt);\n")
+	b.WriteString(";\n")
+	if declared {
+		b.WriteString("    // Keep explicit DECLARE statements; the SDK otherwise prepends duplicates.\n")
+		b.WriteString("    Object.defineProperty(stmt, \"text\", { value: stmt.text, writable: false });\n")
+		b.WriteString("    stmt")
+		for _, p := range q.Parameters {
+			if !q.IsDeclaredParameter(p.Name) {
+				continue
+			}
+			field, _ := identifier(p.Name, false)
+			if len(q.Parameters) > 1 {
+				field = "args." + field
+			}
+			b.WriteString("\n      .parameter(" + strconv.Quote(p.Name) + ", " + bindExpression(p.Type, field) + ")")
+		}
+		b.WriteString(";\n")
+	}
+	b.WriteString("    configure?.(stmt);\n")
+
 	if q.Command == model.Exec {
 		b.WriteString("    await stmt;\n  }\n")
 		return

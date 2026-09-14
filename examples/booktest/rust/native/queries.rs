@@ -117,6 +117,7 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
         self.client
             .query_result_set(
                 r"
+                 DECLARE $tags AS Json;
                  SELECT
                      b.book_id,
                      b.title,

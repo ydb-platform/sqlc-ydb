@@ -21,9 +21,9 @@ func (q *Queries) ListVenues(ctx context.Context, arg string, opts ...query.Exec
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.Query(ctx, ""+
-		"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at "+
-		"FROM venue "+
-		"WHERE city = $city "+
+		"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n"+
+		"FROM venue\n"+
+		"WHERE city = $city\n"+
 		"ORDER BY name;",
 		callOptions...,
 	)
@@ -82,7 +82,7 @@ func (q *Queries) DeleteVenue(ctx context.Context, arg string, opts ...query.Exe
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	err := q.db.Exec(ctx, ""+
-		"DELETE FROM venue "+
+		"DELETE FROM venue\n"+
 		"WHERE slug = $slug AND slug = $slug;",
 		callOptions...,
 	)
@@ -100,8 +100,8 @@ func (q *Queries) GetVenue(ctx context.Context, arg GetVenueParams, opts ...quer
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx, ""+
-		"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at "+
-		"FROM venue "+
+		"SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n"+
+		"FROM venue\n"+
 		"WHERE slug = $slug AND city = $city;",
 		callOptions...,
 	)
@@ -145,26 +145,26 @@ func (q *Queries) CreateVenue(ctx context.Context, arg CreateVenueParams, opts .
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx, ""+
-		"INSERT INTO venue ( "+
-		"id, "+
-		"slug, "+
-		"name, "+
-		"city, "+
-		"created_at, "+
-		"spotify_playlist, "+
-		"status, "+
-		"statuses, "+
-		"tags "+
-		") VALUES ( "+
-		"$id, "+
-		"$slug, "+
-		"$name, "+
-		"$city, "+
-		"$created_at, "+
-		"$spotify_playlist, "+
-		"$status, "+
-		"$statuses, "+
-		"$tags "+
+		"INSERT INTO venue (\n"+
+		"    id,\n"+
+		"    slug,\n"+
+		"    name,\n"+
+		"    city,\n"+
+		"    created_at,\n"+
+		"    spotify_playlist,\n"+
+		"    status,\n"+
+		"    statuses,\n"+
+		"    tags\n"+
+		") VALUES (\n"+
+		"    $id,\n"+
+		"    $slug,\n"+
+		"    $name,\n"+
+		"    $city,\n"+
+		"    $created_at,\n"+
+		"    $spotify_playlist,\n"+
+		"    $status,\n"+
+		"    $statuses,\n"+
+		"    $tags\n"+
 		") RETURNING id;",
 		callOptions...,
 	)
@@ -192,9 +192,9 @@ func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx, ""+
-		"UPDATE venue "+
-		"SET name = $name "+
-		"WHERE slug = $slug "+
+		"UPDATE venue\n"+
+		"SET name = $name\n"+
+		"WHERE slug = $slug\n"+
 		"RETURNING id;",
 		callOptions...,
 	)
@@ -215,11 +215,11 @@ func (q *Queries) UpdateVenueName(ctx context.Context, arg UpdateVenueNameParams
 // -- name: VenueCountByCity :many
 func (q *Queries) VenueCountByCity(ctx context.Context, opts ...query.ExecuteOption) ([]VenueCountByCityRow, error) {
 	result, err := q.db.Query(ctx, ""+
-		"SELECT "+
-		"city, "+
-		"COUNT(*) AS venue_count "+
-		"FROM venue "+
-		"GROUP BY city "+
+		"SELECT\n"+
+		"    city,\n"+
+		"    COUNT(*) AS venue_count\n"+
+		"FROM venue\n"+
+		"GROUP BY city\n"+
 		"ORDER BY city;",
 		opts...,
 	)

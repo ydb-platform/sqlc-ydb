@@ -63,7 +63,6 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	}
 	query.Syntax = &model.QuerySyntax{Root: parsed.tree, Columns: map[int]model.ColumnBinding{}}
 	tree := collectQueryTree(parsed.tree)
-	query.SQLWithoutDeclarations = withoutDeclarations(block.text, parsed.tokens, tree.declares)
 	if diagnostics = unsupportedSQLCMacroDiagnostics(block, parsed.tokens); len(diagnostics) != 0 {
 		return query, diagnostics
 	}
@@ -78,6 +77,12 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	}
 
 	declared, declarationPositions, declarationDiagnostics := declarations(block, tree)
+	for _, declaration := range tree.declares {
+		name := bindName(declaration.Bind_parameter())
+		if !query.IsDeclaredParameter(name) {
+			query.DeclaredParameters = append(query.DeclaredParameters, name)
+		}
+	}
 	diagnostics = append(diagnostics, declarationDiagnostics...)
 	localPositions, localNames, localTypes, localDiagnostics := localBindings(block, tree, declared)
 	diagnostics = append(diagnostics, localDiagnostics...)

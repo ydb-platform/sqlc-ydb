@@ -170,15 +170,23 @@ type ColumnBinding struct {
 type AnalyzedQuery struct {
 	Syntax *QuerySyntax `json:"-"`
 
-	Name    string
-	Command Command
-	SQL     string
-	// SQLWithoutDeclarations preserves the source except DECLARE tokens. SDKs that
-	// synthesize declarations from typed parameters execute this form instead.
-	SQLWithoutDeclarations string
-	Parameters             []Parameter // names without the leading dollar sign
-	ResultSets             []ResultSet
-	Source                 Position
+	Name               string
+	Command            Command
+	SQL                string
+	Parameters         []Parameter // names without the leading dollar sign
+	DeclaredParameters []string    `json:",omitempty"` // names explicitly declared in the original SQL
+	ResultSets         []ResultSet
+	Source             Position
+}
+
+// IsDeclaredParameter reports whether the source explicitly declares this parameter.
+func (q AnalyzedQuery) IsDeclaredParameter(name string) bool {
+	for _, declared := range q.DeclaredParameters {
+		if declared == name {
+			return true
+		}
+	}
+	return false
 }
 
 // QueryAnnotation returns the sqlc metadata comment associated with q.

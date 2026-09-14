@@ -222,7 +222,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 	needsValues, needsOptional := false, false
 	for _, q := range a.Queries {
 		for _, p := range q.Parameters {
-			if o.Runtime == "ydb" || isStructList(p.Type) || strings.HasPrefix(p.Type.UnwrapOptional().Kind, "Uint") || p.Type.UnwrapOptional().Kind == "Json" || p.Type.UnwrapOptional().Kind == "Timestamp" {
+			if o.Runtime == "ydb" || jdbc.HasDeclarations(q) || isStructList(p.Type) || strings.HasPrefix(p.Type.UnwrapOptional().Kind, "Uint") || p.Type.UnwrapOptional().Kind == "Json" || p.Type.UnwrapOptional().Kind == "Timestamp" {
 				needsValues = true
 				needsOptional = needsOptional || p.Type.IsOptional()
 			}
@@ -365,8 +365,17 @@ func emitJDBC(b *strings.Builder, q model.AnalyzedQuery, names []string, binding
 }
 
 func emitJDBCOn(b *strings.Builder, q model.AnalyzedQuery, names []string, bindings []int, sql, row, connection, indent string) {
-	fmt.Fprintf(b, "%stry (var _prepared = %s.prepareStatement(%s)) {\n", indent, connection, sql)
+	if jdbc.HasDeclarations(q) {
+		fmt.Fprintf(b, "%stry (var _prepared = %s.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement(%s, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {\n", indent, connection, sql)
+	} else {
+		fmt.Fprintf(b, "%stry (var _prepared = %s.prepareStatement(%s)) {\n", indent, connection, sql)
+	}
 	indent += "    "
+	if jdbc.HasDeclarations(q) {
+		for i, p := range q.Parameters {
+			fmt.Fprintf(b, "%s_prepared.setObject(%s, %s);\n", indent, quoted(p.Name), parameterValue(p, names[i]))
+		}
+	}
 	for position, i := range bindings {
 		p := q.Parameters[i]
 		s, _, _ := typeInfo(p.Type)

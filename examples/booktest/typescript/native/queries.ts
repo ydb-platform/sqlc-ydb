@@ -155,7 +155,8 @@ export class Queries {
 
   // -- name: BooksByTags :many
   async booksByTags(tags: string, configure?: ConfigureQuery): Promise<BooksByTagsRow[]> {
-    const stmt = this.#sql<[BooksByTagsRow]>`SELECT
+    const stmt = this.#sql<[BooksByTagsRow]>`DECLARE $tags AS Json;
+      SELECT
           b.book_id,
           b.title,
           a.name,
@@ -166,7 +167,10 @@ export class Queries {
       WHERE NOT SetIsDisjoint(
           ToSet(Yson::ConvertToStringList(b.tags)),
           Yson::ConvertToStringList($tags)
-      );`
+      );`;
+    // Keep explicit DECLARE statements; the SDK otherwise prepends duplicates.
+    Object.defineProperty(stmt, "text", { value: stmt.text, writable: false });
+    stmt
       .parameter("tags", new Json(tags));
     configure?.(stmt);
     const [rows] = await stmt;

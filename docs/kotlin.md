@@ -22,7 +22,11 @@ The [authors example](../examples/authors/kotlin) builds all three profiles from
 | `jdbc` | `java.sql.Connection` | The caller owns the connection, autocommit setting and transaction. |
 | `exposed` | Exposed `JdbcTransaction` | The caller owns the Exposed transaction; methods use its underlying JDBC connection. |
 
-`:one` returns a nullable row, `:many` returns a list, and `:exec` returns `Unit`. Rows are data classes. Optional columns and parameters use nullable Kotlin types; an absent row differs from a row whose optional fields are null. Methods created from a native `QueryTransaction`, JDBC and Exposed methods do not commit, roll back, close borrowed resources or create nested transactions. Exposed output is SQL-first: it does not infer `Table` objects or translate SQL into the Exposed DSL. SQL is embedded at each execution site without generated declarations. JDBC and Exposed use positional `?` parameters and standard `PreparedStatement` setters. Unsigned integers, `Json`, `Timestamp`, and structured lists use typed SDK values so the driver receives their YQL types without generated `DECLARE` statements or `unwrap`.
+`:one` returns a nullable row, `:many` returns a list, and `:exec` returns `Unit`. Rows are data classes. Optional columns and parameters use nullable Kotlin types; an absent row differs from a row whose optional fields are null. Methods created from a native `QueryTransaction`, JDBC and Exposed methods do not commit, roll back, close borrowed resources or create nested transactions. Exposed output is SQL-first: it does not infer `Table` objects or translate SQL into the Exposed DSL. SQL is embedded at each execution site. Without explicit declarations, JDBC and Exposed use positional `?` parameters and standard `PreparedStatement` setters. Unsigned integers, `Json`, `Timestamp`, and structured lists use typed SDK values so the driver receives their YQL types.
+
+## Explicit declarations
+
+Source `DECLARE` statements and their named references remain in generated SQL for every runtime. JDBC and Exposed unwrap the borrowed `YdbConnection` and prepare the named query with `YdbPrepareMode.DATA_QUERY`, which avoids automatic batch flattening. Typed values bind by their original names; the driver sends the prepared text unchanged. If a query mixes explicit and inferred parameters, only the missing inferred declarations are prefixed to the preserved source. Connection settings must allow data-query preparation. Native execution passes the original SQL and typed parameters to the Query SDK.
 
 ## Type coverage
 

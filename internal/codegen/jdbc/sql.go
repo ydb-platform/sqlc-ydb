@@ -12,11 +12,17 @@ import (
 // SQL replaces only parameter tokens, preserving quoted text and local variables.
 // Bindings follow occurrences, including repeated uses of the same parameter.
 func SQL(q model.AnalyzedQuery) (string, []int) {
-	text := q.SQLWithoutDeclarations
-	if text == "" {
-		text = q.SQL
-	}
+	text := q.SQL
 	text = model.WithoutQueryAnnotation(text)
+	if HasDeclarations(q) {
+		var declarations strings.Builder
+		for _, p := range q.Parameters {
+			if !q.IsDeclaredParameter(p.Name) {
+				declarations.WriteString("DECLARE $" + p.Name + " AS " + p.Type.String() + ";\n")
+			}
+		}
+		return declarations.String() + text, nil
+	}
 	parameters := map[string]int{}
 	for i, p := range q.Parameters {
 		parameters[p.Name] = i
@@ -50,3 +56,6 @@ func SQL(q model.AnalyzedQuery) (string, []int) {
 	b.WriteString(string(runes[cursor:]))
 	return b.String(), bindings
 }
+
+// HasDeclarations selects named driver binding without rewriting source declarations.
+func HasDeclarations(q model.AnalyzedQuery) bool { return len(q.DeclaredParameters) != 0 }

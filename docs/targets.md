@@ -137,6 +137,8 @@ Kotlin types, nullable results and transaction ownership are documented in [Kotl
 
 ### Python result and retry contracts
 
+Python native `Json` and `JsonDocument` results use the generated recursive `JSONValue` type: JSON objects, arrays, strings, numbers, booleans and `None`. This matches the SDK's default parsed JSON results; disabling native JSON decoding on the caller's client returns strings, which also belong to this type. Optional and collection result types retain this mapping recursively. JSON inputs remain serialized `str` values in every Python runtime. DB-API and SQLAlchemy results remain serialized `str` values.
+
 All Python `:many` methods return an eagerly materialized `list`, not a stream. Use bounded queries or keyset pagination for large results. DB-API and SQLAlchemy `:one` methods fetch a single row and always close their cursor/result, including on conversion failure. Native methods validate that exactly one result set was returned. A result matching a complete table reuses the table dataclass; partial projections use query row dataclasses.
 
 Native pool-backed helpers default to `RetrySettings(max_retries=0)`. SDK 3.29.7 retries `ConnectionLost` even with `idempotent=False`, so that flag alone does not protect a write whose commit response was lost. Opt in only for operations the application can safely repeat:
@@ -150,3 +152,5 @@ Settings apply to every call through that helper. Transaction-backed helpers nev
 ### Batch insert parameters
 
 The [batch example](../examples/batch/README.md) declares `$books` as `List<Struct<...>>` and inserts its fields through `AS_TABLE($books)`. Go accepts `books []CreateBooksBooksItem`; Python accepts a list of generated `CreateBooksBooksItem` dataclasses. Field types follow each target's scalar mapping. The generated binder also preserves the full declared list/struct type for empty input and sends the query normally, returning the SDK's result or error. No client-side empty-batch shortcut changes SQL execution semantics.
+
+Explicit `DECLARE` statements remain in generated SQL. Go string literals preserve the original SQL indentation, line breaks and whitespace rather than compacting lines; the query annotation is emitted as a Go comment outside the SQL string.

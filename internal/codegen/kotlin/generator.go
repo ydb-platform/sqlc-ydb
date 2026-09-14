@@ -331,7 +331,14 @@ func emitJDBC(b *strings.Builder, q model.AnalyzedQuery, names []string, binding
 		b.WriteString("        val _connection = client.connection.connection as java.sql.Connection\n")
 		connection = "_connection"
 	}
-	fmt.Fprintf(b, "        %s.prepareStatement(%s).use { _prepared ->\n", connection, sql)
+	if jdbc.HasDeclarations(q) {
+		fmt.Fprintf(b, "        %s.unwrap(tech.ydb.jdbc.YdbConnection::class.java).prepareStatement(%s, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY).use { _prepared ->\n", connection, sql)
+		for i, p := range q.Parameters {
+			fmt.Fprintf(b, "            _prepared.setObject(%s, %s)\n", quoted(p.Name), parameterValue(p, names[i]))
+		}
+	} else {
+		fmt.Fprintf(b, "        %s.prepareStatement(%s).use { _prepared ->\n", connection, sql)
+	}
 	for position, parameter := range bindings {
 		emitJDBCParameter(b, q.Parameters[parameter], names[parameter], position+1)
 	}

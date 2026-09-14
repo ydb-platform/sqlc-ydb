@@ -213,12 +213,25 @@ export class Queries {
 
   // -- name: CreateBooks :exec
   async createBooks(books: ReadonlyArray<CreateBooksBooksItem>, configure?: ConfigureQuery): Promise<void> {
-    const stmt = this.#sql`INSERT INTO books (
+    const stmt = this.#sql`DECLARE $books AS List<Struct<
+          book_id: Uint64,
+          author_id: Uint64,
+          isbn: Utf8,
+          book_type: Utf8,
+          title: Utf8,
+          year: Int32,
+          available: Timestamp,
+          tags: Json
+      >>;
+      INSERT INTO books (
           book_id, author_id, isbn, book_type, title, year, available, tags
       )
       SELECT
           book_id, author_id, isbn, book_type, title, year, available, tags
-      FROM AS_TABLE($books);`
+      FROM AS_TABLE($books);`;
+    // Keep explicit DECLARE statements; the SDK otherwise prepends duplicates.
+    Object.defineProperty(stmt, "text", { value: stmt.text, writable: false });
+    stmt
       .parameter("books", structList(books.map(item => new Struct({ ["book_id"]: new Uint64(item.bookId), ["author_id"]: new Uint64(item.authorId), ["isbn"]: new Utf8(item.isbn), ["book_type"]: new Utf8(item.bookType), ["title"]: new Utf8(item.title), ["year"]: new Int32(item.year), ["available"]: new Timestamp(item.available), ["tags"]: new Json(item.tags) })), new StructType(["book_id", "author_id", "isbn", "book_type", "title", "year", "available", "tags"], [new Uint64Type(), new Uint64Type(), new Utf8Type(), new Utf8Type(), new Utf8Type(), new Int32Type(), new TimestampType(), new JsonType()])));
     configure?.(stmt);
     await stmt;

@@ -55,3 +55,14 @@ func listBooksQuery() model.AnalyzedQuery {
 	q.SQL = "SELECT * FROM AS_TABLE($books);"
 	return q
 }
+
+func declaredBatchQuery() model.AnalyzedQuery {
+	q := batchQuery()
+	q.Name = "DeclaredBooks"
+	q.SQL = "DECLARE $books AS " + strings.ReplaceAll(q.Parameters[0].Type.String(), "`", "") + ";\n" + q.SQL
+	q.DeclaredParameters = []string{"books"}
+	return q
+}
+func declaredMixedQuery() model.AnalyzedQuery {
+	return model.AnalyzedQuery{Name: "DeclaredMixed", Command: model.Exec, SQL: "DECLARE $z AS Uint64;\nSELECT $z, $a, $z;", DeclaredParameters: []string{"z"}, Parameters: []model.Parameter{{Name: "a", Type: model.Type{Kind: "Utf8"}}, {Name: "z", Type: model.Type{Kind: "Uint64"}}}}
+}

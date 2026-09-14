@@ -77,27 +77,33 @@ public final class Queries {
 
     // -- name: BooksByTags :many
     public List<BooksByTagsRow> booksByTags(JSON tags) {
-        var b = BOOKS.as("b");
-        var a = AUTHORS.as("a");
-        return dsl.select(b.BOOK_ID, b.TITLE, a.NAME, b.ISBN, b.TAGS)
-                .from(b)
-                .leftJoin(a)
-                .on(b.AUTHOR_ID.eq(a.AUTHOR_ID))
-                .where(
-                    condition(
-                        function(
-                            systemName("SetIsDisjoint"),
-                            YdbTypes.BOOL,
-                            function(
-                                systemName("ToSet"),
-                                SQLDataType.OTHER,
-                                function(systemName("Yson::ConvertToStringList"), SQLDataType.OTHER, b.TAGS)
-                            ),
-                            function(systemName("Yson::ConvertToStringList"), SQLDataType.OTHER, val(tags, YdbTypes.JSON))
-                        )
-                    ).not()
-                )
-                .fetch(mapping(BooksByTagsRow::new));
+        return dsl.connectionResult(_connection -> {
+            try (var _prepared = _connection.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+            DECLARE $tags AS Json;
+            SELECT
+                b.book_id,
+                b.title,
+                a.name,
+                b.isbn,
+                b.tags
+            FROM\s\
+            """ + dsl.render(BOOKS) + """
+             AS b
+            LEFT JOIN\s\
+            """ + dsl.render(AUTHORS) + """
+             AS a ON b.author_id = a.author_id
+            WHERE NOT SetIsDisjoint(
+                ToSet(Yson::ConvertToStringList(b.tags)),
+                Yson::ConvertToStringList($tags)
+            );\
+            """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+                _prepared.setObject("tags", tech.ydb.table.values.PrimitiveValue.newJson(tags.data()));
+                try (var _rows = _prepared.executeQuery()) {
+                    var _result = dsl.fetch(_rows, YdbTypes.UINT64, YdbTypes.UTF8, YdbTypes.UTF8, YdbTypes.UTF8, YdbTypes.JSON).map(_row -> new BooksByTagsRow(_row.get(0, org.jooq.types.ULong.class), _row.get(1, String.class), _row.get(2, String.class), _row.get(3, String.class), _row.get(4, org.jooq.JSON.class)));
+                    return _result;
+                }
+            }
+        });
     }
 
     // -- name: CreateAuthor :one

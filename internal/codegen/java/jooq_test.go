@@ -91,3 +91,35 @@ func TestJooqImportsPreserveLiterals(t *testing.T) {
 		t.Fatal(output)
 	}
 }
+
+func TestJooqExplicitDeclarationsKeepNamedSQLAndTableMapping(t *testing.T) {
+	for _, from := range []string{"books AS b", "books"} {
+		qualifier := "books"
+		if strings.Contains(from, " AS ") {
+			qualifier = "b"
+		}
+		sql := "-- name: Declared :many\nDECLARE $id AS Uint64;\nSELECT " + qualifier + ".id FROM " + from + " WHERE " + qualifier + ".id = $id;"
+		analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE books (id Uint64 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "queries.sql", Text: sql}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		files, err := Generate(analysis, Options{Runtime: "jooq"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var generated string
+		for _, file := range files {
+			if file.Name == "Queries.java" {
+				generated = string(file.Content)
+			}
+		}
+		for _, want := range []string{"DECLARE $id AS Uint64;", "YdbPrepareMode.DATA_QUERY", "_prepared.setObject(\"id\"", "dsl.render(BOOKS)", "dsl.fetch(_rows, YdbTypes.UINT64)", qualifier + ".id = $id"} {
+			if !strings.Contains(generated, want) {
+				t.Fatalf("missing %q in %s", want, generated)
+			}
+		}
+		if qualifier == "books" && !strings.Contains(generated, " AS `books`") {
+			t.Fatal("unaliased source lost qualifier under mapping", generated)
+		}
+	}
+}

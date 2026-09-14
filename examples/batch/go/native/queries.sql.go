@@ -22,7 +22,7 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx, ""+
-		"SELECT author_id, name, biography FROM authors "+
+		"SELECT author_id, name, biography FROM authors\n"+
 		"WHERE author_id = $author_id;",
 		callOptions...,
 	)
@@ -51,7 +51,7 @@ func (q *Queries) DeleteBookExecResult(ctx context.Context, arg uint64, opts ...
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	err := q.db.Exec(ctx, ""+
-		"DELETE FROM books "+
+		"DELETE FROM books\n"+
 		"WHERE book_id = $book_id;",
 		callOptions...,
 	)
@@ -68,7 +68,7 @@ func (q *Queries) DeleteBook(ctx context.Context, arg uint64, opts ...query.Exec
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	err := q.db.Exec(ctx, ""+
-		"DELETE FROM books "+
+		"DELETE FROM books\n"+
 		"WHERE book_id = $book_id;",
 		callOptions...,
 	)
@@ -85,7 +85,7 @@ func (q *Queries) DeleteBookNamedFunc(ctx context.Context, arg uint64, opts ...q
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	err := q.db.Exec(ctx, ""+
-		"DELETE FROM books "+
+		"DELETE FROM books\n"+
 		"WHERE book_id = $book_id;",
 		callOptions...,
 	)
@@ -102,7 +102,7 @@ func (q *Queries) DeleteBookNamedSign(ctx context.Context, arg uint64, opts ...q
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	err := q.db.Exec(ctx, ""+
-		"DELETE FROM books "+
+		"DELETE FROM books\n"+
 		"WHERE book_id = $book_id;",
 		callOptions...,
 	)
@@ -119,8 +119,8 @@ func (q *Queries) BooksByYear(ctx context.Context, arg int32, opts ...query.Exec
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.Query(ctx, ""+
-		"SELECT book_id, author_id, isbn, book_type, title, year, available, tags "+
-		"FROM books "+
+		"SELECT book_id, author_id, isbn, book_type, title, year, available, tags\n"+
+		"FROM books\n"+
 		"WHERE year = $year;",
 		callOptions...,
 	)
@@ -179,8 +179,8 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx, ""+
-		"INSERT INTO authors (author_id, name, biography) "+
-		"VALUES ($author_id, $name, $biography) "+
+		"INSERT INTO authors (author_id, name, biography)\n"+
+		"VALUES ($author_id, $name, $biography)\n"+
 		"RETURNING author_id, name, biography;",
 		callOptions...,
 	)
@@ -216,8 +216,8 @@ func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams, opts ...
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx, ""+
-		"INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags) "+
-		"VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags) "+
+		"INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)\n"+
+		"VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)\n"+
 		"RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;",
 		callOptions...,
 	)
@@ -253,8 +253,8 @@ func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams, opts ...
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	err := q.db.Exec(ctx, ""+
-		"UPDATE books "+
-		"SET title = $title, tags = $tags "+
+		"UPDATE books\n"+
+		"SET title = $title, tags = $tags\n"+
 		"WHERE book_id = $book_id;",
 		callOptions...,
 	)
@@ -271,7 +271,7 @@ func (q *Queries) GetBiography(ctx context.Context, arg uint64, opts ...query.Ex
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx, ""+
-		"SELECT biography FROM authors "+
+		"SELECT biography FROM authors\n"+
 		"WHERE author_id = $author_id;",
 		callOptions...,
 	)
@@ -298,11 +298,21 @@ func (q *Queries) CreateBooks(ctx context.Context, books []CreateBooksBooksItem,
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	err := q.db.Exec(ctx, ""+
-		"INSERT INTO books ( "+
-		"book_id, author_id, isbn, book_type, title, year, available, tags "+
-		") "+
-		"SELECT "+
-		"book_id, author_id, isbn, book_type, title, year, available, tags "+
+		"DECLARE $books AS List<Struct<\n"+
+		"    book_id: Uint64,\n"+
+		"    author_id: Uint64,\n"+
+		"    isbn: Utf8,\n"+
+		"    book_type: Utf8,\n"+
+		"    title: Utf8,\n"+
+		"    year: Int32,\n"+
+		"    available: Timestamp,\n"+
+		"    tags: Json\n"+
+		">>;\n"+
+		"INSERT INTO books (\n"+
+		"    book_id, author_id, isbn, book_type, title, year, available, tags\n"+
+		")\n"+
+		"SELECT\n"+
+		"    book_id, author_id, isbn, book_type, title, year, available, tags\n"+
 		"FROM AS_TABLE($books);",
 		callOptions...,
 	)

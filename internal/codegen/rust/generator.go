@@ -47,12 +47,6 @@ func validate(in *model.AnalysisResult) error {
 		if !utf8.ValidString(q.SQL) {
 			return fmt.Errorf("rust generator: query %q: SQL is not valid UTF-8", q.Name)
 		}
-		if len(q.Parameters) != 0 && q.SQLWithoutDeclarations == "" {
-			return fmt.Errorf("rust generator: query %q: analyzer did not provide SQL without declarations required for typed SDK parameters", q.Name)
-		}
-		if !utf8.ValidString(q.SQLWithoutDeclarations) {
-			return fmt.Errorf("rust generator: query %q: SQL without declarations is not valid UTF-8", q.Name)
-		}
 		fn := strings.TrimPrefix(snakeName(q.Name), "get_")
 		row := pascalName(q.Name) + "Row"
 		if !rustIdent(fn) || rustKeywords[fn] {
@@ -200,26 +194,6 @@ func renderQueries(in *model.AnalysisResult) string {
 	}
 	b.WriteString("}\n")
 	return b.String()
-}
-
-func cleanDeclarationGaps(sql string) string {
-	lines := strings.SplitAfter(sql, "\n")
-	for i, line := range lines {
-		ending := ""
-		content := line
-		if strings.HasSuffix(content, "\n") {
-			content = strings.TrimSuffix(content, "\n")
-			ending = "\n"
-			if strings.HasSuffix(content, "\r") {
-				content = strings.TrimSuffix(content, "\r")
-				ending = "\r\n"
-			}
-		}
-		if strings.Trim(content, " \t") == "" {
-			lines[i] = ending
-		}
-	}
-	return strings.Join(lines, "")
 }
 
 func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
@@ -473,12 +447,7 @@ func rustType(t model.Type) (string, error) {
 }
 
 func querySQL(q model.AnalyzedQuery) string {
-	sql := q.SQLWithoutDeclarations
-	if sql == "" {
-		sql = q.SQL
-	} else {
-		sql = cleanDeclarationGaps(sql)
-	}
+	sql := q.SQL
 	sql = model.WithoutQueryAnnotation(sql)
 	sql = strings.Trim(sql, "\r\n")
 	if sql == "" {

@@ -19,7 +19,7 @@ func TestBatchInsertSelect(t *testing.T) {
 		if len(q.Parameters) != 1 || q.Parameters[0].Type.Elem.Kind != "Struct" || len(q.Parameters[0].Type.Elem.Fields) != 2 {
 			t.Fatalf("parameters: %#v", q.Parameters)
 		}
-		if q.SQL != sql || strings.Contains(q.SQLWithoutDeclarations, "DECLARE") {
+		if q.SQL != sql || !q.IsDeclaredParameter("values") {
 			t.Fatalf("SQL preservation: %#v", q)
 		}
 	}

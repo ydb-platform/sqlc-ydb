@@ -19,6 +19,7 @@ function recordingClient(resultSets = [[]]) {
     const call = { text: text.join(""), parameters: new Map() };
     calls.push(call);
     const stmt = Promise.resolve(resultSets);
+    Object.defineProperty(stmt, "text", { value: call.text, configurable: true });
     stmt.parameter = (name, value) => {
       call.parameters.set(name, value);
       return stmt;

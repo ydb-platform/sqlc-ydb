@@ -51,7 +51,7 @@ func TestGenerateRejectsInvalidContracts(t *testing.T) {
 func TestJDBCUsesStandardPositionalParameters(t *testing.T) {
 	querySQL := "-- name: GetAuthor :one\nSELECT id FROM authors WHERE id = $author_id;"
 	files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{
-		Name: "GetAuthor", Command: model.One, SQL: querySQL, SQLWithoutDeclarations: querySQL,
+		Name: "GetAuthor", Command: model.One, SQL: querySQL,
 		Parameters: []model.Parameter{{Name: "author_id", Type: model.Type{Kind: "Uint64"}}},
 		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}}}}},
 	}}}, Options{Package: "authors.jdbc", Runtime: "jdbc"})
@@ -256,7 +256,7 @@ func TestAllSupportedScalarsCompileAgainstAuthorsMaven(t *testing.T) {
 			}
 			queries = append(queries, q)
 		}
-		queries = append(queries, batchQuery(), optionalBatchQuery(), listBooksQuery())
+		queries = append(queries, batchQuery(), optionalBatchQuery(), listBooksQuery(), declaredBatchQuery(), declaredMixedQuery())
 		files, err := Generate(&model.AnalysisResult{Queries: queries}, Options{Package: "synthetic." + runtime, Runtime: profile})
 		if err != nil {
 			t.Fatal(err)
@@ -297,7 +297,7 @@ func TestGeneratedJDBCUsesTypedDriverValuesAndGuardsUnsignedRanges(t *testing.T)
 		{Name: "Bad16", Command: model.Exec, SQL: "SELECT 1;", Parameters: []model.Parameter{{Name: "value", Type: model.Optional(model.Type{Kind: "Uint16"})}}},
 		{Name: "Bad32", Command: model.Exec, SQL: "SELECT 1;", Parameters: []model.Parameter{{Name: "value", Type: model.Type{Kind: "Uint32"}}}},
 	}
-	queries = append(queries, batchQuery(), optionalBatchQuery(), listBooksQuery())
+	queries = append(queries, batchQuery(), optionalBatchQuery(), listBooksQuery(), declaredBatchQuery(), declaredMixedQuery())
 	files, err := Generate(&model.AnalysisResult{Queries: queries}, Options{Package: "synthetic.jdbc", Runtime: "jdbc"})
 	if err != nil {
 		t.Fatal(err)
@@ -378,8 +378,43 @@ public final class Main {
         tech.ydb.table.values.ListValue optionalRows = (tech.ydb.table.values.ListValue) optionalBound.getCurrentParams().values().get("$jp1");
         tech.ydb.table.values.StructValue optionalRow = (tech.ydb.table.values.StructValue) optionalRows.get(0);
         check(optionalRow.getMemberValue(optionalRow.getType().getMemberIndex("rank")).equals(OptionalType.of(PrimitiveType.Uint8).emptyValue()), "optional batch null lost type");
+        String declaredSQL = "DECLARE $books AS List<Struct<book_id:Uint64,author_id:Uint64,isbn:Utf8,book_type:Utf8,title:Utf8,year:Int32,available:Timestamp,tags:Json>>;\nINSERT INTO books SELECT * FROM AS_TABLE($books);";
+        var declaredQuery = YdbQuery.parseQuery(new QueryKey(declaredSQL), new YdbQueryProperties(new Properties()), types);
+        var declared = new tech.ydb.jdbc.query.params.PreparedQuery(types, declaredQuery, java.util.Map.of("$books", emptyBatch.getType()));
+        var declaredQueries = new Queries(declaredConnection(declared, declaredSQL));
+        declaredQueries.declaredBooks(java.util.List.of());
+        check(declared.getQueryText(declared.getCurrentParams()).equals(declaredSQL), "driver changed explicit DECLARE");
+        check(declared.getCurrentParams().values().get("$books").getType().equals(emptyBatch.getType()), "declared empty list lost schema or name");
+        declaredQueries.declaredBooks(java.util.List.of(new DeclaredBooksBooksItem(-1L,42L,"isbn","paper","Book",2026,java.time.Instant.EPOCH,"[]")));
+        check(((tech.ydb.table.values.ListValue)declared.getCurrentParams().values().get("$books")).size()==1,"declared row missing");
+        String mixedSQL = "DECLARE $a AS Utf8;\nDECLARE $z AS Uint64;\nSELECT $z, $a, $z;";
+        var mixedQuery = YdbQuery.parseQuery(new QueryKey(mixedSQL), new YdbQueryProperties(new Properties()), types);
+        var mixed = new tech.ydb.jdbc.query.params.PreparedQuery(types, mixedQuery, java.util.Map.of("$a", PrimitiveType.Text, "$z",PrimitiveType.Uint64));
+        new Queries(declaredConnection(mixed,mixedSQL)).declaredMixed("text",-1L);
+        check(mixed.getQueryText(mixed.getCurrentParams()).equals(mixedSQL),"mixed declarations changed");
+        check(mixed.getCurrentParams().values().get("$z").equals(PrimitiveValue.newUint64(-1L)),"named parameter lost type");
 
 
+
+    }
+
+
+    private static Connection declaredConnection(tech.ydb.jdbc.query.params.PreparedQuery query, String expectedSQL) {
+        var statement = (tech.ydb.jdbc.YdbPreparedStatement) Proxy.newProxyInstance(Main.class.getClassLoader(), new Class<?>[]{tech.ydb.jdbc.YdbPreparedStatement.class}, (proxy,method,args) -> {
+            if (method.getName().equals("setObject")) { query.setParam((String)args[0],args[1],Types.JAVA_OBJECT); return null; }
+            if (method.getName().equals("execute")) return false;
+            if (method.getName().equals("close")) return null;
+            throw new AssertionError(method);
+        });
+        return (Connection) Proxy.newProxyInstance(Main.class.getClassLoader(),new Class<?>[]{tech.ydb.jdbc.YdbConnection.class},(proxy,method,args) -> {
+            if (method.getName().equals("unwrap")) return proxy;
+            if (method.getName().equals("prepareStatement")) {
+                check(args[0].equals(expectedSQL),"source SQL was rewritten: " + args[0]);
+                check(args.length==2 && args[1]==tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY,"auto-batch mode was not disabled");
+                return statement;
+            }
+            throw new AssertionError(method);
+        });
     }
 
     private static Connection refusingConnection() {

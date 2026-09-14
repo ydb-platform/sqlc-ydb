@@ -26,9 +26,9 @@ func representativeAnalysis() *model.AnalysisResult {
 		Queries: []model.AnalyzedQuery{
 			{
 				Name: "GetAuthor", Command: model.One,
-				SQL:                    "DECLARE $author_id AS Uint64;\nSELECT author_id, name, biography FROM authors WHERE author_id = $author_id;\n",
-				SQLWithoutDeclarations: "\nSELECT author_id, name, biography FROM authors WHERE author_id = $author_id;\n",
-				Parameters:             []model.Parameter{{Name: "author_id", Type: u64}},
+				SQL: "DECLARE $author_id AS Uint64;\nSELECT author_id, name, biography FROM authors WHERE author_id = $author_id;\n",
+
+				Parameters: []model.Parameter{{Name: "author_id", Type: u64}},
 				ResultSets: []model.ResultSet{{Columns: []model.Column{
 					{Name: "author_id", Type: u64},
 					{Name: "name", Type: utf8},
@@ -37,8 +37,8 @@ func representativeAnalysis() *model.AnalysisResult {
 			},
 			{
 				Name: "CreateBook", Command: model.One,
-				SQL:                    "DECLARE $book_id AS Uint64;\nDECLARE $year AS Int32;\nDECLARE $available AS Timestamp;\nDECLARE $tags AS Json;\nINSERT INTO books (book_id, year, available, tags) VALUES ($book_id, $year, $available, $tags) RETURNING book_id, year, available, tags;",
-				SQLWithoutDeclarations: "\n\n\n\nINSERT INTO books (book_id, year, available, tags) VALUES ($book_id, $year, $available, $tags) RETURNING book_id, year, available, tags;",
+				SQL: "DECLARE $book_id AS Uint64;\nDECLARE $year AS Int32;\nDECLARE $available AS Timestamp;\nDECLARE $tags AS Json;\nINSERT INTO books (book_id, year, available, tags) VALUES ($book_id, $year, $available, $tags) RETURNING book_id, year, available, tags;",
+
 				Parameters: []model.Parameter{
 					{Name: "book_id", Type: u64},
 					{Name: "year", Type: i32},
@@ -52,7 +52,7 @@ func representativeAnalysis() *model.AnalysisResult {
 					{Name: "tags", Type: jsonType},
 				}}},
 			},
-			{Name: "DeleteAuthor", Command: model.Exec, SQL: "DELETE FROM authors;", SQLWithoutDeclarations: "DELETE FROM authors;"},
+			{Name: "DeleteAuthor", Command: model.Exec, SQL: "DELETE FROM authors;"},
 		},
 	}
 }
@@ -133,7 +133,7 @@ func TestGenerateUsesLosslessOfficialSDKContract(t *testing.T) {
 func TestOneManyExecAndOptionalShapes(t *testing.T) {
 	a := representativeAnalysis()
 	a.Queries = append(a.Queries, model.AnalyzedQuery{
-		Name: "ListAuthors", Command: model.Many, SQL: "SELECT author_id, name, biography FROM authors;", SQLWithoutDeclarations: "SELECT author_id, name, biography FROM authors;",
+		Name: "ListAuthors", Command: model.Many, SQL: "SELECT author_id, name, biography FROM authors;",
 		ResultSets: []model.ResultSet{{Columns: a.Queries[0].ResultSets[0].Columns}},
 	})
 	files, err := Generate(a, Options{})
@@ -242,7 +242,7 @@ func TestRejectsUnsupportedInputsAndCollisions(t *testing.T) {
 			Name: "objects", Columns: []model.Column{{Name: "this", Type: model.Type{Kind: "Utf8"}}},
 		}}}}, want: `invalid generated property name "this"`},
 		{name: "type", a: &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
-			Name: "Bad", Command: model.Exec, SQL: "SELECT $x;", SQLWithoutDeclarations: "SELECT $x;",
+			Name: "Bad", Command: model.Exec, SQL: "SELECT $x;",
 			Parameters: []model.Parameter{{Name: "x", Type: model.Type{Kind: "List"}}},
 		}}}, want: `unsupported YQL type "List"`},
 		{name: "malformed result", a: &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
@@ -304,7 +304,7 @@ func TestSupportsAllScalarTypesWithoutFallbacks(t *testing.T) {
 		columns = append(columns, model.Column{Name: name, Type: typ}, model.Column{Name: "optional_" + name, Type: model.Optional(typ)})
 	}
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
-		Name: "AllTypes", Command: model.One, SQL: "SELECT 1;", SQLWithoutDeclarations: "SELECT 1;",
+		Name: "AllTypes", Command: model.One, SQL: "SELECT 1;",
 		Parameters: params, ResultSets: []model.ResultSet{{Columns: columns}},
 	}}}
 	if _, err := Generate(a, Options{}); err != nil {
@@ -318,7 +318,7 @@ func phpQuote(value string) string {
 
 func TestStructListParameter(t *testing.T) {
 	typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, {Name: "tags", Type: model.Optional(model.Type{Kind: "Json"})}}}}
-	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", SQLWithoutDeclarations: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
 	files, err := Generate(a, Options{})
 	if err != nil {
 		t.Fatal(err)
@@ -340,7 +340,7 @@ func TestStructListParameter(t *testing.T) {
 
 func TestStructFieldCollision(t *testing.T) {
 	typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, {Name: "bookId", Type: model.Type{Kind: "Uint64"}}}}}
-	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", SQLWithoutDeclarations: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
 	if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), "collision") {
 		t.Fatalf("field collision: %v", err)
 	}

@@ -529,60 +529,21 @@ func writeQuery(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 	b.WriteString("}\n\n")
 }
 
-func cleanWhitespaceOnlyLines(sql string) string {
-	lines := strings.SplitAfter(sql, "\n")
-	for i, line := range lines {
-		if strings.TrimSpace(line) != "" {
-			continue
-		}
-		switch {
-		case strings.HasSuffix(line, "\r\n"):
-			lines[i] = "\r\n"
-		case strings.HasSuffix(line, "\n"):
-			lines[i] = "\n"
-		default:
-			lines[i] = ""
-		}
-	}
-	return strings.Join(lines, "")
-}
-
 func sqlLiteral(sql string) string {
 	if sql == "" {
 		return `""`
 	}
-	lines := strings.Split(sql, "\n")
-	compact := lines[:0]
-	for _, line := range lines {
-		line = strings.Trim(line, " \t\r")
+	parts := []string{`""`}
+	for _, line := range strings.SplitAfter(sql, "\n") {
 		if line != "" {
-			compact = append(compact, line)
+			parts = append(parts, strconv.Quote(line))
 		}
 	}
-	for i, line := range compact {
-		if i+1 < len(compact) {
-			if strings.Contains(line, "--") {
-				line += "\n"
-			} else {
-				line += " "
-			}
-		}
-		compact[i] = strconv.Quote(line)
-	}
-	if len(compact) == 0 {
-		return `""`
-	}
-	compact = append([]string{`""`}, compact...)
-	return strings.Join(compact, " +\n")
+	return strings.Join(parts, " +\n")
 }
 
 func querySQL(q model.AnalyzedQuery) string {
-	sql := q.SQLWithoutDeclarations
-	if sql == "" {
-		sql = q.SQL
-	} else {
-		sql = cleanWhitespaceOnlyLines(sql)
-	}
+	sql := q.SQL
 	if line, rest, ok := strings.Cut(sql, "\n"); queryAnnotation(line) {
 		if ok {
 			sql = rest

@@ -159,6 +159,8 @@ try:
         c.rollback()
         d.create_books([DItem(2,'["dbapi"]',None),DItem(3,'{}','Third')])
         c.commit()
+        direct_rows={row.book_id:row for row in d.list_books()}
+        assert isinstance(direct_rows[2].tags,str) and json.loads(direct_rows[2].tags)==["dbapi"]
     finally:
         c.close()
     engine=sa.create_engine("yql+ydb://%%s/%%s" %% (u.netloc,u.path.lstrip("/")))
@@ -167,15 +169,18 @@ try:
             check_empty(SQuerier(conn),"sqlalchemy")
             conn.rollback()
         with engine.begin() as conn:
-            SQuerier(conn).create_books([SItem(4,'["sqlalchemy"]',None),SItem(5,'{}','Fifth')])
+            sq=SQuerier(conn)
+            sq.create_books([SItem(4,'["sqlalchemy"]',None),SItem(5,'{}','Fifth')])
+            direct_rows={row.book_id:row for row in sq.list_books()}
+            assert isinstance(direct_rows[4].tags,str) and json.loads(direct_rows[4].tags)==["sqlalchemy"]
     finally:
         engine.dispose()
     rows={row.book_id:row for row in y.list_books()}
     assert set(rows)=={2**64-1,1,2,3,4,5}, rows
-    assert json.loads(rows[2**64-1].tags)=={"source":"native"} and rows[2**64-1].title is None
+    assert rows[2**64-1].tags=={"source":"native"} and rows[2**64-1].title is None
     assert rows[1].title=='Unicode ☀'
-    assert json.loads(rows[2].tags)==["dbapi"] and rows[2].title is None
-    assert json.loads(rows[4].tags)==["sqlalchemy"] and rows[4].title is None
+    assert rows[2].tags==["dbapi"] and rows[2].title is None
+    assert rows[4].tags==["sqlalchemy"] and rows[4].title is None
     try:
         y.create_books([YItem(1,'{}',None)])
         raise AssertionError("duplicate INSERT accepted")

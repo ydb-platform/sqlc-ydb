@@ -4,11 +4,15 @@ from datetime import date, datetime, timedelta
 from uuid import UUID
 from typing import Optional
 
+from typing import Union
+
+JSONValue = Union[None, bool, int, float, str, list["JSONValue"], dict[str, "JSONValue"]]
+
 @dataclass
 class Authors:
     author_id: int
     name: str
-    biography: Optional[str]
+    biography: Optional[JSONValue]
 
 @dataclass
 class Books:
@@ -19,11 +23,11 @@ class Books:
     title: str
     year: int
     available: datetime
-    tags: str
+    tags: JSONValue
 
 @dataclass
 class GetBiographyRow:
-    biography: Optional[str]
+    biography: Optional[JSONValue]
 
 @dataclass
 class CreateBooksBooksItem:

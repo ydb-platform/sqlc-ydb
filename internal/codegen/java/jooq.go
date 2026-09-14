@@ -184,6 +184,9 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		r := jooqRenderer{query: q, aliases: map[string]string{}, parameters: map[string]string{}}
 		var params []string
 		seen := map[string]bool{"dsl": true, "stmt": true}
+		if jdbc.HasDeclarations(q) {
+			seen["tech"] = true
+		}
 		for _, p := range q.Parameters {
 			pn, e := name(p.Name, false)
 			if e != nil {
@@ -205,6 +208,21 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			parameterList = "\n            " + strings.Join(params, ",\n            ") + "\n    "
 		}
 		fmt.Fprintf(&b, "\n    // %s\n    public %s %s(%s) {\n", model.QueryAnnotation(q), ret, method, parameterList)
+		if jdbc.HasDeclarations(q) {
+			text, _ := jdbc.SQL(q)
+			sql, err := jooqDeclaredSQL(q, text)
+			if err != nil {
+				return nil, err
+			}
+			var names []string
+			for _, p := range q.Parameters {
+				n, _ := name(p.Name, false)
+				names = append(names, n)
+			}
+			emitJooqDeclared(&b, q, names, sql, row)
+			b.WriteString("    }\n")
+			continue
+		}
 		for _, rel := range q.Syntax.Relations {
 			tn, e := jooqConstant(rel.Table)
 			if e != nil {

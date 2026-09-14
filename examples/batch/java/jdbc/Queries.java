@@ -183,25 +183,25 @@ public final class Queries {
 
     // -- name: CreateBooks :exec
     public void createBooks(java.util.List<CreateBooksBooksItem> books) throws java.sql.SQLException {
-        try (var _prepared = client.prepareStatement("""
-              \s
-                \s
-                \s
-                \s
-                \s
-                \s
-                \s
-                \s
-                \s
-
+        try (var _prepared = client.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+            DECLARE $books AS List<Struct<
+                book_id: Uint64,
+                author_id: Uint64,
+                isbn: Utf8,
+                book_type: Utf8,
+                title: Utf8,
+                year: Int32,
+                available: Timestamp,
+                tags: Json
+            >>;
             INSERT INTO books (
                 book_id, author_id, isbn, book_type, title, year, available, tags
             )
             SELECT
                 book_id, author_id, isbn, book_type, title, year, available, tags
-            FROM AS_TABLE(?);\
-            """)) {
-            _prepared.setObject(1, tech.ydb.table.values.ListType.of(tech.ydb.table.values.StructType.of(java.util.Map.ofEntries(java.util.Map.entry("book_id", tech.ydb.table.values.PrimitiveType.Uint64), java.util.Map.entry("author_id", tech.ydb.table.values.PrimitiveType.Uint64), java.util.Map.entry("isbn", tech.ydb.table.values.PrimitiveType.Text), java.util.Map.entry("book_type", tech.ydb.table.values.PrimitiveType.Text), java.util.Map.entry("title", tech.ydb.table.values.PrimitiveType.Text), java.util.Map.entry("year", tech.ydb.table.values.PrimitiveType.Int32), java.util.Map.entry("available", tech.ydb.table.values.PrimitiveType.Timestamp), java.util.Map.entry("tags", tech.ydb.table.values.PrimitiveType.Json)))).newValue(books.stream().map(_batchItem -> tech.ydb.table.values.StructValue.of(java.util.Map.ofEntries(java.util.Map.entry("book_id", PrimitiveValue.newUint64(_batchItem.bookId())), java.util.Map.entry("author_id", PrimitiveValue.newUint64(_batchItem.authorId())), java.util.Map.entry("isbn", PrimitiveValue.newText(_batchItem.isbn())), java.util.Map.entry("book_type", PrimitiveValue.newText(_batchItem.bookType())), java.util.Map.entry("title", PrimitiveValue.newText(_batchItem.title())), java.util.Map.entry("year", PrimitiveValue.newInt32(_batchItem.year())), java.util.Map.entry("available", PrimitiveValue.newTimestamp(_batchItem.available())), java.util.Map.entry("tags", PrimitiveValue.newJson(_batchItem.tags()))))).toList()));
+            FROM AS_TABLE($books);\
+            """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+            _prepared.setObject("books", tech.ydb.table.values.ListType.of(tech.ydb.table.values.StructType.of(java.util.Map.ofEntries(java.util.Map.entry("book_id", tech.ydb.table.values.PrimitiveType.Uint64), java.util.Map.entry("author_id", tech.ydb.table.values.PrimitiveType.Uint64), java.util.Map.entry("isbn", tech.ydb.table.values.PrimitiveType.Text), java.util.Map.entry("book_type", tech.ydb.table.values.PrimitiveType.Text), java.util.Map.entry("title", tech.ydb.table.values.PrimitiveType.Text), java.util.Map.entry("year", tech.ydb.table.values.PrimitiveType.Int32), java.util.Map.entry("available", tech.ydb.table.values.PrimitiveType.Timestamp), java.util.Map.entry("tags", tech.ydb.table.values.PrimitiveType.Json)))).newValue(books.stream().map(_batchItem -> tech.ydb.table.values.StructValue.of(java.util.Map.ofEntries(java.util.Map.entry("book_id", PrimitiveValue.newUint64(_batchItem.bookId())), java.util.Map.entry("author_id", PrimitiveValue.newUint64(_batchItem.authorId())), java.util.Map.entry("isbn", PrimitiveValue.newText(_batchItem.isbn())), java.util.Map.entry("book_type", PrimitiveValue.newText(_batchItem.bookType())), java.util.Map.entry("title", PrimitiveValue.newText(_batchItem.title())), java.util.Map.entry("year", PrimitiveValue.newInt32(_batchItem.year())), java.util.Map.entry("available", PrimitiveValue.newTimestamp(_batchItem.available())), java.util.Map.entry("tags", PrimitiveValue.newJson(_batchItem.tags()))))).toList()));
             _prepared.execute();
         }
     }

@@ -20,7 +20,8 @@ func (q *Queries) CreateBooks(ctx context.Context, books []CreateBooksBooksItem,
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	err := q.db.Exec(ctx, ""+
-		"INSERT INTO books (book_id, title, tags) "+
+		"DECLARE $books AS List<Struct<book_id: Uint64, title: Optional<Utf8>, tags: Json>>;\n"+
+		"INSERT INTO books (book_id, title, tags)\n"+
 		"SELECT book_id, title, tags FROM AS_TABLE($books);",
 		callOptions...,
 	)

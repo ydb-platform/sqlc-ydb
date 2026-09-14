@@ -50,7 +50,7 @@ func TestApprovedExamples(t *testing.T) {
 
 func TestSDKNativeTypes(t *testing.T) {
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Echo", Command: model.One,
-		SQL: "SELECT $created, $payload;", SQLWithoutDeclarations: "SELECT $created, $payload;",
+		SQL:        "SELECT $created, $payload;",
 		Parameters: []model.Parameter{{Name: "created", Type: model.Type{Kind: "Timestamp"}}, {Name: "payload", Type: model.Optional(model.Type{Kind: "Json"})}},
 		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "created", Type: model.Type{Kind: "Timestamp"}}, {Name: "payload", Type: model.Optional(model.Type{Kind: "Json"})}}}},
 	}}}
@@ -68,15 +68,6 @@ func TestSDKNativeTypes(t *testing.T) {
 		if strings.Contains(got, unwanted) {
 			t.Errorf("unexpected %s", unwanted)
 		}
-	}
-}
-
-func TestDeclarationLineFormattingRetainsCommentsAndBlankLines(t *testing.T) {
-	original := "-- name: Q :exec\nDECLARE $id AS Uint64;\n\nDECLARE $name AS Utf8; -- keep\n$local = 1;\nSELECT $id;"
-	executable := "-- name: Q :exec\n   \n\n    -- keep\n$local = 1;\nSELECT $id;"
-	want := "-- name: Q :exec\n\n    -- keep\n$local = 1;\nSELECT $id;"
-	if got := omitDeclarationLines(original, executable); got != want {
-		t.Fatalf("got %q, want %q", got, want)
 	}
 }
 
@@ -139,21 +130,21 @@ func testAnalysis() *model.AnalysisResult {
 		}}}},
 		Queries: []model.AnalyzedQuery{
 			{
-				Name: "GetAuthor", Command: model.One,
-				SQL:                    "DECLARE $author_id AS Uint64;\nSELECT id, display_name, bio FROM authors WHERE id = $author_id;\n",
-				SQLWithoutDeclarations: "\nSELECT id, display_name, bio FROM authors WHERE id = $author_id;\n",
-				Parameters:             []model.Parameter{{Name: "author_id", Type: uint64Type}},
+				Name: "GetAuthor", Command: model.One, DeclaredParameters: []string{"author_id"},
+				SQL: "DECLARE $author_id AS Uint64;\nSELECT id, display_name, bio FROM authors WHERE id = $author_id;\n",
+
+				Parameters: []model.Parameter{{Name: "author_id", Type: uint64Type}},
 				ResultSets: []model.ResultSet{{Columns: []model.Column{
 					{Name: "id", Type: uint64Type}, {Name: "display_name", Type: utf8Type}, {Name: "bio", Type: model.Optional(utf8Type)},
 				}}},
 			},
 			{
-				Name: "UpsertAuthor", Command: model.Exec,
-				SQL:                    "DECLARE $author_id AS Uint64;\nDECLARE $name AS Utf8;\nUPSERT INTO authors (id, display_name) VALUES ($author_id, $name);",
-				SQLWithoutDeclarations: "\n\nUPSERT INTO authors (id, display_name) VALUES ($author_id, $name);",
-				Parameters:             []model.Parameter{{Name: "author_id", Type: uint64Type}, {Name: "name", Type: utf8Type}},
+				Name: "UpsertAuthor", Command: model.Exec, DeclaredParameters: []string{"author_id", "name"},
+				SQL: "DECLARE $author_id AS Uint64;\nDECLARE $name AS Utf8;\nUPSERT INTO authors (id, display_name) VALUES ($author_id, $name);",
+
+				Parameters: []model.Parameter{{Name: "author_id", Type: uint64Type}, {Name: "name", Type: utf8Type}},
 			},
-			{Name: "ListAuthors", Command: model.Many, SQL: "SELECT id, display_name, bio FROM authors;", SQLWithoutDeclarations: "SELECT id, display_name, bio FROM authors;", ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: uint64Type}, {Name: "display_name", Type: utf8Type}, {Name: "bio", Type: model.Optional(utf8Type)}}}}},
+			{Name: "ListAuthors", Command: model.Many, SQL: "SELECT id, display_name, bio FROM authors;", ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: uint64Type}, {Name: "display_name", Type: utf8Type}, {Name: "bio", Type: model.Optional(utf8Type)}}}}},
 		},
 	}
 }
@@ -211,8 +202,8 @@ func TestGenerateTypeScript(t *testing.T) {
 
 func TestConfigureQueryAndSQLNamesCannotShadowGeneratedBindings(t *testing.T) {
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{
-		{Name: "BySQL", Command: model.Exec, SQLWithoutDeclarations: "SELECT $sql;", Parameters: []model.Parameter{{Name: "sql", Type: model.Type{Kind: "Utf8"}}}},
-		{Name: "ByConfigure", Command: model.Exec, SQLWithoutDeclarations: "SELECT $configure;", Parameters: []model.Parameter{{Name: "configure", Type: model.Type{Kind: "Utf8"}}}},
+		{Name: "BySQL", Command: model.Exec, SQL: "SELECT $sql;", Parameters: []model.Parameter{{Name: "sql", Type: model.Type{Kind: "Utf8"}}}},
+		{Name: "ByConfigure", Command: model.Exec, SQL: "SELECT $configure;", Parameters: []model.Parameter{{Name: "configure", Type: model.Type{Kind: "Utf8"}}}},
 	}}
 	files, err := Generate(a, Options{})
 	if err != nil {
@@ -234,7 +225,7 @@ func TestConfigureQueryAndSQLNamesCannotShadowGeneratedBindings(t *testing.T) {
 func TestExecutableSQLAppearsOnlyAtCall(t *testing.T) {
 	const query = "SELECT $value;"
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
-		Name: "Echo", Command: model.Exec, SQL: query, SQLWithoutDeclarations: query,
+		Name: "Echo", Command: model.Exec, SQL: query,
 		Parameters: []model.Parameter{{Name: "value", Type: model.Type{Kind: "Utf8"}}},
 	}}}
 	files, err := Generate(a, Options{})
@@ -259,7 +250,7 @@ func TestSQLLiteralRoundTripsThroughNode(t *testing.T) {
 		t.Skip("node is unavailable")
 	}
 	want := "-- a readable query\nSELECT `tick`, '${value}', \\\\path, \"雪\"u, '\t';\r\n-- trailing space \n \t \nSELECT 1;\t"
-	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Exact", Command: model.Exec, SQL: want, SQLWithoutDeclarations: want}}}
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Exact", Command: model.Exec, SQL: want}}}
 	files, err := Generate(a, Options{})
 	if err != nil {
 		t.Fatal(err)
@@ -321,6 +312,8 @@ func TestGeneratedModuleBindsAndDecodesWithoutShapeFallbacks(t *testing.T) {
 	for _, names := range [][2]string{{"pending", "pending"}, {"result_sets", "result_sets"}, {"rows", "rows"}, {"Named", "decode_named_row"}} {
 		q := a.Queries[0]
 		q.Name = names[0]
+		q.SQL = "SELECT $" + names[1] + ";"
+		q.DeclaredParameters = nil
 		q.Parameters = []model.Parameter{{Name: names[1], Type: model.Type{Kind: "Uint64"}}}
 		a.Queries = append(a.Queries, q)
 	}
@@ -360,6 +353,7 @@ const client = (text) => {
   const call = { text: text.join(""), params: [] }; calls.push(call);
   const promise = Promise.resolve([[{ id: 18446744073709551615n, display_name: 'Ada', bio: null }]]);
   call.pending = promise;
+  Object.defineProperty(promise, "text", { value: call.text, configurable: true });
   promise.parameter = (name, value) => { call.params.push([name, value.value]); return promise; };
   return promise;
 };
@@ -368,7 +362,7 @@ let configured = false;
 const row = await queries.getAuthor(18446744073709551615n, (pending) => { configured = pending === calls[0].pending; return pending; });
 if (!configured) throw new Error('configure hook did not receive the bound query');
 if (row.id !== 18446744073709551615n || row.display_name !== 'Ada' || row.bio !== null) throw new Error('decode failed');
-if (calls[0].text.includes('DECLARE')) throw new Error('wrong SQL variant');
+if (!calls[0].text.includes('DECLARE $author_id AS Uint64;')) throw new Error('source declaration was removed');
 if (calls[0].params[0][0] !== 'author_id' || calls[0].params[0][1] !== 18446744073709551615n) throw new Error('binding failed');
 for (const [method, name] of [['pending', 'pending'], ['resultSets', 'result_sets'], ['rows_', 'rows'], ['named', 'decode_named_row']]) {
   const row = await queries[method](7n);
@@ -400,8 +394,8 @@ func TestRejectsUnsupportedInputsAndNameCollisions(t *testing.T) {
 			name: "type",
 			a: &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
 				Name: "Bad", Command: model.Exec,
-				SQLWithoutDeclarations: "SELECT $x;",
-				Parameters:             []model.Parameter{{Name: "x", Type: model.Type{Kind: "List"}}},
+				SQL:        "SELECT $x;",
+				Parameters: []model.Parameter{{Name: "x", Type: model.Type{Kind: "List"}}},
 			}}},
 			want: `unsupported YQL type "List"`,
 		},
@@ -410,21 +404,13 @@ func TestRejectsUnsupportedInputsAndNameCollisions(t *testing.T) {
 		{
 			name: "parameter collision",
 			a: &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
-				Name: "Bad", Command: model.Exec, SQLWithoutDeclarations: "SELECT $foo_bar, $`foo bar`;",
+				Name: "Bad", Command: model.Exec, SQL: "SELECT $foo_bar, $`foo bar`;",
 				Parameters: []model.Parameter{
 					{Name: "foo_bar", Type: model.Type{Kind: "Int32"}},
 					{Name: "foo bar", Type: model.Type{Kind: "Int32"}},
 				},
 			}}},
 			want: "parameter name collision",
-		},
-		{
-			name: "missing executable sql",
-			a: &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
-				Name: "Bad", Command: model.Exec, SQL: "DECLARE $x AS Int32; SELECT $x;",
-				Parameters: []model.Parameter{{Name: "x", Type: model.Type{Kind: "Int32"}}},
-			}}},
-			want: "SQL without declarations",
 		},
 	}
 	for _, tc := range tests {
@@ -449,7 +435,7 @@ func TestSupportedExampleTypes(t *testing.T) {
 		params = append(params, model.Parameter{Name: name, Type: typ}, model.Parameter{Name: "optional_" + name, Type: model.Optional(typ)})
 		cols = append(cols, model.Column{Name: name, Type: typ}, model.Column{Name: "optional_" + name, Type: model.Optional(typ)})
 	}
-	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "AllTypes", Command: model.One, SQL: "SELECT 1;", SQLWithoutDeclarations: "SELECT 1;", Parameters: params, ResultSets: []model.ResultSet{{Columns: cols}}}}}
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "AllTypes", Command: model.One, SQL: "SELECT 1;", Parameters: params, ResultSets: []model.ResultSet{{Columns: cols}}}}}
 	if _, err := Generate(a, Options{}); err != nil {
 		t.Fatal(err)
 	}
@@ -457,7 +443,7 @@ func TestSupportedExampleTypes(t *testing.T) {
 
 func TestQualifiedProjectionUsesExactWireName(t *testing.T) {
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
-		Name: "Joined", Command: model.Many, SQL: "SELECT b.book_id FROM books AS b;", SQLWithoutDeclarations: "SELECT b.book_id FROM books AS b;",
+		Name: "Joined", Command: model.Many, SQL: "SELECT b.book_id FROM books AS b;",
 		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "book_id", WireName: "b.book_id", Type: model.Type{Kind: "Uint64"}}}}},
 	}}}
 	files, err := Generate(a, Options{})
@@ -480,7 +466,7 @@ func TestQualifiedProjectionUsesExactWireName(t *testing.T) {
 
 func TestStructListParameter(t *testing.T) {
 	typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, {Name: "tags", Type: model.Optional(model.Type{Kind: "Json"})}}}}
-	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", SQLWithoutDeclarations: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
 	files, err := Generate(a, Options{})
 	if err != nil {
 		t.Fatal(err)
@@ -502,7 +488,7 @@ func TestStructListParameter(t *testing.T) {
 
 func TestStructFieldCollision(t *testing.T) {
 	typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, {Name: "bookId", Type: model.Type{Kind: "Uint64"}}}}}
-	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", SQLWithoutDeclarations: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
 	if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), "collision") {
 		t.Fatalf("field collision: %v", err)
 	}
@@ -510,7 +496,7 @@ func TestStructFieldCollision(t *testing.T) {
 
 func TestStructPrototypeMember(t *testing.T) {
 	typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "__proto__", Type: model.Type{Kind: "Uint64"}}}}}
-	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", SQLWithoutDeclarations: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
 	files, err := Generate(a, Options{})
 	if err != nil {
 		t.Fatal(err)
@@ -533,7 +519,7 @@ func TestStructListsEncodeWithPinnedSDK(t *testing.T) {
 		t.Skip("run npm ci --prefix tests/examples/typescript")
 	}
 	typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "__proto__", Type: model.Type{Kind: "Uint64"}}, {Name: "tags", Type: model.Optional(model.Type{Kind: "Json"})}}}}
-	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $struct_list;", SQLWithoutDeclarations: "SELECT $struct_list;", Parameters: []model.Parameter{{Name: "struct_list", Type: typ}}}}}
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $struct_list;", Parameters: []model.Parameter{{Name: "struct_list", Type: typ}}}}}
 	files, err := Generate(a, Options{})
 	if err != nil {
 		t.Fatal(err)
@@ -564,5 +550,95 @@ for(const books of [[], [{proto:18446744073709551615n,tags:null},{proto:1n,tags:
 }`
 	if out, err := exec.Command(node, "--input-type=module", "--eval", script).CombinedOutput(); err != nil {
 		t.Fatalf("SDK struct-list serialization: %v\n%s", err, out)
+	}
+}
+
+func TestDeclaredSQLReachesPinnedSDKWithoutDuplicateDeclarations(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node unavailable")
+	}
+	modules, err := filepath.Abs("../../../tests/examples/typescript/node_modules")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(modules, "@ydbjs/query")); err != nil {
+		t.Skip("run npm ci --prefix tests/examples/typescript")
+	}
+	typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, {Name: "tags", Type: model.Optional(model.Type{Kind: "Json"})}}}}
+	sql := "-- declaration formatting stays intact\nDECLARE $books AS List<Struct<\n    book_id: Uint64,\n    tags: Optional<Json>\n>>;\n\nINSERT INTO books SELECT book_id, tags FROM AS_TABLE($books);"
+	mixed := sql[:len(sql)-1] + " WHERE book_id > $minimum;"
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{
+		{Name: "InsertBooks", Command: model.Exec, SQL: sql, DeclaredParameters: []string{"books"}, Parameters: []model.Parameter{{Name: "books", Type: typ}}},
+		{Name: "MixedBooks", Command: model.Exec, SQL: mixed, DeclaredParameters: []string{"books"}, Parameters: []model.Parameter{{Name: "books", Type: typ}, {Name: "minimum", Type: model.Type{Kind: "Uint64"}}}},
+	}}
+	files, err := Generate(a, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.Symlink(modules, filepath.Join(dir, "node_modules")); err != nil {
+		t.Fatal(err)
+	}
+	module := filepath.Join(dir, "queries.mjs")
+	transpileModule(t, node, string(files[0].Content), module)
+	expected := strings.ReplaceAll(sql, "\n", "\n      ")
+	expectedMixed := "DECLARE $minimum AS Uint64;\n" + strings.ReplaceAll(mixed, "\n", "\n      ")
+	script := `import assert from 'node:assert/strict';
+import { query } from '@ydbjs/query';
+import { StatusIds_StatusCode as Status } from '@ydbjs/api/operation';
+import { Queries } from './queries.mjs';
+const requests=[];
+let failNext=false, commits=0, configurations=0;
+const rpc={
+ async createSession(){return {status:Status.SUCCESS,sessionId:'declared-sql',nodeId:1n}},
+ async *attachSession(_request,{signal}){yield {status:Status.SUCCESS};await new Promise(resolve=>{if(signal.aborted)resolve();else signal.addEventListener('abort',resolve,{once:true})})},
+ async *executeQuery(request){requests.push(request);if(failNext){failNext=false;yield {status:Status.OVERLOADED,issues:[]};return}yield {status:Status.SUCCESS}},
+ async deleteSession(){return {status:Status.SUCCESS}},
+ async beginTransaction(){return {status:Status.SUCCESS,txMeta:{id:'caller-tx'}}},
+ async commitTransaction(){commits++;return {status:Status.SUCCESS}},
+};
+const client=query({identity:'declared-sql-probe',async ready(){},createClient(){return rpc}},{poolOptions:{minSize:0,maxSize:1}});
+const configure = stmt => {
+ configurations++;
+ assert.equal(Object.getOwnPropertyDescriptor(stmt,'text').writable,false);
+ stmt.idempotent(true).timeout(5000);
+};
+const inputs=[[],[{bookId:18446744073709551615n,tags:null},{bookId:1n,tags:'{"present":true}'}]];
+try {
+ for(const books of inputs){
+  const before=requests.length;
+  await new Queries(client).insertBooks(books,configure);
+  const request=requests[before];
+  assert.equal(request.query.value.text,` + string(mustJSON(expected)) + `);
+  assert.equal((request.query.value.text.match(/DECLARE \$books/g)||[]).length,1);
+  assert.equal(request.parameters.$books.value.items.length,books.length);
+  assert.equal(request.parameters.$books.type.type.value.item.type.case,'structType');
+ }
+ failNext=true;
+ const before=requests.length;
+ await new Queries(client).mixedBooks({books:inputs[1],minimum:0n},configure);
+ assert.equal(requests.length,before+2);
+ for(const request of requests.slice(before)){
+  assert.equal(request.query.value.text,` + string(mustJSON(expectedMixed)) + `);
+  assert.equal(request.parameters.$minimum.value.value.value,0n);
+  assert.equal(request.parameters.$books.value.items.length,2);
+ }
+ await client.transaction(async tx => {
+  await new Queries(tx).insertBooks([],configure);
+  assert.equal(requests.at(-1).txControl.txSelector.value,'caller-tx');
+  assert.equal(requests.at(-1).txControl.commitTx,false);
+  assert.equal(requests.at(-1).query.value.text,` + string(mustJSON(expected)) + `);
+ });
+ assert.equal(commits,1);
+ assert.equal(configurations,4);
+} finally {await client[Symbol.asyncDispose]();}
+`
+	program := filepath.Join(dir, "probe.mjs")
+	if err := os.WriteFile(program, []byte(script), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command(node, program).CombinedOutput(); err != nil {
+		t.Fatalf("SDK declaration transport: %v\n%s", err, out)
 	}
 }
