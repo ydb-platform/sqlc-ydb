@@ -315,3 +315,33 @@ func TestSupportsAllScalarTypesWithoutFallbacks(t *testing.T) {
 func phpQuote(value string) string {
 	return "'" + strings.ReplaceAll(strings.ReplaceAll(value, `\`, `\\`), `'`, `\'`) + "'"
 }
+
+func TestStructListParameter(t *testing.T) {
+	typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, {Name: "tags", Type: model.Optional(model.Type{Kind: "Json"})}}}}
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", SQLWithoutDeclarations: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
+	files, err := Generate(a, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output strings.Builder
+	for _, f := range files {
+		output.Write(f.Content)
+	}
+	for _, want := range []string{"CreateBooksBooksItem", "list<CreateBooksBooksItem>", "new \\Ydb\\ListType", "new \\Ydb\\StructMember", "typedOptionalJson($item->tags", "array_values($books)"} {
+		if !strings.Contains(output.String(), want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+	a.Queries[0].Parameters[0].Type.Elem.Fields[1].Type = model.Type{Kind: "List", Elem: &model.Type{Kind: "Utf8"}}
+	if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), "unsupported YQL type") {
+		t.Fatalf("nested list: %v", err)
+	}
+}
+
+func TestStructFieldCollision(t *testing.T) {
+	typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, {Name: "bookId", Type: model.Type{Kind: "Uint64"}}}}}
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", SQLWithoutDeclarations: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
+	if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), "collision") {
+		t.Fatalf("field collision: %v", err)
+	}
+}

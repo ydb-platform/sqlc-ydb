@@ -477,3 +477,92 @@ func TestQualifiedProjectionUsesExactWireName(t *testing.T) {
 		t.Fatalf("generated decoder guessed an unqualified fallback:\n%s", ts)
 	}
 }
+
+func TestStructListParameter(t *testing.T) {
+	typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, {Name: "tags", Type: model.Optional(model.Type{Kind: "Json"})}}}}
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", SQLWithoutDeclarations: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
+	files, err := Generate(a, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output strings.Builder
+	for _, f := range files {
+		output.Write(f.Content)
+	}
+	for _, want := range []string{"CreateBooksBooksItem", "ReadonlyArray<CreateBooksBooksItem>", "new ListType(type)", "new StructType([\"book_id\", \"tags\"]", "new OptionalType(new JsonType())", "item.bookId"} {
+		if !strings.Contains(output.String(), want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+	a.Queries[0].Parameters[0].Type.Elem.Fields[1].Type = model.Type{Kind: "List", Elem: &model.Type{Kind: "Utf8"}}
+	if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), "unsupported YQL type") {
+		t.Fatalf("nested list: %v", err)
+	}
+}
+
+func TestStructFieldCollision(t *testing.T) {
+	typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, {Name: "bookId", Type: model.Type{Kind: "Uint64"}}}}}
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", SQLWithoutDeclarations: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
+	if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), "collision") {
+		t.Fatalf("field collision: %v", err)
+	}
+}
+
+func TestStructPrototypeMember(t *testing.T) {
+	typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "__proto__", Type: model.Type{Kind: "Uint64"}}}}}
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", SQLWithoutDeclarations: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
+	files, err := Generate(a, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(files[0].Content), `["__proto__"]: new Uint64(item.proto)`) {
+		t.Fatal("struct member must be an own property, not an object prototype setter")
+	}
+}
+
+func TestStructListsEncodeWithPinnedSDK(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node unavailable")
+	}
+	modules, err := filepath.Abs("../../../tests/examples/typescript/node_modules")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(modules, "@ydbjs/value")); err != nil {
+		t.Skip("run npm ci --prefix tests/examples/typescript")
+	}
+	typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "__proto__", Type: model.Type{Kind: "Uint64"}}, {Name: "tags", Type: model.Optional(model.Type{Kind: "Json"})}}}}
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $struct_list;", SQLWithoutDeclarations: "SELECT $struct_list;", Parameters: []model.Parameter{{Name: "struct_list", Type: typ}}}}}
+	files, err := Generate(a, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(files[0].Content), "structList(structList_.map(") {
+		t.Fatal("list argument shadows SDK binding helper")
+	}
+	dir := t.TempDir()
+	if err := os.Symlink(modules, filepath.Join(dir, "node_modules")); err != nil {
+		t.Fatal(err)
+	}
+	module := filepath.Join(dir, "queries.mjs")
+	transpileModule(t, node, string(files[0].Content), module)
+	script := `import assert from 'node:assert/strict'; import { Queries } from ` + string(mustJSON(module)) + `;
+let parameter;
+const sql = () => {const stmt=Promise.resolve([]);stmt.parameter=(_name,value)=>{parameter=value;return stmt};return stmt};
+for(const books of [[], [{proto:18446744073709551615n,tags:null},{proto:1n,tags:'{"x":true}'}]]){
+ await new Queries(sql).createBooks(books);
+ const members=parameter.type.encode().type.value.item.type.value.members;
+ assert.deepEqual(members.map(m=>m.name),['__proto__','tags']);
+ assert.equal(members[1].type.type.case,'optionalType');
+ const items=parameter.encode().items;assert.equal(items.length,books.length);
+ for(let i=0;i<books.length;i++){
+  assert.equal(items[i].items[0].value.value,books[i].proto);
+  assert.equal(items[i].items[1].value.case,books[i].tags===null?'nullFlagValue':'textValue');
+  if(books[i].tags!==null)assert.equal(items[i].items[1].value.value,books[i].tags);
+ }
+}`
+	if out, err := exec.Command(node, "--input-type=module", "--eval", script).CombinedOutput(); err != nil {
+		t.Fatalf("SDK struct-list serialization: %v\n%s", err, out)
+	}
+}

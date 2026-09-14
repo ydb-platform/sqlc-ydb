@@ -66,7 +66,7 @@ func validateQuery(q model.AnalyzedQuery) error {
 		return fmt.Errorf("python generator: query %q: expected one result set, got %d", q.Name, len(q.ResultSets))
 	}
 	for _, p := range q.Parameters {
-		if _, err := pyType(p.Type); err != nil {
+		if _, err := parameterType(q, p); err != nil {
 			return fmt.Errorf("python generator: query %q parameter %q: %w", q.Name, p.Name, err)
 		}
 	}
@@ -137,6 +137,13 @@ func validateNames(a *model.AnalysisResult) error {
 		}
 	}
 	for _, q := range a.Queries {
+		for _, p := range q.Parameters {
+			if structList(p.Type) {
+				if err := add(classes, structClass(q, p), "parameter:"+q.Name+":"+p.Name, "model"); err != nil {
+					return err
+				}
+			}
+		}
 		if err := add(methods, methodName(q.Name), q.Name, "method"); err != nil {
 			return err
 		}
@@ -206,6 +213,11 @@ func renderModels(a *model.AnalysisResult) (string, error) {
 		b.WriteString("\n")
 	}
 	for _, q := range a.Queries {
+		for _, p := range q.Parameters {
+			if structList(p.Type) {
+				renderStructModel(&b, q, p)
+			}
+		}
 		if q.Command != model.One && q.Command != model.Many {
 			continue
 		}
@@ -376,7 +388,7 @@ func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQ
 	}
 	p := ""
 	for _, x := range q.Parameters {
-		t, _ := pyType(x.Type)
+		t, _ := parameterType(q, x)
 		p += ", " + fieldName(x.Name) + ": " + t
 	}
 	ret := "None"
@@ -393,10 +405,11 @@ func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQ
 	}
 	b.WriteString("    # " + model.QueryAnnotation(q) + "\n")
 	b.WriteString("    def " + methodName(q.Name) + "(self" + p + ") -> " + ret + ":\n")
+
 	if o.Runtime == "ydb" {
 		b.WriteString("        parameters = {\n")
 		for i, x := range q.Parameters {
-			value := "_ydb.TypedValue(" + fieldName(x.Name) + ", " + typeExprs[i] + ")"
+			value := "_ydb.TypedValue(" + parameterValue(x) + ", " + typeExprs[i] + ")"
 			b.WriteString("            " + pyString("$"+x.Name) + ": " + value + ",\n")
 		}
 		b.WriteString("        }\n        result_sets = self._execute(\n            " + literal + ", parameters)\n")
@@ -404,14 +417,14 @@ func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQ
 	if o.Runtime == "dbapi" {
 		b.WriteString("        parameters = {\n")
 		for i, x := range q.Parameters {
-			b.WriteString("            " + pyString("$"+x.Name) + ": (" + fieldName(x.Name) + ", " + typeExprs[i] + "),\n")
+			b.WriteString("            " + pyString("$"+x.Name) + ": (" + parameterValue(x) + ", " + typeExprs[i] + "),\n")
 		}
 		b.WriteString("        }\n        cursor = self._connection.cursor()\n        try:\n            cursor.execute(\n                " + strings.ReplaceAll(literal, "\n", "\n    ") + ", parameters)\n")
 	}
 	if o.Runtime == "sqlalchemy" {
 		b.WriteString("        parameters = {\n")
 		for i, x := range q.Parameters {
-			b.WriteString("            " + pyString(x.Name) + ": (" + fieldName(x.Name) + ", " + typeExprs[i] + "),\n")
+			b.WriteString("            " + pyString(x.Name) + ": (" + parameterValue(x) + ", " + typeExprs[i] + "),\n")
 		}
 		b.WriteString("        }\n        result = ")
 		b.WriteString("self._connection.execute(_text(\n            " + literal + "), parameters)\n")
@@ -552,6 +565,17 @@ func ydbTypeExpr(t model.Type) (string, error) {
 		return "_ydb.OptionalType(" + elem + ")", err
 	}
 	kind := strings.ToLower(t.Kind)
+	if kind == "struct" {
+		out := "_ydb.StructType()"
+		for _, f := range t.Fields {
+			typ, err := ydbTypeExpr(f.Type)
+			if err != nil {
+				return "", err
+			}
+			out += ".add_member(" + pyString(f.Name) + ", " + typ + ")"
+		}
+		return out, nil
+	}
 	if primitive, ok := pythonPrimitiveTypes[kind]; ok {
 		return "_ydb.PrimitiveType." + primitive.ydb, nil
 	}

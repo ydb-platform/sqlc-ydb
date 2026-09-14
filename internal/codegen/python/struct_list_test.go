@@ -1,0 +1,202 @@
+package python
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/ydb-platform/sqlc-ydb/internal/model"
+)
+
+func structInput() *model.AnalysisResult {
+	return &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "DECLARE $books AS List<Struct<book_id: Uint64, tags: Json, title: Optional<Utf8>>>; INSERT INTO books SELECT * FROM AS_TABLE($books);", Parameters: []model.Parameter{{Name: "books", Type: model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, {Name: "tags", Type: model.Type{Kind: "Json"}}, {Name: "title", Type: model.Optional(model.Type{Kind: "Utf8"})}}}}}}}}}
+}
+func TestStructListGeneration(t *testing.T) {
+	for _, runtime := range []string{"ydb", "dbapi", "sqlalchemy"} {
+		files, err := Generate(structInput(), Options{Runtime: runtime})
+		if err != nil {
+			t.Fatal(err)
+		}
+		source := ""
+		for _, f := range files {
+			source += string(f.Content)
+		}
+		for _, want := range []string{"class CreateBooksBooksItem:", "book_id: int", "tags: str", "title: Optional[str]", "books: list[_models.CreateBooksBooksItem]", "[{\"book_id\": item.book_id, \"tags\": item.tags, \"title\": item.title} for item in books]", "_ydb.ListType(_ydb.StructType().add_member(\"book_id\", _ydb.PrimitiveType.Uint64)"} {
+			if !strings.Contains(source, want) {
+				t.Fatalf("%s missing %s\n%s", runtime, want, source)
+			}
+		}
+	}
+}
+func TestStructListRejectsNestedField(t *testing.T) {
+	in := structInput()
+	in.Queries[0].Parameters[0].Type.Elem.Fields[0].Type = model.Type{Kind: "List", Elem: &model.Type{Kind: "Uint64"}}
+	_, err := Generate(in, Options{})
+	if err == nil || !strings.Contains(err.Error(), "field book_id must be a supported scalar") {
+		t.Fatalf("err=%v", err)
+	}
+}
+func TestStructListSDKSerialization(t *testing.T) {
+	if os.Getenv("SQLC_YDB_PYTHON_SDK_CHECK") == "" {
+		t.Skip("set SQLC_YDB_PYTHON_SDK_CHECK=1 with pinned Python SDK dependencies")
+	}
+	for _, runtime := range []string{"ydb", "dbapi", "sqlalchemy"} {
+		t.Run(runtime, func(t *testing.T) {
+			dir := t.TempDir()
+			pkg := filepath.Join(dir, "generated")
+			if err := os.Mkdir(pkg, 0700); err != nil {
+				t.Fatal(err)
+			}
+			files, err := Generate(structInput(), Options{Runtime: runtime})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, f := range files {
+				if err := os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			script := `
+import ydb
+from ydb import convert
+from typing import get_type_hints
+from generated.models import CreateBooksBooksItem
+from generated.queries import Querier
+assert get_type_hints(Querier.create_books)["books"] == list[CreateBooksBooksItem]
+class Capture:
+    def __init__(self): self.parameters = None; self.closed = False
+    def execute(self, sql, parameters): self.parameters = parameters; return self
+    def cursor(self): return self
+    def close(self): self.closed = True
+capture = Capture()
+q = Querier.__new__(Querier)
+q._connection = capture
+q._execute = capture.execute
+populated = [CreateBooksBooksItem(2**64-1, '{"a":1}', None), CreateBooksBooksItem(1, '{}', 'Unicode ☀')]
+types = []
+for items in [[], populated]:
+    q.create_books(items)
+    typed = next(iter(capture.parameters.values()))
+    if isinstance(typed, ydb.TypedValue): value, typ = typed.value, typed.value_type
+    else: value, typ = typed
+    wire = convert.to_typed_value_from_native(typ.proto, value)
+    types.append(wire.type)
+    assert len(wire.value.items) == len(items)
+    if items:
+        assert wire.value.items[0].items[0].uint64_value == 2**64-1
+        assert wire.value.items[0].items[1].text_value == '{"a":1}'
+        assert wire.type.list_type.item.struct_type.members[1].type.type_id == ydb.PrimitiveType.Json.proto.type_id
+        assert wire.value.items[0].items[2].WhichOneof('value') == 'null_flag_value'
+        assert wire.value.items[1].items[2].text_value == 'Unicode ☀'
+assert types[0] == types[1]
+`
+			cmd := exec.Command("python3", "-c", script)
+			cmd.Dir = dir
+			cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("%s SDK serialization: %v\n%s", runtime, err, out)
+			}
+		})
+	}
+}
+
+func TestLiveYDBBatchInsertRuntimes(t *testing.T) {
+	if os.Getenv("YDB_CONNECTION_STRING") == "" {
+		t.Skip("set YDB_CONNECTION_STRING for live batch insert validation")
+	}
+	table := "sqlc_python_batch_" + fmt.Sprint(time.Now().UnixNano())
+	in := structInput()
+	in.Queries[0].SQL = "DECLARE $books AS List<Struct<book_id: Uint64, tags: Json, title: Optional<Utf8>>>; INSERT INTO " + table + " (book_id,tags,title) SELECT book_id,tags,title FROM AS_TABLE($books);"
+	in.Queries = append(in.Queries, model.AnalyzedQuery{Name: "ListBooks", Command: model.Many, SQL: "SELECT book_id,tags,title FROM " + table + ";", ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, {Name: "tags", Type: model.Type{Kind: "Json"}}, {Name: "title", Type: model.Optional(model.Type{Kind: "Utf8"})}}}}})
+	root := t.TempDir()
+	for _, runtime := range []string{"ydb", "dbapi", "sqlalchemy"} {
+		dir := filepath.Join(root, runtime+"_generated")
+		if err := os.Mkdir(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		files, err := Generate(in, Options{Runtime: runtime})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range files {
+			if err := os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	script := fmt.Sprintf(`import os, urllib.parse, json
+import ydb
+import ydb_dbapi
+import sqlalchemy as sa
+import ydb.sqlalchemy
+from ydb_generated.queries import Querier as YQuerier
+from ydb_generated.models import CreateBooksBooksItem as YItem
+from dbapi_generated.queries import Querier as DQuerier
+from dbapi_generated.models import CreateBooksBooksItem as DItem
+from sqlalchemy_generated.queries import Querier as SQuerier
+from sqlalchemy_generated.models import CreateBooksBooksItem as SItem
+u=urllib.parse.urlsplit(os.environ["YDB_CONNECTION_STRING"])
+driver=ydb.Driver(ydb.DriverConfig(u.scheme+"://"+u.netloc,u.path,credentials=ydb.AnonymousCredentials(),disable_discovery=True));driver.wait(20)
+pool=ydb.QuerySessionPool(driver)
+table=%q
+pool.execute_with_retries("CREATE TABLE %%s (book_id Uint64 NOT NULL, tags Json NOT NULL, title Utf8, PRIMARY KEY(book_id));" %% table)
+def check_empty(query, runtime):
+    # Record the database response; typed empty batches must reach the executor.
+    try:
+        query.create_books([])
+        print(runtime + " empty: accepted")
+    except Exception as error:
+        print(runtime + " empty: " + str(error))
+try:
+    y=YQuerier(pool)
+    check_empty(y,"native")
+    y.create_books([YItem(2**64-1,'{"source":"native"}',None),YItem(1,'[]','Unicode ☀')])
+    c=ydb_dbapi.connect(host=u.hostname,port=u.port,database=u.path,protocol=u.scheme)
+    try:
+        d=DQuerier(c)
+        check_empty(d,"dbapi")
+        c.rollback()
+        d.create_books([DItem(2,'["dbapi"]',None),DItem(3,'{}','Third')])
+        c.commit()
+    finally:
+        c.close()
+    engine=sa.create_engine("yql+ydb://%%s/%%s" %% (u.netloc,u.path.lstrip("/")))
+    try:
+        with engine.connect() as conn:
+            check_empty(SQuerier(conn),"sqlalchemy")
+            conn.rollback()
+        with engine.begin() as conn:
+            SQuerier(conn).create_books([SItem(4,'["sqlalchemy"]',None),SItem(5,'{}','Fifth')])
+    finally:
+        engine.dispose()
+    rows={row.book_id:row for row in y.list_books()}
+    assert set(rows)=={2**64-1,1,2,3,4,5}, rows
+    assert json.loads(rows[2**64-1].tags)=={"source":"native"} and rows[2**64-1].title is None
+    assert rows[1].title=='Unicode ☀'
+    assert json.loads(rows[2].tags)==["dbapi"] and rows[2].title is None
+    assert json.loads(rows[4].tags)==["sqlalchemy"] and rows[4].title is None
+    try:
+        y.create_books([YItem(1,'{}',None)])
+        raise AssertionError("duplicate INSERT accepted")
+    except ydb.Error:
+        pass
+finally:
+    pool.execute_with_retries("DROP TABLE IF EXISTS %%s;" %% table)
+    driver.stop()
+`, table)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "python3", "-c", script)
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(root, "pycache"))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("live batch: %v\n%s", err, out)
+	}
+	t.Log(string(out))
+}

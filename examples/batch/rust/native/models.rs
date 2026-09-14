@@ -42,3 +42,15 @@ pub struct CreateBookRow {
 pub struct GetBiographyRow {
     pub biography: Option<String>,
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CreateBooksBooksItem {
+    pub book_id: u64,
+    pub author_id: u64,
+    pub isbn: String,
+    pub book_type: String,
+    pub title: String,
+    pub year: i32,
+    pub available: std::time::SystemTime,
+    pub tags: String,
+}

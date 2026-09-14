@@ -259,4 +259,49 @@ class Queries {
         val _value0: String? = if (_rows.getColumn(0).isOptionalItemPresent()) _rows.getColumn(0).getOptionalItem().getJson() else null
         return GetBiographyRow(_value0)
     }
+
+    // -- name: CreateBooks :exec
+    fun createBooks(books: List<CreateBooksBooksItem>): Unit {
+        val _params = Params.create()
+        _params.put("\$books", tech.ydb.table.values.ListType.of(tech.ydb.table.values.StructType.of(mapOf("book_id" to tech.ydb.table.values.PrimitiveType.Uint64, "author_id" to tech.ydb.table.values.PrimitiveType.Uint64, "isbn" to tech.ydb.table.values.PrimitiveType.Text, "book_type" to tech.ydb.table.values.PrimitiveType.Text, "title" to tech.ydb.table.values.PrimitiveType.Text, "year" to tech.ydb.table.values.PrimitiveType.Int32, "available" to tech.ydb.table.values.PrimitiveType.Timestamp, "tags" to tech.ydb.table.values.PrimitiveType.Json))).newValue(books.map { _batchItem -> tech.ydb.table.values.StructValue.of(mapOf("book_id" to PrimitiveValue.newUint64(_batchItem.bookId), "author_id" to PrimitiveValue.newUint64(_batchItem.authorId), "isbn" to PrimitiveValue.newText(_batchItem.isbn), "book_type" to PrimitiveValue.newText(_batchItem.bookType), "title" to PrimitiveValue.newText(_batchItem.title), "year" to PrimitiveValue.newInt32(_batchItem.year), "available" to PrimitiveValue.newTimestamp(_batchItem.available), "tags" to PrimitiveValue.newJson(_batchItem.tags))) }))
+        if (transaction != null) {
+            transaction.createQuery(
+                "DECLARE \$books AS List<Struct<\n" +
+                "    book_id: Uint64,\n" +
+                "    author_id: Uint64,\n" +
+                "    isbn: Utf8,\n" +
+                "    book_type: Utf8,\n" +
+                "    title: Utf8,\n" +
+                "    year: Int32,\n" +
+                "    available: Timestamp,\n" +
+                "    tags: Json\n" +
+                ">>;\n" +
+                "INSERT INTO books (\n" +
+                "    book_id, author_id, isbn, book_type, title, year, available, tags\n" +
+                ")\n" +
+                "SELECT\n" +
+                "    book_id, author_id, isbn, book_type, title, year, available, tags\n" +
+                "FROM AS_TABLE(\$books);", _params).execute().join().getStatus().expectSuccess()
+        } else {
+            client!!.supplyResult { _session ->
+                _session.createQuery(
+                "DECLARE \$books AS List<Struct<\n" +
+                "    book_id: Uint64,\n" +
+                "    author_id: Uint64,\n" +
+                "    isbn: Utf8,\n" +
+                "    book_type: Utf8,\n" +
+                "    title: Utf8,\n" +
+                "    year: Int32,\n" +
+                "    available: Timestamp,\n" +
+                "    tags: Json\n" +
+                ">>;\n" +
+                "INSERT INTO books (\n" +
+                "    book_id, author_id, isbn, book_type, title, year, available, tags\n" +
+                ")\n" +
+                "SELECT\n" +
+                "    book_id, author_id, isbn, book_type, title, year, available, tags\n" +
+                "FROM AS_TABLE(\$books);", TxMode.SERIALIZABLE_RW, _params).execute()
+            }.join().getStatus().expectSuccess()
+        }
+    }
 }

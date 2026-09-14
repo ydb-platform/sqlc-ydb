@@ -6,6 +6,7 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 build_dir="${1:-${script_dir}/build}"
 cd "${script_dir}/.."
 
+"${build_dir}/batch_values"
 "${build_dir}/native/authors_native"
 
 cpp/userver/run.sh "${build_dir}/userver/authors_userver" &

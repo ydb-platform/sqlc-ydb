@@ -115,3 +115,7 @@ SDK 1.16.1 fixes `google/protobuf` at 3.15.8. On PHP 8.2 that protobuf runtime e
 Use the repository's [development commands](../.agents/development.md) for generated-code and live checks. The [shared PHP example harness](../tests/examples/php/README.md) documents its generated-class loading layout.
 
 Primary references: the YDB documentation for [installing an SDK](https://ydb.tech/docs/en/reference/ydb-sdk/install) and the official [`ydb-platform/ydb-php-sdk`](https://github.com/ydb-platform/ydb-php-sdk).
+
+## Structured batch parameters
+
+`List<Struct<...>>` parameters accept a list of generated immutable item objects. The binder serializes each item with the usual scalar codecs and sends one typed protobuf list, preserving the declared struct schema even for an empty PHP array. See the [batch example](../examples/batch/README.md).

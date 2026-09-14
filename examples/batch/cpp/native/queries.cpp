@@ -414,4 +414,76 @@ std::optional<GetBiographyRow> Queries::GetBiography(std::uint64_t author_id) co
     return sqlc_row;
 }
 
+namespace {
+NYdb::TValue sqlc_bind_CreateBooksBooksItem(const std::vector<CreateBooksBooksItem>& sqlc_items) {
+    const auto sqlc_type = NYdb::TTypeBuilder().BeginList().BeginStruct()
+        .AddMember("book_id").Primitive(NYdb::EPrimitiveType::Uint64)
+        .AddMember("author_id").Primitive(NYdb::EPrimitiveType::Uint64)
+        .AddMember("isbn").Primitive(NYdb::EPrimitiveType::Utf8)
+        .AddMember("book_type").Primitive(NYdb::EPrimitiveType::Utf8)
+        .AddMember("title").Primitive(NYdb::EPrimitiveType::Utf8)
+        .AddMember("year").Primitive(NYdb::EPrimitiveType::Int32)
+        .AddMember("available").Primitive(NYdb::EPrimitiveType::Timestamp)
+        .AddMember("tags").Primitive(NYdb::EPrimitiveType::Json)
+        .EndStruct().EndList().Build();
+    NYdb::TValueBuilder sqlc_builder(sqlc_type);
+    sqlc_builder.BeginList();
+    for (const auto& sqlc_item : sqlc_items) {
+        sqlc_builder.AddListItem().BeginStruct()
+            .AddMember("book_id").Uint64(sqlc_item.book_id)
+            .AddMember("author_id").Uint64(sqlc_item.author_id)
+            .AddMember("isbn").Utf8(sqlc_item.isbn)
+            .AddMember("book_type").Utf8(sqlc_item.book_type)
+            .AddMember("title").Utf8(sqlc_item.title)
+            .AddMember("year").Int32(sqlc_item.year)
+            .AddMember("available").Timestamp(sqlc_item.available)
+            .AddMember("tags").Json(sqlc_item.tags)
+            .EndStruct();
+    }
+    return sqlc_builder.EndList().Build();
+}
+}  // namespace
+
+// -- name: CreateBooks :exec
+void Queries::CreateBooks(const std::vector<CreateBooksBooksItem>& books) const {
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_params = NYdb::TParamsBuilder()
+            .AddParam("$books", sqlc_bind_CreateBooksBooksItem(books))
+            .Build();
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            R"sql(
+                DECLARE $books AS List<Struct<
+                    book_id: Uint64,
+                    author_id: Uint64,
+                    isbn: Utf8,
+                    book_type: Utf8,
+                    title: Utf8,
+                    year: Int32,
+                    available: Timestamp,
+                    tags: Json
+                >>;
+                INSERT INTO books (
+                    book_id, author_id, isbn, book_type, title, year, available, tags
+                )
+                SELECT
+                    book_id, author_id, isbn, book_type, title, year, available, tags
+                FROM AS_TABLE($books);
+            )sql",
+            sqlc_tx,
+            sqlc_params,
+            this->execute_settings_
+        ).GetValueSync();
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+}
+
 }  // namespace batch::native

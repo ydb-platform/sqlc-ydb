@@ -11,6 +11,40 @@ impl From<JsonParam> for ydb::Value {
     }
 }
 
+impl From<CreateBooksBooksItem> for ydb::Value {
+    fn from(item: CreateBooksBooksItem) -> Self {
+        ydb::Value::struct_from_fields(vec![
+            (r"book_id".to_string(), item.book_id.into()),
+            (r"author_id".to_string(), item.author_id.into()),
+            (r"isbn".to_string(), item.isbn.into()),
+            (r"book_type".to_string(), item.book_type.into()),
+            (r"title".to_string(), item.title.into()),
+            (r"year".to_string(), item.year.into()),
+            (
+                r"available".to_string(),
+                ydb::Value::Timestamp(item.available).into(),
+            ),
+            (r"tags".to_string(), JsonParam(item.tags).into()),
+        ])
+    }
+}
+
+fn create_books_books_item_type() -> ydb::Value {
+    ydb::Value::struct_from_fields(vec![
+        (r"book_id".to_string(), <u64>::default().into()),
+        (r"author_id".to_string(), <u64>::default().into()),
+        (r"isbn".to_string(), <String>::default().into()),
+        (r"book_type".to_string(), <String>::default().into()),
+        (r"title".to_string(), <String>::default().into()),
+        (r"year".to_string(), <i32>::default().into()),
+        (
+            r"available".to_string(),
+            ydb::Value::Timestamp(std::time::SystemTime::UNIX_EPOCH).into(),
+        ),
+        (r"tags".to_string(), JsonParam(<String>::default()).into()),
+    ])
+}
+
 pub struct Queries<'a, E: ydb::QueryExecutor> {
     client: &'a mut E,
 }
@@ -225,5 +259,35 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
         Ok(GetBiographyRow {
             biography: row.remove_field(0)?.try_into()?,
         })
+    }
+
+    // -- name: CreateBooks :exec
+    #[builder(on(String, into))]
+    pub async fn create_books(
+        &mut self,
+        books: impl IntoIterator<Item = impl std::borrow::Borrow<CreateBooksBooksItem>>,
+    ) -> ydb::YdbResult<()> {
+        let books = {
+            let items = books.into_iter();
+            let mut values = Vec::new();
+            for item in items {
+                let item = std::borrow::Borrow::<CreateBooksBooksItem>::borrow(&item).clone();
+                values.push(item.into());
+            }
+            let item_type = create_books_books_item_type().into();
+            ydb::Value::list_from(item_type, values)?
+        };
+        self.client
+            .exec(
+                r"
+                 INSERT INTO books (
+                     book_id, author_id, isbn, book_type, title, year, available, tags
+                 )
+                 SELECT
+                     book_id, author_id, isbn, book_type, title, year, available, tags
+                 FROM AS_TABLE($books);",
+            )
+            .param("$books", books)
+            .await
     }
 }

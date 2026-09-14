@@ -79,3 +79,7 @@ queries.find().ids(Vec::<u64>::new()).call().await?;
 ```
 
 The iterator is collected into a typed SDK list when the query executes. Empty lists retain their SQL element type. Lists support the scalar types in the table above; nested lists, nullable lists and nullable list elements are unsupported.
+
+## Structured batch parameters
+
+`List<Struct<...>>` parameters use generated item structs and retain the borrowed `IntoIterator` API. Fields follow the scalar mapping, including optional scalar fields as `Option<T>`. The binder collects the iterator into one typed SDK list; an empty iterator still carries the declared struct schema and executes the query. See the [batch example](../examples/batch/README.md).

@@ -424,4 +424,32 @@ try {
     check(str_contains($error->getMessage(), 'transaction control'), 'unclear transaction configuration error');
 }
 
+
+foreach ([[], [new Batch\Native\CreateBooksBooksItem('18446744073709551615', '2', 'batch', 'novel', 'Batch', 2026, 1788957296789123, '{"batch":true}')]] as $books) {
+    $checked = false;
+    $stop = new RuntimeException('batch parameter inspected');
+    $batchQueries = new Batch\Native\Queries(new RetryProbeTable(), configure: static function (\YdbPlatform\Ydb\YdbQuery $query) use ($books, &$checked, $stop): void {
+        $parameter = $query->getRequestData()['parameters']['$books'];
+        $roundTrip = new \Ydb\TypedValue();
+        $roundTrip->mergeFromString($parameter->serializeToString());
+        $members = $roundTrip->getType()->getListType()->getItem()->getStructType()->getMembers();
+        check(count($members) === 8, 'batch: empty list lost struct type');
+        $names = [];
+        foreach ($members as $index => $member) { $names[$member->getName()] = $index; }
+        $items = $roundTrip->getValue()->getItems();
+        check(count($items) === count($books), 'batch: serialized list length');
+        foreach ($books as $index => $book) {
+            $fields = $items->offsetGet($index)->getItems();
+            check(Batch\Native\YdbValueCodec::uint64($fields->offsetGet($names['book_id']), 'book_id') === $book->bookId, 'batch: Uint64 binding');
+            check($fields->offsetGet($names['tags'])->getTextValue() === $book->tags, 'batch: Json binding');
+            check((string) $fields->offsetGet($names['available'])->getUint64Value() === (string) $book->available, 'batch: Timestamp binding');
+        }
+        $checked = true;
+        throw $stop;
+    });
+    try { $batchQueries->createBooks($books); }
+    catch (RuntimeException $error) { check($error === $stop, 'batch: unexpected failure before inspection'); }
+    check($checked, 'batch: configure callback was not called');
+}
+
 echo "Imported and checked generated PHP for all five examples against YDB PHP SDK 1.16.1.\n";

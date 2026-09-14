@@ -34,6 +34,7 @@ public:
     std::optional<CreateBookRow> CreateBook(std::uint64_t book_id, std::uint64_t author_id, const std::string& isbn, const std::string& book_type, const std::string& title, std::int32_t year, const TInstant& available, const std::string& tags) const;
     void UpdateBook(const std::string& title, const std::string& tags, std::uint64_t book_id) const;
     std::optional<GetBiographyRow> GetBiography(std::uint64_t author_id) const;
+    void CreateBooks(const std::vector<CreateBooksBooksItem>& books) const;
 
 private:
     NYdb::NQuery::TQueryClient* client_;

@@ -64,6 +64,17 @@ func validate(in *model.AnalysisResult, options Options) error {
 		}
 	}
 
+	for _, query := range in.Queries {
+		for _, p := range query.Parameters {
+			if isStructList(p.Type) {
+				name := itemName(query.Name, p.Name)
+				if previous, ok := rowTypes[name]; ok {
+					return fmt.Errorf("generated C++ type %q collides with %s", name, previous)
+				}
+				rowTypes[name] = query.Name
+			}
+		}
+	}
 	seenQueries := map[string]bool{}
 	for _, query := range in.Queries {
 		if err := validateIdent(query.Name); err != nil || query.Name == "Queries" || query.Name == "client_" || query.Name == "transaction_" || query.Name == "retry_settings_" || query.Name == "tx_settings_" || query.Name == "execute_settings_" || query.Name == "operation_settings_" {
@@ -100,7 +111,7 @@ func validate(in *model.AnalysisResult, options Options) error {
 				return fmt.Errorf("%s: parameter %q collides with generated row type", query.Name, parameter.Name)
 			}
 			seenParams[parameter.Name] = true
-			if _, err := typeInfo(parameter.Type, options.Runtime); err != nil {
+			if _, err := parameterType(query.Name, parameter.Name, parameter.Type, options.Runtime); err != nil {
 				return fmt.Errorf("%s parameter %s: %w", query.Name, parameter.Name, err)
 			}
 		}
@@ -273,9 +284,25 @@ func renderModels(in *model.AnalysisResult, options Options) (string, error) {
 	}
 	if options.Runtime == "userver" {
 		out.WriteString("\n#include <userver/ydb/types.hpp>\n")
+		if hasType(in, "List") {
+			out.WriteString("#include <userver/ydb/io/structs.hpp>\n")
+		}
 	}
 	out.WriteString("\nnamespace " + options.Namespace + " {\n\n")
 	for _, query := range in.Queries {
+		for _, p := range query.Parameters {
+			if isStructList(p.Type) {
+				out.WriteString("struct " + itemName(query.Name, p.Name) + " final {\n")
+				if options.Runtime == "userver" {
+					out.WriteString("    static constexpr ::userver::ydb::StructMemberNames kYdbMemberNames{};\n\n")
+				}
+				for _, f := range p.Type.Elem.Fields {
+					info, _ := typeInfo(f.Type, options.Runtime)
+					out.WriteString("    " + info.cpp + " " + f.Name + ";\n")
+				}
+				out.WriteString("};\n\n")
+			}
+		}
 		if query.Command != model.One && query.Command != model.Many {
 			continue
 		}
@@ -359,7 +386,7 @@ func methodReturnType(query model.AnalyzedQuery) string {
 func methodParameters(query model.AnalyzedQuery, runtime string) string {
 	parts := make([]string, 0, len(query.Parameters))
 	for _, parameter := range query.Parameters {
-		info, _ := typeInfo(parameter.Type, runtime)
+		info, _ := parameterType(query.Name, parameter.Name, parameter.Type, runtime)
 		declaration := info.cpp + " " + parameter.Name
 		if info.reference {
 			declaration = "const " + info.cpp + "& " + parameter.Name
@@ -379,6 +406,11 @@ func renderSource(in *model.AnalysisResult, options Options) string {
 	out.WriteString("\nnamespace " + options.Namespace + " {\n\n")
 	for _, query := range in.Queries {
 		if options.Runtime == "ydb" {
+			for _, p := range query.Parameters {
+				if isStructList(p.Type) {
+					renderNativeListBinder(&out, query.Name, p)
+				}
+			}
 			renderNativeMethod(&out, query, options)
 		} else {
 			renderUserverMethod(&out, query, options)
@@ -391,6 +423,7 @@ func renderSource(in *model.AnalysisResult, options Options) string {
 func renderNativeMethod(out *strings.Builder, query model.AnalyzedQuery, options Options) {
 	returnType := methodReturnType(query)
 	out.WriteString("// " + model.QueryAnnotation(query) + "\n" + returnType + " Queries::" + query.Name + "(" + methodParameters(query, options.Runtime) + ") const {\n")
+
 	if query.Command == model.One || query.Command == model.Many {
 		out.WriteString("    std::optional<NYdb::TResultSet> sqlc_result_set;\n")
 	}
@@ -398,6 +431,10 @@ func renderNativeMethod(out *strings.Builder, query model.AnalyzedQuery, options
 	if len(query.Parameters) != 0 {
 		out.WriteString("        auto sqlc_params = NYdb::TParamsBuilder()")
 		for _, parameter := range query.Parameters {
+			if isStructList(parameter.Type) {
+				out.WriteString("\n            .AddParam(" + strconv.Quote("$"+parameter.Name) + ", sqlc_bind_" + itemName(query.Name, parameter.Name) + "(" + parameter.Name + "))")
+				continue
+			}
 			info, _ := typeInfo(parameter.Type, options.Runtime)
 			out.WriteString("\n            .AddParam(" + strconv.Quote("$"+parameter.Name) + ")." + info.builder + "(" + parameter.Name + ").Build()")
 		}
@@ -443,6 +480,7 @@ func writeNativeRow(out *strings.Builder, resultSet model.ResultSet, runtime, in
 func renderUserverMethod(out *strings.Builder, query model.AnalyzedQuery, options Options) {
 	returnType := methodReturnType(query)
 	out.WriteString("// " + model.QueryAnnotation(query) + "\n" + returnType + " Queries::" + query.Name + "(" + methodParameters(query, options.Runtime) + ") const {\n")
+
 	queryLiteral := "::userver::ydb::Query{\n        " + sqlLiteral(model.WithoutQueryAnnotation(query.SQL), "            ", "        ") + ",\n        ::userver::ydb::Query::Name{" + strconv.Quote(query.Name) + "},\n        ::userver::ydb::Query::LogMode::kNameOnly,\n    }"
 	out.WriteString("    const auto sqlc_query = " + queryLiteral + ";\n")
 	args := ""
@@ -485,6 +523,14 @@ func needsString(in *model.AnalysisResult, runtime string) bool {
 	for _, q := range in.Queries {
 		for _, p := range q.Parameters {
 			info, _ := typeInfo(p.Type, runtime)
+			if isStructList(p.Type) {
+				for _, f := range p.Type.Elem.Fields {
+					fieldInfo, _ := typeInfo(f.Type, runtime)
+					if strings.Contains(fieldInfo.cpp, "std::string") {
+						return true
+					}
+				}
+			}
 			if strings.Contains(info.cpp, "std::string") {
 				return true
 			}
@@ -504,6 +550,13 @@ func needsString(in *model.AnalysisResult, runtime string) bool {
 func hasType(in *model.AnalysisResult, kind string) bool {
 	for _, q := range in.Queries {
 		for _, p := range q.Parameters {
+			if isStructList(p.Type) {
+				for _, f := range p.Type.Elem.Fields {
+					if strings.EqualFold(f.Type.UnwrapOptional().Kind, kind) {
+						return true
+					}
+				}
+			}
 			if strings.EqualFold(p.Type.UnwrapOptional().Kind, kind) {
 				return true
 			}
@@ -517,4 +570,64 @@ func hasType(in *model.AnalysisResult, kind string) bool {
 		}
 	}
 	return false
+}
+
+func isStructList(t model.Type) bool {
+	return t.Kind == "List" && t.Elem != nil && t.Elem.Kind == "Struct"
+}
+func itemName(query, param string) string {
+	var b strings.Builder
+	b.WriteString(query)
+	for _, part := range strings.Split(param, "_") {
+		if part != "" {
+			b.WriteString(strings.ToUpper(part[:1]) + part[1:])
+		}
+	}
+	return b.String() + "Item"
+}
+func parameterType(query, param string, t model.Type, runtime string) (scalarType, error) {
+	if !isStructList(t) {
+		return typeInfo(t, runtime)
+	}
+	if len(t.Elem.Fields) == 0 {
+		return scalarType{}, fmt.Errorf("List<Struct> requires at least one scalar field")
+	}
+	seen := map[string]bool{}
+	for _, f := range t.Elem.Fields {
+		if err := validateIdent(f.Name); err != nil {
+			return scalarType{}, fmt.Errorf("struct field %q: %w", f.Name, err)
+		}
+		if f.Name == itemName(query, param) || runtime == "userver" && f.Name == "kYdbMemberNames" {
+			return scalarType{}, fmt.Errorf("struct field %q collides with generated member", f.Name)
+		}
+		if seen[f.Name] {
+			return scalarType{}, fmt.Errorf("duplicate struct field %q", f.Name)
+		}
+		seen[f.Name] = true
+		if _, err := typeInfo(f.Type, runtime); err != nil {
+			return scalarType{}, fmt.Errorf("struct field %q: %w", f.Name, err)
+		}
+	}
+	return scalarType{cpp: "std::vector<" + itemName(query, param) + ">", reference: true}, nil
+}
+func renderNativeListBinder(out *strings.Builder, query string, p model.Parameter) {
+	name := itemName(query, p.Name)
+	out.WriteString("namespace {\nNYdb::TValue sqlc_bind_" + name + "(const std::vector<" + name + ">& sqlc_items) {\n    const auto sqlc_type = NYdb::TTypeBuilder().BeginList().BeginStruct()")
+	for _, f := range p.Type.Elem.Fields {
+		info, _ := typeInfo(f.Type.UnwrapOptional(), "ydb")
+		out.WriteString("\n        .AddMember(" + strconv.Quote(f.Name) + ")")
+		if f.Type.IsOptional() {
+			out.WriteString(".BeginOptional()")
+		}
+		out.WriteString(".Primitive(NYdb::EPrimitiveType::" + info.builder + ")")
+		if f.Type.IsOptional() {
+			out.WriteString(".EndOptional()")
+		}
+	}
+	out.WriteString("\n        .EndStruct().EndList().Build();\n    NYdb::TValueBuilder sqlc_builder(sqlc_type);\n    sqlc_builder.BeginList();\n    for (const auto& sqlc_item : sqlc_items) {\n        sqlc_builder.AddListItem().BeginStruct()")
+	for _, f := range p.Type.Elem.Fields {
+		info, _ := typeInfo(f.Type, "ydb")
+		out.WriteString("\n            .AddMember(" + strconv.Quote(f.Name) + ")." + info.builder + "(sqlc_item." + f.Name + ")")
+	}
+	out.WriteString("\n            .EndStruct();\n    }\n    return sqlc_builder.EndList().Build();\n}\n}  // namespace\n\n")
 }

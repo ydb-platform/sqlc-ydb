@@ -102,7 +102,7 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		cores, partials, selectDiagnostics = selectArms(block, selectStatement)
 		diagnostics = append(diagnostics, selectDiagnostics...)
 		for i, core := range cores {
-			armRelations, relationDiagnostics := selectRelations(catalog, block, core)
+			armRelations, relationDiagnostics := selectRelations(catalog, block, core, bindings)
 			diagnostics = append(diagnostics, relationDiagnostics...)
 			if len(relationDiagnostics) != 0 {
 				continue
@@ -147,13 +147,24 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		}
 	}
 
-	if selectStatement == nil && len(relations) != 0 {
+	if selectStatement == nil && len(relations) != 0 && !(len(tree.insert) == 1 && insertSelect(tree.insert[0]) != nil) {
 		recordColumnBindings(query.Syntax, parsed.tree, relations)
 		diagnostics = append(diagnostics, validateColumnReferences(block, parsed.tree, relations)...)
 		inferFromComparisons(tree, relations, inferred)
 	}
 	if target != nil && len(tree.insert) == 1 {
-		diagnostics = append(diagnostics, inferInsert(block, tree.insert[0], target, inferred)...)
+		if stmt := insertSelect(tree.insert[0]); stmt != nil {
+			bindings := make(map[string]model.Type)
+			for name, typ := range declared {
+				bindings[name] = typ
+			}
+			for name, typ := range localTypes {
+				bindings[name] = typ
+			}
+			diagnostics = append(diagnostics, analyzeInsertSelect(catalog, block, tree.insert[0], target, bindings, inferred, query.Syntax)...)
+		} else {
+			diagnostics = append(diagnostics, inferInsert(block, tree.insert[0], target, inferred)...)
+		}
 	}
 	if target != nil && len(tree.updates) == 1 {
 		diagnostics = append(diagnostics, inferUpdate(block, tree.updates[0], target, inferred)...)
@@ -392,7 +403,7 @@ type relation struct {
 	optional bool
 }
 
-func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser.Select_coreContext) ([]relation, []model.Diagnostic) {
+func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser.Select_coreContext, bindings map[string]model.Type) ([]relation, []model.Diagnostic) {
 	var relations []relation
 	var diagnostics []model.Diagnostic
 	for _, join := range selectCore.AllJoin_source() {
@@ -412,15 +423,21 @@ func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, "table hints and sampling are not yet supported"))
 				continue
 			}
+			var table *model.Table
 			if tableRef.Table_key() == nil {
-				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, "dynamic table references are unsupported"))
-				continue
-			}
-			name := identifier(tableRef.Table_key().GetText())
-			table := findTable(catalog, name)
-			if table == nil {
-				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, fmt.Sprintf("unknown table %q", name)))
-				continue
+				var err error
+				table, err = asTableRelation(tableRef, bindings)
+				if err != nil {
+					diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, err.Error()))
+					continue
+				}
+			} else {
+				name := identifier(tableRef.Table_key().GetText())
+				table = findTable(catalog, name)
+				if table == nil {
+					diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, fmt.Sprintf("unknown table %q", name)))
+					continue
+				}
 			}
 			alias := table.Name
 			if named.An_id() != nil {

@@ -262,6 +262,21 @@ internal static class Program
         var nullBiography = await queries.GetBiographyAsync(id - 1, cancellationToken);
         if (book.Available != at || book.Tags != "[\"typed\"]" || rows.Single().BookID != id || biography.Biography != "{\"profile\":\"dapper\"}" || nullBiography.Biography is not null)
             throw new InvalidOperationException("batch Dapper Json/Timestamp/result mapping changed");
+        await queries.CreateBooksAsync(Array.Empty<BatchDapper.CreateBooksBooksItem>(), cancellationToken);
+        await queries.CreateBooksAsync(new[] {
+            new BatchDapper.CreateBooksBooksItem(id - 2, id, "batch-1", "paper", "First", 2027, at, "[\"first\"]"),
+            new BatchDapper.CreateBooksBooksItem(id - 3, id, "batch-2", "paper", "Second", 2027, at, "[\"second\"]")
+        }, cancellationToken);
+        var batch = (await queries.BooksByYearAsync(2027, cancellationToken)).OrderBy(row => row.BookID).ToArray();
+        if (batch.Length != 2 || batch[0].BookID != id - 3 || batch[1].Tags != "[\"first\"]" || batch.Any(row => row.Available != at))
+            throw new InvalidOperationException("batch Dapper List<Struct> round-trip changed");
+        var ado = new Batch.AdoNet.Queries(connection);
+        await ado.CreateBooksAsync(Array.Empty<Batch.AdoNet.CreateBooksBooksItem>(), cancellationToken);
+        await ado.CreateBooksAsync(new[] {
+            new Batch.AdoNet.CreateBooksBooksItem(id - 4, id, "ado-1", "paper", "ADO", 2028, at, "{}")
+        }, cancellationToken);
+        if ((await ado.BooksByYearAsync(2028, cancellationToken)).Single().BookID != id - 4)
+            throw new InvalidOperationException("batch ADO.NET List<Struct> round-trip changed");
     }
 
     private static async Task ExerciseBooktestDapperAsync(YdbConnection connection, CancellationToken cancellationToken)

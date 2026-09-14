@@ -46,4 +46,15 @@ struct GetBiographyRow final {
     std::optional<std::string> biography;
 };
 
+struct CreateBooksBooksItem final {
+    std::uint64_t book_id;
+    std::uint64_t author_id;
+    std::string isbn;
+    std::string book_type;
+    std::string title;
+    std::int32_t year;
+    TInstant available;
+    std::string tags;
+};
+
 }  // namespace batch::native

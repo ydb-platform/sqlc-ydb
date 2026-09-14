@@ -99,6 +99,10 @@ jobs:
         run: go test -p 1 -count=1 ./internal/codegen/csharp ./internal/codegen/java ./internal/codegen/kotlin ./internal/codegen/rust
       - name: Compile and test all jOOQ examples
         run: mvn -B -f tests/examples/java/jooq/pom.xml test
+      - name: Compile Java and Kotlin batch examples
+        run: |
+          mvn -B -f tests/examples/java/batch/pom.xml test-compile
+          mvn -B -f tests/examples/kotlin/pom.xml test-compile
       - name: Compile Kotlin Query SDK, JDBC and Exposed examples
         run: mvn -B -f examples/authors/kotlin/pom.xml test-compile
       - name: Compile all Dapper examples
@@ -214,6 +218,10 @@ jobs:
         run: sh examples/authors/java/run-smoke.sh
       - name: Run Kotlin Query SDK, JDBC and Exposed examples sequentially
         run: sh examples/authors/kotlin/run-smoke.sh
+      - name: Run Java and Kotlin batch examples sequentially
+        run: |
+          sh tests/examples/java/batch/run-smoke.sh
+          sh tests/examples/kotlin/run-smoke.sh
       - name: Run Dapper examples sequentially
         env:
           YDB_CONNECTION_STRING: Host=localhost;Port=2136;Database=/local

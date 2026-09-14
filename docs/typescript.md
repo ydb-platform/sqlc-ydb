@@ -49,3 +49,7 @@ The verified dependencies are `@ydbjs/core` 6.3.1, `@ydbjs/query` 6.3.0 and `@yd
 The offline check type-checks every generated example module against the pinned SDK and verifies representative typed bindings. The smoke command runs all five example families sequentially against an already-running disposable YDB. Commands are in [development](../.agents/development.md#generated-runtime-checks).
 
 Primary references: the YDB documentation for [installing the JavaScript SDK](https://ydb.tech/docs/en/reference/ydb-sdk/install), the [`@ydbjs/query` API](https://github.com/ydb-platform/ydb-js-sdk/tree/main/packages/query), and the SDK [`@ydbjs/value` implementation](https://github.com/ydb-platform/ydb-js-sdk/tree/main/packages/value).
+
+## Structured batch parameters
+
+`List<Struct<...>>` parameters use arrays of generated item interfaces. Fields follow the parameter mappings above; the binder constructs an explicit SDK `ListType` and `StructType`, including for an empty array. The SQL executes once with one list parameter. See the [batch example](../examples/batch/README.md).

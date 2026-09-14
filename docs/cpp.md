@@ -74,3 +74,7 @@ Identifiers must be ASCII C++ identifiers, must not be C++20 keywords, and must 
 Generated code requires C++20. Native applications link the SDK `Driver`, `Params`, and `Query` components; userver applications link `userver::ydb`. The bundled [CMake project](../examples/authors/cpp/CMakeLists.txt) builds both profiles for authors, batch, booktest, jets, and ondeck. Its [container environment](../examples/authors/cpp/Dockerfile) pins YDB C++ SDK 3.21.1 and userver 3.2-rc.
 
 See the [authors configuration](../examples/authors/sqlc.yaml) for both output profiles. Instructions for reproducing the pinned example environment and its packaging workarounds are in the [maintainer build notes](../.agents/cpp-development.md#build-and-smoke).
+
+## Structured batch parameters
+
+`List<Struct<...>>` parameters use `std::vector<QueryParameterItem>` with generated field types. Native bindings build a typed SDK list; userver item structs expose `kYdbMemberNames` for its structural serializers. Empty collections retain the declared element type and execute the original query. See the [batch example](../examples/batch/README.md).

@@ -27,6 +27,7 @@ class GeneratedQueriesTest {
                 Class<?> type = Class.forName(family + ".jooq.Queries");
                 Object queries = type.getConstructor(tech.ydb.jooq.YdbDSLContext.class).newInstance(dsl);
                 for (Method method : type.getDeclaredMethods()) {
+                    if (!java.lang.reflect.Modifier.isPublic(method.getModifiers()) || method.isSynthetic()) continue;
                     Object[] args = new Object[method.getParameterCount()];
                     for (int i = 0; i < args.length; i++) {
                         Class<?> parameter = method.getParameterTypes()[i];
@@ -34,6 +35,7 @@ class GeneratedQueriesTest {
                         else if (parameter == String.class) args[i] = "value";
                         else if (parameter == Integer.class) args[i] = 2026;
                         else if (parameter == Instant.class) args[i] = Instant.parse("2026-01-01T00:00:00.123456Z");
+                        else if (parameter == List.class) args[i] = List.of(new batch.jooq.CreateBooksBooksItem(-1L, 42L, "isbn", "paper", "Batch", 2026, Instant.EPOCH, "[]"));
                         else if (parameter == JSON.class) args[i] = JSON.valueOf("[\"tag\"]");
                         else fail("uncovered parameter type " + parameter);
                     }
@@ -46,7 +48,7 @@ class GeneratedQueriesTest {
                     assertEquals(before + 1, statements.size(), family + "." + method.getName());
                     String sql = statements.get(before);
                     assertFalse(sql.contains("-- name:"), sql);
-                    if (method.getName().startsWith("create") || method.getName().equals("updateVenueName")) {
+                    if ((method.getName().startsWith("create") && !method.getName().equals("createBooks")) || method.getName().equals("updateVenueName")) {
                         assertTrue(sql.toLowerCase().contains("returning"), sql);
                     }
                     if (method.getName().equals("booksByTags")) {
@@ -56,6 +58,6 @@ class GeneratedQueriesTest {
                 }
             }
         }
-        assertEquals(40, statements.size());
+        assertEquals(41, statements.size());
     }
 }

@@ -7,6 +7,7 @@
 #include <userver/formats/json/value.hpp>
 
 #include <userver/ydb/types.hpp>
+#include <userver/ydb/io/structs.hpp>
 
 namespace batch::userver {
 
@@ -46,6 +47,19 @@ struct CreateBookRow final {
 
 struct GetBiographyRow final {
     std::optional<::userver::formats::json::Value> biography;
+};
+
+struct CreateBooksBooksItem final {
+    static constexpr ::userver::ydb::StructMemberNames kYdbMemberNames{};
+
+    std::uint64_t book_id;
+    std::uint64_t author_id;
+    ::userver::ydb::Utf8 isbn;
+    ::userver::ydb::Utf8 book_type;
+    ::userver::ydb::Utf8 title;
+    std::int32_t year;
+    std::chrono::system_clock::time_point available;
+    ::userver::formats::json::Value tags;
 };
 
 }  // namespace batch::userver

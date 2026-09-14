@@ -256,6 +256,7 @@ func TestAllSupportedScalarsCompileAgainstAuthorsMaven(t *testing.T) {
 			}
 			queries = append(queries, q)
 		}
+		queries = append(queries, batchQuery(), optionalBatchQuery(), listBooksQuery())
 		files, err := Generate(&model.AnalysisResult{Queries: queries}, Options{Package: "synthetic." + runtime, Runtime: profile})
 		if err != nil {
 			t.Fatal(err)
@@ -296,6 +297,7 @@ func TestGeneratedJDBCUsesTypedDriverValuesAndGuardsUnsignedRanges(t *testing.T)
 		{Name: "Bad16", Command: model.Exec, SQL: "SELECT 1;", Parameters: []model.Parameter{{Name: "value", Type: model.Optional(model.Type{Kind: "Uint16"})}}},
 		{Name: "Bad32", Command: model.Exec, SQL: "SELECT 1;", Parameters: []model.Parameter{{Name: "value", Type: model.Type{Kind: "Uint32"}}}},
 	}
+	queries = append(queries, batchQuery(), optionalBatchQuery(), listBooksQuery())
 	files, err := Generate(&model.AnalysisResult{Queries: queries}, Options{Package: "synthetic.jdbc", Runtime: "jdbc"})
 	if err != nil {
 		t.Fatal(err)
@@ -354,6 +356,30 @@ public final class Main {
         check(OptionalType.of(PrimitiveType.Uint16).emptyValue().equals(values.values().get("$jp2")), "optional null lost its declared type");
         check(PrimitiveValue.newText("typed text").equals(values.values().get("$jp3")), "Utf8 lost its type");
         check(PrimitiveValue.newBytes(new byte[] { 0, 1, (byte) 255 }).equals(values.values().get("$jp4")), "String lost its binary type");
+        YdbQuery batch = YdbQuery.parseQuery(new QueryKey("INSERT INTO books SELECT * FROM AS_TABLE(?);"), new YdbQueryProperties(new Properties()), types);
+        tech.ydb.jdbc.query.params.InMemoryQuery batchBound = new tech.ydb.jdbc.query.params.InMemoryQuery(batch, false);
+        Queries batchQueries = new Queries(bindingConnection(batchBound));
+        batchQueries.createBooks(java.util.List.of());
+        tech.ydb.table.values.ListValue emptyBatch = (tech.ydb.table.values.ListValue) batchBound.getCurrentParams().values().get("$jp1");
+        check(emptyBatch.size() == 0, "emptyBatch batch contains rows");
+        tech.ydb.table.values.StructType itemType = (tech.ydb.table.values.StructType) emptyBatch.getType().getItemType();
+        check(itemType.getMembersCount() == 8, "emptyBatch batch lost struct schema");
+        check(itemType.getMemberType(itemType.getMemberIndex("tags")).equals(PrimitiveType.Json), "Json field lost type");
+        batchQueries.createBooks(java.util.List.of(new CreateBooksBooksItem(-1L, 42L, "isbn", "paper", "Book", 2026, java.time.Instant.EPOCH, "{\"ok\":true}")));
+        tech.ydb.table.values.ListValue filledBatch = (tech.ydb.table.values.ListValue) batchBound.getCurrentParams().values().get("$jp1");
+        check(filledBatch.size() == 1 && filledBatch.getType().equals(emptyBatch.getType()), "batch changed declared type");
+        tech.ydb.table.values.StructValue book = (tech.ydb.table.values.StructValue) filledBatch.get(0);
+        check(book.getMemberValue(itemType.getMemberIndex("book_id")).equals(PrimitiveValue.newUint64(-1L)), "batch Uint64 lost unsigned bits");
+        check(book.getMemberValue(itemType.getMemberIndex("tags")).equals(PrimitiveValue.newJson("{\"ok\":true}")), "batch Json lost bytes");
+        expectRange(() -> guarded.optionalBooks(java.util.List.of(new OptionalBooksBooksItem(-1, null))));
+        YdbQuery optionalBatch = YdbQuery.parseQuery(new QueryKey("SELECT * FROM AS_TABLE(?);"), new YdbQueryProperties(new Properties()), types);
+        tech.ydb.jdbc.query.params.InMemoryQuery optionalBound = new tech.ydb.jdbc.query.params.InMemoryQuery(optionalBatch, false);
+        new Queries(bindingConnection(optionalBound)).optionalBooks(java.util.List.of(new OptionalBooksBooksItem(null, null)));
+        tech.ydb.table.values.ListValue optionalRows = (tech.ydb.table.values.ListValue) optionalBound.getCurrentParams().values().get("$jp1");
+        tech.ydb.table.values.StructValue optionalRow = (tech.ydb.table.values.StructValue) optionalRows.get(0);
+        check(optionalRow.getMemberValue(optionalRow.getType().getMemberIndex("rank")).equals(OptionalType.of(PrimitiveType.Uint8).emptyValue()), "optional batch null lost type");
+
+
     }
 
     private static Connection refusingConnection() {

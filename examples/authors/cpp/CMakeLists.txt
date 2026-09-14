@@ -28,3 +28,7 @@ foreach(example batch booktest jets ondeck)
 endforeach()
 target_link_libraries(authors_native PRIVATE batch_native)
 target_link_libraries(authors_userver PRIVATE batch_userver)
+
+add_executable(batch_values "${CMAKE_CURRENT_SOURCE_DIR}/../../../tests/examples/cpp/batch-values.cpp")
+target_link_libraries(batch_values PRIVATE userver::ydb YDB-CPP-SDK::Query YDB-CPP-SDK::Params)
+add_dependencies(authors_native batch_values)

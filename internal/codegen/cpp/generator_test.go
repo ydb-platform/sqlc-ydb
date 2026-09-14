@@ -524,3 +524,35 @@ func TestJsonTimestampTypes(t *testing.T) {
 		}
 	}
 }
+
+func TestStructListParameter(t *testing.T) {
+	for _, runtime := range []string{"ydb", "userver"} {
+		t.Run(runtime, func(t *testing.T) {
+			typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, {Name: "tags", Type: model.Optional(model.Type{Kind: "Json"})}, {Name: "available", Type: model.Type{Kind: "Timestamp"}}}}}
+			a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
+			files, err := Generate(a, Options{Runtime: runtime})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var output strings.Builder
+			for _, f := range files {
+				output.Write(f.Content)
+			}
+			expected := []string{"struct CreateBooksBooksItem final", "const std::vector<CreateBooksBooksItem>& books"}
+			if runtime == "ydb" {
+				expected = append(expected, "NYdb::TValueBuilder sqlc_builder(sqlc_type)", ".BeginList().BeginStruct()", ".AddMember(\"tags\").BeginOptional().Primitive(NYdb::EPrimitiveType::Json).EndOptional()", ".OptionalJson(sqlc_item.tags)")
+			} else {
+				expected = append(expected, "static constexpr ::userver::ydb::StructMemberNames kYdbMemberNames{}", "std::optional<::userver::formats::json::Value>", "#include <chrono>")
+			}
+			for _, want := range expected {
+				if !strings.Contains(output.String(), want) {
+					t.Errorf("missing %s", want)
+				}
+			}
+			typ.Elem.Fields[1].Type = model.Type{Kind: "List", Elem: &model.Type{Kind: "Utf8"}}
+			if _, err := Generate(a, Options{Runtime: runtime}); err == nil || !strings.Contains(err.Error(), "unsupported YQL type") {
+				t.Fatalf("nested list: %v", err)
+			}
+		})
+	}
+}

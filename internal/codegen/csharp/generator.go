@@ -51,7 +51,7 @@ func validate(in *model.AnalysisResult, runtime string) error {
 	methodNames := map[string]string{}
 	// Queries is emitted by this generator, so no record may reuse its name.
 	modelNames := map[string]string{"Queries": "generated query class"}
-	for _, n := range []string{"Guid", "DateTime", "DateTimeKind", "Task", "CancellationToken", "List", "IReadOnlyList", "DbType", "DBNull", "DbDataReader", "ArgumentException", "ArgumentNullException", "InvalidOperationException", "YdbConnection", "YdbTransaction", "YdbCommand", "YdbParameter", "YdbValue"} {
+	for _, n := range []string{"Guid", "DateTime", "DateTimeKind", "Task", "CancellationToken", "List", "IReadOnlyList", "DbType", "DBNull", "DbDataReader", "ArgumentException", "ArgumentNullException", "InvalidOperationException", "YdbConnection", "YdbTransaction", "YdbCommand", "YdbParameter", "YdbValue", "YdbTypeId"} {
 		modelNames[n] = "framework type"
 	}
 	if runtime == "dapper" {
@@ -104,7 +104,16 @@ func validate(in *model.AnalysisResult, runtime string) error {
 				return fmt.Errorf("csharp generator: query %q: parameter name collision at %q", q.Name, p.Name)
 			}
 			seen[n] = true
-			if _, err := csType(p.Type); err != nil {
+			if isStructList(p.Type) {
+				itemName := structItemName(q, p)
+				if err := add(modelNames, itemName, "parameter:"+q.Name+"."+p.Name, "model name"); err != nil {
+					return err
+				}
+				if err := fields("struct parameter "+p.Name, itemName, structColumns(p.Type)); err != nil {
+					return err
+				}
+			}
+			if _, err := parameterType(q, p); err != nil {
 				return fmt.Errorf("csharp generator: query %q parameter %q: %w", q.Name, p.Name, err)
 			}
 		}
@@ -116,7 +125,7 @@ func validate(in *model.AnalysisResult, runtime string) error {
 			for i, p := range q.Parameters {
 				params[i] = model.Column{Name: p.Name, Type: p.Type}
 			}
-			if err := fields("query "+q.Name+" parameters", csName(q.Name)+"Params", params); err != nil {
+			if err := fieldNames("query "+q.Name+" parameters", csName(q.Name)+"Params", params); err != nil {
 				return err
 			}
 		}
@@ -139,6 +148,18 @@ var recordReservedMembers = map[string]bool{
 }
 
 func fields(where, record string, columns []model.Column) error {
+	if err := fieldNames(where, record, columns); err != nil {
+		return err
+	}
+	for _, c := range columns {
+		if _, err := csType(c.Type); err != nil {
+			return fmt.Errorf("csharp generator: %s column %q: %w", where, c.Name, err)
+		}
+	}
+	return nil
+}
+
+func fieldNames(where, record string, columns []model.Column) error {
 	seen := map[string]bool{}
 	for _, c := range columns {
 		n := csName(c.Name)
@@ -152,9 +173,6 @@ func fields(where, record string, columns []model.Column) error {
 			return fmt.Errorf("csharp generator: %s: record member %q collides with generated record member", where, c.Name)
 		}
 		seen[n] = true
-		if _, err := csType(c.Type); err != nil {
-			return fmt.Errorf("csharp generator: %s column %q: %w", where, c.Name, err)
-		}
 	}
 	return nil
 }
@@ -213,11 +231,26 @@ func csType(t model.Type) (string, error) {
 
 func renderModels(in *model.AnalysisResult, o Options) []byte {
 	var b bytes.Buffer
-	b.WriteString(modelsHeader(o) + "\n")
-	write := func(name string, cols []model.Column) {
+	header := modelsHeader(o)
+	for _, q := range in.Queries {
+		for _, p := range q.Parameters {
+			if isStructList(p.Type) {
+				header = strings.Replace(header, "using System;", "using System;\nusing System.Collections.Generic;", 1)
+				break
+			}
+		}
+		if strings.Contains(header, "Collections.Generic") {
+			break
+		}
+	}
+	b.WriteString(header + "\n")
+	write := func(name string, cols []model.Column, types map[string]string) {
 		b.WriteString("public sealed record " + name + "(\n")
 		for i, c := range cols {
 			typ, _ := csType(c.Type)
+			if override, ok := types[c.Name]; ok {
+				typ = override
+			}
 			comma := ","
 			if i == len(cols)-1 {
 				comma = ""
@@ -227,18 +260,25 @@ func renderModels(in *model.AnalysisResult, o Options) []byte {
 		b.WriteString(");\n\n")
 	}
 	for _, t := range in.Catalog.Tables {
-		write(csName(t.Name), t.Columns)
+		write(csName(t.Name), t.Columns, nil)
 	}
 	for _, q := range in.Queries {
+		overrides := map[string]string{}
+		for _, p := range q.Parameters {
+			if isStructList(p.Type) {
+				write(structItemName(q, p), structColumns(p.Type), nil)
+				overrides[p.Name], _ = parameterType(q, p)
+			}
+		}
 		if len(q.Parameters) > 1 {
 			ps := make([]model.Column, len(q.Parameters))
 			for i, p := range q.Parameters {
 				ps[i] = model.Column{Name: p.Name, Type: p.Type}
 			}
-			write(csName(q.Name)+"Params", ps)
+			write(csName(q.Name)+"Params", ps, overrides)
 		}
 		if q.Command == model.One || q.Command == model.Many {
-			write(csName(q.Name)+"Row", q.ResultSets[0].Columns)
+			write(csName(q.Name)+"Row", q.ResultSets[0].Columns, nil)
 		}
 	}
 	return []byte(strings.TrimRight(b.String(), "\n") + "\n")
@@ -271,6 +311,7 @@ func renderQueries(in *model.AnalysisResult, o Options) []byte {
 	b.WriteString("\npublic sealed class Queries\n{\n")
 	b.WriteString(connectionMembers)
 	writeTimestampHelpers(&b, in)
+	writeStructListHelpers(&b, in)
 	for _, q := range in.Queries {
 		writeMethod(&b, q)
 	}
@@ -292,6 +333,7 @@ func renderDapperQueries(in *model.AnalysisResult, o Options) []byte {
 	b.WriteString(connectionMembers)
 	writeDapperMaps(&b, in)
 	writeTimestampHelpers(&b, in)
+	writeStructListHelpers(&b, in)
 	for _, q := range in.Queries {
 		writeDapperMethod(&b, q)
 	}
@@ -392,6 +434,9 @@ func dapperParameters(q model.AnalyzedQuery) string {
 
 func ydbParameterExpression(q model.AnalyzedQuery, p model.Parameter) string {
 	v := parameterRef(q, p)
+	if isStructList(p.Type) {
+		return fmt.Sprintf("new YdbParameter(%q, Bind%s(%s))", "$"+p.Name, structItemName(q, p), v)
+	}
 	if strings.EqualFold(p.Type.UnwrapOptional().Kind, "timestamp") {
 		v = "NormalizeTimestamp(" + v + ")"
 	}
@@ -462,7 +507,7 @@ func methodParameters(q model.AnalyzedQuery) string {
 	if len(q.Parameters) > 1 {
 		return csName(q.Name) + "Params args, "
 	}
-	typ, _ := csType(q.Parameters[0].Type)
+	typ, _ := parameterType(q, q.Parameters[0])
 	return typ + " " + localParameterName(q.Parameters[0].Name) + ", "
 }
 func parameterRef(q model.AnalyzedQuery, p model.Parameter) string {
@@ -474,7 +519,7 @@ func parameterRef(q model.AnalyzedQuery, p model.Parameter) string {
 func writeTimestampHelpers(b *bytes.Buffer, in *model.AnalysisResult) {
 	for _, q := range in.Queries {
 		for _, p := range q.Parameters {
-			if strings.EqualFold(p.Type.UnwrapOptional().Kind, "timestamp") {
+			if containsTimestamp(p.Type) {
 				b.WriteString("\n    private static DateTime NormalizeTimestamp(DateTime value) =>\n        value.Kind == DateTimeKind.Local ? value.ToUniversalTime() : DateTime.SpecifyKind(value, DateTimeKind.Utc);\n\n    private static DateTime? NormalizeTimestamp(DateTime? value) =>\n        value.HasValue ? NormalizeTimestamp(value.Value) : null;\n")
 				return
 			}

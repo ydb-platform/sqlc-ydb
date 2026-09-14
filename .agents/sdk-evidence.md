@@ -71,3 +71,17 @@ Pinned `ydb==3.29.7` uses `RetrySettings(idempotent=False)` by default, but `ydb
 DB-API and SQLAlchemy expose `fetchone()` for first-row queries; generated `:many` APIs return eager lists. Full table projections reuse the table model.
 
 `Session::take()` marks a session busy; the default memory pool selects only idle sessions. `withTx()` takes the session, and bound raw requests do not release it, including after errors. SDK `commitTransaction()` and `rollbackTransaction()` use `Session::request()`, which releases the session. The live suite verifies that pool acquisition between bound calls selects a different session and that both transaction completion paths release the original.
+
+## List-of-struct batch parameters
+
+The batch example uses one declared `List<Struct<...>>` parameter and `INSERT ... SELECT ... FROM AS_TABLE($books)`. Empty lists retain their full declared schema and execute normally. Container construction remains specific to each SDK:
+
+- Go SDK 3.151.1: `types.ListValue`, `types.StructValue`, `types.StructFieldValue`, and `types.ZeroValue(types.List(types.Struct(...)))`. The database/sql adapter's `CheckNamedValue` and parameter binder pass SDK typed values through. Generated-code tests compile and inspect both adapters' empty and populated bindings.
+- Java/Kotlin SDK 2.4.11: `StructType.of(Map)`, `StructValue.of(Map)`, and `ListType.of(Type).newValue(List)`; actual JDBC `InMemoryQuery` tests validate structured parameter serialization, including empty lists. jOOQ 3.21 exposes `DSLContext.connection(ConnectionRunnable)`; the batch method borrows that connection and renders the target with `dsl.render` to retain table mapping.
+- TypeScript `@ydbjs/value` 6.0.8: `List` infers `NullType` without items, so the binder implements the public `Value` contract with explicit `ListType(StructType(...))` and delegates value encoding to `List`. `Struct` and `StructType` sort member names consistently. SDK execution tests include optional fields and the `__proto__` property.
+- PHP SDK 1.16.1: protobuf `Type.list_type`, `ListType.item`, `StructType.members` and `Value.items` encode the explicit schema and matching field order. The generated scalar codecs preserve Uint64 and JSON semantics inside each row.
+- C++ SDK 3.21.1: `TValueBuilder(const TType&)`, `BeginList`, `AddListItem`, `BeginStruct` and `AddMember` build typed values. userver's `io/list.hpp` uses `EmptyList(ValueTraits<ValueType>::MakeType())`; `io/structs.hpp` derives the type from item fields and `kYdbMemberNames`. The `batch_values` executable checks both SDK serializers without a server.
+
+C# uses the public mutable protobuf returned by `YdbValue.GetProto` because the pinned SDK has no complex empty-list factory; see [C# SDK evidence](csharp-sdk-evidence.md). Runtime tests, rather than rendering assertions alone, establish the empty-list wire schema.
+
+Python SDK 3.29.7 supplies `StructType.add_member` and list/struct protobuf serialization by original field name. Native `TypedValue` and the DBAPI/SQLAlchemy typed-parameter tuples retain that declared type. Serializer regressions use ydb-dbapi 0.1.23, ydb-sqlalchemy 0.1.22 and SQLAlchemy 2.0.52. Rust SDK 0.18.2 provides `Value::struct_from_fields` and `Value::list_from(type exemplar, values)`, including empty lists. Generated structs preserve the borrowed iterable API; SDK tests cover scalar and optional field bindings.

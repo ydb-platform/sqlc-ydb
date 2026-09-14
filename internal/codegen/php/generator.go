@@ -77,6 +77,12 @@ func Generate(in *model.AnalysisResult, opts Options) ([]model.File, error) {
 		files = append(files, model.File{Name: name + ".php", Content: []byte(renderDTO(opts.Namespace, name, table.Columns))})
 	}
 	for _, query := range in.Queries {
+		for _, parameter := range query.Parameters {
+			if isStructList(parameter.Type) {
+				name := pascalName(query.Name) + pascalName(parameter.Name) + "Item"
+				files = append(files, model.File{Name: name + ".php", Content: []byte(renderDTO(opts.Namespace, name, structColumns(parameter.Type)))})
+			}
+		}
 		if len(query.Parameters) > 1 {
 			name := pascalName(query.Name) + "Params"
 			columns := make([]model.Column, len(query.Parameters))
@@ -152,7 +158,21 @@ func validate(in *model.AnalysisResult) error {
 		}
 		parameterColumns := make([]model.Column, len(query.Parameters))
 		for i, parameter := range query.Parameters {
-			parameterColumns[i] = model.Column{Name: parameter.Name, Type: parameter.Type}
+			typ := parameter.Type
+			if isStructList(typ) {
+				name := classBase + pascalName(parameter.Name) + "Item"
+				if err := add(classes, name, "struct:"+query.Name+"."+parameter.Name, "class name"); err != nil {
+					return err
+				}
+				if len(typ.Elem.Fields) == 0 {
+					return fmt.Errorf("php generator: List<Struct> requires at least one scalar field")
+				}
+				if err := validateFields("struct "+name, structColumns(typ)); err != nil {
+					return err
+				}
+				typ = model.Type{Kind: "Utf8"}
+			}
+			parameterColumns[i] = model.Column{Name: parameter.Name, Type: typ}
 		}
 		if err := validateFields("query "+query.Name+" parameters", parameterColumns); err != nil {
 			return err
@@ -218,6 +238,10 @@ func renderDTO(namespace, name string, columns []model.Column) string {
 	b.WriteString("final class " + name + "\n{\n    public function __construct(\n")
 	for i, column := range columns {
 		typeName, _ := phpType(column.Type)
+		if isStructList(column.Type) {
+			typeName = "array"
+			fmt.Fprintf(&b, "        /** @var list<%s> */\n", strings.TrimSuffix(name, "Params")+pascalName(column.Name)+"Item")
+		}
 		comma := ","
 		if i == len(columns)-1 {
 			comma = ""
@@ -312,6 +336,9 @@ func renderMethod(b *strings.Builder, query model.AnalyzedQuery) {
 	argument := ""
 	if len(query.Parameters) == 1 {
 		t, _ := phpType(query.Parameters[0].Type)
+		if isStructList(query.Parameters[0].Type) {
+			t = "array"
+		}
 		argument = t + " $" + camelName(query.Parameters[0].Name)
 	} else if len(query.Parameters) > 1 {
 		argument = paramsClass + " $params"
@@ -323,16 +350,38 @@ func renderMethod(b *strings.Builder, query model.AnalyzedQuery) {
 		returnType = "array"
 	}
 	b.WriteByte('\n')
+	if len(query.Parameters) == 1 && isStructList(query.Parameters[0].Type) {
+		fmt.Fprintf(b, "    /** @param list<%s> $%s */\n", pascalName(query.Name)+pascalName(query.Parameters[0].Name)+"Item", camelName(query.Parameters[0].Name))
+	}
 	if query.Command == model.Many {
 		fmt.Fprintf(b, "    /** @return list<%s> */\n", rowClass)
 	}
 	fmt.Fprintf(b, "    // %s\n", model.QueryAnnotation(query))
 	fmt.Fprintf(b, "    public function %s(%s): %s\n    {\n", method, argument, returnType)
+
 	b.WriteString("        $parameters = [\n")
 	for _, parameter := range query.Parameters {
 		value := "$" + camelName(parameter.Name)
 		if len(query.Parameters) > 1 {
 			value = "$params->" + camelName(parameter.Name)
+		}
+		if isStructList(parameter.Type) {
+			var members, values []string
+			for _, field := range parameter.Type.Elem.Fields {
+				info := phpTypes[field.Type.UnwrapOptional().Kind]
+				typ := "new \\Ydb\\Type(['type_id' => PrimitiveTypeId::" + info.typeID + "])"
+				if field.Type.IsOptional() {
+					typ = "new \\Ydb\\Type(['optional_type' => new \\Ydb\\OptionalType(['item' => " + typ + "])])"
+				}
+				members = append(members, "new \\Ydb\\StructMember(['name' => "+phpString(field.Name, "")+", 'type' => "+typ+"])")
+				fn := "typed" + strings.ToUpper(info.method[:1]) + info.method[1:]
+				if field.Type.IsOptional() {
+					fn = "typedOptional" + strings.ToUpper(info.method[:1]) + info.method[1:]
+				}
+				values = append(values, "YdbValueCodec::"+fn+"($item->"+camelName(field.Name)+", "+phpString(parameter.Name+"."+field.Name, "")+")->getValue()")
+			}
+			fmt.Fprintf(b, "            %s => new \\Ydb\\TypedValue([\n                'type' => new \\Ydb\\Type(['list_type' => new \\Ydb\\ListType(['item' => new \\Ydb\\Type(['struct_type' => new \\Ydb\\StructType(['members' => [\n                    %s,\n                ]])])])]),\n                'value' => new \\Ydb\\Value(['items' => array_map(static fn(%s $item): \\Ydb\\Value => new \\Ydb\\Value(['items' => [\n                    %s,\n                ]]), array_values(%s))]),\n            ]),\n", phpString("$"+parameter.Name, ""), strings.Join(members, ",\n                    "), pascalName(query.Name)+pascalName(parameter.Name)+"Item", strings.Join(values, ",\n                    "), value)
+			continue
 		}
 		base := parameter.Type.UnwrapOptional()
 		info := phpTypes[base.Kind]
@@ -1137,3 +1186,14 @@ var phpReserved = func() map[string]bool {
 	}
 	return out
 }()
+
+func isStructList(t model.Type) bool {
+	return t.Kind == "List" && t.Elem != nil && t.Elem.Kind == "Struct"
+}
+func structColumns(t model.Type) []model.Column {
+	columns := make([]model.Column, len(t.Elem.Fields))
+	for i, f := range t.Elem.Fields {
+		columns[i] = model.Column{Name: f.Name, Type: f.Type}
+	}
+	return columns
+}

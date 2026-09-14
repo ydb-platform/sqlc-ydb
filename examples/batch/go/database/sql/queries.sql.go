@@ -182,3 +182,47 @@ func (q *Queries) GetBiography(ctx context.Context, arg uint64) (GetBiographyRow
 
 	return row, err
 }
+
+// -- name: CreateBooks :exec
+func (q *Queries) CreateBooks(ctx context.Context, books []CreateBooksBooksItem) error {
+	_, err := q.db.ExecContext(ctx, ""+
+		"INSERT INTO books ( "+
+		"book_id, author_id, isbn, book_type, title, year, available, tags "+
+		") "+
+		"SELECT "+
+		"book_id, author_id, isbn, book_type, title, year, available, tags "+
+		"FROM AS_TABLE($books);",
+		sql.Named("books", bindCreateBooksBooksItem(books)),
+	)
+
+	return err
+}
+
+func bindCreateBooksBooksItem(values []CreateBooksBooksItem) types.Value {
+	if len(values) == 0 {
+		return types.ZeroValue(types.List(types.Struct(
+			types.StructField("book_id", types.TypeUint64),
+			types.StructField("author_id", types.TypeUint64),
+			types.StructField("isbn", types.TypeText),
+			types.StructField("book_type", types.TypeText),
+			types.StructField("title", types.TypeText),
+			types.StructField("year", types.TypeInt32),
+			types.StructField("available", types.TypeTimestamp),
+			types.StructField("tags", types.TypeJSON),
+		)))
+	}
+	items := make([]types.Value, len(values))
+	for i, item := range values {
+		items[i] = types.StructValue(
+			types.StructFieldValue("book_id", types.Uint64Value(item.BookID)),
+			types.StructFieldValue("author_id", types.Uint64Value(item.AuthorID)),
+			types.StructFieldValue("isbn", types.TextValue(item.Isbn)),
+			types.StructFieldValue("book_type", types.TextValue(item.BookType)),
+			types.StructFieldValue("title", types.TextValue(item.Title)),
+			types.StructFieldValue("year", types.Int32Value(item.Year)),
+			types.StructFieldValue("available", types.TimestampValueFromTime(item.Available)),
+			types.StructFieldValue("tags", types.JSONValue(item.Tags)),
+		)
+	}
+	return types.ListValue(items...)
+}

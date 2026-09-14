@@ -231,4 +231,35 @@ std::optional<GetBiographyRow> Queries::GetBiography(std::uint64_t author_id) co
     };
 }
 
+// -- name: CreateBooks :exec
+void Queries::CreateBooks(const std::vector<CreateBooksBooksItem>& books) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        R"sql(
+            DECLARE $books AS List<Struct<
+                book_id: Uint64,
+                author_id: Uint64,
+                isbn: Utf8,
+                book_type: Utf8,
+                title: Utf8,
+                year: Int32,
+                available: Timestamp,
+                tags: Json
+            >>;
+            INSERT INTO books (
+                book_id, author_id, isbn, book_type, title, year, available, tags
+            )
+            SELECT
+                book_id, author_id, isbn, book_type, title, year, available, tags
+            FROM AS_TABLE($books);
+        )sql",
+        ::userver::ydb::Query::Name{"CreateBooks"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    static_cast<void>(
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$books", books)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$books", books)
+    );
+}
+
 }  // namespace batch::userver

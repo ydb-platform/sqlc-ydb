@@ -114,7 +114,7 @@ func TestGenerateRejectsInvalidContracts(t *testing.T) {
 		{"runtime", &model.AnalysisResult{}, Options{Runtime: "unknown"}, "unsupported Java runtime"},
 		{"removed_spring_runtime", &model.AnalysisResult{}, Options{Runtime: "spring"}, "unsupported Java runtime"},
 		{"removed_hibernate_runtime", &model.AnalysisResult{}, Options{Runtime: "hibernate"}, "unsupported Java runtime"},
-		{"unsupported_parameter", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.Exec, Parameters: []model.Parameter{{Name: "p", Type: model.Type{Kind: "Json"}}}}}}, Options{}, "unsupported Java type"},
+		{"unsupported_parameter", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.Exec, Parameters: []model.Parameter{{Name: "p", Type: model.Type{Kind: "Tuple"}}}}}}, Options{}, "unsupported Java type"},
 		{"unsupported_result", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.One, ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "value", Type: model.Type{Kind: "List"}}}}}}}}, Options{}, "unsupported Java type"},
 		{"execrows", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.ExecRows}}}, Options{}, "does not support"},
 		{"one_no_results", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.One}}}, Options{}, "requires one nonempty result set"},
@@ -146,7 +146,7 @@ func TestAllSupportedScalarsCompileAgainstAuthorsMavenProfiles(t *testing.T) {
 	types := []model.Type{
 		{Kind: "Bool"}, {Kind: "Int8"}, {Kind: "Uint8"}, {Kind: "Int16"}, {Kind: "Uint16"},
 		{Kind: "Int32"}, {Kind: "Uint32"}, {Kind: "Int64"}, {Kind: "Uint64"}, {Kind: "Float"},
-		{Kind: "Double"}, {Kind: "Utf8"}, {Kind: "String"},
+		{Kind: "Double"}, {Kind: "Utf8"}, {Kind: "String"}, {Kind: "Json"}, {Kind: "Timestamp"},
 	}
 	var parameters []model.Parameter
 	var columns []model.Column
@@ -171,7 +171,7 @@ func TestAllSupportedScalarsCompileAgainstAuthorsMavenProfiles(t *testing.T) {
 		t.Run(profile.runtime, func(t *testing.T) {
 			files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{
 				Name: "AllScalars", Command: model.One, SQL: "SELECT 1;", Parameters: parameters, ResultSets: []model.ResultSet{{Columns: columns}},
-			}}}, Options{Package: profile.pkg, Runtime: profile.runtime})
+			}, batchQuery(), optionalBatchQuery(), listBooksQuery()}}, Options{Package: profile.pkg, Runtime: profile.runtime})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -239,6 +239,7 @@ func TestGeneratedJDBCUsesTypedDriverValuesAndGuardsUnsignedRanges(t *testing.T)
 			{Name: "payload", Type: model.Optional(model.Type{Kind: "String"})},
 		}}},
 	})
+	queries = append(queries, batchQuery(), optionalBatchQuery(), listBooksQuery())
 	files, err := Generate(&model.AnalysisResult{Queries: queries}, Options{Package: "synthetic.jdbc", Runtime: "jdbc"})
 	if err != nil {
 		t.Fatal(err)
@@ -313,6 +314,30 @@ public final class Main {
         check(OptionalType.of(PrimitiveType.Uint16).emptyValue().equals(values.values().get("$jp2")), "optional null lost its declared type");
         check(PrimitiveValue.newText("typed text").equals(values.values().get("$jp3")), "Utf8 lost its type");
         check(PrimitiveValue.newBytes(new byte[] { 0, 1, (byte) 255 }).equals(values.values().get("$jp4")), "String lost its binary type");
+        YdbQuery batch = YdbQuery.parseQuery(new QueryKey("INSERT INTO books SELECT * FROM AS_TABLE(?);"), new YdbQueryProperties(new Properties()), types);
+        tech.ydb.jdbc.query.params.InMemoryQuery batchBound = new tech.ydb.jdbc.query.params.InMemoryQuery(batch, false);
+        Queries batchQueries = new Queries(bindingConnection(batchBound));
+        batchQueries.createBooks(java.util.List.of());
+        tech.ydb.table.values.ListValue emptyBatch = (tech.ydb.table.values.ListValue) batchBound.getCurrentParams().values().get("$jp1");
+        check(emptyBatch.size() == 0, "emptyBatch batch contains rows");
+        tech.ydb.table.values.StructType itemType = (tech.ydb.table.values.StructType) emptyBatch.getType().getItemType();
+        check(itemType.getMembersCount() == 8, "emptyBatch batch lost struct schema");
+        check(itemType.getMemberType(itemType.getMemberIndex("tags")).equals(PrimitiveType.Json), "Json field lost type");
+        batchQueries.createBooks(java.util.List.of(new CreateBooksBooksItem(-1L, 42L, "isbn", "paper", "Book", 2026, java.time.Instant.EPOCH, "{\"ok\":true}")));
+        tech.ydb.table.values.ListValue filledBatch = (tech.ydb.table.values.ListValue) batchBound.getCurrentParams().values().get("$jp1");
+        check(filledBatch.size() == 1 && filledBatch.getType().equals(emptyBatch.getType()), "batch changed declared type");
+        tech.ydb.table.values.StructValue book = (tech.ydb.table.values.StructValue) filledBatch.get(0);
+        check(book.getMemberValue(itemType.getMemberIndex("book_id")).equals(PrimitiveValue.newUint64(-1L)), "batch Uint64 lost unsigned bits");
+        check(book.getMemberValue(itemType.getMemberIndex("tags")).equals(PrimitiveValue.newJson("{\"ok\":true}")), "batch Json lost bytes");
+        expectRange(() -> guarded.optionalBooks(java.util.List.of(new OptionalBooksBooksItem(-1, null))));
+        YdbQuery optionalBatch = YdbQuery.parseQuery(new QueryKey("SELECT * FROM AS_TABLE(?);"), new YdbQueryProperties(new Properties()), types);
+        tech.ydb.jdbc.query.params.InMemoryQuery optionalBound = new tech.ydb.jdbc.query.params.InMemoryQuery(optionalBatch, false);
+        new Queries(bindingConnection(optionalBound)).optionalBooks(java.util.List.of(new OptionalBooksBooksItem(null, null)));
+        tech.ydb.table.values.ListValue optionalRows = (tech.ydb.table.values.ListValue) optionalBound.getCurrentParams().values().get("$jp1");
+        tech.ydb.table.values.StructValue optionalRow = (tech.ydb.table.values.StructValue) optionalRows.get(0);
+        check(optionalRow.getMemberValue(optionalRow.getType().getMemberIndex("rank")).equals(OptionalType.of(PrimitiveType.Uint8).emptyValue()), "optional batch null lost type");
+
+
         String endpoint = System.getenv("YDB_CONNECTION_STRING");
         if (endpoint != null && !endpoint.isBlank()) {
             try (Connection connection = java.sql.DriverManager.getConnection("jdbc:ydb:" + endpoint)) {

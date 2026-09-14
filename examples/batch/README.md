@@ -7,3 +7,9 @@ The SQL file retains ordinary generated equivalents of the original create, read
 PostgreSQL enum values (`FICTION`, `NONFICTION`) are stored as `Utf8` and validated by the application. Foreign keys, unique ISBN constraints and defaults from the upstream schema are omitted. Biography and tag arrays use YDB `Json`; the Go batch helper accepts their encoded JSON strings. IDs and timestamps are supplied explicitly because the YDB schema does not use the PostgreSQL serial and timestamp defaults from the source example.
 
 `BulkUpsertBooks` accepts the generated `CreateBookParams` type; an empty slice does not send a request. The [live test](go/batch_test.go) shows bulk writes followed by generated reads and updates.
+
+## SQL batch insert
+
+`CreateBooks` inserts a list of books with one `INSERT INTO books (...) SELECT ... FROM AS_TABLE($books)` statement. The declared `List<Struct<...>>` retains each field's YQL type, including `Json` tags and the `Timestamp` availability date. Generated methods accept a collection of named item values and build the SDK parameter internally. The native Go method is `CreateBooks(ctx context.Context, books []CreateBooksBooksItem, opts ...query.ExecuteOption) error`; the `database/sql` method accepts the same item type without execute options. Go item fields use the same types as `CreateBookParams`, including `string` for JSON.
+
+This SQL insert participates in the query's transaction and retains `INSERT` duplicate-key semantics. An empty collection is sent as a typed empty list. The existing `BulkUpsertBooks` helper remains a separate non-transactional bulk-upsert example. The shared runtime tests cover empty and populated SQL batches and read the inserted books through generated methods.

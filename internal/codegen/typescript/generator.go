@@ -42,7 +42,7 @@ var typescriptTypes = map[string]typeInfo{
 }
 
 var reserved = func() map[string]bool {
-	m := map[string]bool{"constructor": true, "configure": true, "sql": true, "stmt": true, "rows": true, "row": true, "args": true}
+	m := map[string]bool{"constructor": true, "configure": true, "structList": true, "sql": true, "stmt": true, "rows": true, "row": true, "args": true}
 	for _, word := range strings.Fields("await break case catch class const continue debugger default delete do else enum export extends false finally for function if implements import in instanceof interface let new null package private protected public return static super switch this throw true try typeof var void while with yield arguments eval") {
 		m[word] = true
 	}
@@ -74,7 +74,36 @@ func Generate(a *model.AnalysisResult, options Options) ([]model.File, error) {
 
 func validate(a *model.AnalysisResult) error {
 	methods := map[string]string{}
+	names := map[string]bool{"Queries": true, "ConfigureQuery": true, "Value": true, "List": true, "ListType": true, "Struct": true, "StructType": true, "Optional": true, "OptionalType": true, "Query": true, "SQL": true, "JSValue": true}
+	for _, info := range typescriptTypes {
+		names[info.valueClass] = true
+		names[info.typeClass] = true
+	}
+	addName := func(name string) error {
+		if names[name] {
+			return fmt.Errorf("typescript generator: generated type name collision %q", name)
+		}
+		names[name] = true
+		return nil
+	}
 	for _, query := range a.Queries {
+		if len(query.Parameters) > 1 {
+			if err := addName(exportedName(query.Name) + "Params"); err != nil {
+				return err
+			}
+		}
+		if query.Command == model.One || query.Command == model.Many {
+			if err := addName(exportedName(query.Name) + "Row"); err != nil {
+				return err
+			}
+		}
+		for _, p := range query.Parameters {
+			if isStructList(p.Type) {
+				if err := addName(exportedName(query.Name) + exportedName(p.Name) + "Item"); err != nil {
+					return err
+				}
+			}
+		}
 		switch query.Command {
 		case model.One, model.Many, model.Exec:
 		case model.ExecRows:
@@ -103,7 +132,7 @@ func validate(a *model.AnalysisResult) error {
 				return fmt.Errorf("typescript generator: query %q: parameter name collision %q between %q and %q", query.Name, field, previous, parameter.Name)
 			}
 			seenParameters[field] = parameter.Name
-			if _, err := tsType(parameter.Type); err != nil {
+			if _, err := parameterType(query.Name, parameter.Name, parameter.Type); err != nil {
 				return fmt.Errorf("typescript generator: query %q parameter %q: %w", query.Name, parameter.Name, err)
 			}
 		}
@@ -167,14 +196,23 @@ func resultType(t model.Type) string {
 func renderTypeScript(a *model.AnalysisResult) (string, error) {
 
 	classes := map[string]bool{}
-	optional, jsonResult := false, false
+	optional, jsonResult, batch := false, false, false
 	for _, q := range a.Queries {
 		for _, p := range q.Parameters {
-			info := typescriptTypes[p.Type.UnwrapOptional().Kind]
-			classes[info.valueClass] = true
-			if p.Type.IsOptional() {
-				optional = true
-				classes[info.typeClass] = true
+			fields := []model.StructField{{Type: p.Type}}
+			if isStructList(p.Type) {
+				batch = true
+				fields = p.Type.Elem.Fields
+			}
+			for _, field := range fields {
+				info := typescriptTypes[field.Type.UnwrapOptional().Kind]
+				classes[info.valueClass] = true
+				if field.Type.IsOptional() {
+					optional = true
+				}
+				if field.Type.IsOptional() || isStructList(p.Type) {
+					classes[info.typeClass] = true
+				}
 			}
 		}
 		for _, rs := range q.ResultSets {
@@ -197,16 +235,37 @@ func renderTypeScript(a *model.AnalysisResult) (string, error) {
 	if len(imports) > 0 {
 		b.WriteString("import { " + strings.Join(imports, ", ") + " } from \"@ydbjs/value/primitive\";\n")
 	}
+	if batch {
+		b.WriteString("import { List, ListType } from \"@ydbjs/value/list\";\nimport { Struct, StructType } from \"@ydbjs/value/struct\";\nimport type { Value } from \"@ydbjs/value\";\n")
+	}
 	if optional {
-		b.WriteString("import { Optional } from \"@ydbjs/value/optional\";\n")
+		if batch {
+			b.WriteString("import { Optional, OptionalType } from \"@ydbjs/value/optional\";\n")
+		} else {
+			b.WriteString("import { Optional } from \"@ydbjs/value/optional\";\n")
+		}
 	}
 	b.WriteString("\nexport type ConfigureQuery = (query: Query) => void;\n\n")
+	if batch {
+		b.WriteString("// The SDK infers Null for an empty List, so retain the declared item type.\nfunction structList(items: Struct[], type: StructType): Value<ListType> {\n  const list = new List<Struct>();\n  for (const item of items) list.items.push(item);\n  return { type: new ListType(type), encode: () => list.encode() };\n}\n\n")
+	}
 	for _, q := range a.Queries {
+		for _, p := range q.Parameters {
+			if isStructList(p.Type) {
+				b.WriteString("export type " + exportedName(q.Name) + exportedName(p.Name) + "Item = {\n")
+				for _, f := range p.Type.Elem.Fields {
+					field, _ := identifier(f.Name, false)
+					typ, _ := tsType(f.Type)
+					b.WriteString("  readonly " + field + ": " + typ + ";\n")
+				}
+				b.WriteString("};\n\n")
+			}
+		}
 		if len(q.Parameters) > 1 {
 			b.WriteString("export type " + exportedName(q.Name) + "Params = {\n")
 			for _, p := range q.Parameters {
 				field, _ := identifier(p.Name, false)
-				typ, _ := tsType(p.Type)
+				typ, _ := parameterType(q.Name, p.Name, p.Type)
 				b.WriteString("  readonly " + field + ": " + typ + ";\n")
 			}
 			b.WriteString("};\n\n")
@@ -268,7 +327,7 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 	if len(q.Parameters) == 1 {
 		p := q.Parameters[0]
 		field, _ := identifier(p.Name, false)
-		typ, _ := tsType(p.Type)
+		typ, _ := parameterType(q.Name, p.Name, p.Type)
 		params = field + ": " + typ + ", "
 	}
 	if len(q.Parameters) > 1 {
@@ -285,6 +344,7 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 	}
 	b.WriteString("\n  // " + model.QueryAnnotation(q) + "\n")
 	b.WriteString("  async " + method + "(" + params + "configure?: ConfigureQuery): Promise<" + ret + "> {\n")
+
 	sql := q.SQL
 	if len(q.Parameters) > 0 {
 		sql = omitDeclarationLines(q.SQL, q.SQLWithoutDeclarations)
@@ -313,6 +373,21 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 }
 
 func bindExpression(t model.Type, value string) string {
+	if isStructList(t) {
+		var fields, names, types []string
+		for _, f := range t.Elem.Fields {
+			field, _ := identifier(f.Name, false)
+			fields = append(fields, "["+strconv.Quote(f.Name)+"]: "+bindExpression(f.Type, "item."+field))
+			names = append(names, strconv.Quote(f.Name))
+			info := typescriptTypes[f.Type.UnwrapOptional().Kind]
+			typ := "new " + info.typeClass + "()"
+			if f.Type.IsOptional() {
+				typ = "new OptionalType(" + typ + ")"
+			}
+			types = append(types, typ)
+		}
+		return "structList(" + value + ".map(item => new Struct({ " + strings.Join(fields, ", ") + " })), new StructType([" + strings.Join(names, ", ") + "], [" + strings.Join(types, ", ") + "]))"
+	}
 	info := typescriptTypes[t.UnwrapOptional().Kind]
 	wrapped := "new " + info.valueClass + "(" + value + ")"
 	if t.IsOptional() {
@@ -434,4 +509,31 @@ func splitWords(value string) []string {
 func exportedName(value string) string {
 	result, _ := identifier(value, true)
 	return result
+}
+
+func isStructList(t model.Type) bool {
+	return t.Kind == "List" && t.Elem != nil && t.Elem.Kind == "Struct"
+}
+func parameterType(query, name string, t model.Type) (string, error) {
+	if !isStructList(t) {
+		return tsType(t)
+	}
+	if len(t.Elem.Fields) == 0 {
+		return "", fmt.Errorf("List<Struct> requires at least one scalar field")
+	}
+	seen := map[string]bool{}
+	for _, f := range t.Elem.Fields {
+		field, err := identifier(f.Name, false)
+		if err != nil {
+			return "", err
+		}
+		if seen[field] {
+			return "", fmt.Errorf("struct field name collision %q", field)
+		}
+		seen[field] = true
+		if _, err := tsType(f.Type); err != nil {
+			return "", fmt.Errorf("struct field %q: %w", f.Name, err)
+		}
+	}
+	return "ReadonlyArray<" + exportedName(query) + exportedName(name) + "Item>", nil
 }
