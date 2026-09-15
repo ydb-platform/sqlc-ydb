@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.1.6
+
 ### Added
 
 - Analyze typed SELECT sources consistently across read queries and DML, including computed INSERT/UPSERT SELECT projections and UPDATE/DELETE ON SELECT with name-based primary-key validation and wildcard expansion.
