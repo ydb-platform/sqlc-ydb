@@ -20,8 +20,10 @@ export class Queries {
 
   // -- name: GetAuthor :one
   async getAuthor(authorId: bigint, configure?: ConfigureQuery): Promise<GetAuthorRow | null> {
-    const stmt = this.#sql<[GetAuthorRow]>`DECLARE $author_id AS Uint64;
-SELECT \`id\`, \`name\`, \`bio\` FROM \`authors\` WHERE \`id\` = $author_id;`;
+    const stmt = this.#sql<[GetAuthorRow]>(
+      "DECLARE $author_id AS Uint64;\n" +
+      "SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;"
+    );
     // Keep explicit DECLARE statements; the SDK otherwise prepends duplicates.
     Object.defineProperty(stmt, "text", { value: stmt.text, writable: false });
     stmt

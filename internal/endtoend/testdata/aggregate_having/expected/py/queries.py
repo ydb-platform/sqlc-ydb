@@ -29,7 +29,9 @@ class Querier:
              "SELECT city, COUNT(*) AS reading_count, MAX(temperature) AS hottest_temperature\n"
              "FROM weather\n"
              "GROUP BY city\n"
-             "HAVING MAX(temperature) < $maximum_temperature;"), parameters)
+             "HAVING MAX(temperature) < $maximum_temperature;"),
+            parameters,
+        )
         if len(result_sets) != 1:
             raise ValueError("expected exactly one YDB result set")
         rows = result_sets[0].rows

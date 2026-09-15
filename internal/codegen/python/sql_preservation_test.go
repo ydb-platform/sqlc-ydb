@@ -27,6 +27,15 @@ func TestBatchSQLRuntimePreservesWhitespace(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, f := range files {
+				if f.Name == "queries.py" {
+					indent := "            "
+					if runtime == "dbapi" {
+						indent = "                "
+					}
+					if !strings.Contains(string(f.Content), "\n"+indent+"parameters,\n"+indent[4:]+")") {
+						t.Fatalf("unaligned execute arguments:\n%s", f.Content)
+					}
+				}
 				if err := os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600); err != nil {
 					t.Fatal(err)
 				}

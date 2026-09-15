@@ -67,11 +67,11 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     ) -> ydb::YdbResult<CreateAuthorRow> {
         let mut row = self
             .client
-            .query_row(
-                r"INSERT INTO `authors` (`id`, `name`, `bio`)
-VALUES ($author_id, $author_name, $biography)
-RETURNING `id`, `name`, `bio`;",
-            )
+            .query_row(concat!(
+                "INSERT INTO `authors` (`id`, `name`, `bio`)\n",
+                "VALUES ($author_id, $author_name, $biography)\n",
+                "RETURNING `id`, `name`, `bio`;",
+            ))
             .param("$author_id", author_id)
             .param("$author_name", author_name)
             .param("$biography", biography)
@@ -92,10 +92,10 @@ RETURNING `id`, `name`, `bio`;",
         #[builder(required, into)] biography: Option<String>,
     ) -> ydb::YdbResult<()> {
         self.client
-            .exec(
-                r"UPSERT INTO authors (id, name, bio)
-VALUES ($author_id, $author_name, $biography);",
-            )
+            .exec(concat!(
+                "UPSERT INTO authors (id, name, bio)\n",
+                "VALUES ($author_id, $author_name, $biography);",
+            ))
             .param("$author_id", author_id)
             .param("$author_name", author_name)
             .param("$biography", biography)

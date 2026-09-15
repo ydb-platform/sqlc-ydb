@@ -266,7 +266,7 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 	}
 	sql := querySQL(q)
 	callPrefix := "            ." + method + "("
-	if strings.Contains(sql, "\n") || len(callPrefix)+len(sql)+1 > rustfmtMaxWidth {
+	if !strings.HasPrefix(sql, "concat!(\n") && len(callPrefix)+len(sql)+1 > rustfmtMaxWidth {
 		b.WriteString("\n            ." + method + "(\n")
 		b.WriteString("                " + sql)
 		b.WriteString(",\n            )")
@@ -454,10 +454,20 @@ func querySQL(q model.AnalyzedQuery) string {
 	if sql == "" {
 		return `""`
 	}
-	if strings.ContainsAny(sql, "\r\x00") {
-		return rustString(sql)
+	if strings.Contains(sql, "\n") {
+		var b strings.Builder
+		b.WriteString("concat!(\n")
+		for _, line := range strings.SplitAfter(sql, "\n") {
+			if line == "" {
+				continue
+			}
+			b.WriteString("                " + rustSQLLine(line))
+			b.WriteString(",\n")
+		}
+		b.WriteString("            )")
+		return b.String()
 	}
-	return rawString(sql)
+	return rustString(sql)
 }
 
 func rustString(s string) string {
@@ -559,3 +569,30 @@ var rustKeywords = func() map[string]bool {
 	}
 	return out
 }()
+
+func rustSQLLine(s string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '\\':
+			b.WriteString(`\\`)
+		case '"':
+			b.WriteString(`\"`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		default:
+			if r < 0x20 || r == 0x7f {
+				fmt.Fprintf(&b, `\u{%x}`, r)
+			} else {
+				b.WriteRune(r)
+			}
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
+}

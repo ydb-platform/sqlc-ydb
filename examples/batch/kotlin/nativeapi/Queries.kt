@@ -36,8 +36,8 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "SELECT author_id, name, biography FROM authors\n" +
-                "WHERE author_id = \$author_id;", TxMode.SERIALIZABLE_RW, _params))
+                    "SELECT author_id, name, biography FROM authors\n" +
+                    "WHERE author_id = \$author_id;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -45,7 +45,7 @@ class Queries {
         if (!_rows.next()) return null
         val _value0: Long = _rows.getColumn(0).getUint64()
         val _value1: String = _rows.getColumn(1).getText()
-        val _value2: String? = if (_rows.getColumn(2).isOptionalItemPresent()) _rows.getColumn(2).getOptionalItem().getJson() else null
+        val _value2: String? = _rows.getColumn(2).getJson()
         return GetAuthorRow(_value0, _value1, _value2)
     }
 
@@ -60,8 +60,8 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 _session.createQuery(
-                "DELETE FROM books\n" +
-                "WHERE book_id = \$book_id;", TxMode.SERIALIZABLE_RW, _params).execute()
+                    "DELETE FROM books\n" +
+                    "WHERE book_id = \$book_id;", TxMode.SERIALIZABLE_RW, _params).execute()
             }.join().getStatus().expectSuccess()
         }
     }
@@ -77,8 +77,8 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 _session.createQuery(
-                "DELETE FROM books\n" +
-                "WHERE book_id = \$book_id;", TxMode.SERIALIZABLE_RW, _params).execute()
+                    "DELETE FROM books\n" +
+                    "WHERE book_id = \$book_id;", TxMode.SERIALIZABLE_RW, _params).execute()
             }.join().getStatus().expectSuccess()
         }
     }
@@ -94,8 +94,8 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 _session.createQuery(
-                "DELETE FROM books\n" +
-                "WHERE book_id = \$book_id;", TxMode.SERIALIZABLE_RW, _params).execute()
+                    "DELETE FROM books\n" +
+                    "WHERE book_id = \$book_id;", TxMode.SERIALIZABLE_RW, _params).execute()
             }.join().getStatus().expectSuccess()
         }
     }
@@ -111,8 +111,8 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 _session.createQuery(
-                "DELETE FROM books\n" +
-                "WHERE book_id = \$book_id;", TxMode.SERIALIZABLE_RW, _params).execute()
+                    "DELETE FROM books\n" +
+                    "WHERE book_id = \$book_id;", TxMode.SERIALIZABLE_RW, _params).execute()
             }.join().getStatus().expectSuccess()
         }
     }
@@ -129,9 +129,9 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "SELECT book_id, author_id, isbn, book_type, title, year, available, tags\n" +
-                "FROM books\n" +
-                "WHERE year = \$year;", TxMode.SERIALIZABLE_RW, _params))
+                    "SELECT book_id, author_id, isbn, book_type, title, year, available, tags\n" +
+                    "FROM books\n" +
+                    "WHERE year = \$year;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -156,7 +156,7 @@ class Queries {
         val _params = Params.create()
         _params.put("\$author_id", PrimitiveValue.newUint64(authorId))
         _params.put("\$name", PrimitiveValue.newText(name))
-        _params.put("\$biography", if (biography == null) OptionalType.of(PrimitiveType.Json).emptyValue() else OptionalType.of(PrimitiveType.Json).newValue(PrimitiveValue.newJson(biography)))
+        _params.put("\$biography", if (biography == null) OptionalType.of(PrimitiveType.Json).emptyValue() else PrimitiveValue.newJson(biography).makeOptional())
         val _query = if (transaction != null) {
             QueryReader.readFrom(transaction.createQuery(
                 "INSERT INTO authors (author_id, name, biography)\n" +
@@ -165,9 +165,9 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "INSERT INTO authors (author_id, name, biography)\n" +
-                "VALUES (\$author_id, \$name, \$biography)\n" +
-                "RETURNING author_id, name, biography;", TxMode.SERIALIZABLE_RW, _params))
+                    "INSERT INTO authors (author_id, name, biography)\n" +
+                    "VALUES (\$author_id, \$name, \$biography)\n" +
+                    "RETURNING author_id, name, biography;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -175,7 +175,7 @@ class Queries {
         if (!_rows.next()) return null
         val _value0: Long = _rows.getColumn(0).getUint64()
         val _value1: String = _rows.getColumn(1).getText()
-        val _value2: String? = if (_rows.getColumn(2).isOptionalItemPresent()) _rows.getColumn(2).getOptionalItem().getJson() else null
+        val _value2: String? = _rows.getColumn(2).getJson()
         return CreateAuthorRow(_value0, _value1, _value2)
     }
 
@@ -198,9 +198,9 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)\n" +
-                "VALUES (\$book_id, \$author_id, \$isbn, \$book_type, \$title, \$year, \$available, \$tags)\n" +
-                "RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;", TxMode.SERIALIZABLE_RW, _params))
+                    "INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)\n" +
+                    "VALUES (\$book_id, \$author_id, \$isbn, \$book_type, \$title, \$year, \$available, \$tags)\n" +
+                    "RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -231,9 +231,9 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 _session.createQuery(
-                "UPDATE books\n" +
-                "SET title = \$title, tags = \$tags\n" +
-                "WHERE book_id = \$book_id;", TxMode.SERIALIZABLE_RW, _params).execute()
+                    "UPDATE books\n" +
+                    "SET title = \$title, tags = \$tags\n" +
+                    "WHERE book_id = \$book_id;", TxMode.SERIALIZABLE_RW, _params).execute()
             }.join().getStatus().expectSuccess()
         }
     }
@@ -249,21 +249,45 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "SELECT biography FROM authors\n" +
-                "WHERE author_id = \$author_id;", TxMode.SERIALIZABLE_RW, _params))
+                    "SELECT biography FROM authors\n" +
+                    "WHERE author_id = \$author_id;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
         val _rows = _query.getResultSet(0)
         if (!_rows.next()) return null
-        val _value0: String? = if (_rows.getColumn(0).isOptionalItemPresent()) _rows.getColumn(0).getOptionalItem().getJson() else null
+        val _value0: String? = _rows.getColumn(0).getJson()
         return GetBiographyRow(_value0)
     }
 
     // -- name: CreateBooks :exec
     fun createBooks(books: List<CreateBooksBooksItem>): Unit {
         val _params = Params.create()
-        _params.put("\$books", tech.ydb.table.values.ListType.of(tech.ydb.table.values.StructType.of(mapOf("book_id" to tech.ydb.table.values.PrimitiveType.Uint64, "author_id" to tech.ydb.table.values.PrimitiveType.Uint64, "isbn" to tech.ydb.table.values.PrimitiveType.Text, "book_type" to tech.ydb.table.values.PrimitiveType.Text, "title" to tech.ydb.table.values.PrimitiveType.Text, "year" to tech.ydb.table.values.PrimitiveType.Int32, "available" to tech.ydb.table.values.PrimitiveType.Timestamp, "tags" to tech.ydb.table.values.PrimitiveType.Json))).newValue(books.map { _batchItem -> tech.ydb.table.values.StructValue.of(mapOf("book_id" to PrimitiveValue.newUint64(_batchItem.bookId), "author_id" to PrimitiveValue.newUint64(_batchItem.authorId), "isbn" to PrimitiveValue.newText(_batchItem.isbn), "book_type" to PrimitiveValue.newText(_batchItem.bookType), "title" to PrimitiveValue.newText(_batchItem.title), "year" to PrimitiveValue.newInt32(_batchItem.year), "available" to PrimitiveValue.newTimestamp(_batchItem.available), "tags" to PrimitiveValue.newJson(_batchItem.tags))) }))
+        _params.put("\$books", tech.ydb.table.values.ListType.of(
+            tech.ydb.table.values.StructType.of(mapOf(
+                "book_id" to tech.ydb.table.values.PrimitiveType.Uint64,
+                "author_id" to tech.ydb.table.values.PrimitiveType.Uint64,
+                "isbn" to tech.ydb.table.values.PrimitiveType.Text,
+                "book_type" to tech.ydb.table.values.PrimitiveType.Text,
+                "title" to tech.ydb.table.values.PrimitiveType.Text,
+                "year" to tech.ydb.table.values.PrimitiveType.Int32,
+                "available" to tech.ydb.table.values.PrimitiveType.Timestamp,
+                "tags" to tech.ydb.table.values.PrimitiveType.Json
+            ))
+        ).newValue(
+            books.map { _batchItem ->
+                tech.ydb.table.values.StructValue.of(mapOf(
+                    "book_id" to PrimitiveValue.newUint64(_batchItem.bookId),
+                    "author_id" to PrimitiveValue.newUint64(_batchItem.authorId),
+                    "isbn" to PrimitiveValue.newText(_batchItem.isbn),
+                    "book_type" to PrimitiveValue.newText(_batchItem.bookType),
+                    "title" to PrimitiveValue.newText(_batchItem.title),
+                    "year" to PrimitiveValue.newInt32(_batchItem.year),
+                    "available" to PrimitiveValue.newTimestamp(_batchItem.available),
+                    "tags" to PrimitiveValue.newJson(_batchItem.tags)
+                ))
+            }
+        ))
         if (transaction != null) {
             transaction.createQuery(
                 "DECLARE \$books AS List<Struct<\n" +
@@ -285,22 +309,22 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 _session.createQuery(
-                "DECLARE \$books AS List<Struct<\n" +
-                "    book_id: Uint64,\n" +
-                "    author_id: Uint64,\n" +
-                "    isbn: Utf8,\n" +
-                "    book_type: Utf8,\n" +
-                "    title: Utf8,\n" +
-                "    year: Int32,\n" +
-                "    available: Timestamp,\n" +
-                "    tags: Json\n" +
-                ">>;\n" +
-                "INSERT INTO books (\n" +
-                "    book_id, author_id, isbn, book_type, title, year, available, tags\n" +
-                ")\n" +
-                "SELECT\n" +
-                "    book_id, author_id, isbn, book_type, title, year, available, tags\n" +
-                "FROM AS_TABLE(\$books);", TxMode.SERIALIZABLE_RW, _params).execute()
+                    "DECLARE \$books AS List<Struct<\n" +
+                    "    book_id: Uint64,\n" +
+                    "    author_id: Uint64,\n" +
+                    "    isbn: Utf8,\n" +
+                    "    book_type: Utf8,\n" +
+                    "    title: Utf8,\n" +
+                    "    year: Int32,\n" +
+                    "    available: Timestamp,\n" +
+                    "    tags: Json\n" +
+                    ">>;\n" +
+                    "INSERT INTO books (\n" +
+                    "    book_id, author_id, isbn, book_type, title, year, available, tags\n" +
+                    ")\n" +
+                    "SELECT\n" +
+                    "    book_id, author_id, isbn, book_type, title, year, available, tags\n" +
+                    "FROM AS_TABLE(\$books);", TxMode.SERIALIZABLE_RW, _params).execute()
             }.join().getStatus().expectSuccess()
         }
     }

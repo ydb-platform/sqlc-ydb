@@ -18,8 +18,7 @@ class Queries(private val client: org.jetbrains.exposed.v1.jdbc.JdbcTransaction)
                 if (!_rows.next()) return null
                 val _value0: Long = _rows.getLong(1)
                 val _value1: String = _rows.getString(2)
-                val _value2Raw = _rows.getString(3)
-                val _value2: String? = if (_rows.wasNull()) null else _value2Raw
+                val _value2: String? = _rows.getString(3)
                 return GetAuthorRow(_value0, _value1, _value2)
             }
         }
@@ -35,8 +34,7 @@ class Queries(private val client: org.jetbrains.exposed.v1.jdbc.JdbcTransaction)
                 while (_rows.next()) {
                     val _value0: Long = _rows.getLong(1)
                     val _value1: String = _rows.getString(2)
-                    val _value2Raw = _rows.getString(3)
-                    val _value2: String? = if (_rows.wasNull()) null else _value2Raw
+                    val _value2: String? = _rows.getString(3)
                     _items.add(ListAuthorsRow(_value0, _value1, _value2))
                 }
                 return _items
@@ -72,8 +70,7 @@ class Queries(private val client: org.jetbrains.exposed.v1.jdbc.JdbcTransaction)
                 if (!_rows.next()) return null
                 val _value0: Long = _rows.getLong(1)
                 val _value1: String = _rows.getString(2)
-                val _value2Raw = _rows.getString(3)
-                val _value2: String? = if (_rows.wasNull()) null else _value2Raw
+                val _value2: String? = _rows.getString(3)
                 return CreateAuthorRow(_value0, _value1, _value2)
             }
         }

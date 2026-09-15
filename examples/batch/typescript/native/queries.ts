@@ -98,8 +98,10 @@ export class Queries {
 
   // -- name: GetAuthor :one
   async getAuthor(authorId: bigint, configure?: ConfigureQuery): Promise<GetAuthorRow | null> {
-    const stmt = this.#sql<[GetAuthorRow]>`SELECT author_id, name, biography FROM authors
-WHERE author_id = $author_id;`
+    const stmt = this.#sql<[GetAuthorRow]>(
+      "SELECT author_id, name, biography FROM authors\n" +
+      "WHERE author_id = $author_id;"
+    )
       .parameter("author_id", new Uint64(authorId));
     configure?.(stmt);
     const [rows] = await stmt;
@@ -109,8 +111,10 @@ WHERE author_id = $author_id;`
 
   // -- name: DeleteBookExecResult :exec
   async deleteBookExecResult(bookId: bigint, configure?: ConfigureQuery): Promise<void> {
-    const stmt = this.#sql`DELETE FROM books
-WHERE book_id = $book_id;`
+    const stmt = this.#sql(
+      "DELETE FROM books\n" +
+      "WHERE book_id = $book_id;"
+    )
       .parameter("book_id", new Uint64(bookId));
     configure?.(stmt);
     await stmt;
@@ -118,8 +122,10 @@ WHERE book_id = $book_id;`
 
   // -- name: DeleteBook :exec
   async deleteBook(bookId: bigint, configure?: ConfigureQuery): Promise<void> {
-    const stmt = this.#sql`DELETE FROM books
-WHERE book_id = $book_id;`
+    const stmt = this.#sql(
+      "DELETE FROM books\n" +
+      "WHERE book_id = $book_id;"
+    )
       .parameter("book_id", new Uint64(bookId));
     configure?.(stmt);
     await stmt;
@@ -127,8 +133,10 @@ WHERE book_id = $book_id;`
 
   // -- name: DeleteBookNamedFunc :exec
   async deleteBookNamedFunc(bookId: bigint, configure?: ConfigureQuery): Promise<void> {
-    const stmt = this.#sql`DELETE FROM books
-WHERE book_id = $book_id;`
+    const stmt = this.#sql(
+      "DELETE FROM books\n" +
+      "WHERE book_id = $book_id;"
+    )
       .parameter("book_id", new Uint64(bookId));
     configure?.(stmt);
     await stmt;
@@ -136,8 +144,10 @@ WHERE book_id = $book_id;`
 
   // -- name: DeleteBookNamedSign :exec
   async deleteBookNamedSign(bookId: bigint, configure?: ConfigureQuery): Promise<void> {
-    const stmt = this.#sql`DELETE FROM books
-WHERE book_id = $book_id;`
+    const stmt = this.#sql(
+      "DELETE FROM books\n" +
+      "WHERE book_id = $book_id;"
+    )
       .parameter("book_id", new Uint64(bookId));
     configure?.(stmt);
     await stmt;
@@ -145,9 +155,11 @@ WHERE book_id = $book_id;`
 
   // -- name: BooksByYear :many
   async booksByYear(year: number, configure?: ConfigureQuery): Promise<BooksByYearRow[]> {
-    const stmt = this.#sql<[BooksByYearRow]>`SELECT book_id, author_id, isbn, book_type, title, year, available, tags
-FROM books
-WHERE year = $year;`
+    const stmt = this.#sql<[BooksByYearRow]>(
+      "SELECT book_id, author_id, isbn, book_type, title, year, available, tags\n" +
+      "FROM books\n" +
+      "WHERE year = $year;"
+    )
       .parameter("year", new Int32(year));
     configure?.(stmt);
     const [rows] = await stmt;
@@ -157,9 +169,11 @@ WHERE year = $year;`
 
   // -- name: CreateAuthor :one
   async createAuthor(args: CreateAuthorParams, configure?: ConfigureQuery): Promise<CreateAuthorRow | null> {
-    const stmt = this.#sql<[CreateAuthorRow]>`INSERT INTO authors (author_id, name, biography)
-VALUES ($author_id, $name, $biography)
-RETURNING author_id, name, biography;`
+    const stmt = this.#sql<[CreateAuthorRow]>(
+      "INSERT INTO authors (author_id, name, biography)\n" +
+      "VALUES ($author_id, $name, $biography)\n" +
+      "RETURNING author_id, name, biography;"
+    )
       .parameter("author_id", new Uint64(args.authorId))
       .parameter("name", new Utf8(args.name))
       .parameter("biography", new Optional(args.biography === null ? null : new Json(args.biography), new JsonType()));
@@ -171,9 +185,11 @@ RETURNING author_id, name, biography;`
 
   // -- name: CreateBook :one
   async createBook(args: CreateBookParams, configure?: ConfigureQuery): Promise<CreateBookRow | null> {
-    const stmt = this.#sql<[CreateBookRow]>`INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)
-VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)
-RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;`
+    const stmt = this.#sql<[CreateBookRow]>(
+      "INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)\n" +
+      "VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)\n" +
+      "RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;"
+    )
       .parameter("book_id", new Uint64(args.bookId))
       .parameter("author_id", new Uint64(args.authorId))
       .parameter("isbn", new Utf8(args.isbn))
@@ -190,9 +206,11 @@ RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;`
 
   // -- name: UpdateBook :exec
   async updateBook(args: UpdateBookParams, configure?: ConfigureQuery): Promise<void> {
-    const stmt = this.#sql`UPDATE books
-SET title = $title, tags = $tags
-WHERE book_id = $book_id;`
+    const stmt = this.#sql(
+      "UPDATE books\n" +
+      "SET title = $title, tags = $tags\n" +
+      "WHERE book_id = $book_id;"
+    )
       .parameter("title", new Utf8(args.title))
       .parameter("tags", new Json(args.tags))
       .parameter("book_id", new Uint64(args.bookId));
@@ -202,8 +220,10 @@ WHERE book_id = $book_id;`
 
   // -- name: GetBiography :one
   async getBiography(authorId: bigint, configure?: ConfigureQuery): Promise<GetBiographyRow | null> {
-    const stmt = this.#sql<[GetBiographyRow]>`SELECT biography FROM authors
-WHERE author_id = $author_id;`
+    const stmt = this.#sql<[GetBiographyRow]>(
+      "SELECT biography FROM authors\n" +
+      "WHERE author_id = $author_id;"
+    )
       .parameter("author_id", new Uint64(authorId));
     configure?.(stmt);
     const [rows] = await stmt;
@@ -213,26 +233,61 @@ WHERE author_id = $author_id;`
 
   // -- name: CreateBooks :exec
   async createBooks(books: ReadonlyArray<CreateBooksBooksItem>, configure?: ConfigureQuery): Promise<void> {
-    const stmt = this.#sql`DECLARE $books AS List<Struct<
-    book_id: Uint64,
-    author_id: Uint64,
-    isbn: Utf8,
-    book_type: Utf8,
-    title: Utf8,
-    year: Int32,
-    available: Timestamp,
-    tags: Json
->>;
-INSERT INTO books (
-    book_id, author_id, isbn, book_type, title, year, available, tags
-)
-SELECT
-    book_id, author_id, isbn, book_type, title, year, available, tags
-FROM AS_TABLE($books);`;
+    const stmt = this.#sql(
+      "DECLARE $books AS List<Struct<\n" +
+      "    book_id: Uint64,\n" +
+      "    author_id: Uint64,\n" +
+      "    isbn: Utf8,\n" +
+      "    book_type: Utf8,\n" +
+      "    title: Utf8,\n" +
+      "    year: Int32,\n" +
+      "    available: Timestamp,\n" +
+      "    tags: Json\n" +
+      ">>;\n" +
+      "INSERT INTO books (\n" +
+      "    book_id, author_id, isbn, book_type, title, year, available, tags\n" +
+      ")\n" +
+      "SELECT\n" +
+      "    book_id, author_id, isbn, book_type, title, year, available, tags\n" +
+      "FROM AS_TABLE($books);"
+    );
     // Keep explicit DECLARE statements; the SDK otherwise prepends duplicates.
     Object.defineProperty(stmt, "text", { value: stmt.text, writable: false });
     stmt
-      .parameter("books", structList(books.map(item => new Struct({ ["book_id"]: new Uint64(item.bookId), ["author_id"]: new Uint64(item.authorId), ["isbn"]: new Utf8(item.isbn), ["book_type"]: new Utf8(item.bookType), ["title"]: new Utf8(item.title), ["year"]: new Int32(item.year), ["available"]: new Timestamp(item.available), ["tags"]: new Json(item.tags) })), new StructType(["book_id", "author_id", "isbn", "book_type", "title", "year", "available", "tags"], [new Uint64Type(), new Uint64Type(), new Utf8Type(), new Utf8Type(), new Utf8Type(), new Int32Type(), new TimestampType(), new JsonType()])));
+      .parameter("books", structList(
+        books.map(item => new Struct({
+          ["book_id"]: new Uint64(item.bookId),
+          ["author_id"]: new Uint64(item.authorId),
+          ["isbn"]: new Utf8(item.isbn),
+          ["book_type"]: new Utf8(item.bookType),
+          ["title"]: new Utf8(item.title),
+          ["year"]: new Int32(item.year),
+          ["available"]: new Timestamp(item.available),
+          ["tags"]: new Json(item.tags),
+        })),
+        new StructType(
+          [
+            "book_id",
+            "author_id",
+            "isbn",
+            "book_type",
+            "title",
+            "year",
+            "available",
+            "tags",
+          ],
+          [
+            new Uint64Type(),
+            new Uint64Type(),
+            new Utf8Type(),
+            new Utf8Type(),
+            new Utf8Type(),
+            new Int32Type(),
+            new TimestampType(),
+            new JsonType(),
+          ],
+        ),
+      ));
     configure?.(stmt);
     await stmt;
   }

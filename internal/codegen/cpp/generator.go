@@ -447,7 +447,7 @@ func renderNativeMethod(out *strings.Builder, query model.AnalyzedQuery, options
 		}
 		out.WriteString("\n            .Build();\n")
 	}
-	out.WriteString("        auto sqlc_result = sqlc_session.ExecuteQuery(\n            " + sqlLiteral(model.WithoutQueryAnnotation(query.SQL)) + ",\n            sqlc_tx")
+	out.WriteString("        auto sqlc_result = sqlc_session.ExecuteQuery(\n            " + strings.ReplaceAll(sqlLiteral(model.WithoutQueryAnnotation(query.SQL)), "\n", "\n            ") + ",\n            sqlc_tx")
 	if len(query.Parameters) != 0 {
 		out.WriteString(",\n            sqlc_params")
 	}
@@ -488,7 +488,7 @@ func renderUserverMethod(out *strings.Builder, query model.AnalyzedQuery, option
 	returnType := methodReturnType(query)
 	out.WriteString("// " + model.QueryAnnotation(query) + "\n" + returnType + " Queries::" + query.Name + "(" + methodParameters(query, options.Runtime) + ") const {\n")
 
-	queryLiteral := "::userver::ydb::Query{\n        " + sqlLiteral(model.WithoutQueryAnnotation(query.SQL)) + ",\n        ::userver::ydb::Query::Name{" + strconv.Quote(query.Name) + "},\n        ::userver::ydb::Query::LogMode::kNameOnly,\n    }"
+	queryLiteral := "::userver::ydb::Query{\n        " + strings.ReplaceAll(sqlLiteral(model.WithoutQueryAnnotation(query.SQL)), "\n", "\n        ") + ",\n        ::userver::ydb::Query::Name{" + strconv.Quote(query.Name) + "},\n        ::userver::ydb::Query::LogMode::kNameOnly,\n    }"
 	out.WriteString("    const auto sqlc_query = " + queryLiteral + ";\n")
 	args := ""
 	for _, parameter := range query.Parameters {
@@ -519,49 +519,35 @@ func writeUserverRow(out *strings.Builder, resultSet model.ResultSet, runtime, i
 }
 
 func sqlLiteral(sql string) string {
-	escaped := false
-	for _, line := range strings.Split(sql, "\n") {
-		escaped = escaped || strings.HasSuffix(line, " ") || strings.HasSuffix(line, "\t")
-	}
-	for _, ch := range []byte(sql) {
-		escaped = escaped || ch == '\r' || ch < 0x20 && ch != '\n' && ch != '\t' || ch == 0x7f
-	}
-	if escaped {
-		var out strings.Builder
-		out.WriteByte('"')
-		for i, ch := range []byte(sql) {
-			switch ch {
-			case '\\', '"':
-				out.WriteByte('\\')
+	var out strings.Builder
+	out.WriteByte('"')
+	for i, ch := range []byte(sql) {
+		switch ch {
+		case '\\', '"':
+			out.WriteByte('\\')
+			out.WriteByte(ch)
+		case '\n':
+			out.WriteString(`\n`)
+			if i+1 < len(sql) {
+				out.WriteString("\"\n\"")
+			}
+		case '\r':
+			out.WriteString(`\r`)
+		case '\t':
+			out.WriteString(`\t`)
+		default:
+			if ch < 0x20 || ch == 0x7f {
+				fmt.Fprintf(&out, "\\%03o", ch)
+			} else {
 				out.WriteByte(ch)
-			case '\n':
-				out.WriteString(`\n`)
-				if i+1 < len(sql) {
-					out.WriteString("\"\n\"")
-				}
-			case '\r':
-				out.WriteString(`\r`)
-			case '\t':
-				out.WriteString(`\t`)
-			default:
-				if ch < 0x20 || ch == 0x7f {
-					fmt.Fprintf(&out, "\\%03o", ch)
-				} else {
-					out.WriteByte(ch)
-				}
 			}
 		}
-		out.WriteByte('"')
-		if strings.ContainsRune(sql, 0) {
-			return "std::string{" + out.String() + ", " + strconv.Itoa(len(sql)) + "}"
-		}
-		return out.String()
 	}
-	delimiter := "sql"
-	for suffix := 0; strings.Contains(sql, ")"+delimiter+"\""); suffix++ {
-		delimiter = "sql" + strconv.Itoa(suffix+1)
+	out.WriteByte('"')
+	if strings.ContainsRune(sql, 0) {
+		return "std::string{" + out.String() + ", " + strconv.Itoa(len(sql)) + "}"
 	}
-	return "R\"" + delimiter + "(" + sql + ")" + delimiter + "\""
+	return out.String()
 }
 
 func needsString(in *model.AnalysisResult, runtime string) bool {

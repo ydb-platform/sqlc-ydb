@@ -26,7 +26,7 @@ func TestStructListGeneration(t *testing.T) {
 		for _, f := range files {
 			source += string(f.Content)
 		}
-		for _, want := range []string{"class CreateBooksBooksItem:", "book_id: int", "tags: str", "title: Optional[str]", "books: list[_models.CreateBooksBooksItem]", "[{\"book_id\": item.book_id, \"tags\": item.tags, \"title\": item.title} for item in books]", "_ydb.ListType(_ydb.StructType().add_member(\"book_id\", _ydb.PrimitiveType.Uint64)"} {
+		for _, want := range []string{"class CreateBooksBooksItem:", "book_id: int", "tags: str", "title: Optional[str]", "books: list[_models.CreateBooksBooksItem]", "                    {\n                        \"book_id\": item.book_id,\n                        \"tags\": item.tags,\n                        \"title\": item.title,\n                    }\n                    for item in books\n                ],", "\"book_id\": item.book_id,\n", "_ydb.ListType(\n                    _ydb.StructType()\n                    .add_member(\"book_id\", _ydb.PrimitiveType.Uint64)"} {
 			if !strings.Contains(source, want) {
 				t.Fatalf("%s missing %s\n%s", runtime, want, source)
 			}

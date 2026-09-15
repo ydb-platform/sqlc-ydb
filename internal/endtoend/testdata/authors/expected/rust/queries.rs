@@ -17,10 +17,10 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     pub async fn author(&mut self, author_id: u64) -> ydb::YdbResult<GetAuthorRow> {
         let mut row = self
             .client
-            .query_row(
-                r"DECLARE $author_id AS Uint64;
-SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;",
-            )
+            .query_row(concat!(
+                "DECLARE $author_id AS Uint64;\n",
+                "SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;",
+            ))
             .param("$author_id", author_id)
             .await?;
         Ok(GetAuthorRow {

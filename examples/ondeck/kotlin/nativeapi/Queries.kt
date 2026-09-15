@@ -36,9 +36,9 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "SELECT slug, name\n" +
-                "FROM city\n" +
-                "ORDER BY name;", TxMode.SERIALIZABLE_RW, _params))
+                    "SELECT slug, name\n" +
+                    "FROM city\n" +
+                    "ORDER BY name;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -64,9 +64,9 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "SELECT slug, name\n" +
-                "FROM city\n" +
-                "WHERE slug = \$slug;", TxMode.SERIALIZABLE_RW, _params))
+                    "SELECT slug, name\n" +
+                    "FROM city\n" +
+                    "WHERE slug = \$slug;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -94,13 +94,13 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "INSERT INTO city (\n" +
-                "    name,\n" +
-                "    slug\n" +
-                ") VALUES (\n" +
-                "    \$name,\n" +
-                "    \$slug\n" +
-                ") RETURNING slug, name;", TxMode.SERIALIZABLE_RW, _params))
+                    "INSERT INTO city (\n" +
+                    "    name,\n" +
+                    "    slug\n" +
+                    ") VALUES (\n" +
+                    "    \$name,\n" +
+                    "    \$slug\n" +
+                    ") RETURNING slug, name;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -124,9 +124,9 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 _session.createQuery(
-                "UPDATE city\n" +
-                "SET name = \$name\n" +
-                "WHERE slug = \$slug;", TxMode.SERIALIZABLE_RW, _params).execute()
+                    "UPDATE city\n" +
+                    "SET name = \$name\n" +
+                    "WHERE slug = \$slug;", TxMode.SERIALIZABLE_RW, _params).execute()
             }.join().getStatus().expectSuccess()
         }
     }
@@ -144,10 +144,10 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n" +
-                "FROM venue\n" +
-                "WHERE city = \$city\n" +
-                "ORDER BY name;", TxMode.SERIALIZABLE_RW, _params))
+                    "SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n" +
+                    "FROM venue\n" +
+                    "WHERE city = \$city\n" +
+                    "ORDER BY name;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -159,11 +159,11 @@ class Queries {
             val _value2: String = _rows.getColumn(2).getText()
             val _value3: String = _rows.getColumn(3).getText()
             val _value4: String = _rows.getColumn(4).getText()
-            val _value5: String? = if (_rows.getColumn(5).isOptionalItemPresent()) _rows.getColumn(5).getOptionalItem().getJson() else null
+            val _value5: String? = _rows.getColumn(5).getJson()
             val _value6: String = _rows.getColumn(6).getText()
-            val _value7: String? = if (_rows.getColumn(7).isOptionalItemPresent()) _rows.getColumn(7).getOptionalItem().getText() else null
-            val _value8: String? = if (_rows.getColumn(8).isOptionalItemPresent()) _rows.getColumn(8).getOptionalItem().getJson() else null
-            val _value9: java.time.Instant? = if (_rows.getColumn(9).isOptionalItemPresent()) _rows.getColumn(9).getOptionalItem().getTimestamp() else null
+            val _value7: String? = _rows.getColumn(7).getText()
+            val _value8: String? = _rows.getColumn(8).getJson()
+            val _value9: java.time.Instant? = _rows.getColumn(9).getTimestamp()
             _items.add(ListVenuesRow(_value0, _value1, _value2, _value3, _value4, _value5, _value6, _value7, _value8, _value9))
         }
         return _items
@@ -180,8 +180,8 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 _session.createQuery(
-                "DELETE FROM venue\n" +
-                "WHERE slug = \$slug AND slug = \$slug;", TxMode.SERIALIZABLE_RW, _params).execute()
+                    "DELETE FROM venue\n" +
+                    "WHERE slug = \$slug AND slug = \$slug;", TxMode.SERIALIZABLE_RW, _params).execute()
             }.join().getStatus().expectSuccess()
         }
     }
@@ -199,9 +199,9 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n" +
-                "FROM venue\n" +
-                "WHERE slug = \$slug AND city = \$city;", TxMode.SERIALIZABLE_RW, _params))
+                    "SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n" +
+                    "FROM venue\n" +
+                    "WHERE slug = \$slug AND city = \$city;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -212,11 +212,11 @@ class Queries {
         val _value2: String = _rows.getColumn(2).getText()
         val _value3: String = _rows.getColumn(3).getText()
         val _value4: String = _rows.getColumn(4).getText()
-        val _value5: String? = if (_rows.getColumn(5).isOptionalItemPresent()) _rows.getColumn(5).getOptionalItem().getJson() else null
+        val _value5: String? = _rows.getColumn(5).getJson()
         val _value6: String = _rows.getColumn(6).getText()
-        val _value7: String? = if (_rows.getColumn(7).isOptionalItemPresent()) _rows.getColumn(7).getOptionalItem().getText() else null
-        val _value8: String? = if (_rows.getColumn(8).isOptionalItemPresent()) _rows.getColumn(8).getOptionalItem().getJson() else null
-        val _value9: java.time.Instant? = if (_rows.getColumn(9).isOptionalItemPresent()) _rows.getColumn(9).getOptionalItem().getTimestamp() else null
+        val _value7: String? = _rows.getColumn(7).getText()
+        val _value8: String? = _rows.getColumn(8).getJson()
+        val _value9: java.time.Instant? = _rows.getColumn(9).getTimestamp()
         return GetVenueRow(_value0, _value1, _value2, _value3, _value4, _value5, _value6, _value7, _value8, _value9)
     }
 
@@ -227,11 +227,11 @@ class Queries {
         _params.put("\$slug", PrimitiveValue.newText(slug))
         _params.put("\$name", PrimitiveValue.newText(name))
         _params.put("\$city", PrimitiveValue.newText(city))
-        _params.put("\$created_at", if (createdAt == null) OptionalType.of(PrimitiveType.Timestamp).emptyValue() else OptionalType.of(PrimitiveType.Timestamp).newValue(PrimitiveValue.newTimestamp(createdAt)))
+        _params.put("\$created_at", if (createdAt == null) OptionalType.of(PrimitiveType.Timestamp).emptyValue() else PrimitiveValue.newTimestamp(createdAt).makeOptional())
         _params.put("\$spotify_playlist", PrimitiveValue.newText(spotifyPlaylist))
         _params.put("\$status", PrimitiveValue.newText(status))
-        _params.put("\$statuses", if (statuses == null) OptionalType.of(PrimitiveType.Json).emptyValue() else OptionalType.of(PrimitiveType.Json).newValue(PrimitiveValue.newJson(statuses)))
-        _params.put("\$tags", if (tags == null) OptionalType.of(PrimitiveType.Json).emptyValue() else OptionalType.of(PrimitiveType.Json).newValue(PrimitiveValue.newJson(tags)))
+        _params.put("\$statuses", if (statuses == null) OptionalType.of(PrimitiveType.Json).emptyValue() else PrimitiveValue.newJson(statuses).makeOptional())
+        _params.put("\$tags", if (tags == null) OptionalType.of(PrimitiveType.Json).emptyValue() else PrimitiveValue.newJson(tags).makeOptional())
         val _query = if (transaction != null) {
             QueryReader.readFrom(transaction.createQuery(
                 "INSERT INTO venue (\n" +
@@ -258,27 +258,27 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "INSERT INTO venue (\n" +
-                "    id,\n" +
-                "    slug,\n" +
-                "    name,\n" +
-                "    city,\n" +
-                "    created_at,\n" +
-                "    spotify_playlist,\n" +
-                "    status,\n" +
-                "    statuses,\n" +
-                "    tags\n" +
-                ") VALUES (\n" +
-                "    \$id,\n" +
-                "    \$slug,\n" +
-                "    \$name,\n" +
-                "    \$city,\n" +
-                "    \$created_at,\n" +
-                "    \$spotify_playlist,\n" +
-                "    \$status,\n" +
-                "    \$statuses,\n" +
-                "    \$tags\n" +
-                ") RETURNING id;", TxMode.SERIALIZABLE_RW, _params))
+                    "INSERT INTO venue (\n" +
+                    "    id,\n" +
+                    "    slug,\n" +
+                    "    name,\n" +
+                    "    city,\n" +
+                    "    created_at,\n" +
+                    "    spotify_playlist,\n" +
+                    "    status,\n" +
+                    "    statuses,\n" +
+                    "    tags\n" +
+                    ") VALUES (\n" +
+                    "    \$id,\n" +
+                    "    \$slug,\n" +
+                    "    \$name,\n" +
+                    "    \$city,\n" +
+                    "    \$created_at,\n" +
+                    "    \$spotify_playlist,\n" +
+                    "    \$status,\n" +
+                    "    \$statuses,\n" +
+                    "    \$tags\n" +
+                    ") RETURNING id;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -302,10 +302,10 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "UPDATE venue\n" +
-                "SET name = \$name\n" +
-                "WHERE slug = \$slug\n" +
-                "RETURNING id;", TxMode.SERIALIZABLE_RW, _params))
+                    "UPDATE venue\n" +
+                    "SET name = \$name\n" +
+                    "WHERE slug = \$slug\n" +
+                    "RETURNING id;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -329,12 +329,12 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "SELECT\n" +
-                "    city,\n" +
-                "    COUNT(*) AS venue_count\n" +
-                "FROM venue\n" +
-                "GROUP BY city\n" +
-                "ORDER BY city;", TxMode.SERIALIZABLE_RW, _params))
+                    "SELECT\n" +
+                    "    city,\n" +
+                    "    COUNT(*) AS venue_count\n" +
+                    "FROM venue\n" +
+                    "GROUP BY city\n" +
+                    "ORDER BY city;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }

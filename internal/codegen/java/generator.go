@@ -336,7 +336,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 func emitNative(b *strings.Builder, q model.AnalyzedQuery, names []string, sql, row string) {
 	b.WriteString("        var _params = Params.create();\n")
 	for i, p := range q.Parameters {
-		fmt.Fprintf(b, "        _params.put(%s, %s);\n", quoted("$"+p.Name), parameterValue(p, names[i]))
+		fmt.Fprintf(b, "        _params.put(%s, %s);\n", quoted("$"+p.Name), indentExpression(parameterValue(p, names[i]), "        "))
 	}
 	if q.Command == model.Exec {
 		fmt.Fprintf(b, "        client.createQuery(%s, _params).execute().join().getStatus().expectSuccess();\n", sql)
@@ -367,6 +367,7 @@ func emitJDBC(b *strings.Builder, q model.AnalyzedQuery, names []string, binding
 }
 
 func emitJDBCOn(b *strings.Builder, q model.AnalyzedQuery, names []string, bindings []int, sql, row, connection, indent string) {
+	sql = indentExpression(sql, strings.TrimPrefix(indent, "        "))
 	if jdbc.HasDeclarations(q) {
 		fmt.Fprintf(b, "%stry (var _prepared = %s.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement(%s, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {\n", indent, connection, sql)
 	} else {
@@ -375,14 +376,22 @@ func emitJDBCOn(b *strings.Builder, q model.AnalyzedQuery, names []string, bindi
 	indent += "    "
 	if jdbc.HasDeclarations(q) {
 		for i, p := range q.Parameters {
-			fmt.Fprintf(b, "%s_prepared.setObject(%s, %s);\n", indent, quoted(p.Name), parameterValue(p, names[i]))
+			emitJDBCNamedParameter(b, p, names[i], indent)
 		}
 	}
 	for position, i := range bindings {
 		p := q.Parameters[i]
 		s, _, _ := typeInfo(p.Type)
-		if isStructList(p.Type) || strings.HasPrefix(p.Type.UnwrapOptional().Kind, "Uint") || p.Type.UnwrapOptional().Kind == "Json" || p.Type.UnwrapOptional().Kind == "Timestamp" {
-			fmt.Fprintf(b, "%s_prepared.setObject(%d, %s);\n", indent, position+1, parameterValue(p, names[i]))
+		if p.Type.UnwrapOptional().Kind == "Timestamp" {
+			value := "java.sql.Timestamp.from(" + names[i] + ")"
+			if p.Type.IsOptional() {
+				value = names[i] + " == null ? null : " + value
+			}
+			fmt.Fprintf(b, "%s_prepared.setTimestamp(%d, %s);\n", indent, position+1, value)
+			continue
+		}
+		if isStructList(p.Type) || strings.HasPrefix(p.Type.UnwrapOptional().Kind, "Uint") || p.Type.UnwrapOptional().Kind == "Json" {
+			fmt.Fprintf(b, "%s_prepared.setObject(%d, %s);\n", indent, position+1, indentExpression(parameterValue(p, names[i]), indent))
 		} else {
 			sqlType := map[string]string{"Bool": "BOOLEAN", "Int8": "TINYINT", "Int16": "SMALLINT", "Int32": "INTEGER", "Int64": "BIGINT", "Float": "REAL", "Double": "DOUBLE"}[p.Type.UnwrapOptional().Kind]
 			if p.Type.IsOptional() && sqlType != "" {
@@ -417,7 +426,7 @@ func emitRows(b *strings.Builder, q model.AnalyzedQuery, row, indent string, nat
 		n := fmt.Sprintf("_value%d", i)
 		if native {
 			reader := fmt.Sprintf("_rows.getColumn(%d)", i)
-			if c.Type.IsOptional() && s.typ != "String" && s.typ != "byte[]" {
+			if c.Type.IsOptional() && s.typ != "String" && s.typ != "byte[]" && s.sdk != "Timestamp" {
 				fmt.Fprintf(b, "%s%s %s = %s.isOptionalItemPresent() ? %s.getOptionalItem().get%s() : null;\n", indent, typ, n, reader, reader, s.sdk)
 			} else {
 				fmt.Fprintf(b, "%s%s %s = %s.get%s();\n", indent, typ, n, reader, s.sdk)
@@ -442,4 +451,30 @@ func emitRows(b *strings.Builder, q model.AnalyzedQuery, row, indent string, nat
 		indent = strings.TrimSuffix(indent, "    ")
 		b.WriteString(indent + "}\n" + indent + "return _items;\n")
 	}
+}
+
+func indentExpression(s, indent string) string {
+	return strings.ReplaceAll(s, "\n", "\n"+indent)
+}
+
+func emitJDBCNamedParameter(b *strings.Builder, p model.Parameter, n, indent string) {
+	kind := p.Type.UnwrapOptional().Kind
+	if !isStructList(p.Type) && kind != "Uint64" {
+		scalar, _, _ := typeInfo(p.Type)
+		value := n
+		if kind == "Timestamp" {
+			value = "java.sql.Timestamp.from(" + value + ")"
+			if p.Type.IsOptional() {
+				value = n + " == null ? null : " + value
+			}
+		}
+		if p.Type.IsOptional() && scalar.typ != "String" && scalar.typ != "byte[]" && kind != "Timestamp" {
+			fmt.Fprintf(b, "%sif (%s == null) _prepared.setNull(%s, java.sql.Types.NULL);\n%selse ", indent, n, quoted(p.Name), indent)
+		} else {
+			b.WriteString(indent)
+		}
+		fmt.Fprintf(b, "_prepared.set%s(%s, %s);\n", scalar.jdbc, quoted(p.Name), value)
+		return
+	}
+	fmt.Fprintf(b, "%s_prepared.setObject(%s, %s);\n", indent, quoted(p.Name), indentExpression(parameterValue(p, n), indent))
 }

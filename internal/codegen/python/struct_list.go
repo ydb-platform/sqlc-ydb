@@ -42,13 +42,27 @@ func renderStructModel(b *strings.Builder, q model.AnalyzedQuery, p model.Parame
 	}
 	b.WriteByte('\n')
 }
-func parameterValue(p model.Parameter) string {
+func renderParameter(b *strings.Builder, p model.Parameter, typeExpr, runtime string) {
+	key := p.Name
+	if runtime != "sqlalchemy" {
+		key = "$" + key
+	}
+	prefix := "("
+	if runtime == "ydb" {
+		prefix = "_ydb.TypedValue("
+	}
 	if !structList(p.Type) {
-		return fieldName(p.Name)
+		b.WriteString("            " + pyString(key) + ": " + prefix + fieldName(p.Name) + ", " + typeExpr + "),\n")
+		return
 	}
-	fields := make([]string, 0, len(p.Type.Elem.Fields))
+	b.WriteString("            " + pyString(key) + ": " + prefix + "\n                [\n                    {\n")
 	for _, f := range p.Type.Elem.Fields {
-		fields = append(fields, pyString(f.Name)+": item."+fieldName(f.Name))
+		b.WriteString("                        " + pyString(f.Name) + ": item." + fieldName(f.Name) + ",\n")
 	}
-	return "[{" + strings.Join(fields, ", ") + "} for item in " + fieldName(p.Name) + "]"
+	b.WriteString("                    }\n                    for item in " + fieldName(p.Name) + "\n                ],\n                _ydb.ListType(\n                    _ydb.StructType()\n")
+	for _, f := range p.Type.Elem.Fields {
+		typ, _ := ydbTypeExpr(f.Type)
+		b.WriteString("                    .add_member(" + pyString(f.Name) + ", " + typ + ")\n")
+	}
+	b.WriteString("                ),\n            ),\n")
 }

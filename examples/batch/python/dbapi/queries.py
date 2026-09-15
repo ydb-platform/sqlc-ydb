@@ -19,7 +19,9 @@ class Querier:
         try:
             cursor.execute(
                 ("SELECT author_id, name, biography FROM authors\n"
-                 "WHERE author_id = $author_id;"), parameters)
+                 "WHERE author_id = $author_id;"),
+                parameters,
+            )
             row = cursor.fetchone()
             if row is None:
                 return None
@@ -40,7 +42,9 @@ class Querier:
         try:
             cursor.execute(
                 ("DELETE FROM books\n"
-                 "WHERE book_id = $book_id;"), parameters)
+                 "WHERE book_id = $book_id;"),
+                parameters,
+            )
             return None
         finally:
             cursor.close()
@@ -54,7 +58,9 @@ class Querier:
         try:
             cursor.execute(
                 ("DELETE FROM books\n"
-                 "WHERE book_id = $book_id;"), parameters)
+                 "WHERE book_id = $book_id;"),
+                parameters,
+            )
             return None
         finally:
             cursor.close()
@@ -68,7 +74,9 @@ class Querier:
         try:
             cursor.execute(
                 ("DELETE FROM books\n"
-                 "WHERE book_id = $book_id;"), parameters)
+                 "WHERE book_id = $book_id;"),
+                parameters,
+            )
             return None
         finally:
             cursor.close()
@@ -82,7 +90,9 @@ class Querier:
         try:
             cursor.execute(
                 ("DELETE FROM books\n"
-                 "WHERE book_id = $book_id;"), parameters)
+                 "WHERE book_id = $book_id;"),
+                parameters,
+            )
             return None
         finally:
             cursor.close()
@@ -97,7 +107,9 @@ class Querier:
             cursor.execute(
                 ("SELECT book_id, author_id, isbn, book_type, title, year, available, tags\n"
                  "FROM books\n"
-                 "WHERE year = $year;"), parameters)
+                 "WHERE year = $year;"),
+                parameters,
+            )
             rows = cursor.fetchall()
             return [_models.Books(
                 book_id=row[0],
@@ -124,7 +136,9 @@ class Querier:
             cursor.execute(
                 ("INSERT INTO authors (author_id, name, biography)\n"
                  "VALUES ($author_id, $name, $biography)\n"
-                 "RETURNING author_id, name, biography;"), parameters)
+                 "RETURNING author_id, name, biography;"),
+                parameters,
+            )
             row = cursor.fetchone()
             if row is None:
                 return None
@@ -153,7 +167,9 @@ class Querier:
             cursor.execute(
                 ("INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)\n"
                  "VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)\n"
-                 "RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;"), parameters)
+                 "RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;"),
+                parameters,
+            )
             row = cursor.fetchone()
             if row is None:
                 return None
@@ -182,7 +198,9 @@ class Querier:
             cursor.execute(
                 ("UPDATE books\n"
                  "SET title = $title, tags = $tags\n"
-                 "WHERE book_id = $book_id;"), parameters)
+                 "WHERE book_id = $book_id;"),
+                parameters,
+            )
             return None
         finally:
             cursor.close()
@@ -196,7 +214,9 @@ class Querier:
         try:
             cursor.execute(
                 ("SELECT biography FROM authors\n"
-                 "WHERE author_id = $author_id;"), parameters)
+                 "WHERE author_id = $author_id;"),
+                parameters,
+            )
             row = cursor.fetchone()
             if row is None:
                 return None
@@ -209,7 +229,32 @@ class Querier:
     # -- name: CreateBooks :exec
     def create_books(self, books: list[_models.CreateBooksBooksItem]) -> None:
         parameters = {
-            "$books": ([{"book_id": item.book_id, "author_id": item.author_id, "isbn": item.isbn, "book_type": item.book_type, "title": item.title, "year": item.year, "available": item.available, "tags": item.tags} for item in books], _ydb.ListType(_ydb.StructType().add_member("book_id", _ydb.PrimitiveType.Uint64).add_member("author_id", _ydb.PrimitiveType.Uint64).add_member("isbn", _ydb.PrimitiveType.Utf8).add_member("book_type", _ydb.PrimitiveType.Utf8).add_member("title", _ydb.PrimitiveType.Utf8).add_member("year", _ydb.PrimitiveType.Int32).add_member("available", _ydb.PrimitiveType.Timestamp).add_member("tags", _ydb.PrimitiveType.Json))),
+            "$books": (
+                [
+                    {
+                        "book_id": item.book_id,
+                        "author_id": item.author_id,
+                        "isbn": item.isbn,
+                        "book_type": item.book_type,
+                        "title": item.title,
+                        "year": item.year,
+                        "available": item.available,
+                        "tags": item.tags,
+                    }
+                    for item in books
+                ],
+                _ydb.ListType(
+                    _ydb.StructType()
+                    .add_member("book_id", _ydb.PrimitiveType.Uint64)
+                    .add_member("author_id", _ydb.PrimitiveType.Uint64)
+                    .add_member("isbn", _ydb.PrimitiveType.Utf8)
+                    .add_member("book_type", _ydb.PrimitiveType.Utf8)
+                    .add_member("title", _ydb.PrimitiveType.Utf8)
+                    .add_member("year", _ydb.PrimitiveType.Int32)
+                    .add_member("available", _ydb.PrimitiveType.Timestamp)
+                    .add_member("tags", _ydb.PrimitiveType.Json)
+                ),
+            ),
         }
         cursor = self._connection.cursor()
         try:
@@ -229,7 +274,9 @@ class Querier:
                  ")\n"
                  "SELECT\n"
                  "    book_id, author_id, isbn, book_type, title, year, available, tags\n"
-                 "FROM AS_TABLE($books);"), parameters)
+                 "FROM AS_TABLE($books);"),
+                parameters,
+            )
             return None
         finally:
             cursor.close()

@@ -17,9 +17,13 @@ class Querier:
         parameters = {
             "author_id": (author_id, _ydb.PrimitiveType.Uint64),
         }
-        result = self._connection.execute(_text(
-            ("SELECT author_id, name, biography FROM authors\n"
-             "WHERE author_id = :author_id;")), parameters)
+        result = self._connection.execute(
+            _text(
+                ("SELECT author_id, name, biography FROM authors\n"
+                 "WHERE author_id = :author_id;")
+            ),
+            parameters,
+        )
         try:
             row = result.fetchone()
         finally:
@@ -37,9 +41,13 @@ class Querier:
         parameters = {
             "book_id": (book_id, _ydb.PrimitiveType.Uint64),
         }
-        result = self._connection.execute(_text(
-            ("DELETE FROM books\n"
-             "WHERE book_id = :book_id;")), parameters)
+        result = self._connection.execute(
+            _text(
+                ("DELETE FROM books\n"
+                 "WHERE book_id = :book_id;")
+            ),
+            parameters,
+        )
         result.close()
         return None
 
@@ -48,9 +56,13 @@ class Querier:
         parameters = {
             "book_id": (book_id, _ydb.PrimitiveType.Uint64),
         }
-        result = self._connection.execute(_text(
-            ("DELETE FROM books\n"
-             "WHERE book_id = :book_id;")), parameters)
+        result = self._connection.execute(
+            _text(
+                ("DELETE FROM books\n"
+                 "WHERE book_id = :book_id;")
+            ),
+            parameters,
+        )
         result.close()
         return None
 
@@ -59,9 +71,13 @@ class Querier:
         parameters = {
             "book_id": (book_id, _ydb.PrimitiveType.Uint64),
         }
-        result = self._connection.execute(_text(
-            ("DELETE FROM books\n"
-             "WHERE book_id = :book_id;")), parameters)
+        result = self._connection.execute(
+            _text(
+                ("DELETE FROM books\n"
+                 "WHERE book_id = :book_id;")
+            ),
+            parameters,
+        )
         result.close()
         return None
 
@@ -70,9 +86,13 @@ class Querier:
         parameters = {
             "book_id": (book_id, _ydb.PrimitiveType.Uint64),
         }
-        result = self._connection.execute(_text(
-            ("DELETE FROM books\n"
-             "WHERE book_id = :book_id;")), parameters)
+        result = self._connection.execute(
+            _text(
+                ("DELETE FROM books\n"
+                 "WHERE book_id = :book_id;")
+            ),
+            parameters,
+        )
         result.close()
         return None
 
@@ -81,10 +101,14 @@ class Querier:
         parameters = {
             "year": (year, _ydb.PrimitiveType.Int32),
         }
-        result = self._connection.execute(_text(
-            ("SELECT book_id, author_id, isbn, book_type, title, year, available, tags\n"
-             "FROM books\n"
-             "WHERE year = :year;")), parameters)
+        result = self._connection.execute(
+            _text(
+                ("SELECT book_id, author_id, isbn, book_type, title, year, available, tags\n"
+                 "FROM books\n"
+                 "WHERE year = :year;")
+            ),
+            parameters,
+        )
         try:
             rows = result.fetchall()
         finally:
@@ -107,10 +131,14 @@ class Querier:
             "name": (name, _ydb.PrimitiveType.Utf8),
             "biography": (biography, _ydb.OptionalType(_ydb.PrimitiveType.Json)),
         }
-        result = self._connection.execute(_text(
-            ("INSERT INTO authors (author_id, name, biography)\n"
-             "VALUES (:author_id, :name, :biography)\n"
-             "RETURNING author_id, name, biography;")), parameters)
+        result = self._connection.execute(
+            _text(
+                ("INSERT INTO authors (author_id, name, biography)\n"
+                 "VALUES (:author_id, :name, :biography)\n"
+                 "RETURNING author_id, name, biography;")
+            ),
+            parameters,
+        )
         try:
             row = result.fetchone()
         finally:
@@ -135,10 +163,14 @@ class Querier:
             "available": (available, _ydb.PrimitiveType.Timestamp),
             "tags": (tags, _ydb.PrimitiveType.Json),
         }
-        result = self._connection.execute(_text(
-            ("INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)\n"
-             "VALUES (:book_id, :author_id, :isbn, :book_type, :title, :year, :available, :tags)\n"
-             "RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;")), parameters)
+        result = self._connection.execute(
+            _text(
+                ("INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)\n"
+                 "VALUES (:book_id, :author_id, :isbn, :book_type, :title, :year, :available, :tags)\n"
+                 "RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;")
+            ),
+            parameters,
+        )
         try:
             row = result.fetchone()
         finally:
@@ -163,10 +195,14 @@ class Querier:
             "tags": (tags, _ydb.PrimitiveType.Json),
             "book_id": (book_id, _ydb.PrimitiveType.Uint64),
         }
-        result = self._connection.execute(_text(
-            ("UPDATE books\n"
-             "SET title = :title, tags = :tags\n"
-             "WHERE book_id = :book_id;")), parameters)
+        result = self._connection.execute(
+            _text(
+                ("UPDATE books\n"
+                 "SET title = :title, tags = :tags\n"
+                 "WHERE book_id = :book_id;")
+            ),
+            parameters,
+        )
         result.close()
         return None
 
@@ -175,9 +211,13 @@ class Querier:
         parameters = {
             "author_id": (author_id, _ydb.PrimitiveType.Uint64),
         }
-        result = self._connection.execute(_text(
-            ("SELECT biography FROM authors\n"
-             "WHERE author_id = :author_id;")), parameters)
+        result = self._connection.execute(
+            _text(
+                ("SELECT biography FROM authors\n"
+                 "WHERE author_id = :author_id;")
+            ),
+            parameters,
+        )
         try:
             row = result.fetchone()
         finally:
@@ -191,24 +231,53 @@ class Querier:
     # -- name: CreateBooks :exec
     def create_books(self, books: list[_models.CreateBooksBooksItem]) -> None:
         parameters = {
-            "books": ([{"book_id": item.book_id, "author_id": item.author_id, "isbn": item.isbn, "book_type": item.book_type, "title": item.title, "year": item.year, "available": item.available, "tags": item.tags} for item in books], _ydb.ListType(_ydb.StructType().add_member("book_id", _ydb.PrimitiveType.Uint64).add_member("author_id", _ydb.PrimitiveType.Uint64).add_member("isbn", _ydb.PrimitiveType.Utf8).add_member("book_type", _ydb.PrimitiveType.Utf8).add_member("title", _ydb.PrimitiveType.Utf8).add_member("year", _ydb.PrimitiveType.Int32).add_member("available", _ydb.PrimitiveType.Timestamp).add_member("tags", _ydb.PrimitiveType.Json))),
+            "books": (
+                [
+                    {
+                        "book_id": item.book_id,
+                        "author_id": item.author_id,
+                        "isbn": item.isbn,
+                        "book_type": item.book_type,
+                        "title": item.title,
+                        "year": item.year,
+                        "available": item.available,
+                        "tags": item.tags,
+                    }
+                    for item in books
+                ],
+                _ydb.ListType(
+                    _ydb.StructType()
+                    .add_member("book_id", _ydb.PrimitiveType.Uint64)
+                    .add_member("author_id", _ydb.PrimitiveType.Uint64)
+                    .add_member("isbn", _ydb.PrimitiveType.Utf8)
+                    .add_member("book_type", _ydb.PrimitiveType.Utf8)
+                    .add_member("title", _ydb.PrimitiveType.Utf8)
+                    .add_member("year", _ydb.PrimitiveType.Int32)
+                    .add_member("available", _ydb.PrimitiveType.Timestamp)
+                    .add_member("tags", _ydb.PrimitiveType.Json)
+                ),
+            ),
         }
-        result = self._connection.execute(_text(
-            ("DECLARE $books AS List<Struct<\n"
-             "    book_id\\: Uint64,\n"
-             "    author_id\\: Uint64,\n"
-             "    isbn\\: Utf8,\n"
-             "    book_type\\: Utf8,\n"
-             "    title\\: Utf8,\n"
-             "    year\\: Int32,\n"
-             "    available\\: Timestamp,\n"
-             "    tags\\: Json\n"
-             ">>;\n"
-             "INSERT INTO books (\n"
-             "    book_id, author_id, isbn, book_type, title, year, available, tags\n"
-             ")\n"
-             "SELECT\n"
-             "    book_id, author_id, isbn, book_type, title, year, available, tags\n"
-             "FROM AS_TABLE(:books);")), parameters)
+        result = self._connection.execute(
+            _text(
+                ("DECLARE $books AS List<Struct<\n"
+                 "    book_id\\: Uint64,\n"
+                 "    author_id\\: Uint64,\n"
+                 "    isbn\\: Utf8,\n"
+                 "    book_type\\: Utf8,\n"
+                 "    title\\: Utf8,\n"
+                 "    year\\: Int32,\n"
+                 "    available\\: Timestamp,\n"
+                 "    tags\\: Json\n"
+                 ">>;\n"
+                 "INSERT INTO books (\n"
+                 "    book_id, author_id, isbn, book_type, title, year, available, tags\n"
+                 ")\n"
+                 "SELECT\n"
+                 "    book_id, author_id, isbn, book_type, title, year, available, tags\n"
+                 "FROM AS_TABLE(:books);")
+            ),
+            parameters,
+        )
         result.close()
         return None

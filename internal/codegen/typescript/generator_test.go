@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -236,8 +237,8 @@ func TestExecutableSQLAppearsOnlyAtCall(t *testing.T) {
 	if strings.Contains(ts, "_ECHO_SQL_EXEC") {
 		t.Fatalf("equal executable SQL produced a duplicate private constant:\n%s", ts)
 	}
-	if strings.Count(ts, "`SELECT $value;`") != 1 {
-		t.Fatalf("got %d SQL literals, want 1:\n%s", strings.Count(ts, "`SELECT $value;`"), ts)
+	if strings.Count(ts, `"SELECT $value;"`) != 1 {
+		t.Fatalf("got %d SQL literals, want 1:\n%s", strings.Count(ts, `"SELECT $value;"`), ts)
 	}
 	if !strings.Contains(ts, "const stmt = this.#sql") {
 		t.Fatalf("method does not construct an inline SQL statement:\n%s", ts)
@@ -250,12 +251,20 @@ func TestSQLLiteralRoundTripsThroughNode(t *testing.T) {
 		t.Skip("node is unavailable")
 	}
 	want := "  DECLARE $id AS Uint64; -- source comment\n\n    -- a readable query\n  SELECT `tick`, '${value}', \\\\path, \"雪\"u, '\t';\r\n-- trailing space \n \t \nSELECT 1;\t"
+	want += "\nSELECT '"
+	for ch := rune(0); ch < 32; ch++ {
+		want += string(ch)
+	}
+	want += "😀\U0001D173';"
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Exact", Command: model.Exec, SQL: want}}}
 	files, err := Generate(a, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	generated := fileContent(t, files, "queries.ts")
+	if !strings.Contains(generated, "\n      "+strconv.Quote("    -- a readable query\n")+" +\n") {
+		t.Fatal("SQL lines must retain source indentation inside literals aligned with the call")
+	}
 	for lineNumber, line := range strings.Split(generated, "\n") {
 		if strings.HasSuffix(line, " ") || strings.HasSuffix(line, "\t") {
 			t.Fatalf("generated TypeScript line %d has trailing whitespace: %q", lineNumber+1, line)
@@ -265,7 +274,7 @@ func TestSQLLiteralRoundTripsThroughNode(t *testing.T) {
 	module := filepath.Join(dir, "queries.mjs")
 	transpileModule(t, node, generated, module)
 	expected, _ := json.Marshal(want)
-	script := `import { Queries } from ` + string(mustJSON(module)) + `; let actual; await new Queries((parts) => { actual = parts.join(""); return Promise.resolve([]); }).exact(); if (actual !== ` + string(expected) + `) { throw new Error(JSON.stringify(actual)); }`
+	script := `import { Queries } from ` + string(mustJSON(module)) + `; let actual; await new Queries((parts) => { actual = parts; return Promise.resolve([]); }).exact(); if (actual !== ` + string(expected) + `) { throw new Error(JSON.stringify(actual)); }`
 	if out, err := exec.Command(node, "--input-type=module", "--eval", script).CombinedOutput(); err != nil {
 		t.Fatalf("generated literal did not round-trip: %v\n%s", err, out)
 	}
@@ -350,7 +359,7 @@ export async function load(url, context, nextLoad) {
 import { Queries } from './queries.mjs';
 const calls = [];
 const client = (text) => {
-  const call = { text: text.join(""), params: [] }; calls.push(call);
+  const call = { text, params: [] }; calls.push(call);
   const promise = Promise.resolve([[{ id: 18446744073709551615n, display_name: 'Ada', bio: null }]]);
   call.pending = promise;
   Object.defineProperty(promise, "text", { value: call.text, configurable: true });
@@ -475,7 +484,7 @@ func TestStructListParameter(t *testing.T) {
 	for _, f := range files {
 		output.Write(f.Content)
 	}
-	for _, want := range []string{"CreateBooksBooksItem", "ReadonlyArray<CreateBooksBooksItem>", "new ListType(type)", "new StructType([\"book_id\", \"tags\"]", "new OptionalType(new JsonType())", "item.bookId"} {
+	for _, want := range []string{"CreateBooksBooksItem", "ReadonlyArray<CreateBooksBooksItem>", "new ListType(type)", "new StructType(\n          [\n            \"book_id\",\n            \"tags\",\n", "new OptionalType(new JsonType())", "item.bookId"} {
 		if !strings.Contains(output.String(), want) {
 			t.Errorf("missing %s", want)
 		}
@@ -524,7 +533,7 @@ func TestStructListsEncodeWithPinnedSDK(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(files[0].Content), "structList(structList_.map(") {
+	if !strings.Contains(string(files[0].Content), "structList(\n        structList_.map(") {
 		t.Fatal("list argument shadows SDK binding helper")
 	}
 	dir := t.TempDir()
@@ -582,6 +591,9 @@ func TestDeclaredSQLReachesPinnedSDKWithoutDuplicateDeclarations(t *testing.T) {
 	}
 	module := filepath.Join(dir, "queries.mjs")
 	transpileModule(t, node, string(files[0].Content), module)
+	if !strings.Contains(string(files[0].Content), "DECLARE $books AS List<Struct<") {
+		t.Fatal("SQL declaration brackets must remain readable")
+	}
 	expected := sql
 	expectedMixed := "DECLARE $minimum AS Uint64;\n" + mixed
 	script := `import assert from 'node:assert/strict';

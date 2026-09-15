@@ -47,14 +47,70 @@ public sealed class Queries
             {
                 Members =
                 {
-                    new global::Ydb.StructMember { Name = "book_id", Type = new global::Ydb.Type { TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Uint64 } },
-                    new global::Ydb.StructMember { Name = "author_id", Type = new global::Ydb.Type { TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Uint64 } },
-                    new global::Ydb.StructMember { Name = "isbn", Type = new global::Ydb.Type { TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Utf8 } },
-                    new global::Ydb.StructMember { Name = "book_type", Type = new global::Ydb.Type { TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Utf8 } },
-                    new global::Ydb.StructMember { Name = "title", Type = new global::Ydb.Type { TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Utf8 } },
-                    new global::Ydb.StructMember { Name = "year", Type = new global::Ydb.Type { TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Int32 } },
-                    new global::Ydb.StructMember { Name = "available", Type = new global::Ydb.Type { TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Timestamp } },
-                    new global::Ydb.StructMember { Name = "tags", Type = new global::Ydb.Type { TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Json } },
+                    new global::Ydb.StructMember
+                    {
+                        Name = "book_id",
+                        Type = new global::Ydb.Type
+                        {
+                            TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Uint64
+                        }
+                    },
+                    new global::Ydb.StructMember
+                    {
+                        Name = "author_id",
+                        Type = new global::Ydb.Type
+                        {
+                            TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Uint64
+                        }
+                    },
+                    new global::Ydb.StructMember
+                    {
+                        Name = "isbn",
+                        Type = new global::Ydb.Type
+                        {
+                            TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Utf8
+                        }
+                    },
+                    new global::Ydb.StructMember
+                    {
+                        Name = "book_type",
+                        Type = new global::Ydb.Type
+                        {
+                            TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Utf8
+                        }
+                    },
+                    new global::Ydb.StructMember
+                    {
+                        Name = "title",
+                        Type = new global::Ydb.Type
+                        {
+                            TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Utf8
+                        }
+                    },
+                    new global::Ydb.StructMember
+                    {
+                        Name = "year",
+                        Type = new global::Ydb.Type
+                        {
+                            TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Int32
+                        }
+                    },
+                    new global::Ydb.StructMember
+                    {
+                        Name = "available",
+                        Type = new global::Ydb.Type
+                        {
+                            TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Timestamp
+                        }
+                    },
+                    new global::Ydb.StructMember
+                    {
+                        Name = "tags",
+                        Type = new global::Ydb.Type
+                        {
+                            TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Json
+                        }
+                    },
                 }
             }
         };

@@ -6,9 +6,9 @@ namespace ondeck::userver {
 // -- name: ListCities :many
 std::vector<ListCitiesRow> Queries::ListCities() const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(SELECT slug, name
-FROM city
-ORDER BY name;)sql",
+        "SELECT slug, name\n"
+        "FROM city\n"
+        "ORDER BY name;",
         ::userver::ydb::Query::Name{"ListCities"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -31,9 +31,9 @@ ORDER BY name;)sql",
 // -- name: GetCity :one
 std::optional<GetCityRow> Queries::GetCity(const ::userver::ydb::Utf8& slug) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(SELECT slug, name
-FROM city
-WHERE slug = $slug;)sql",
+        "SELECT slug, name\n"
+        "FROM city\n"
+        "WHERE slug = $slug;",
         ::userver::ydb::Query::Name{"GetCity"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -55,13 +55,13 @@ WHERE slug = $slug;)sql",
 // -- name: CreateCity :one
 std::optional<CreateCityRow> Queries::CreateCity(const ::userver::ydb::Utf8& name, const ::userver::ydb::Utf8& slug) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(INSERT INTO city (
-    name,
-    slug
-) VALUES (
-    $name,
-    $slug
-) RETURNING slug, name;)sql",
+        "INSERT INTO city (\n"
+        "    name,\n"
+        "    slug\n"
+        ") VALUES (\n"
+        "    $name,\n"
+        "    $slug\n"
+        ") RETURNING slug, name;",
         ::userver::ydb::Query::Name{"CreateCity"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -83,9 +83,9 @@ std::optional<CreateCityRow> Queries::CreateCity(const ::userver::ydb::Utf8& nam
 // -- name: UpdateCityName :exec
 void Queries::UpdateCityName(const ::userver::ydb::Utf8& name, const ::userver::ydb::Utf8& slug) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(UPDATE city
-SET name = $name
-WHERE slug = $slug;)sql",
+        "UPDATE city\n"
+        "SET name = $name\n"
+        "WHERE slug = $slug;",
         ::userver::ydb::Query::Name{"UpdateCityName"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -99,10 +99,10 @@ WHERE slug = $slug;)sql",
 // -- name: ListVenues :many
 std::vector<ListVenuesRow> Queries::ListVenues(const ::userver::ydb::Utf8& city) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
-FROM venue
-WHERE city = $city
-ORDER BY name;)sql",
+        "SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n"
+        "FROM venue\n"
+        "WHERE city = $city\n"
+        "ORDER BY name;",
         ::userver::ydb::Query::Name{"ListVenues"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -133,8 +133,8 @@ ORDER BY name;)sql",
 // -- name: DeleteVenue :exec
 void Queries::DeleteVenue(const ::userver::ydb::Utf8& slug) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(DELETE FROM venue
-WHERE slug = $slug AND slug = $slug;)sql",
+        "DELETE FROM venue\n"
+        "WHERE slug = $slug AND slug = $slug;",
         ::userver::ydb::Query::Name{"DeleteVenue"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -148,9 +148,9 @@ WHERE slug = $slug AND slug = $slug;)sql",
 // -- name: GetVenue :one
 std::optional<GetVenueRow> Queries::GetVenue(const ::userver::ydb::Utf8& slug, const ::userver::ydb::Utf8& city) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
-FROM venue
-WHERE slug = $slug AND city = $city;)sql",
+        "SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n"
+        "FROM venue\n"
+        "WHERE slug = $slug AND city = $city;",
         ::userver::ydb::Query::Name{"GetVenue"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -180,27 +180,27 @@ WHERE slug = $slug AND city = $city;)sql",
 // -- name: CreateVenue :one
 std::optional<CreateVenueRow> Queries::CreateVenue(std::uint64_t id, const ::userver::ydb::Utf8& slug, const ::userver::ydb::Utf8& name, const ::userver::ydb::Utf8& city, const std::optional<std::chrono::system_clock::time_point>& created_at, const ::userver::ydb::Utf8& spotify_playlist, const ::userver::ydb::Utf8& status, const std::optional<::userver::formats::json::Value>& statuses, const std::optional<::userver::formats::json::Value>& tags) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(INSERT INTO venue (
-    id,
-    slug,
-    name,
-    city,
-    created_at,
-    spotify_playlist,
-    status,
-    statuses,
-    tags
-) VALUES (
-    $id,
-    $slug,
-    $name,
-    $city,
-    $created_at,
-    $spotify_playlist,
-    $status,
-    $statuses,
-    $tags
-) RETURNING id;)sql",
+        "INSERT INTO venue (\n"
+        "    id,\n"
+        "    slug,\n"
+        "    name,\n"
+        "    city,\n"
+        "    created_at,\n"
+        "    spotify_playlist,\n"
+        "    status,\n"
+        "    statuses,\n"
+        "    tags\n"
+        ") VALUES (\n"
+        "    $id,\n"
+        "    $slug,\n"
+        "    $name,\n"
+        "    $city,\n"
+        "    $created_at,\n"
+        "    $spotify_playlist,\n"
+        "    $status,\n"
+        "    $statuses,\n"
+        "    $tags\n"
+        ") RETURNING id;",
         ::userver::ydb::Query::Name{"CreateVenue"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -221,10 +221,10 @@ std::optional<CreateVenueRow> Queries::CreateVenue(std::uint64_t id, const ::use
 // -- name: UpdateVenueName :one
 std::optional<UpdateVenueNameRow> Queries::UpdateVenueName(const ::userver::ydb::Utf8& name, const ::userver::ydb::Utf8& slug) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(UPDATE venue
-SET name = $name
-WHERE slug = $slug
-RETURNING id;)sql",
+        "UPDATE venue\n"
+        "SET name = $name\n"
+        "WHERE slug = $slug\n"
+        "RETURNING id;",
         ::userver::ydb::Query::Name{"UpdateVenueName"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -245,12 +245,12 @@ RETURNING id;)sql",
 // -- name: VenueCountByCity :many
 std::vector<VenueCountByCityRow> Queries::VenueCountByCity() const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(SELECT
-    city,
-    COUNT(*) AS venue_count
-FROM venue
-GROUP BY city
-ORDER BY city;)sql",
+        "SELECT\n"
+        "    city,\n"
+        "    COUNT(*) AS venue_count\n"
+        "FROM venue\n"
+        "GROUP BY city\n"
+        "ORDER BY city;",
         ::userver::ydb::Query::Name{"VenueCountByCity"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };

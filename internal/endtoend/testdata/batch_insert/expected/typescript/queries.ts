@@ -31,13 +31,33 @@ export class Queries {
 
   // -- name: CreateBooks :exec
   async createBooks(books: ReadonlyArray<CreateBooksBooksItem>, configure?: ConfigureQuery): Promise<void> {
-    const stmt = this.#sql`DECLARE $books AS List<Struct<book_id: Uint64, title: Optional<Utf8>, tags: Json>>;
-INSERT INTO books (book_id, title, tags)
-SELECT book_id, title, tags FROM AS_TABLE($books);`;
+    const stmt = this.#sql(
+      "DECLARE $books AS List<Struct<book_id: Uint64, title: Optional<Utf8>, tags: Json>>;\n" +
+      "INSERT INTO books (book_id, title, tags)\n" +
+      "SELECT book_id, title, tags FROM AS_TABLE($books);"
+    );
     // Keep explicit DECLARE statements; the SDK otherwise prepends duplicates.
     Object.defineProperty(stmt, "text", { value: stmt.text, writable: false });
     stmt
-      .parameter("books", structList(books.map(item => new Struct({ ["book_id"]: new Uint64(item.bookId), ["title"]: new Optional(item.title === null ? null : new Utf8(item.title), new Utf8Type()), ["tags"]: new Json(item.tags) })), new StructType(["book_id", "title", "tags"], [new Uint64Type(), new OptionalType(new Utf8Type()), new JsonType()])));
+      .parameter("books", structList(
+        books.map(item => new Struct({
+          ["book_id"]: new Uint64(item.bookId),
+          ["title"]: new Optional(item.title === null ? null : new Utf8(item.title), new Utf8Type()),
+          ["tags"]: new Json(item.tags),
+        })),
+        new StructType(
+          [
+            "book_id",
+            "title",
+            "tags",
+          ],
+          [
+            new Uint64Type(),
+            new OptionalType(new Utf8Type()),
+            new JsonType(),
+          ],
+        ),
+      ));
     configure?.(stmt);
     await stmt;
   }

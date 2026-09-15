@@ -79,25 +79,25 @@ public final class Queries {
     public List<BooksByTagsRow> booksByTags(JSON tags) {
         return dsl.connectionResult(_connection -> {
             try (var _prepared = _connection.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
-            DECLARE $tags AS Json;
-            SELECT
-                b.book_id,
-                b.title,
-                a.name,
-                b.isbn,
-                b.tags
-            FROM\s\
-            """ + dsl.render(BOOKS) + """
-             AS b
-            LEFT JOIN\s\
-            """ + dsl.render(AUTHORS) + """
-             AS a ON b.author_id = a.author_id
-            WHERE NOT SetIsDisjoint(
-                ToSet(Yson::ConvertToStringList(b.tags)),
-                Yson::ConvertToStringList($tags)
-            );\
-            """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
-                _prepared.setObject("tags", tech.ydb.table.values.PrimitiveValue.newJson(tags.data()));
+                DECLARE $tags AS Json;
+                SELECT
+                    b.book_id,
+                    b.title,
+                    a.name,
+                    b.isbn,
+                    b.tags
+                FROM\s\
+                """ + dsl.render(BOOKS) + """
+                 AS b
+                LEFT JOIN\s\
+                """ + dsl.render(AUTHORS) + """
+                 AS a ON b.author_id = a.author_id
+                WHERE NOT SetIsDisjoint(
+                    ToSet(Yson::ConvertToStringList(b.tags)),
+                    Yson::ConvertToStringList($tags)
+                );\
+                """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+                _prepared.setString("tags", tags.data());
                 try (var _rows = _prepared.executeQuery()) {
                     var _result = dsl.fetch(_rows, YdbTypes.UINT64, YdbTypes.UTF8, YdbTypes.UTF8, YdbTypes.UTF8, YdbTypes.JSON).map(_row -> new BooksByTagsRow(_row.get(0, org.jooq.types.ULong.class), _row.get(1, String.class), _row.get(2, String.class), _row.get(3, String.class), _row.get(4, org.jooq.JSON.class)));
                     return _result;

@@ -43,11 +43,11 @@ func containsTimestamp(t model.Type) bool {
 	}
 	return false
 }
-func structTypeExpression(t model.Type) string {
+func structTypeExpression(t model.Type, indent string) string {
 	if t.IsOptional() {
-		return "new global::Ydb.Type { OptionalType = new global::Ydb.OptionalType { Item = " + structTypeExpression(*t.Elem) + " } }"
+		return "new global::Ydb.Type\n" + indent + "{\n" + indent + "    OptionalType = new global::Ydb.OptionalType\n" + indent + "    {\n" + indent + "        Item = " + structTypeExpression(*t.Elem, indent+"        ") + "\n" + indent + "    }\n" + indent + "}"
 	}
-	return "new global::Ydb.Type { TypeId = global::Ydb.Type.Types.PrimitiveTypeId." + csName(t.Kind) + " }"
+	return "new global::Ydb.Type\n" + indent + "{\n" + indent + "    TypeId = global::Ydb.Type.Types.PrimitiveTypeId." + csName(t.Kind) + "\n" + indent + "}"
 }
 func structValueExpression(t model.Type, v string) string {
 	if strings.EqualFold(t.UnwrapOptional().Kind, "timestamp") {
@@ -68,7 +68,7 @@ func writeStructListHelpers(b *bytes.Buffer, in *model.AnalysisResult) {
 			name := structItemName(q, p)
 			fmt.Fprintf(b, "\n    private static YdbValue Bind%s(IReadOnlyList<%s> items)\n    {\n        ArgumentNullException.ThrowIfNull(items);\n        // The SDK has no complex empty-list factory. GetProto exposes the mutable wire type.\n        var result = YdbValue.MakeEmptyList(YdbTypeId.Uint64);\n        var proto = result.GetProto();\n        proto.Type.ListType.Item = new global::Ydb.Type\n        {\n            StructType = new global::Ydb.StructType\n            {\n                Members =\n                {\n", name, name)
 			for _, f := range p.Type.Elem.Fields {
-				fmt.Fprintf(b, "                    new global::Ydb.StructMember { Name = %s, Type = %s },\n", csString(f.Name), structTypeExpression(f.Type))
+				fmt.Fprintf(b, "                    new global::Ydb.StructMember\n                    {\n                        Name = %s,\n                        Type = %s\n                    },\n", csString(f.Name), structTypeExpression(f.Type, "                        "))
 			}
 			b.WriteString("                }\n            }\n        };\n        foreach (var item in items)\n        {\n            ArgumentNullException.ThrowIfNull(item);\n            var row = YdbValue.MakeStruct(new global::System.Collections.Generic.Dictionary<string, YdbValue>\n            {\n")
 			for _, f := range p.Type.Elem.Fields {

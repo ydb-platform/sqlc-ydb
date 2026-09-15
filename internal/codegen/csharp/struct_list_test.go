@@ -143,3 +143,17 @@ func TestStructListAndScalarParameters(t *testing.T) {
 		}
 	}
 }
+
+func TestStructListSchemaUsesIndentedMemberBlocks(t *testing.T) {
+	for _, runtime := range []string{"adonet", "dapper"} {
+		_, queries := generatedRuntime(t, batchAnalysis(), runtime)
+		for _, want := range []string{
+			"                    new global::Ydb.StructMember\n                    {\n                        Name = \"book_id\",\n                        Type = new global::Ydb.Type\n",
+			"                            OptionalType = new global::Ydb.OptionalType\n                            {\n                                Item = new global::Ydb.Type\n",
+		} {
+			if !strings.Contains(queries, want) {
+				t.Fatalf("%s: missing structured schema layout %q", runtime, want)
+			}
+		}
+	}
+}

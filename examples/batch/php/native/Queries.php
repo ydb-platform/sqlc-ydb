@@ -488,26 +488,41 @@ final class Queries
     {
         $parameters = [
             '$books' => new \Ydb\TypedValue([
-                'type' => new \Ydb\Type(['list_type' => new \Ydb\ListType(['item' => new \Ydb\Type(['struct_type' => new \Ydb\StructType(['members' => [
-                    new \Ydb\StructMember(['name' => 'book_id', 'type' => new \Ydb\Type(['type_id' => PrimitiveTypeId::UINT64])]),
-                    new \Ydb\StructMember(['name' => 'author_id', 'type' => new \Ydb\Type(['type_id' => PrimitiveTypeId::UINT64])]),
-                    new \Ydb\StructMember(['name' => 'isbn', 'type' => new \Ydb\Type(['type_id' => PrimitiveTypeId::UTF8])]),
-                    new \Ydb\StructMember(['name' => 'book_type', 'type' => new \Ydb\Type(['type_id' => PrimitiveTypeId::UTF8])]),
-                    new \Ydb\StructMember(['name' => 'title', 'type' => new \Ydb\Type(['type_id' => PrimitiveTypeId::UTF8])]),
-                    new \Ydb\StructMember(['name' => 'year', 'type' => new \Ydb\Type(['type_id' => PrimitiveTypeId::INT32])]),
-                    new \Ydb\StructMember(['name' => 'available', 'type' => new \Ydb\Type(['type_id' => PrimitiveTypeId::TIMESTAMP])]),
-                    new \Ydb\StructMember(['name' => 'tags', 'type' => new \Ydb\Type(['type_id' => PrimitiveTypeId::JSON])]),
-                ]])])])]),
-                'value' => new \Ydb\Value(['items' => array_map(static fn(CreateBooksBooksItem $item): \Ydb\Value => new \Ydb\Value(['items' => [
-                    YdbValueCodec::typedUint64($item->bookId, 'books.book_id')->getValue(),
-                    YdbValueCodec::typedUint64($item->authorId, 'books.author_id')->getValue(),
-                    YdbValueCodec::typedUtf8($item->isbn, 'books.isbn')->getValue(),
-                    YdbValueCodec::typedUtf8($item->bookType, 'books.book_type')->getValue(),
-                    YdbValueCodec::typedUtf8($item->title, 'books.title')->getValue(),
-                    YdbValueCodec::typedInt32($item->year, 'books.year')->getValue(),
-                    YdbValueCodec::typedTimestamp($item->available, 'books.available')->getValue(),
-                    YdbValueCodec::typedJson($item->tags, 'books.tags')->getValue(),
-                ]]), array_values($books))]),
+                'type' => new \Ydb\Type([
+                    'list_type' => new \Ydb\ListType([
+                        'item' => new \Ydb\Type([
+                            'struct_type' => new \Ydb\StructType([
+                                'members' => [
+                                    new \Ydb\StructMember(['name' => 'book_id', 'type' => new \Ydb\Type(['type_id' => PrimitiveTypeId::UINT64])]),
+                                    new \Ydb\StructMember(['name' => 'author_id', 'type' => new \Ydb\Type(['type_id' => PrimitiveTypeId::UINT64])]),
+                                    new \Ydb\StructMember(['name' => 'isbn', 'type' => new \Ydb\Type(['type_id' => PrimitiveTypeId::UTF8])]),
+                                    new \Ydb\StructMember(['name' => 'book_type', 'type' => new \Ydb\Type(['type_id' => PrimitiveTypeId::UTF8])]),
+                                    new \Ydb\StructMember(['name' => 'title', 'type' => new \Ydb\Type(['type_id' => PrimitiveTypeId::UTF8])]),
+                                    new \Ydb\StructMember(['name' => 'year', 'type' => new \Ydb\Type(['type_id' => PrimitiveTypeId::INT32])]),
+                                    new \Ydb\StructMember(['name' => 'available', 'type' => new \Ydb\Type(['type_id' => PrimitiveTypeId::TIMESTAMP])]),
+                                    new \Ydb\StructMember(['name' => 'tags', 'type' => new \Ydb\Type(['type_id' => PrimitiveTypeId::JSON])]),
+                                ],
+                            ]),
+                        ]),
+                    ]),
+                ]),
+                'value' => new \Ydb\Value([
+                    'items' => array_map(
+                        static fn(CreateBooksBooksItem $item): \Ydb\Value => new \Ydb\Value([
+                            'items' => [
+                                YdbValueCodec::typedUint64($item->bookId, 'books.book_id')->getValue(),
+                                YdbValueCodec::typedUint64($item->authorId, 'books.author_id')->getValue(),
+                                YdbValueCodec::typedUtf8($item->isbn, 'books.isbn')->getValue(),
+                                YdbValueCodec::typedUtf8($item->bookType, 'books.book_type')->getValue(),
+                                YdbValueCodec::typedUtf8($item->title, 'books.title')->getValue(),
+                                YdbValueCodec::typedInt32($item->year, 'books.year')->getValue(),
+                                YdbValueCodec::typedTimestamp($item->available, 'books.available')->getValue(),
+                                YdbValueCodec::typedJson($item->tags, 'books.tags')->getValue(),
+                            ],
+                        ]),
+                        array_values($books),
+                    ),
+                ]),
             ]),
         ];
 

@@ -25,7 +25,9 @@ class Querier:
             "$author_id": _ydb.TypedValue(author_id, _ydb.PrimitiveType.Uint64),
         }
         result_sets = self._execute(
-            ("SELECT id, name, bio FROM authors WHERE id = $author_id;"), parameters)
+            ("SELECT id, name, bio FROM authors WHERE id = $author_id;"),
+            parameters,
+        )
         if len(result_sets) != 1:
             raise ValueError("expected exactly one YDB result set")
         rows = result_sets[0].rows
@@ -43,7 +45,9 @@ class Querier:
         parameters = {
         }
         result_sets = self._execute(
-            ("SELECT id, name, bio FROM authors ORDER BY name;"), parameters)
+            ("SELECT id, name, bio FROM authors ORDER BY name;"),
+            parameters,
+        )
         if len(result_sets) != 1:
             raise ValueError("expected exactly one YDB result set")
         rows = result_sets[0].rows
@@ -59,7 +63,9 @@ class Querier:
             "$author_id": _ydb.TypedValue(author_id, _ydb.PrimitiveType.Uint64),
         }
         result_sets = self._execute(
-            ("SELECT name FROM authors WHERE id = $author_id;"), parameters)
+            ("SELECT name FROM authors WHERE id = $author_id;"),
+            parameters,
+        )
         if len(result_sets) != 1:
             raise ValueError("expected exactly one YDB result set")
         rows = result_sets[0].rows
@@ -80,7 +86,9 @@ class Querier:
         result_sets = self._execute(
             ("INSERT INTO `authors` (`id`, `name`, `bio`)\n"
              "VALUES ($author_id, $author_name, $biography)\n"
-             "RETURNING `id`, `name`, `bio`;"), parameters)
+             "RETURNING `id`, `name`, `bio`;"),
+            parameters,
+        )
         if len(result_sets) != 1:
             raise ValueError("expected exactly one YDB result set")
         rows = result_sets[0].rows
@@ -102,7 +110,9 @@ class Querier:
         }
         result_sets = self._execute(
             ("UPSERT INTO authors (id, name, bio)\n"
-             "VALUES ($author_id, $author_name, $biography);"), parameters)
+             "VALUES ($author_id, $author_name, $biography);"),
+            parameters,
+        )
         return None
 
     # -- name: DeleteAuthor :exec
@@ -111,5 +121,7 @@ class Querier:
             "$author_id": _ydb.TypedValue(author_id, _ydb.PrimitiveType.Uint64),
         }
         result_sets = self._execute(
-            ("DELETE FROM authors WHERE id = $author_id;"), parameters)
+            ("DELETE FROM authors WHERE id = $author_id;"),
+            parameters,
+        )
         return None

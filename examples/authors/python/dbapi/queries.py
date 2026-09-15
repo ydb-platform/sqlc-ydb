@@ -17,7 +17,9 @@ class Querier:
         cursor = self._connection.cursor()
         try:
             cursor.execute(
-                ("SELECT id, name, bio FROM authors WHERE id = $author_id;"), parameters)
+                ("SELECT id, name, bio FROM authors WHERE id = $author_id;"),
+                parameters,
+            )
             row = cursor.fetchone()
             if row is None:
                 return None
@@ -36,7 +38,9 @@ class Querier:
         cursor = self._connection.cursor()
         try:
             cursor.execute(
-                ("SELECT id, name, bio FROM authors ORDER BY name;"), parameters)
+                ("SELECT id, name, bio FROM authors ORDER BY name;"),
+                parameters,
+            )
             rows = cursor.fetchall()
             return [_models.Authors(
                 id=row[0],
@@ -54,7 +58,9 @@ class Querier:
         cursor = self._connection.cursor()
         try:
             cursor.execute(
-                ("SELECT name FROM authors WHERE id = $author_id;"), parameters)
+                ("SELECT name FROM authors WHERE id = $author_id;"),
+                parameters,
+            )
             row = cursor.fetchone()
             if row is None:
                 return None
@@ -76,7 +82,9 @@ class Querier:
             cursor.execute(
                 ("INSERT INTO `authors` (`id`, `name`, `bio`)\n"
                  "VALUES ($author_id, $author_name, $biography)\n"
-                 "RETURNING `id`, `name`, `bio`;"), parameters)
+                 "RETURNING `id`, `name`, `bio`;"),
+                parameters,
+            )
             row = cursor.fetchone()
             if row is None:
                 return None
@@ -99,7 +107,9 @@ class Querier:
         try:
             cursor.execute(
                 ("UPSERT INTO authors (id, name, bio)\n"
-                 "VALUES ($author_id, $author_name, $biography);"), parameters)
+                 "VALUES ($author_id, $author_name, $biography);"),
+                parameters,
+            )
             return None
         finally:
             cursor.close()
@@ -112,7 +122,9 @@ class Querier:
         cursor = self._connection.cursor()
         try:
             cursor.execute(
-                ("DELETE FROM authors WHERE id = $author_id;"), parameters)
+                ("DELETE FROM authors WHERE id = $author_id;"),
+                parameters,
+            )
             return None
         finally:
             cursor.close()

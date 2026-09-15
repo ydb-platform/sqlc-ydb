@@ -16,7 +16,7 @@ for (const generated of modules) {
 function recordingClient(resultSets = [[]]) {
   const calls = [];
   const client = (text) => {
-    const call = { text: text.join(""), parameters: new Map() };
+    const call = { text, parameters: new Map() };
     calls.push(call);
     const stmt = Promise.resolve(resultSets);
     Object.defineProperty(stmt, "text", { value: call.text, configurable: true });

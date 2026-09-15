@@ -392,7 +392,30 @@ func renderMethod(b *strings.Builder, query model.AnalyzedQuery) {
 				}
 				values = append(values, "YdbValueCodec::"+fn+"($item->"+camelName(field.Name)+", "+phpString(parameter.Name+"."+field.Name, "")+")->getValue()")
 			}
-			fmt.Fprintf(b, "            %s => new \\Ydb\\TypedValue([\n                'type' => new \\Ydb\\Type(['list_type' => new \\Ydb\\ListType(['item' => new \\Ydb\\Type(['struct_type' => new \\Ydb\\StructType(['members' => [\n                    %s,\n                ]])])])]),\n                'value' => new \\Ydb\\Value(['items' => array_map(static fn(%s $item): \\Ydb\\Value => new \\Ydb\\Value(['items' => [\n                    %s,\n                ]]), array_values(%s))]),\n            ]),\n", phpString("$"+parameter.Name, ""), strings.Join(members, ",\n                    "), pascalName(query.Name)+pascalName(parameter.Name)+"Item", strings.Join(values, ",\n                    "), value)
+			fmt.Fprintf(b, `            %s => new \Ydb\TypedValue([
+                'type' => new \Ydb\Type([
+                    'list_type' => new \Ydb\ListType([
+                        'item' => new \Ydb\Type([
+                            'struct_type' => new \Ydb\StructType([
+                                'members' => [
+                                    %s,
+                                ],
+                            ]),
+                        ]),
+                    ]),
+                ]),
+                'value' => new \Ydb\Value([
+                    'items' => array_map(
+                        static fn(%s $item): \Ydb\Value => new \Ydb\Value([
+                            'items' => [
+                                %s,
+                            ],
+                        ]),
+                        array_values(%s),
+                    ),
+                ]),
+            ]),
+`, phpString("$"+parameter.Name, ""), strings.Join(members, ",\n                                    "), pascalName(query.Name)+pascalName(parameter.Name)+"Item", strings.Join(values, ",\n                                "), value)
 			continue
 		}
 		base := parameter.Type.UnwrapOptional()

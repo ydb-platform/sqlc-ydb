@@ -16,9 +16,13 @@ class Querier:
         parameters = {
             "id": (id, _ydb.PrimitiveType.Uint64),
         }
-        result = self._connection.execute(_text(
-            ("DECLARE $id AS Uint64;\n"
-             "SELECT * FROM authors WHERE id = :id;")), parameters)
+        result = self._connection.execute(
+            _text(
+                ("DECLARE $id AS Uint64;\n"
+                 "SELECT * FROM authors WHERE id = :id;")
+            ),
+            parameters,
+        )
         try:
             row = result.fetchone()
         finally:

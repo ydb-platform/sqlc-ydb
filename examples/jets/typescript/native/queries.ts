@@ -23,7 +23,9 @@ export class Queries {
 
   // -- name: CountPilots :one
   async countPilots(configure?: ConfigureQuery): Promise<CountPilotsRow | null> {
-    const stmt = this.#sql<[CountPilotsRow]>`SELECT COUNT(*) AS pilot_count FROM pilots;`;
+    const stmt = this.#sql<[CountPilotsRow]>(
+      "SELECT COUNT(*) AS pilot_count FROM pilots;"
+    );
     configure?.(stmt);
     const [rows] = await stmt;
 
@@ -32,7 +34,9 @@ export class Queries {
 
   // -- name: ListPilots :many
   async listPilots(configure?: ConfigureQuery): Promise<ListPilotsRow[]> {
-    const stmt = this.#sql<[ListPilotsRow]>`SELECT id, name FROM pilots ORDER BY id LIMIT 5;`;
+    const stmt = this.#sql<[ListPilotsRow]>(
+      "SELECT id, name FROM pilots ORDER BY id LIMIT 5;"
+    );
     configure?.(stmt);
     const [rows] = await stmt;
 
@@ -41,7 +45,9 @@ export class Queries {
 
   // -- name: DeletePilot :exec
   async deletePilot(pilotId: number, configure?: ConfigureQuery): Promise<void> {
-    const stmt = this.#sql`DELETE FROM pilots WHERE id = $pilot_id;`
+    const stmt = this.#sql(
+      "DELETE FROM pilots WHERE id = $pilot_id;"
+    )
       .parameter("pilot_id", new Int32(pilotId));
     configure?.(stmt);
     await stmt;

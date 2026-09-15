@@ -89,7 +89,7 @@ func TestNullableScalarModelsAndRuntimeOwnership(t *testing.T) {
 				t.Fatal(source)
 			}
 			if runtime == "jdbc" || runtime == "exposed" {
-				for _, want := range []string{".use { _prepared", ".use { _rows", "setObject(1, PrimitiveValue.newUint64(id))", "if (_rows.wasNull()) null"} {
+				for _, want := range []string{".use { _prepared", ".use { _rows", "setObject(1, PrimitiveValue.newUint64(id))", "_rows.getString(2)"} {
 					if !strings.Contains(source, want) {
 						t.Errorf("missing %q", want)
 					}
@@ -346,6 +346,27 @@ public final class Main {
         expectRange(() -> guarded.bad32(4294967296L));
 
         YdbTypes types = new YdbTypes(false, DecimalType.getDefault());
+        var scalarQuery = YdbQuery.parseQuery(new QueryKey("DECLARE $j AS Json; DECLARE $u AS Uint8; SELECT $j, $u;"), new YdbQueryProperties(new Properties()), types);
+        var scalarPrepared = new tech.ydb.jdbc.query.params.PreparedQuery(types, scalarQuery, java.util.Map.of("$j", PrimitiveType.Json, "$u", PrimitiveType.Uint8));
+        scalarPrepared.setParam("j", "{}", Types.VARCHAR);
+        scalarPrepared.setParam("u", 255, Types.INTEGER);
+        check(scalarPrepared.getCurrentParams().values().get("$j").equals(PrimitiveValue.newJson("{}")), "declared Json rejected setString");
+        check(scalarPrepared.getCurrentParams().values().get("$u").equals(PrimitiveValue.newUint8(255)), "declared Uint8 rejected setInt");
+        var setterQuery = YdbQuery.parseQuery(new QueryKey("SELECT ?, ?, ?;"), new YdbQueryProperties(new Properties()), types);
+        var setters = new tech.ydb.jdbc.query.params.InMemoryQuery(setterQuery, false);
+        setters.setParam(1, "{}", Types.VARCHAR);
+        setters.setParam(2, 255, Types.INTEGER);
+        setters.setParam(3, java.sql.Timestamp.from(java.time.Instant.EPOCH), Types.TIMESTAMP);
+        check(setters.getCurrentParams().values().get("$jp1").getType().equals(PrimitiveType.Text), "setString does not infer Json");
+        check(setters.getCurrentParams().values().get("$jp2").getType().equals(PrimitiveType.Int32), "setInt does not infer Uint8");
+        check(setters.getCurrentParams().values().get("$jp3").equals(PrimitiveValue.newTimestamp(java.time.Instant.EPOCH)), "setTimestamp lost the timestamp type");
+        for (PrimitiveType optionalType : new PrimitiveType[]{PrimitiveType.Text, PrimitiveType.Bytes, PrimitiveType.Json, PrimitiveType.Timestamp}) {
+            var empty = OptionalType.of(optionalType).emptyValue();
+            var reader = tech.ydb.table.result.impl.ProtoValueReaders.forTypedValue(tech.ydb.proto.ValueProtos.TypedValue.newBuilder().setType(empty.getType().toPb()).setValue(empty.toPb()).build());
+            Object actual = optionalType == PrimitiveType.Text ? reader.getText() : optionalType == PrimitiveType.Bytes ? reader.getBytes() : optionalType == PrimitiveType.Json ? reader.getJson() : reader.getTimestamp();
+            check(actual == null, "optional reference getter did not return null");
+        }
+
         YdbQuery query = YdbQuery.parseQuery(new QueryKey("SELECT ?, ?, ?, ?;"), new YdbQueryProperties(new Properties()), types);
         tech.ydb.jdbc.query.params.InMemoryQuery bound = new tech.ydb.jdbc.query.params.InMemoryQuery(query, false);
         new Queries(bindingConnection(bound)).bind(-1L, null, "typed text", new byte[] { 0, 1, (byte) 255 });
@@ -394,6 +415,11 @@ public final class Main {
         String declaredSQL = "DECLARE $books AS List<Struct<book_id:Uint64,author_id:Uint64,isbn:Utf8,book_type:Utf8,title:Utf8,year:Int32,available:Timestamp,tags:Json>>;\nINSERT INTO books SELECT * FROM AS_TABLE($books);";
         var declaredQuery = YdbQuery.parseQuery(new QueryKey(declaredSQL), new YdbQueryProperties(new Properties()), types);
         var declared = new tech.ydb.jdbc.query.params.PreparedQuery(types, declaredQuery, java.util.Map.of("$books", emptyBatch.getType()));
+        var autoBatch = tech.ydb.jdbc.query.params.BatchedQuery.tryCreateBatched(types, declaredQuery, java.util.Map.of("$books", emptyBatch.getType()));
+        check(autoBatch != null && autoBatch.parametersCount() == 8, "AUTO did not flatten struct members into parameters");
+        try { autoBatch.setParam("books", emptyBatch, Types.JAVA_OBJECT); throw new AssertionError("AUTO unexpectedly accepted the named list"); } catch (java.sql.SQLException expected) { }
+        try { autoBatch.setParam(1, emptyBatch, Types.JAVA_OBJECT); throw new AssertionError("AUTO unexpectedly accepted a positional list"); } catch (java.sql.SQLException expected) { }
+
         var declaredQueries = new Queries(declaredConnection(declared, declaredSQL));
         declaredQueries.declaredBooks(java.util.List.of());
         check(declared.getQueryText(declared.getCurrentParams()).equals(declaredSQL), "driver changed explicit DECLARE");
@@ -414,7 +440,7 @@ public final class Main {
 
     private static Connection declaredConnection(tech.ydb.jdbc.query.params.PreparedQuery query, String expectedSQL) {
         var statement = (tech.ydb.jdbc.YdbPreparedStatement) Proxy.newProxyInstance(Main.class.getClassLoader(), new Class<?>[]{tech.ydb.jdbc.YdbPreparedStatement.class}, (proxy,method,args) -> {
-            if (method.getName().equals("setObject")) { query.setParam((String)args[0],args[1],Types.JAVA_OBJECT); return null; }
+            if (method.getName().equals("setObject") || method.getName().equals("setString")) { query.setParam((String)args[0],args[1],method.getName().equals("setString") ? Types.VARCHAR : Types.JAVA_OBJECT); return null; }
             if (method.getName().equals("execute")) return false;
             if (method.getName().equals("close")) return null;
             throw new AssertionError(method);

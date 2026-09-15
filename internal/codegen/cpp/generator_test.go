@@ -172,6 +172,9 @@ func TestUserverRuntimeQueryConstructor(t *testing.T) {
 		t.Fatal("missing Query initializer end")
 	}
 	query := generated[start : start+end+len("\n    }")]
+	if !strings.Contains(query, "\n        \"SELECT 1;\\n\"\n        \"SELECT 2;\"") {
+		t.Fatal("SQL literals must align with the query constructor arguments")
+	}
 	// The generated runtime Name selects the overload that owns the query text.
 	program := `#include <optional>
 #include <string>
@@ -410,18 +413,17 @@ func TestSQLLiteralPreservesSourceBytes(t *testing.T) {
 	}
 	cases := []struct {
 		name, sql string
-		raw       bool
 	}{
-		{"multiline", "-- Привет\nSELECT '\\\"', `name`\nFROM authors;", true},
-		{"delimiter collision", "SELECT ')sql\"', ')sql1\"';", true},
-		{"declared indentation", "  DECLARE $id AS Uint64; -- keep\n\n    SELECT 'first\n  second';\n", true},
-		{"CRLF and whitespace", "DECLARE $id AS Uint64; \r\n \t \r\nSELECT $id;\t", false},
-		{"control byte", "SELECT '\x00A\x01';", false},
+		{"multiline", "-- Привет\nSELECT '\\\"', `name`\nFROM authors;"},
+		{"delimiter collision", "SELECT ')sql\"', ')sql1\"';"},
+		{"declared indentation", "  DECLARE $id AS Uint64; -- keep\n\n    SELECT 'first\n  second';\n"},
+		{"CRLF and whitespace", "DECLARE $id AS Uint64; \r\n \t \r\nSELECT $id;\t"},
+		{"control byte", "SELECT '\x00A\x01';"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			literal := sqlLiteral(tc.sql)
-			if strings.HasPrefix(literal, "R\"") != tc.raw {
+			if strings.HasPrefix(literal, "R\"") {
 				t.Fatalf("unexpected literal form: %s", literal)
 			}
 			for _, line := range strings.Split(literal, "\n") {

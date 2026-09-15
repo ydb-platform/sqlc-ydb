@@ -43,6 +43,12 @@ CI saves the offline profile together with `coverage-sdk.out` and `coverage-type
 
 Repository administrators must enable `ydb-platform/sqlc-ydb` in Codecov and grant the [Codecov GitHub App](https://github.com/apps/codecov) access so it can post PR comments. Set the repository Actions secret `CODECOV_TOKEN` to the Codecov upload token, as in ydb-go-sdk. Alternatively, the organization can allow tokenless public uploads with **Global Upload Token → Not required** in Codecov; the action accepts an empty secret in that mode. Public fork PR uploads do not need access to the secret. See [Codecov token authentication](https://docs.codecov.com/docs/codecov-tokens) and [PR comments](https://docs.codecov.com/docs/pull-request-comments). An upload failure fails the CI job rather than silently leaving stale coverage.
 
+## Generated code layout
+
+SQL has two indentation levels: preserve the relative indentation from the input query, and indent its source representation to match the surrounding call or block. Keep explicit `DECLARE` statements and blank lines. Use language-native multiline literals when they support this layout without changing SQL values; otherwise emit aligned adjacent or concatenated string literals with explicit line endings. Do not place continuation lines at column zero merely to preserve runtime bytes.
+
+Expand long batch type and value expressions by their structure: one field or map entry per line, nested constructor arguments one level deeper, and closing delimiters aligned with their opening expression. Place arguments following multiline SQL on separate lines where needed to make the call readable. Test both the generated source layout and the runtime SQL text; either check alone misses part of the contract.
+
 ## Test prerequisites
 
 PHP CI installs the pinned gRPC 1.83.1 binary package with [`.github/scripts/install-php-grpc`](../.github/scripts/install-php-grpc). It downloads the PHP 8.2 package from the Ondřej Surý Ubuntu PPA, verifies its pinned SHA-256 and extracts `grpc.so` without requiring PHP packages in APT. It verifies the binary loads in PHP before installing it into PHP's extension directory, then enables it and checks the loaded version. Both PHP jobs use Ubuntu 24.04 amd64. Installation has a five-minute timeout and never falls back to compilation. Package updates require updating the revision and checksum in the script together and running the PHP checks and live smoke tests.

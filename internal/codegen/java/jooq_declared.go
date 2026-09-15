@@ -114,13 +114,31 @@ func jooqDeclaredValue(p model.Parameter, n string) string {
 }
 
 func emitJooqDeclared(b *strings.Builder, q model.AnalyzedQuery, names []string, sql, row string) {
+	sql = indentExpression(sql, "    ")
 	callback := "dsl.connection"
 	if q.Command != model.Exec {
 		callback = "return dsl.connectionResult"
 	}
 	fmt.Fprintf(b, "        %s(_connection -> {\n            try (var _prepared = _connection.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement(%s, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {\n", callback, sql)
 	for i, p := range q.Parameters {
-		fmt.Fprintf(b, "                _prepared.setObject(%s, %s);\n", quoted(p.Name), jooqDeclaredValue(p, names[i]))
+		_, _, scalarErr := typeInfo(p.Type)
+		if p.Type.UnwrapOptional().Kind == "Uint64" || scalarErr != nil {
+			fmt.Fprintf(b, "                _prepared.setObject(%s, %s);\n", quoted(p.Name), jooqDeclaredValue(p, names[i]))
+		} else {
+			input := names[i]
+			switch p.Type.UnwrapOptional().Kind {
+			case "Uint8", "Uint16":
+				input += ".intValue()"
+			case "Uint32":
+				input += ".longValue()"
+			case "Json", "JsonDocument":
+				input += ".data()"
+			}
+			if input != names[i] && p.Type.IsOptional() {
+				input = "(" + names[i] + " == null ? null : " + input + ")"
+			}
+			emitJDBCNamedParameter(b, p, input, "                ")
+		}
 	}
 	if q.Command == model.Exec {
 		b.WriteString("                _prepared.execute();\n")

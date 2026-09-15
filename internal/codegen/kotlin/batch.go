@@ -26,7 +26,11 @@ func structListValue(t model.Type, parameter string) string {
 		types = append(types, quoted(field.Name)+" to "+fieldType)
 		values = append(values, quoted(field.Name)+" to "+value)
 	}
-	return "tech.ydb.table.values.ListType.of(tech.ydb.table.values.StructType.of(mapOf(" + strings.Join(types, ", ") + "))).newValue(" + parameter + ".map { _batchItem -> tech.ydb.table.values.StructValue.of(mapOf(" + strings.Join(values, ", ") + ")) })"
+	return "tech.ydb.table.values.ListType.of(\n" +
+		"    tech.ydb.table.values.StructType.of(mapOf(\n        " + strings.Join(types, ",\n        ") + "\n    ))\n" +
+		").newValue(\n    " + parameter + ".map { _batchItem ->\n" +
+		"        tech.ydb.table.values.StructValue.of(mapOf(\n            " + strings.Join(values, ",\n            ") + "\n        ))\n" +
+		"    }\n)"
 }
 
 func emitUnsignedChecks(b *strings.Builder, q model.AnalyzedQuery, names []string) {

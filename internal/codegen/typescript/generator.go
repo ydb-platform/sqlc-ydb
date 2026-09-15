@@ -2,6 +2,7 @@
 package typescript
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -363,7 +364,7 @@ func bindExpression(t model.Type, value string) string {
 			}
 			types = append(types, typ)
 		}
-		return "structList(" + value + ".map(item => new Struct({ " + strings.Join(fields, ", ") + " })), new StructType([" + strings.Join(names, ", ") + "], [" + strings.Join(types, ", ") + "]))"
+		return "structList(\n        " + value + ".map(item => new Struct({\n          " + strings.Join(fields, ",\n          ") + ",\n        })),\n        new StructType(\n          [\n            " + strings.Join(names, ",\n            ") + ",\n          ],\n          [\n            " + strings.Join(types, ",\n            ") + ",\n          ],\n        ),\n      )"
 	}
 	info := typescriptTypes[t.UnwrapOptional().Kind]
 	wrapped := "new " + info.valueClass + "(" + value + ")"
@@ -374,57 +375,20 @@ func bindExpression(t model.Type, value string) string {
 }
 
 func sqlLiteral(value string) string {
-	var b strings.Builder
-	b.WriteByte('`')
-	for i := 0; i < len(value); {
-		if value[i] == ' ' || value[i] == '\t' {
-			end := i
-			for end < len(value) && (value[end] == ' ' || value[end] == '\t') {
-				end++
-			}
-			if end == len(value) || value[end] == '\r' || value[end] == '\n' {
-				for ; i < end; i++ {
-					if value[i] == ' ' {
-						b.WriteString(`\x20`)
-					} else {
-						b.WriteString(`\t`)
-					}
-				}
-			} else {
-				b.WriteString(value[i:end])
-				i = end
-			}
-			continue
+	var lines []string
+	for _, line := range strings.SplitAfter(value, "\n") {
+		if line != "" {
+			var quoted strings.Builder
+			encoder := json.NewEncoder(&quoted)
+			encoder.SetEscapeHTML(false)
+			_ = encoder.Encode(line)
+			lines = append(lines, strings.TrimSuffix(quoted.String(), "\n"))
 		}
-		r, size := utf8.DecodeRuneInString(value[i:])
-		switch r {
-		case '\\':
-			b.WriteString(`\\`)
-		case '`':
-			b.WriteString("\\`")
-		case '$':
-			if i+size < len(value) && value[i+size] == '{' {
-				b.WriteString(`\$`)
-			} else {
-				b.WriteRune(r)
-			}
-		case '\r':
-			b.WriteString(`\r`)
-		case '\n':
-			b.WriteByte('\n')
-		default:
-			if r < 0x20 && r != '\n' && r != '\t' {
-				fmt.Fprintf(&b, "\\x%02x", r)
-			} else if r == 0x7f || r == '\u2028' || r == '\u2029' {
-				fmt.Fprintf(&b, "\\u%04x", r)
-			} else {
-				b.WriteRune(r)
-			}
-		}
-		i += size
 	}
-	b.WriteByte('`')
-	return b.String()
+	if len(lines) == 0 {
+		lines = []string{`""`}
+	}
+	return "(\n      " + strings.Join(lines, " +\n      ") + "\n    )"
 }
 
 func identifier(value string, exported bool) (string, error) {

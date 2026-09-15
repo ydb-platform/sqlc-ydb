@@ -60,10 +60,10 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     pub async fn author(&mut self, author_id: u64) -> ydb::YdbResult<GetAuthorRow> {
         let mut row = self
             .client
-            .query_row(
-                r"SELECT author_id, name, biography FROM authors
-WHERE author_id = $author_id;",
-            )
+            .query_row(concat!(
+                "SELECT author_id, name, biography FROM authors\n",
+                "WHERE author_id = $author_id;",
+            ))
             .param("$author_id", author_id)
             .await?;
         Ok(GetAuthorRow {
@@ -77,10 +77,10 @@ WHERE author_id = $author_id;",
     #[builder(on(String, into))]
     pub async fn delete_book_exec_result(&mut self, book_id: u64) -> ydb::YdbResult<()> {
         self.client
-            .exec(
-                r"DELETE FROM books
-WHERE book_id = $book_id;",
-            )
+            .exec(concat!(
+                "DELETE FROM books\n",
+                "WHERE book_id = $book_id;",
+            ))
             .param("$book_id", book_id)
             .await
     }
@@ -89,10 +89,10 @@ WHERE book_id = $book_id;",
     #[builder(on(String, into))]
     pub async fn delete_book(&mut self, book_id: u64) -> ydb::YdbResult<()> {
         self.client
-            .exec(
-                r"DELETE FROM books
-WHERE book_id = $book_id;",
-            )
+            .exec(concat!(
+                "DELETE FROM books\n",
+                "WHERE book_id = $book_id;",
+            ))
             .param("$book_id", book_id)
             .await
     }
@@ -101,10 +101,10 @@ WHERE book_id = $book_id;",
     #[builder(on(String, into))]
     pub async fn delete_book_named_func(&mut self, book_id: u64) -> ydb::YdbResult<()> {
         self.client
-            .exec(
-                r"DELETE FROM books
-WHERE book_id = $book_id;",
-            )
+            .exec(concat!(
+                "DELETE FROM books\n",
+                "WHERE book_id = $book_id;",
+            ))
             .param("$book_id", book_id)
             .await
     }
@@ -113,10 +113,10 @@ WHERE book_id = $book_id;",
     #[builder(on(String, into))]
     pub async fn delete_book_named_sign(&mut self, book_id: u64) -> ydb::YdbResult<()> {
         self.client
-            .exec(
-                r"DELETE FROM books
-WHERE book_id = $book_id;",
-            )
+            .exec(concat!(
+                "DELETE FROM books\n",
+                "WHERE book_id = $book_id;",
+            ))
             .param("$book_id", book_id)
             .await
     }
@@ -125,11 +125,11 @@ WHERE book_id = $book_id;",
     #[builder(on(String, into))]
     pub async fn books_by_year(&mut self, year: i32) -> ydb::YdbResult<Vec<BooksByYearRow>> {
         self.client
-            .query_result_set(
-                r"SELECT book_id, author_id, isbn, book_type, title, year, available, tags
-FROM books
-WHERE year = $year;",
-            )
+            .query_result_set(concat!(
+                "SELECT book_id, author_id, isbn, book_type, title, year, available, tags\n",
+                "FROM books\n",
+                "WHERE year = $year;",
+            ))
             .param("$year", year)
             .await?
             .rows()
@@ -158,11 +158,11 @@ WHERE year = $year;",
     ) -> ydb::YdbResult<CreateAuthorRow> {
         let mut row = self
             .client
-            .query_row(
-                r"INSERT INTO authors (author_id, name, biography)
-VALUES ($author_id, $name, $biography)
-RETURNING author_id, name, biography;",
-            )
+            .query_row(concat!(
+                "INSERT INTO authors (author_id, name, biography)\n",
+                "VALUES ($author_id, $name, $biography)\n",
+                "RETURNING author_id, name, biography;",
+            ))
             .param("$author_id", author_id)
             .param("$name", name)
             .param("$biography", biography.map(JsonParam))
@@ -189,11 +189,11 @@ RETURNING author_id, name, biography;",
     ) -> ydb::YdbResult<CreateBookRow> {
         let mut row = self
             .client
-            .query_row(
-                r"INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)
-VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)
-RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;",
-            )
+            .query_row(concat!(
+                "INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)\n",
+                "VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)\n",
+                "RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;",
+            ))
             .param("$book_id", book_id)
             .param("$author_id", author_id)
             .param("$isbn", isbn)
@@ -224,11 +224,11 @@ RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;",
         book_id: u64,
     ) -> ydb::YdbResult<()> {
         self.client
-            .exec(
-                r"UPDATE books
-SET title = $title, tags = $tags
-WHERE book_id = $book_id;",
-            )
+            .exec(concat!(
+                "UPDATE books\n",
+                "SET title = $title, tags = $tags\n",
+                "WHERE book_id = $book_id;",
+            ))
             .param("$title", title)
             .param("$tags", JsonParam(tags))
             .param("$book_id", book_id)
@@ -240,10 +240,10 @@ WHERE book_id = $book_id;",
     pub async fn biography(&mut self, author_id: u64) -> ydb::YdbResult<GetBiographyRow> {
         let mut row = self
             .client
-            .query_row(
-                r"SELECT biography FROM authors
-WHERE author_id = $author_id;",
-            )
+            .query_row(concat!(
+                "SELECT biography FROM authors\n",
+                "WHERE author_id = $author_id;",
+            ))
             .param("$author_id", author_id)
             .await?;
         Ok(GetBiographyRow {
@@ -268,24 +268,24 @@ WHERE author_id = $author_id;",
             ydb::Value::list_from(item_type, values)?
         };
         self.client
-            .exec(
-                r"DECLARE $books AS List<Struct<
-    book_id: Uint64,
-    author_id: Uint64,
-    isbn: Utf8,
-    book_type: Utf8,
-    title: Utf8,
-    year: Int32,
-    available: Timestamp,
-    tags: Json
->>;
-INSERT INTO books (
-    book_id, author_id, isbn, book_type, title, year, available, tags
-)
-SELECT
-    book_id, author_id, isbn, book_type, title, year, available, tags
-FROM AS_TABLE($books);",
-            )
+            .exec(concat!(
+                "DECLARE $books AS List<Struct<\n",
+                "    book_id: Uint64,\n",
+                "    author_id: Uint64,\n",
+                "    isbn: Utf8,\n",
+                "    book_type: Utf8,\n",
+                "    title: Utf8,\n",
+                "    year: Int32,\n",
+                "    available: Timestamp,\n",
+                "    tags: Json\n",
+                ">>;\n",
+                "INSERT INTO books (\n",
+                "    book_id, author_id, isbn, book_type, title, year, available, tags\n",
+                ")\n",
+                "SELECT\n",
+                "    book_id, author_id, isbn, book_type, title, year, available, tags\n",
+                "FROM AS_TABLE($books);",
+            ))
             .param("$books", books)
             .await
     }

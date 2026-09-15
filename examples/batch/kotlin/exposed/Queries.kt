@@ -19,8 +19,7 @@ class Queries(private val client: org.jetbrains.exposed.v1.jdbc.JdbcTransaction)
                 if (!_rows.next()) return null
                 val _value0: Long = _rows.getLong(1)
                 val _value1: String = _rows.getString(2)
-                val _value2Raw = _rows.getString(3)
-                val _value2: String? = if (_rows.wasNull()) null else _value2Raw
+                val _value2: String? = _rows.getString(3)
                 return GetAuthorRow(_value0, _value1, _value2)
             }
         }
@@ -105,13 +104,12 @@ class Queries(private val client: org.jetbrains.exposed.v1.jdbc.JdbcTransaction)
             "RETURNING author_id, name, biography;").use { _prepared ->
             _prepared.setObject(1, PrimitiveValue.newUint64(authorId))
             _prepared.setString(2, name)
-            _prepared.setObject(3, if (biography == null) OptionalType.of(PrimitiveType.Json).emptyValue() else OptionalType.of(PrimitiveType.Json).newValue(PrimitiveValue.newJson(biography)))
+            _prepared.setObject(3, if (biography == null) OptionalType.of(PrimitiveType.Json).emptyValue() else PrimitiveValue.newJson(biography).makeOptional())
             _prepared.executeQuery().use { _rows ->
                 if (!_rows.next()) return null
                 val _value0: Long = _rows.getLong(1)
                 val _value1: String = _rows.getString(2)
-                val _value2Raw = _rows.getString(3)
-                val _value2: String? = if (_rows.wasNull()) null else _value2Raw
+                val _value2: String? = _rows.getString(3)
                 return CreateAuthorRow(_value0, _value1, _value2)
             }
         }
@@ -130,7 +128,7 @@ class Queries(private val client: org.jetbrains.exposed.v1.jdbc.JdbcTransaction)
             _prepared.setString(4, bookType)
             _prepared.setString(5, title)
             _prepared.setInt(6, year)
-            _prepared.setObject(7, PrimitiveValue.newTimestamp(available))
+            _prepared.setTimestamp(7, java.sql.Timestamp.from(available))
             _prepared.setObject(8, PrimitiveValue.newJson(tags))
             _prepared.executeQuery().use { _rows ->
                 if (!_rows.next()) return null
@@ -170,8 +168,7 @@ class Queries(private val client: org.jetbrains.exposed.v1.jdbc.JdbcTransaction)
             _prepared.setObject(1, PrimitiveValue.newUint64(authorId))
             _prepared.executeQuery().use { _rows ->
                 if (!_rows.next()) return null
-                val _value0Raw = _rows.getString(1)
-                val _value0: String? = if (_rows.wasNull()) null else _value0Raw
+                val _value0: String? = _rows.getString(1)
                 return GetBiographyRow(_value0)
             }
         }
@@ -197,7 +194,31 @@ class Queries(private val client: org.jetbrains.exposed.v1.jdbc.JdbcTransaction)
             "SELECT\n" +
             "    book_id, author_id, isbn, book_type, title, year, available, tags\n" +
             "FROM AS_TABLE(\$books);", tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY).use { _prepared ->
-            _prepared.setObject("books", tech.ydb.table.values.ListType.of(tech.ydb.table.values.StructType.of(mapOf("book_id" to tech.ydb.table.values.PrimitiveType.Uint64, "author_id" to tech.ydb.table.values.PrimitiveType.Uint64, "isbn" to tech.ydb.table.values.PrimitiveType.Text, "book_type" to tech.ydb.table.values.PrimitiveType.Text, "title" to tech.ydb.table.values.PrimitiveType.Text, "year" to tech.ydb.table.values.PrimitiveType.Int32, "available" to tech.ydb.table.values.PrimitiveType.Timestamp, "tags" to tech.ydb.table.values.PrimitiveType.Json))).newValue(books.map { _batchItem -> tech.ydb.table.values.StructValue.of(mapOf("book_id" to PrimitiveValue.newUint64(_batchItem.bookId), "author_id" to PrimitiveValue.newUint64(_batchItem.authorId), "isbn" to PrimitiveValue.newText(_batchItem.isbn), "book_type" to PrimitiveValue.newText(_batchItem.bookType), "title" to PrimitiveValue.newText(_batchItem.title), "year" to PrimitiveValue.newInt32(_batchItem.year), "available" to PrimitiveValue.newTimestamp(_batchItem.available), "tags" to PrimitiveValue.newJson(_batchItem.tags))) }))
+            _prepared.setObject("books", tech.ydb.table.values.ListType.of(
+                tech.ydb.table.values.StructType.of(mapOf(
+                    "book_id" to tech.ydb.table.values.PrimitiveType.Uint64,
+                    "author_id" to tech.ydb.table.values.PrimitiveType.Uint64,
+                    "isbn" to tech.ydb.table.values.PrimitiveType.Text,
+                    "book_type" to tech.ydb.table.values.PrimitiveType.Text,
+                    "title" to tech.ydb.table.values.PrimitiveType.Text,
+                    "year" to tech.ydb.table.values.PrimitiveType.Int32,
+                    "available" to tech.ydb.table.values.PrimitiveType.Timestamp,
+                    "tags" to tech.ydb.table.values.PrimitiveType.Json
+                ))
+            ).newValue(
+                books.map { _batchItem ->
+                    tech.ydb.table.values.StructValue.of(mapOf(
+                        "book_id" to PrimitiveValue.newUint64(_batchItem.bookId),
+                        "author_id" to PrimitiveValue.newUint64(_batchItem.authorId),
+                        "isbn" to PrimitiveValue.newText(_batchItem.isbn),
+                        "book_type" to PrimitiveValue.newText(_batchItem.bookType),
+                        "title" to PrimitiveValue.newText(_batchItem.title),
+                        "year" to PrimitiveValue.newInt32(_batchItem.year),
+                        "available" to PrimitiveValue.newTimestamp(_batchItem.available),
+                        "tags" to PrimitiveValue.newJson(_batchItem.tags)
+                    ))
+                }
+            ))
             _prepared.execute()
         }
     }

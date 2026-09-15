@@ -415,25 +415,24 @@ func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQ
 	if o.Runtime == "ydb" {
 		b.WriteString("        parameters = {\n")
 		for i, x := range q.Parameters {
-			value := "_ydb.TypedValue(" + parameterValue(x) + ", " + typeExprs[i] + ")"
-			b.WriteString("            " + pyString("$"+x.Name) + ": " + value + ",\n")
+			renderParameter(b, x, typeExprs[i], o.Runtime)
 		}
-		b.WriteString("        }\n        result_sets = self._execute(\n            " + literal + ", parameters)\n")
+		b.WriteString("        }\n        result_sets = self._execute(\n            " + literal + ",\n            parameters,\n        )\n")
 	}
 	if o.Runtime == "dbapi" {
 		b.WriteString("        parameters = {\n")
 		for i, x := range q.Parameters {
-			b.WriteString("            " + pyString("$"+x.Name) + ": (" + parameterValue(x) + ", " + typeExprs[i] + "),\n")
+			renderParameter(b, x, typeExprs[i], o.Runtime)
 		}
-		b.WriteString("        }\n        cursor = self._connection.cursor()\n        try:\n            cursor.execute(\n                " + strings.ReplaceAll(literal, "\n", "\n    ") + ", parameters)\n")
+		b.WriteString("        }\n        cursor = self._connection.cursor()\n        try:\n            cursor.execute(\n                " + strings.ReplaceAll(literal, "\n", "\n    ") + ",\n                parameters,\n            )\n")
 	}
 	if o.Runtime == "sqlalchemy" {
 		b.WriteString("        parameters = {\n")
 		for i, x := range q.Parameters {
-			b.WriteString("            " + pyString(x.Name) + ": (" + parameterValue(x) + ", " + typeExprs[i] + "),\n")
+			renderParameter(b, x, typeExprs[i], o.Runtime)
 		}
 		b.WriteString("        }\n        result = ")
-		b.WriteString("self._connection.execute(_text(\n            " + literal + "), parameters)\n")
+		b.WriteString("self._connection.execute(\n            _text(\n                " + strings.ReplaceAll(literal, "\n", "\n    ") + "\n            ),\n            parameters,\n        )\n")
 	}
 	if q.Command == model.One || q.Command == model.Many {
 		if o.Runtime == "ydb" {

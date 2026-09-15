@@ -34,7 +34,7 @@ func TestBatchInsertTypedCollection(t *testing.T) {
 		for _, file := range files {
 			code += string(file.Content)
 		}
-		for _, want := range []string{"CreateBooksBooksItem", "tech.ydb.table.values.ListType.of(tech.ydb.table.values.StructType.of(", "PrimitiveValue.newJson(", "PrimitiveValue.newTimestamp("} {
+		for _, want := range []string{"CreateBooksBooksItem", "tech.ydb.table.values.ListType.of(\n", "tech.ydb.table.values.StructType.of(", "PrimitiveValue.newJson(", "PrimitiveValue.newTimestamp("} {
 			if !strings.Contains(code, want) {
 				t.Fatalf("%s missing %s in %s", runtime, want, code)
 			}

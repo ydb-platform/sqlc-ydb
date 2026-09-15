@@ -92,8 +92,8 @@ class GeneratedQueriesTest {
                     var statement = connection.prepareStatement((String) args[0]);
                     return java.lang.reflect.Proxy.newProxyInstance(GeneratedQueriesTest.class.getClassLoader(),
                             new Class<?>[]{tech.ydb.jdbc.YdbPreparedStatement.class}, (statementProxy, operation, values) -> {
-                                if (operation.getName().equals("setObject") && values[0] instanceof String) {
-                                    assertInstanceOf(tech.ydb.table.values.Value.class, values[1]);
+                                if (operation.getName().startsWith("set") && values[0] instanceof String) {
+                                    if (operation.getName().equals("setObject")) assertInstanceOf(tech.ydb.table.values.Value.class, values[1]);
                                     return null;
                                 }
                                 if (operation.getName().equals("executeQuery")) {

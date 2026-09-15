@@ -26,7 +26,11 @@ func structListValue(t model.Type, parameter string) string {
 		types = append(types, "java.util.Map.entry("+quoted(field.Name)+", "+fieldType+")")
 		values = append(values, "java.util.Map.entry("+quoted(field.Name)+", "+value+")")
 	}
-	return "tech.ydb.table.values.ListType.of(tech.ydb.table.values.StructType.of(java.util.Map.ofEntries(" + strings.Join(types, ", ") + "))).newValue(" + parameter + ".stream().map(_batchItem -> tech.ydb.table.values.StructValue.of(java.util.Map.ofEntries(" + strings.Join(values, ", ") + "))).toList())"
+	return "tech.ydb.table.values.ListType.of(\n" +
+		"    tech.ydb.table.values.StructType.of(java.util.Map.ofEntries(\n        " + strings.Join(types, ",\n        ") + "\n    ))\n" +
+		").newValue(\n    " + parameter + ".stream()\n" +
+		"        .map(_batchItem -> tech.ydb.table.values.StructValue.of(java.util.Map.ofEntries(\n            " + strings.Join(values, ",\n            ") + "\n        )))\n" +
+		"        .toList()\n)"
 }
 
 func hasStructList(q model.AnalyzedQuery) bool {

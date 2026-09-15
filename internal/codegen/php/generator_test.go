@@ -330,7 +330,7 @@ func TestStructListParameter(t *testing.T) {
 	for _, f := range files {
 		output.Write(f.Content)
 	}
-	for _, want := range []string{"CreateBooksBooksItem", "list<CreateBooksBooksItem>", "new \\Ydb\\ListType", "new \\Ydb\\StructMember", "typedOptionalJson($item->tags", "array_values($books)"} {
+	for _, want := range []string{"CreateBooksBooksItem", "list<CreateBooksBooksItem>", "new \\Ydb\\ListType", "new \\Ydb\\StructMember", "typedOptionalJson($item->tags", "array_values($books)", "\n                    'list_type' => new \\Ydb\\ListType([\n                        'item'", "\n                    'items' => array_map(\n                        static fn"} {
 		if !strings.Contains(output.String(), want) {
 			t.Errorf("missing %s", want)
 		}

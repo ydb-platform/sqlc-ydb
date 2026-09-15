@@ -136,7 +136,11 @@ func TestGetPrefixAndMultilineSQLMatchApprovedRustStyle(t *testing.T) {
 	queries := generatedFile(t, files, "queries.rs")
 	for _, want := range []string{
 		"// -- name: GetAuthor :one\n    #[builder(on(String, into))]\n    pub async fn author(",
-		".query_row(\n                r\"INSERT INTO authors (id, name)\nVALUES ($id, $name)\nRETURNING id, name;\",\n            )",
+		`.query_row(concat!(
+                "INSERT INTO authors (id, name)\n",
+                "VALUES ($id, $name)\n",
+                "RETURNING id, name;",
+            ))`,
 	} {
 		if !strings.Contains(queries, want) {
 			t.Fatalf("approved Rust style missing %q:\n%s", want, queries)
@@ -230,11 +234,17 @@ func TestGeneratedRawSQLRoundTripsThroughRustCompiler(t *testing.T) {
 				t.Fatal("inline SQL missing")
 			}
 			start += len(".exec(")
-			end := strings.Index(queries[start:], ",\n            )")
+			end := strings.Index(queries[start:], "\n            ))")
 			if end < 0 {
 				t.Fatal("inline SQL delimiter missing")
 			}
-			literal := queries[start : start+end]
+			literal := queries[start : start+end+len("\n            )")]
+			lines := strings.Split(literal, "\n")
+			for _, line := range lines[1 : len(lines)-1] {
+				if !strings.HasPrefix(line, "                \"") {
+					t.Fatalf("SQL line lacks external code indent: %q", line)
+				}
+			}
 			var expected strings.Builder
 			expected.WriteString("&[")
 			for i, value := range []byte(model.WithoutQueryAnnotation(sql)) {

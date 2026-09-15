@@ -6,7 +6,7 @@ namespace authors::userver {
 // -- name: GetAuthor :one
 std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(SELECT id, name, bio FROM authors WHERE id = $author_id;)sql",
+        "SELECT id, name, bio FROM authors WHERE id = $author_id;",
         ::userver::ydb::Query::Name{"GetAuthor"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -29,7 +29,7 @@ std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
 // -- name: ListAuthors :many
 std::vector<ListAuthorsRow> Queries::ListAuthors() const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(SELECT id, name, bio FROM authors ORDER BY name;)sql",
+        "SELECT id, name, bio FROM authors ORDER BY name;",
         ::userver::ydb::Query::Name{"ListAuthors"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -53,7 +53,7 @@ std::vector<ListAuthorsRow> Queries::ListAuthors() const {
 // -- name: GetAuthorName :one
 std::optional<GetAuthorNameRow> Queries::GetAuthorName(std::uint64_t author_id) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(SELECT name FROM authors WHERE id = $author_id;)sql",
+        "SELECT name FROM authors WHERE id = $author_id;",
         ::userver::ydb::Query::Name{"GetAuthorName"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -74,9 +74,9 @@ std::optional<GetAuthorNameRow> Queries::GetAuthorName(std::uint64_t author_id) 
 // -- name: CreateAuthor :one
 std::optional<CreateAuthorRow> Queries::CreateAuthor(std::uint64_t author_id, const ::userver::ydb::Utf8& author_name, const std::optional<::userver::ydb::Utf8>& biography) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(INSERT INTO `authors` (`id`, `name`, `bio`)
-VALUES ($author_id, $author_name, $biography)
-RETURNING `id`, `name`, `bio`;)sql",
+        "INSERT INTO `authors` (`id`, `name`, `bio`)\n"
+        "VALUES ($author_id, $author_name, $biography)\n"
+        "RETURNING `id`, `name`, `bio`;",
         ::userver::ydb::Query::Name{"CreateAuthor"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -99,8 +99,8 @@ RETURNING `id`, `name`, `bio`;)sql",
 // -- name: UpsertAuthor :exec
 void Queries::UpsertAuthor(std::uint64_t author_id, const ::userver::ydb::Utf8& author_name, const std::optional<::userver::ydb::Utf8>& biography) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(UPSERT INTO authors (id, name, bio)
-VALUES ($author_id, $author_name, $biography);)sql",
+        "UPSERT INTO authors (id, name, bio)\n"
+        "VALUES ($author_id, $author_name, $biography);",
         ::userver::ydb::Query::Name{"UpsertAuthor"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -114,7 +114,7 @@ VALUES ($author_id, $author_name, $biography);)sql",
 // -- name: DeleteAuthor :exec
 void Queries::DeleteAuthor(std::uint64_t author_id) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(DELETE FROM authors WHERE id = $author_id;)sql",
+        "DELETE FROM authors WHERE id = $author_id;",
         ::userver::ydb::Query::Name{"DeleteAuthor"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
