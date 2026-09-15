@@ -30,7 +30,7 @@ import (
 )
 
 // Version and Commit are set through linker flags in release builds.
-var Version = "0.1.4"
+var Version = "0.1.5"
 var Commit = "unknown"
 
 const help = `sqlc-ydb generates typed code from YQL.
