@@ -432,6 +432,11 @@ func (r *jooqRenderer) statement() string {
 	root := r.query.Syntax.Root
 	for _, stmt := range jooqNodes[*parser.Sql_stmtContext](root) {
 		core := stmt.Sql_stmt_core()
+		isDML := core.Into_table_stmt() != nil || core.Update_stmt() != nil || core.Delete_stmt() != nil
+		if isDML && len(jooqNodes[*parser.Select_coreContext](core)) > 0 {
+			r.err = fmt.Errorf("SELECT-backed DML is unsupported by the jOOQ DSL; use runtime: jdbc or ydb")
+			return ""
+		}
 		if core.Declare_stmt() == nil && core.Select_stmt() == nil && core.Into_table_stmt() == nil && core.Update_stmt() == nil && core.Delete_stmt() == nil {
 			return r.fail(core)
 		}

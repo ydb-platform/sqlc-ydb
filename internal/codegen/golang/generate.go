@@ -130,14 +130,11 @@ func validate(in *model.AnalysisResult, o Options) error {
 			if _, err := parameterGoType(q, p); err != nil {
 				return fmt.Errorf("%s parameter %s: %w", q.Name, p.Name, err)
 			}
-			if isStructList(p.Type) {
-				if err := validateStructList(p.Type); err != nil {
+			if isStructParameter(p.Type) {
+				if err := validateStructParameter(p.Type); err != nil {
 					return fmt.Errorf("%s parameter %s: %w", q.Name, p.Name, err)
 				}
 			} else if hasKind(p.Type, "list") {
-				if o.Runtime == "database/sql" {
-					return fmt.Errorf("%s parameter %s: List parameters are unsupported by database/sql", q.Name, p.Name)
-				}
 				if err := validateNativeListParameter(p.Type); err != nil {
 					return fmt.Errorf("%s parameter %s: %w", q.Name, p.Name, err)
 				}
@@ -302,7 +299,7 @@ func models(in *model.AnalysisResult, o Options) []byte {
 	var imports typeImports
 	for _, q := range in.Queries {
 		for _, p := range q.Parameters {
-			if isStructList(p.Type) {
+			if isStructParameter(p.Type) {
 				writeStructModel(&b, q, p, o, &imports)
 			}
 		}
@@ -324,7 +321,7 @@ func models(in *model.AnalysisResult, o Options) []byte {
 			b.WriteString("type " + q.Name + "Params struct {\n")
 			for _, p := range q.Parameters {
 				typ, _ := parameterGoType(q, p)
-				if !isStructList(p.Type) {
+				if !isStructParameter(p.Type) {
 					imports.add(p.Type)
 				}
 				b.WriteString(goName(p.Name) + " " + typ)
@@ -340,7 +337,7 @@ func models(in *model.AnalysisResult, o Options) []byte {
 		b.WriteString("type Querier interface {\n")
 		for _, q := range in.Queries {
 			for _, p := range q.Parameters {
-				if !isStructList(p.Type) {
+				if !isStructParameter(p.Type) {
 					imports.add(p.Type)
 				}
 			}
@@ -446,7 +443,8 @@ func queryFile(source string, qs []model.AnalyzedQuery, o Options) []byte {
 	for _, q := range qs {
 		needsYDBMany = needsYDBMany || (o.Runtime == "ydb" && q.Command == model.Many)
 		for _, p := range q.Parameters {
-			if len(q.Parameters) == 1 && !isStructList(p.Type) {
+			usesParameterType := !isStructParameter(p.Type) && (len(q.Parameters) == 1 || (o.Runtime == "database/sql" && strings.EqualFold(p.Type.Kind, "List")))
+			if usesParameterType {
 				parameterImports.add(p.Type)
 			}
 			kind := strings.ToLower(p.Type.UnwrapOptional().Kind)
@@ -454,8 +452,8 @@ func queryFile(source string, qs []model.AnalyzedQuery, o Options) []byte {
 			if kind == "json" || kind == "jsondocument" {
 				needsJSON = true
 			}
-			needsUUID = needsUUID || (len(q.Parameters) == 1 && !isStructList(p.Type) && hasKind(p.Type, "uuid"))
-			needsTypes = needsTypes || isStructList(p.Type) ||
+			needsUUID = needsUUID || (usesParameterType && hasKind(p.Type, "uuid"))
+			needsTypes = needsTypes || isStructParameter(p.Type) || hasKind(p.Type, "list") ||
 				(o.Runtime == "database/sql" && (kind == "uuid" || kind == "decimal")) ||
 				(o.Runtime == "ydb" && (hasKind(p.Type, "list") || (len(q.Parameters) == 1 && hasKind(p.Type, "decimal"))))
 			needsYDB = needsYDB || o.Runtime == "ydb"
@@ -504,6 +502,10 @@ func queryFile(source string, qs []model.AnalyzedQuery, o Options) []byte {
 		for _, p := range q.Parameters {
 			if isStructList(p.Type) {
 				writeStructListBuilder(&b, q, p)
+			} else if strings.EqualFold(p.Type.Kind, "Struct") {
+				writeStructBuilder(&b, q, p)
+			} else if o.Runtime == "database/sql" && strings.EqualFold(p.Type.Kind, "List") {
+				writeScalarListBuilder(&b, q, p)
 			}
 		}
 	}
@@ -588,6 +590,14 @@ func sqlArgumentList(q model.AnalyzedQuery) []string {
 		value := varRef(q, p)
 		if isStructList(p.Type) {
 			x[i] = "sql.Named(" + strconv.Quote(p.Name) + ", " + structListBuilderName(q, p) + "(" + value + "))"
+			continue
+		}
+		if strings.EqualFold(p.Type.Kind, "Struct") {
+			x[i] = "sql.Named(" + strconv.Quote(p.Name) + ", " + structListBuilderName(q, p) + "(" + value + "))"
+			continue
+		}
+		if strings.EqualFold(p.Type.Kind, "List") {
+			x[i] = "sql.Named(" + strconv.Quote(p.Name) + ", " + scalarListBuilderName(q, p) + "(" + value + "))"
 			continue
 		}
 		typeValue := p.Type.UnwrapOptional()
@@ -677,7 +687,7 @@ func writeYDB(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 		writeDecimalValidations(b, q, o)
 		b.WriteString("parameters := ydb.ParamsBuilder()\n")
 		for i, p := range q.Parameters {
-			if isStructList(p.Type) {
+			if isStructParameter(p.Type) {
 				b.WriteString("parameters = parameters.Param(" + strconv.Quote("$"+p.Name) + ").Any(" + structListBuilderName(q, p) + "(" + varRef(q, p) + "))\n")
 			} else {
 				writeYDBParameter(b, p, varRef(q, p), i)
@@ -725,7 +735,7 @@ func writeYDB(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 func writeDecimalValidations(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 	for i, p := range q.Parameters {
 		value := varRef(q, p)
-		if isStructList(p.Type) {
+		if isStructParameter(p.Type) {
 			writeStructDecimalValidations(b, q, p, o)
 			continue
 		}

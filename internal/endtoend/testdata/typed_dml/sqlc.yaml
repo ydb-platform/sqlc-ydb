@@ -1,0 +1,20 @@
+version: "2"
+sql:
+  - engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      go:
+        package: records
+        out: db
+        sql_package: database/sql
+        emit_interface: true
+  - engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      go:
+        package: records
+        out: db/native
+        sql_package: ydb
+        emit_interface: true

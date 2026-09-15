@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/antlr4-go/antlr/v4"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 	parser "github.com/ydb-platform/yql-parsers/go"
 )
@@ -40,6 +41,59 @@ func insertSelect(statement *parser.Into_table_stmtContext) parser.ISelect_stmtC
 	return source.Values_source().Select_stmt()
 }
 
+func updateSelect(statement *parser.Update_stmtContext) parser.ISelect_stmtContext {
+	if statement.ON() == nil || statement.Into_values_source() == nil || statement.Into_values_source().Values_source() == nil {
+		return nil
+	}
+	return statement.Into_values_source().Values_source().Select_stmt()
+}
+
+func deleteSelect(statement *parser.Delete_stmtContext) parser.ISelect_stmtContext {
+	if statement.ON() == nil || statement.Into_values_source() == nil || statement.Into_values_source().Values_source() == nil {
+		return nil
+	}
+	return statement.Into_values_source().Values_source().Select_stmt()
+}
+
+func analyzeSelectRows(catalog model.Catalog, block queryBlock, stmt parser.ISelect_stmtContext, bindings, inferred map[string]model.Type, syntax *model.QuerySyntax, projection func(queryBlock, *parser.Select_coreContext, []relation, map[string]model.Type) ([]model.Column, []model.Diagnostic)) ([]model.Column, []model.Diagnostic) {
+	cores, partials, diagnostics := selectArms(block, stmt)
+	if len(diagnostics) != 0 {
+		return nil, diagnostics
+	}
+	if len(cores) != 1 {
+		return nil, []model.Diagnostic{diagnosticAt(block.file, block.line-1, stmt, "DML SELECT supports one SELECT input; UNION is not yet supported")}
+	}
+	return analyzeSelectCore(catalog, block, cores[0], partials[0], bindings, inferred, syntax, projection)
+}
+
+func analyzeSelectCore(catalog model.Catalog, block queryBlock, core *parser.Select_coreContext, partial parser.ISelect_kind_partialContext, bindings, inferred map[string]model.Type, syntax *model.QuerySyntax, projection func(queryBlock, *parser.Select_coreContext, []relation, map[string]model.Type) ([]model.Column, []model.Diagnostic)) ([]model.Column, []model.Diagnostic) {
+	var diagnostics []model.Diagnostic
+	relations, ds := selectRelations(catalog, block, core, bindings)
+	diagnostics = append(diagnostics, ds...)
+	if len(ds) != 0 {
+		return nil, diagnostics
+	}
+	recordColumnBindings(syntax, core, relations)
+	tree := collectQueryTree(core)
+	inferFromComparisons(tree, relations, inferred)
+	inferFromInLists(tree.conds, relations, inferred)
+	inferFromExpressionContexts(core, bindings, inferred)
+	if partial != nil {
+		inferLimitOffset(partial, inferred)
+	}
+	for name, typ := range inferred {
+		if _, ok := bindings[name]; !ok && typ.Kind != "" {
+			bindings[name] = typ
+		}
+	}
+	columns, ds := projection(block, core, relations, bindings)
+	diagnostics = append(diagnostics, ds...)
+	diagnostics = append(diagnostics, validateColumnReferences(block, core, relations)...)
+	diagnostics = append(diagnostics, validatePredicateContexts(block, core, relations, bindings)...)
+	diagnostics = append(diagnostics, validateGrouping(block, core, relations, bindings)...)
+	return columns, diagnostics
+}
+
 func analyzeInsertSelect(catalog model.Catalog, block queryBlock, statement *parser.Into_table_stmtContext, target *model.Table, bindings, inferred map[string]model.Type, syntax *model.QuerySyntax) []model.Diagnostic {
 	source := statement.Into_values_source()
 	if source.Pure_column_list() == nil {
@@ -50,7 +104,6 @@ func analyzeInsertSelect(catalog model.Catalog, block queryBlock, statement *par
 	if len(diagnostics) != 0 {
 		return diagnostics
 	}
-	// UNION inputs use YQL's name-based alignment and need a separate DML contract.
 	if len(cores) != 1 {
 		return []model.Diagnostic{diagnosticAt(block.file, block.line-1, statement, "INSERT/UPSERT SELECT supports one SELECT input; UNION is not yet supported")}
 	}
@@ -60,28 +113,11 @@ func analyzeInsertSelect(catalog model.Catalog, block queryBlock, statement *par
 			return []model.Diagnostic{diagnosticAt(block.file, block.line-1, result, "INSERT/UPSERT SELECT requires explicit source columns; wildcard column order is not guaranteed")}
 		}
 	}
-	relations, ds := selectRelations(catalog, block, core, bindings)
+	columns, ds := analyzeSelectCore(catalog, block, core, partials[0], bindings, inferred, syntax, selectDMLProjection)
 	diagnostics = append(diagnostics, ds...)
 	if len(ds) != 0 {
 		return diagnostics
 	}
-	recordColumnBindings(syntax, core, relations)
-	tree := collectQueryTree(core)
-	inferFromComparisons(tree, relations, inferred)
-	inferFromInLists(tree.conds, relations, inferred)
-	inferFromExpressionContexts(core, bindings, inferred)
-	if len(partials) > 0 {
-		inferLimitOffset(partials[0], inferred)
-	}
-	for name, typ := range inferred {
-		if _, ok := bindings[name]; !ok {
-			bindings[name] = typ
-		}
-	}
-	columns, ds := selectProjection(block, core, relations, bindings)
-	diagnostics = append(diagnostics, ds...)
-	diagnostics = append(diagnostics, validateColumnReferences(block, core, relations)...)
-	diagnostics = append(diagnostics, validateGrouping(block, core, relations, bindings)...)
 	ids := source.Pure_column_list().AllAn_id()
 	if len(columns) != len(ids) {
 		return append(diagnostics, diagnosticAt(block.file, block.line-1, statement, fmt.Sprintf("SELECT has %d columns for %d target columns", len(columns), len(ids))))
@@ -99,9 +135,50 @@ func analyzeInsertSelect(catalog model.Catalog, block queryBlock, statement *par
 			continue
 		}
 		from, to := columns[i].Type, column.Type
-		if !from.Equal(to) && !(to.IsOptional() && from.Equal(to.UnwrapOptional())) {
+		if !compatibleDMLSelectTypes(from, to) {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, id, fmt.Sprintf("SELECT column %q has type %s but target column %q requires %s", columns[i].Name, from.String(), name, to.String())))
 		}
 	}
 	return diagnostics
+}
+
+func analyzeNamedDMLSelect(catalog model.Catalog, block queryBlock, stmt parser.ISelect_stmtContext, context antlr.ParserRuleContext, target *model.Table, bindings, inferred map[string]model.Type, syntax *model.QuerySyntax) []model.Diagnostic {
+	columns, diagnostics := analyzeSelectRows(catalog, block, stmt, bindings, inferred, syntax, selectProjection)
+	if len(diagnostics) != 0 {
+		return diagnostics
+	}
+	seen := map[string]bool{}
+	for _, source := range columns {
+		name := source.ResultName()
+		if seen[name] {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, context, fmt.Sprintf("duplicate source column %q", name)))
+			continue
+		}
+		seen[name] = true
+		destination := tableColumn(target, name)
+		if destination == nil {
+			message := fmt.Sprintf("unknown target column %q", name)
+			if dot := strings.LastIndex(name, "."); dot >= 0 && dot+1 < len(name) {
+				message += fmt.Sprintf("; use AS %s to map the qualified result", name[dot+1:])
+			}
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, context, message))
+			continue
+		}
+		if !compatibleDMLSelectTypes(source.Type, destination.Type) {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, context, fmt.Sprintf("source column %q has type %s but target column requires %s", name, source.Type.String(), destination.Type.String())))
+		}
+	}
+	for _, key := range target.PrimaryKey {
+		if !seen[key] {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, context, fmt.Sprintf("missing primary key column %q", key)))
+		}
+	}
+	return diagnostics
+}
+
+func compatibleDMLSelectTypes(source, target model.Type) bool {
+	if source.Kind == "Null" {
+		return target.IsOptional()
+	}
+	return source.Equal(target) || target.IsOptional() && source.Equal(target.UnwrapOptional())
 }

@@ -13,7 +13,21 @@ func isStructList(t model.Type) bool {
 	return strings.EqualFold(t.Kind, "List") && t.Elem != nil && strings.EqualFold(t.Elem.Kind, "Struct")
 }
 
+func isStructParameter(t model.Type) bool {
+	return strings.EqualFold(t.Kind, "Struct") || isStructList(t)
+}
+
+func structFields(t model.Type) []model.StructField {
+	if isStructList(t) {
+		return t.Elem.Fields
+	}
+	return t.Fields
+}
+
 func structItemName(q model.AnalyzedQuery, p model.Parameter) string {
+	if strings.EqualFold(p.Type.Kind, "Struct") {
+		return q.Name + goName(p.Name)
+	}
 	return q.Name + goName(p.Name) + "Item"
 }
 
@@ -22,21 +36,30 @@ func structListBuilderName(q model.AnalyzedQuery, p model.Parameter) string {
 }
 
 func parameterGoType(q model.AnalyzedQuery, p model.Parameter) (string, error) {
-	if isStructList(p.Type) {
-		return "[]" + structItemName(q, p), nil
+	if isStructParameter(p.Type) {
+		prefix := ""
+		if isStructList(p.Type) {
+			prefix = "[]"
+		}
+		return prefix + structItemName(q, p), nil
 	}
 	return goType(p.Type)
 }
 
-func validateStructList(t model.Type) error {
-	if len(t.Elem.Fields) == 0 {
-		return fmt.Errorf("List<Struct> requires at least one field")
+func validateStructParameter(t model.Type) error {
+	kind := "Struct"
+	if isStructList(t) {
+		kind = "List<Struct>"
+	}
+	fields := structFields(t)
+	if len(fields) == 0 {
+		return fmt.Errorf("%s requires at least one field", kind)
 	}
 	names := map[string]bool{}
-	for _, f := range t.Elem.Fields {
+	for _, f := range fields {
 		name := goName(f.Name)
 		if f.Name == "" || !ident(name) || names[name] {
-			return fmt.Errorf("List<Struct> has invalid or colliding field %q", f.Name)
+			return fmt.Errorf("%s has invalid or colliding field %q", kind, f.Name)
 		}
 		names[name] = true
 		scalar := f.Type
@@ -44,16 +67,16 @@ func validateStructList(t model.Type) error {
 			scalar = *scalar.Elem
 		}
 		if scalar.IsOptional() || strings.EqualFold(scalar.Kind, "List") || strings.EqualFold(scalar.Kind, "Struct") || strings.EqualFold(scalar.Kind, "Dict") {
-			return fmt.Errorf("List<Struct> field %s must be a scalar or Optional<scalar>", f.Name)
+			return fmt.Errorf("%s field %s must be a scalar or Optional<scalar>", kind, f.Name)
 		}
 		if _, err := goType(scalar); err != nil {
-			return fmt.Errorf("List<Struct> field %s: %w", f.Name, err)
+			return fmt.Errorf("%s field %s: %w", kind, f.Name, err)
 		}
 		if extendedListTemporal(scalar) {
-			return fmt.Errorf("List<Struct> field %s: extended temporal type %s is unsupported", f.Name, scalar.Kind)
+			return fmt.Errorf("%s field %s: extended temporal type %s is unsupported", kind, f.Name, scalar.Kind)
 		}
 		if err := validateDecimal(f.Type); err != nil {
-			return fmt.Errorf("List<Struct> field %s: %w", f.Name, err)
+			return fmt.Errorf("%s field %s: %w", kind, f.Name, err)
 		}
 	}
 	return nil
@@ -61,7 +84,7 @@ func validateStructList(t model.Type) error {
 
 func writeStructModel(b *bytes.Buffer, q model.AnalyzedQuery, p model.Parameter, o Options, imports *typeImports) {
 	b.WriteString("type " + structItemName(q, p) + " struct {\n")
-	for _, f := range p.Type.Elem.Fields {
+	for _, f := range structFields(p.Type) {
 		typ, _ := goType(f.Type)
 		imports.add(f.Type)
 		b.WriteString(goName(f.Name) + " " + typ)
@@ -92,6 +115,30 @@ func writeStructListBuilder(b *bytes.Buffer, q model.AnalyzedQuery, p model.Para
 	b.WriteString(") }\nreturn types.ListValue(items...)\n}\n\n")
 }
 
+func writeStructBuilder(b *bytes.Buffer, q model.AnalyzedQuery, p model.Parameter) {
+	b.WriteString("func " + structListBuilderName(q, p) + "(item " + structItemName(q, p) + ") types.Value {\nreturn types.StructValue(\n")
+	for _, f := range p.Type.Fields {
+		b.WriteString("types.StructFieldValue(" + strconv.Quote(f.Name) + ", " + structScalarValue(f.Type, "item."+goName(f.Name)) + "),\n")
+	}
+	b.WriteString(")\n}\n\n")
+}
+
+func scalarListBuilderName(q model.AnalyzedQuery, p model.Parameter) string {
+	return "bind" + q.Name + goName(p.Name)
+}
+
+func writeScalarListBuilder(b *bytes.Buffer, q model.AnalyzedQuery, p model.Parameter) {
+	e := *p.Type.Elem
+	b.WriteString("func " + scalarListBuilderName(q, p) + "(values []")
+	typ, _ := goType(e)
+	b.WriteString(typ + ") types.Value {\n")
+	typeExpr := ydbTypeExpr(e.UnwrapOptional())
+	if e.IsOptional() {
+		typeExpr = "types.Optional(" + typeExpr + ")"
+	}
+	b.WriteString("if len(values) == 0 { return types.ZeroValue(types.List(" + typeExpr + ")) }\nitems := make([]types.Value,len(values))\nfor i,item := range values { items[i] = " + structScalarValue(e, "item") + " }\nreturn types.ListValue(items...)\n}\n\n")
+}
+
 func structScalarValue(t model.Type, value string) string {
 	if t.IsOptional() {
 		return nullableValueExpr(*t.Elem, value)
@@ -118,13 +165,17 @@ func writeStructDecimalValidations(b *bytes.Buffer, q model.AnalyzedQuery, p mod
 	if !hasKind(p.Type, "decimal") {
 		return
 	}
-	b.WriteString("for _, item := range " + varRef(q, p) + " {\n")
-	for _, f := range p.Type.Elem.Fields {
+	valuePrefix := varRef(q, p) + "."
+	if isStructList(p.Type) {
+		b.WriteString("for _, item := range " + varRef(q, p) + " {\n")
+		valuePrefix = "item."
+	}
+	for _, f := range structFields(p.Type) {
 		scalar := f.Type.UnwrapOptional()
 		if !strings.EqualFold(scalar.Kind, "Decimal") {
 			continue
 		}
-		value := "item." + goName(f.Name)
+		value := valuePrefix + goName(f.Name)
 		if f.Type.IsOptional() {
 			b.WriteString("if " + value + " != nil {\n")
 			value = "*" + value
@@ -135,7 +186,9 @@ func writeStructDecimalValidations(b *bytes.Buffer, q model.AnalyzedQuery, p mod
 			b.WriteString("}\n")
 		}
 	}
-	b.WriteString("}\n")
+	if isStructList(p.Type) {
+		b.WriteString("}\n")
+	}
 }
 
 func validateStructDeclarations(in *model.AnalysisResult) error {
@@ -150,10 +203,13 @@ func validateStructDeclarations(in *model.AnalysisResult) error {
 	}
 	for _, q := range in.Queries {
 		for _, p := range q.Parameters {
-			if !isStructList(p.Type) {
-				continue
+			declarations := []string{}
+			if isStructParameter(p.Type) {
+				declarations = append(declarations, structItemName(q, p), structListBuilderName(q, p))
+			} else if strings.EqualFold(p.Type.Kind, "List") {
+				declarations = append(declarations, scalarListBuilderName(q, p))
 			}
-			for _, name := range []string{structItemName(q, p), structListBuilderName(q, p)} {
+			for _, name := range declarations {
 				if names[name] {
 					return fmt.Errorf("%s parameter %s: generated declaration %s collides with another declaration", q.Name, p.Name, name)
 				}

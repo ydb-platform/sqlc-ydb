@@ -195,7 +195,7 @@ func validateGrouping(block queryBlock, core *parser.Select_coreContext, relatio
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, ref.ctx, fmt.Sprintf("HAVING column %q must appear in GROUP BY or an aggregate function", qualifiedName(ref))))
 			}
 		}
-		typeValue, err := resolveExpression(having, expressionScope{relations: relations, bindings: bindings, grouped: core.Group_by_clause() != nil, predicate: true})
+		typeValue, err := resolveExpression(having, expressionScope{relations: relations, bindings: bindings, grouped: core.Group_by_clause() != nil, predicate: true, functions: block.functions})
 		if err != nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, having, fmt.Sprintf("cannot resolve HAVING expression: %v", err)))
 		} else if typeValue.UnwrapOptional().Kind != "Bool" {

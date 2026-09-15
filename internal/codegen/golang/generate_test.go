@@ -737,7 +737,7 @@ func compileInput(t *testing.T, input *model.AnalysisResult, opts Options) {
 }
 
 func TestRejectsUnsupportedType(t *testing.T) {
-	_, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.Exec, Parameters: []model.Parameter{{Name: "p", Type: model.Type{Kind: "Struct"}}}}}}, Options{Runtime: "ydb"})
+	_, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.Exec, Parameters: []model.Parameter{{Name: "p", Type: model.Type{Kind: "Dict"}}}}}}, Options{Runtime: "ydb"})
 	if err == nil || !strings.Contains(err.Error(), "unsupported YQL type") {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1046,7 +1046,7 @@ func TestRejectsUnsupportedListAndDecimalShapes(t *testing.T) {
 		name, runtime, want string
 		type_               model.Type
 	}{
-		{"database list", "database/sql", "List parameters are unsupported", model.Type{Kind: "List", Elem: &u64}},
+		{"database nested list", "database/sql", "nested List parameters", model.Type{Kind: "List", Elem: ptr(model.Type{Kind: "List", Elem: &u64})}},
 		{"optional list", "ydb", "Optional<List> parameters", model.Optional(model.Type{Kind: "List", Elem: &u64})},
 		{"nested list", "ydb", "nested List parameters", model.Type{Kind: "List", Elem: ptr(model.Type{Kind: "List", Elem: &u64})}},
 		{"invalid decimal", "ydb", "Decimal requires precision", model.Type{Kind: "Decimal", Precision: 0, Scale: 0}},
@@ -1059,6 +1059,39 @@ func TestRejectsUnsupportedListAndDecimalShapes(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestDatabaseSQLScalarListsUseTypedValuesAndPreserveEmptyType(t *testing.T) {
+	u64 := model.Type{Kind: "Uint64"}
+	json := model.Type{Kind: "Json"}
+	in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name: "FindBooks", Command: model.Exec,
+		Parameters: []model.Parameter{{Name: "ids", Type: model.Type{Kind: "List", Elem: &u64}}, {Name: "tags", Type: model.Type{Kind: "List", Elem: &json}}},
+	}}}
+	runGeneratedRuntimeTest(t, in, Options{Package: "db", Runtime: "database/sql"}, `package db
+import("testing";"github.com/ydb-platform/ydb-go-sdk/v3/types")
+func TestLists(t *testing.T){
+ for _,tc:=range []FindBooksParams{{},{Ids:[]uint64{1,2},Tags:[]string{"{}","{\"x\":1}"}}}{
+  ids:=bindFindBooksIds(tc.Ids);tags:=bindFindBooksTags(tc.Tags)
+  if ids.Type().Yql()!="List<Uint64>"||tags.Type().Yql()!="List<Json>"{t.Fatalf("types=%s %s",ids.Type().Yql(),tags.Type().Yql())}
+  idItems,err:=types.ListItems(ids);if err!=nil||len(idItems)!=len(tc.Ids){t.Fatalf("ids=%v err=%v",idItems,err)}
+  tagItems,err:=types.ListItems(tags);if err!=nil||len(tagItems)!=len(tc.Tags){t.Fatalf("tags=%v err=%v",tagItems,err)}
+ }
+}
+`)
+	files, err := Generate(in, Options{Package: "db", Runtime: "database/sql"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var source string
+	for _, f := range files {
+		source += string(f.Content)
+	}
+	for _, want := range []string{`sql.Named("ids", bindFindBooksIds(arg.Ids))`, `sql.Named("tags", bindFindBooksTags(arg.Tags))`} {
+		if !strings.Contains(source, want) {
+			t.Fatalf("missing %q:\n%s", want, source)
+		}
 	}
 }
 
@@ -1111,7 +1144,7 @@ func TestCompileTypedParametersAcrossSources(t *testing.T) {
 	}
 }
 
-func TestCompileNativeListParameterMatrix(t *testing.T) {
+func TestCompileListParameterMatrix(t *testing.T) {
 	decimal := model.Type{Kind: "Decimal", Precision: 22, Scale: 9}
 	supported := []model.Type{
 		{Kind: "Bool"}, {Kind: "Int8"}, {Kind: "Int16"}, {Kind: "Int32"}, {Kind: "Int64"},
@@ -1134,7 +1167,9 @@ func TestCompileNativeListParameterMatrix(t *testing.T) {
 			})
 		}
 	}
-	compileInput(t, in, Options{Package: "db", Runtime: "ydb"})
+	for _, runtime := range []string{"ydb", "database/sql"} {
+		compileInput(t, in, Options{Package: "db", Runtime: runtime})
+	}
 	files, err := Generate(in, Options{Package: "db", Runtime: "ydb"})
 	if err != nil {
 		t.Fatal(err)
@@ -1150,6 +1185,21 @@ func TestCompileNativeListParameterMatrix(t *testing.T) {
 			t.Fatalf("native YSON list binding lacks %q:\n%s", want, source)
 		}
 	}
+}
+
+func TestDatabaseSQLMultiParameterTemporalAndUUIDListBuildersCompile(t *testing.T) {
+	timestamp := model.Type{Kind: "Timestamp"}
+	uuid := model.Type{Kind: "Uuid"}
+	in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name: "BindLists", Command: model.Exec,
+		Parameters: []model.Parameter{
+			{Name: "timestamps", Type: model.Type{Kind: "List", Elem: &timestamp}},
+			{Name: "optional_timestamps", Type: model.Type{Kind: "List", Elem: ptr(model.Optional(timestamp))}},
+			{Name: "ids", Type: model.Type{Kind: "List", Elem: &uuid}},
+			{Name: "optional_ids", Type: model.Type{Kind: "List", Elem: ptr(model.Optional(uuid))}},
+		},
+	}}}
+	compileInput(t, in, Options{Package: "db", Runtime: "database/sql"})
 }
 
 func TestRejectsExtendedTemporalNativeListParameters(t *testing.T) {

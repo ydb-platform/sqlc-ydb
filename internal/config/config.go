@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/ydb-platform/sqlc-ydb/internal/yql/builtins"
+
 	"go.yaml.in/yaml/v3"
 )
 
@@ -103,13 +105,31 @@ type Gen struct {
 	PHP        *PHP        `yaml:"php"`
 }
 
+type FunctionArgument struct {
+	Name     string `yaml:"name"`
+	Type     string `yaml:"type"`
+	Optional bool   `yaml:"optional"`
+	AutoMap  bool   `yaml:"auto_map"`
+}
+
+type Function struct {
+	Name    string             `yaml:"name"`
+	Args    []FunctionArgument `yaml:"args"`
+	Returns string             `yaml:"returns"`
+}
+
+type Analyzer struct {
+	Functions []Function `yaml:"functions"`
+}
+
 type SQL struct {
-	Name    string    `yaml:"name"`
-	Engine  string    `yaml:"engine"`
-	Schema  Paths     `yaml:"schema"`
-	Queries Paths     `yaml:"queries"`
-	Gen     Gen       `yaml:"gen"`
-	Codegen yaml.Node `yaml:"codegen"`
+	Name     string    `yaml:"name"`
+	Engine   string    `yaml:"engine"`
+	Schema   Paths     `yaml:"schema"`
+	Queries  Paths     `yaml:"queries"`
+	Analyzer Analyzer  `yaml:"analyzer"`
+	Gen      Gen       `yaml:"gen"`
+	Codegen  yaml.Node `yaml:"codegen"`
 }
 
 type Config struct {
@@ -187,6 +207,9 @@ func Parse(data []byte) (*Config, error) {
 		}
 		if len(s.Schema) == 0 || len(s.Queries) == 0 {
 			return nil, fmt.Errorf("sql[%d]: schema and queries paths are required", i)
+		}
+		if err := validateFunctions(i, s.Analyzer.Functions); err != nil {
+			return nil, err
 		}
 		if g := s.Gen.Go; g != nil {
 			if g.Out == "" {
@@ -308,6 +331,34 @@ func Parse(data []byte) (*Config, error) {
 		}
 	}
 	return &c, nil
+}
+
+func validateFunctions(sqlIndex int, functions []Function) error {
+	for functionIndex, function := range functions {
+		prefix := fmt.Sprintf("sql[%d].analyzer.functions[%d]", sqlIndex, functionIndex)
+		if !builtins.IsFunctionIdentifier(function.Name) {
+			return fmt.Errorf("%s: function name must be a non-empty YQL identifier", prefix)
+		}
+		if function.Returns == "" {
+			return fmt.Errorf("%s: return type is required", prefix)
+		}
+		names := make(map[string]struct{})
+		for argumentIndex, argument := range function.Args {
+			if argument.Type == "" {
+				return fmt.Errorf("%s: argument %d type is required", prefix, argumentIndex+1)
+			}
+			if argument.Name != "" && !builtins.IsParameterIdentifier(argument.Name) {
+				return fmt.Errorf("%s: argument %d name must be a YQL identifier", prefix, argumentIndex+1)
+			}
+			if argument.Name != "" {
+				if _, exists := names[argument.Name]; exists {
+					return fmt.Errorf("%s: duplicate argument name %q", prefix, argument.Name)
+				}
+				names[argument.Name] = struct{}{}
+			}
+		}
+	}
+	return nil
 }
 
 func pluginError() error {
