@@ -379,7 +379,6 @@ func resolveFunction(name string, invoke *parser.Invoke_exprContext, scope expre
 	if invoke.Opt_set_quantifier() != nil && invoke.Opt_set_quantifier().GetText() != "" {
 		return model.Type{}, fmt.Errorf("set quantifiers in function %q are unsupported", name)
 	}
-	var args []model.Type
 	var callArgs []builtins.CallArgument
 	if list := invoke.Named_expr_list(); list != nil {
 		for _, named := range list.AllNamed_expr() {
@@ -387,12 +386,11 @@ func resolveFunction(name string, invoke *parser.Invoke_exprContext, scope expre
 				return model.Type{}, fmt.Errorf("aggregate function %q cannot contain another aggregate", name)
 			}
 			argumentScope := scope
-			argumentScope.predicate = strings.EqualFold(name, "if") && len(args) == 0
+			argumentScope.predicate = strings.EqualFold(name, "if") && len(callArgs) == 0
 			typeValue, err := resolveExpression(named.Expr(), argumentScope)
 			if err != nil {
 				return model.Type{}, fmt.Errorf("cannot resolve argument of %s: %w", name, err)
 			}
-			args = append(args, typeValue)
 			argument := builtins.CallArgument{Type: typeValue}
 			if named.AS() != nil {
 				argument.Name = identifier(named.An_id_or_type().GetText())
@@ -406,7 +404,7 @@ func resolveFunction(name string, invoke *parser.Invoke_exprContext, scope expre
 				return model.Type{}, fmt.Errorf("named arguments in aggregate %q are unsupported", name)
 			}
 		}
-		if len(args) != 1 {
+		if len(callArgs) != 1 {
 			return model.Type{}, fmt.Errorf("function %q expects one argument or *", name)
 		}
 		return model.Type{Kind: "Uint64"}, nil
@@ -415,7 +413,7 @@ func resolveFunction(name string, invoke *parser.Invoke_exprContext, scope expre
 	if err != nil {
 		return model.Type{}, err
 	}
-	if scope.grouped && groupMakesAggregateNonOptional(name) && len(args) == 1 && args[0].Kind != "Null" && !args[0].IsOptional() {
+	if scope.grouped && groupMakesAggregateNonOptional(name) && len(callArgs) == 1 && callArgs[0].Type.Kind != "Null" && !callArgs[0].Type.IsOptional() {
 		result = result.UnwrapOptional()
 	}
 	return result, nil

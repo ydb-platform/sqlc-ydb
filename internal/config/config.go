@@ -8,7 +8,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
+
+	"github.com/ydb-platform/sqlc-ydb/internal/yql/builtins"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -332,13 +333,10 @@ func Parse(data []byte) (*Config, error) {
 	return &c, nil
 }
 
-var functionIdentifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*$`)
-var argumentIdentifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-
 func validateFunctions(sqlIndex int, functions []Function) error {
 	for functionIndex, function := range functions {
 		prefix := fmt.Sprintf("sql[%d].analyzer.functions[%d]", sqlIndex, functionIndex)
-		if !functionIdentifier.MatchString(function.Name) {
+		if !builtins.IsFunctionIdentifier(function.Name) {
 			return fmt.Errorf("%s: function name must be a non-empty YQL identifier", prefix)
 		}
 		if function.Returns == "" {
@@ -349,7 +347,7 @@ func validateFunctions(sqlIndex int, functions []Function) error {
 			if argument.Type == "" {
 				return fmt.Errorf("%s: argument %d type is required", prefix, argumentIndex+1)
 			}
-			if argument.Name != "" && !argumentIdentifier.MatchString(argument.Name) {
+			if argument.Name != "" && !builtins.IsParameterIdentifier(argument.Name) {
 				return fmt.Errorf("%s: argument %d name must be a YQL identifier", prefix, argumentIndex+1)
 			}
 			if argument.Name != "" {

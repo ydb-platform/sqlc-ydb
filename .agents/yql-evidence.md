@@ -16,6 +16,8 @@ UPDATE/DELETE ON SELECT instead validate the source's named columns and require 
 
 ## Function contracts
 
+On 2026-09-15, local YDB accepted `SELECT "plain"u = "plain"` and `CAST("101" AS Decimal(22,9)) > 100`, both returning true. It rejected `SELECT 1ul IN (AsList(1ul,2ul))` with `Can't compare Uint64 with List<Uint64>`. This supports keeping parenthesized List operands distinct from the unparenthesized `IN $ids` form.
+
 `TestLiveYDBSemanticTypes` compares the analyzer's result types against server metadata. On the same local image it confirmed all 21 shipped Digest functions with plain and optional inputs, including omitted, NULL and named seeds where supported. A seed's optionality does not itself make the return type optional; AutoMap on the input does. These are offline signatures, not UDF implementations. User-defined contracts belong to one SQL configuration entry and do not execute or install code.
 
 The existing collection predicate is covered by the [dictionary functions](https://ydb.tech/docs/en/yql/reference/builtins/dict) and [Yson conversion](https://ydb.tech/docs/en/yql/reference/udf/list/yson) contracts. Live `TypeOf` probes confirmed that `Yson::ConvertToStringList` with nullable Json or Yson input returns a required `List<String>`, whereas `ToSet` of an optional list and `SetIsDisjoint` with optional collection inputs retain optionality. Resource-valued Yson overloads remain outside this implementation.

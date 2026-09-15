@@ -81,7 +81,7 @@ func TestPredicateINValidatesItsActualOperands(t *testing.T) {
 		{"unknown call", "DECLARE $id AS Uint64;", "id IN (Unknown::Hash($id))", "unsupported YQL function"},
 		{"missing member", "DECLARE $key AS Struct<id:Uint64>;", "id IN ($key.missing)", "unknown struct field"},
 		{"scalar direct", "DECLARE $id AS Uint64;", "id IN $id", "requires a List parameter"},
-		{"parenthesized list", "DECLARE $ids AS List<Uint64>;", "id IN ($ids)", "incompatible types"},
+		{"parenthesized list", "DECLARE $ids AS List<Uint64>;", "id IN ($ids)", "parenthesized List parameter"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			query := "-- name: Read :many\n" + test.declaration + " SELECT id FROM records WHERE " + test.predicate + ";"

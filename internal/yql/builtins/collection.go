@@ -66,7 +66,10 @@ func resolveYsonConvertToStringList(args []model.Type) (model.Type, error) {
 		return model.Type{}, err
 	}
 	base, _, err := baseType(args[0])
-	if err != nil || (base.Kind != "Json" && base.Kind != "Yson" && base.Kind != "Null") {
+	if err != nil {
+		return model.Type{}, fmt.Errorf("Yson::ConvertToStringList: %w", err)
+	}
+	if base.Kind != "Json" && base.Kind != "Yson" && base.Kind != "Null" {
 		return model.Type{}, fmt.Errorf("Yson::ConvertToStringList argument 1 must be Json or Yson, including an Optional form")
 	}
 	item := model.Type{Kind: "String"}

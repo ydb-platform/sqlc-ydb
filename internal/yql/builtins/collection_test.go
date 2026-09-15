@@ -138,3 +138,11 @@ func TestRegistryRejectsCollectionFunctionOverride(t *testing.T) {
 		}
 	}
 }
+
+func TestYsonConvertToStringListPreservesBaseTypeError(t *testing.T) {
+	inner := model.Type{Kind: "Optional", Elem: &model.Type{Kind: "String"}}
+	_, err := Resolve("Yson::ConvertToStringList", []model.Type{{Kind: "Optional", Elem: &inner}})
+	if err == nil || !strings.Contains(err.Error(), "nested Optional") {
+		t.Fatalf("error = %v, want nested Optional cause", err)
+	}
+}

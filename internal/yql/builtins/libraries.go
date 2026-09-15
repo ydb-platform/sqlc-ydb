@@ -7,48 +7,55 @@ import (
 )
 
 func resolveLibrary(name string, args []model.Type) (model.Type, error) {
+	if resolve := lookupLibrary(name); resolve != nil {
+		return resolve(args)
+	}
+	return model.Type{}, fmt.Errorf("unsupported YQL function %q", name)
+}
+
+func lookupLibrary(name string) functionResolver {
 	switch name {
 	case "Yson::ConvertToStringList":
-		return resolveYsonConvertToStringList(args)
+		return resolveYsonConvertToStringList
 	case "String::Base64Encode", "String::EscapeC", "String::UnescapeC", "String::HexEncode",
 		"String::EncodeHtml", "String::DecodeHtml", "String::CgiEscape", "String::CgiUnescape",
 		"String::Strip", "String::Collapse", "String::AsciiToLower", "String::AsciiToUpper", "String::AsciiToTitle":
-		return autoMapUnary(name, args, "String", "String")
+		return func(args []model.Type) (model.Type, error) { return autoMapUnary(name, args, "String", "String") }
 	case "String::Base64Decode", "String::Base64StrictDecode", "String::HexDecode":
-		return nullableStringDecoder(name, args)
+		return func(args []model.Type) (model.Type, error) { return nullableStringDecoder(name, args) }
 	case "String::Find", "String::ReverseFind":
-		return resolveStringFind(name, args)
+		return func(args []model.Type) (model.Type, error) { return resolveStringFind(name, args) }
 	case "String::Substring":
-		return resolveLibrarySubstring(name, args, "String")
+		return func(args []model.Type) (model.Type, error) { return resolveLibrarySubstring(name, args, "String") }
 	case "String::ReplaceAll", "String::ReplaceFirst", "String::ReplaceLast":
-		return resolveStringReplace(name, args)
+		return func(args []model.Type) (model.Type, error) { return resolveStringReplace(name, args) }
 	case "Unicode::IsUtf":
-		return exactUnary(name, args, "String", "Bool")
+		return func(args []model.Type) (model.Type, error) { return exactUnary(name, args, "String", "Bool") }
 	case "Unicode::GetLength":
-		return autoMapUnary(name, args, "Utf8", "Uint64")
+		return func(args []model.Type) (model.Type, error) { return autoMapUnary(name, args, "Utf8", "Uint64") }
 	case "Unicode::Find", "Unicode::RFind":
-		return resolveUnicodeFind(name, args)
+		return func(args []model.Type) (model.Type, error) { return resolveUnicodeFind(name, args) }
 	case "Unicode::Substring":
-		return resolveLibrarySubstring(name, args, "Utf8")
+		return func(args []model.Type) (model.Type, error) { return resolveLibrarySubstring(name, args, "Utf8") }
 	case "Unicode::ToLower", "Unicode::ToUpper", "Unicode::ToTitle", "Unicode::Normalize",
 		"Unicode::NormalizeNFC", "Unicode::NormalizeNFD", "Unicode::NormalizeNFKC", "Unicode::NormalizeNFKD":
-		return autoMapUnary(name, args, "Utf8", "Utf8")
+		return func(args []model.Type) (model.Type, error) { return autoMapUnary(name, args, "Utf8", "Utf8") }
 	case "DateTime::GetYear":
-		return resolveDateTimeGetYear(name, args)
+		return func(args []model.Type) (model.Type, error) { return resolveDateTimeGetYear(name, args) }
 	case "DateTime::GetDayOfYear":
-		return dateTimeComponent(name, args, "Uint16")
+		return func(args []model.Type) (model.Type, error) { return dateTimeComponent(name, args, "Uint16") }
 	case "DateTime::GetMonth", "DateTime::GetWeekOfYear", "DateTime::GetWeekOfYearIso8601",
 		"DateTime::GetDayOfMonth", "DateTime::GetDayOfWeek", "DateTime::GetHour",
 		"DateTime::GetMinute", "DateTime::GetSecond":
-		return dateTimeComponent(name, args, "Uint8")
+		return func(args []model.Type) (model.Type, error) { return dateTimeComponent(name, args, "Uint8") }
 	case "DateTime::GetMillisecondOfSecond", "DateTime::GetMicrosecondOfSecond":
-		return dateTimeComponent(name, args, "Uint32")
+		return func(args []model.Type) (model.Type, error) { return dateTimeComponent(name, args, "Uint32") }
 	case "DateTime::GetTimezoneId":
-		return dateTimeComponent(name, args, "Uint16")
+		return func(args []model.Type) (model.Type, error) { return dateTimeComponent(name, args, "Uint16") }
 	case "DateTime::GetMonthName", "DateTime::GetDayOfWeekName", "DateTime::GetTimezoneName":
-		return dateTimeComponent(name, args, "String")
+		return func(args []model.Type) (model.Type, error) { return dateTimeComponent(name, args, "String") }
 	default:
-		return model.Type{}, fmt.Errorf("unsupported YQL function %q", name)
+		return nil
 	}
 }
 

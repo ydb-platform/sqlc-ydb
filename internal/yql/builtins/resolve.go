@@ -23,35 +23,44 @@ func resolveLegacy(name string, args []model.Type) (model.Type, error) {
 		return resolveLibrary(name, args)
 	}
 
+	if resolve := lookupCore(name); resolve != nil {
+		return resolve(args)
+	}
+	return model.Type{}, fmt.Errorf("unsupported YQL function %q", name)
+}
+
+type functionResolver func([]model.Type) (model.Type, error)
+
+func lookupCore(name string) functionResolver {
 	switch strings.ToUpper(name) {
 	case "COALESCE", "NVL":
-		return resolveCoalesce(name, args)
+		return func(args []model.Type) (model.Type, error) { return resolveCoalesce(name, args) }
 	case "IF":
-		return resolveIf(args)
+		return resolveIf
 	case "LENGTH", "LEN":
-		return resolveLength(name, args)
+		return func(args []model.Type) (model.Type, error) { return resolveLength(name, args) }
 	case "SUBSTRING":
-		return resolveSubstring(name, args)
+		return func(args []model.Type) (model.Type, error) { return resolveSubstring(name, args) }
 	case "FIND", "RFIND":
-		return resolveFind(name, args)
+		return func(args []model.Type) (model.Type, error) { return resolveFind(name, args) }
 	case "STARTSWITH", "ENDSWITH":
-		return resolveAffix(name, args)
+		return func(args []model.Type) (model.Type, error) { return resolveAffix(name, args) }
 	case "ABS":
-		return resolveAbs(args)
+		return resolveAbs
 	case "TOSET":
-		return resolveToSet(args)
+		return resolveToSet
 	case "SETISDISJOINT":
-		return resolveSetIsDisjoint(args)
+		return resolveSetIsDisjoint
 	case "COUNT":
-		return resolveCount(args)
+		return resolveCount
 	case "MIN", "MAX":
-		return resolveMinMax(name, args)
+		return func(args []model.Type) (model.Type, error) { return resolveMinMax(name, args) }
 	case "SUM":
-		return resolveSum(args)
+		return resolveSum
 	case "AVG":
-		return resolveAvg(args)
+		return resolveAvg
 	default:
-		return model.Type{}, fmt.Errorf("unsupported YQL function %q", name)
+		return nil
 	}
 }
 

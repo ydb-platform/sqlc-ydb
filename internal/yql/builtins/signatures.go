@@ -88,7 +88,7 @@ func (r *Registry) ResolveCall(name string, args []CallArgument) (model.Type, er
 }
 
 func validateSignature(signature Signature) error {
-	if !signatureIdentifier.MatchString(signature.Name) {
+	if !IsFunctionIdentifier(signature.Name) {
 		return fmt.Errorf("function name must be a non-empty YQL identifier")
 	}
 	if err := validateSignatureType(signature.Returns, false); err != nil {
@@ -101,7 +101,7 @@ func validateSignature(signature Signature) error {
 			return fmt.Errorf("argument %d has invalid type %s: %w", i+1, parameter.Type.String(), err)
 		}
 		if parameter.Name != "" {
-			if !parameterIdentifier.MatchString(parameter.Name) {
+			if !IsParameterIdentifier(parameter.Name) {
 				return fmt.Errorf("argument %d name must be a YQL identifier", i+1)
 			}
 			if _, exists := seenNames[parameter.Name]; exists {
@@ -167,6 +167,12 @@ func validateSignatureType(value model.Type, parentOptional bool) error {
 var signatureIdentifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*$`)
 var parameterIdentifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
+// IsFunctionIdentifier reports whether value is a qualified YQL function name.
+func IsFunctionIdentifier(value string) bool { return signatureIdentifier.MatchString(value) }
+
+// IsParameterIdentifier reports whether value is a YQL parameter name.
+func IsParameterIdentifier(value string) bool { return parameterIdentifier.MatchString(value) }
+
 func signaturesOverlap(left, right Signature) bool {
 	leftRequired, rightRequired := requiredCount(left.Arguments), requiredCount(right.Arguments)
 	minimum := leftRequired
@@ -212,7 +218,7 @@ func resolveSignatures(name string, args []CallArgument, signatures []Signature)
 	var matches []model.Type
 	var failures []string
 	for _, signature := range signatures {
-		result, err := matchSignature(name, args, signature)
+		result, err := matchSignature(args, signature)
 		if err == nil {
 			matches = append(matches, result)
 		} else {
@@ -231,7 +237,7 @@ func resolveSignatures(name string, args []CallArgument, signatures []Signature)
 	return model.Type{}, fmt.Errorf("%s has no matching overload: %s", name, strings.Join(failures, "; "))
 }
 
-func matchSignature(name string, args []CallArgument, signature Signature) (model.Type, error) {
+func matchSignature(args []CallArgument, signature Signature) (model.Type, error) {
 	bound := make([]*CallArgument, len(signature.Arguments))
 	positional := 0
 	namedSeen := false
@@ -341,39 +347,5 @@ func standardSignatures(name string) []Signature {
 }
 
 func isKnownFunction(name string) bool {
-	if len(standardSignatures(name)) != 0 {
-		return true
-	}
-	if knownLibraryFunctions[name] {
-		return true
-	}
-	switch strings.ToUpper(name) {
-	case "COALESCE", "NVL", "IF", "LENGTH", "LEN", "SUBSTRING", "FIND", "RFIND", "STARTSWITH", "ENDSWITH", "ABS", "TOSET", "SETISDISJOINT", "COUNT", "MIN", "MAX", "SUM", "AVG":
-		return true
-	default:
-		return false
-	}
-}
-
-var knownLibraryFunctions = map[string]bool{
-	"Yson::ConvertToStringList": true,
-	"String::Base64Encode":      true, "String::EscapeC": true, "String::UnescapeC": true,
-	"String::HexEncode": true, "String::EncodeHtml": true, "String::DecodeHtml": true,
-	"String::CgiEscape": true, "String::CgiUnescape": true, "String::Strip": true,
-	"String::Collapse": true, "String::AsciiToLower": true, "String::AsciiToUpper": true,
-	"String::AsciiToTitle": true, "String::Base64Decode": true, "String::Base64StrictDecode": true,
-	"String::HexDecode": true, "String::Find": true, "String::ReverseFind": true,
-	"String::Substring": true, "String::ReplaceAll": true, "String::ReplaceFirst": true,
-	"String::ReplaceLast": true, "Unicode::IsUtf": true, "Unicode::GetLength": true,
-	"Unicode::Find": true, "Unicode::RFind": true, "Unicode::Substring": true,
-	"Unicode::ToLower": true, "Unicode::ToUpper": true, "Unicode::ToTitle": true,
-	"Unicode::Normalize": true, "Unicode::NormalizeNFC": true, "Unicode::NormalizeNFD": true,
-	"Unicode::NormalizeNFKC": true, "Unicode::NormalizeNFKD": true,
-	"DateTime::GetYear": true, "DateTime::GetDayOfYear": true, "DateTime::GetMonth": true,
-	"DateTime::GetMonthName": true, "DateTime::GetWeekOfYear": true,
-	"DateTime::GetWeekOfYearIso8601": true, "DateTime::GetDayOfMonth": true,
-	"DateTime::GetDayOfWeek": true, "DateTime::GetDayOfWeekName": true,
-	"DateTime::GetHour": true, "DateTime::GetMinute": true, "DateTime::GetSecond": true,
-	"DateTime::GetMillisecondOfSecond": true, "DateTime::GetMicrosecondOfSecond": true,
-	"DateTime::GetTimezoneId": true, "DateTime::GetTimezoneName": true,
+	return len(standardSignatures(name)) != 0 || lookupCore(name) != nil || lookupLibrary(name) != nil
 }

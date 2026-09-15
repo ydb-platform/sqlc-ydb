@@ -234,6 +234,8 @@ func TestRegistryValidatesCustomSignatures(t *testing.T) {
 		{"duplicate overload", []Signature{valid, valid}, "ambiguous duplicate"},
 		{"overlapping optional overload", []Signature{valid, {Name: "Acme::Hash", Arguments: []Parameter{{Name: "value", Type: scalar("String")}, {Name: "seed", Type: scalar("Uint64"), Optional: true}}, Returns: scalar("Uint64")}}, "ambiguous overloads"},
 		{"known builtin conflict", []Signature{{Name: "Digest::CityHash", Arguments: []Parameter{{Type: scalar("String")}}, Returns: scalar("Uint64")}}, "built-in"},
+		{"known core conflict is case insensitive", []Signature{{Name: "coalesce", Returns: scalar("Uint64")}}, "built-in"},
+		{"known library conflict", []Signature{{Name: "Yson::ConvertToStringList", Returns: scalar("Uint64")}}, "built-in"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := NewRegistry(tc.sigs)
@@ -241,6 +243,12 @@ func TestRegistryValidatesCustomSignatures(t *testing.T) {
 				t.Fatalf("NewRegistry() error = %v, want %q", err, tc.want)
 			}
 		})
+	}
+}
+
+func TestRegistryAllowsWrongCaseLibraryName(t *testing.T) {
+	if _, err := NewRegistry([]Signature{{Name: "yson::ConvertToStringList", Returns: scalar("Uint64")}}); err != nil {
+		t.Fatalf("NewRegistry() error = %v", err)
 	}
 }
 

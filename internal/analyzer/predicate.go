@@ -101,6 +101,11 @@ func validatePredicateAtom(atom *parser.Xor_subexprContext, scope expressionScop
 					return fmt.Errorf("unsupported IN operand %q", inExpr.GetText())
 				}
 				for _, expression := range expressions {
+					if bind := directBind(expression); bind != nil {
+						if typeValue, ok := scope.bindings[bindName(bind)]; ok && typeValue.Kind == "List" {
+							return fmt.Errorf("parenthesized List parameter %q is not a valid IN operand; use IN %s", bind.GetText(), bind.GetText())
+						}
+					}
 					typeValue, err := resolveExpression(expression, scope)
 					if err != nil {
 						return fmt.Errorf("cannot resolve IN operand %q: %w", expression.GetText(), err)
