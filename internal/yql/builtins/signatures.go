@@ -36,6 +36,10 @@ type Registry struct {
 	custom map[string][]Signature
 }
 
+// defaultRegistry has no mutable custom catalog. ResolveCall only reads it, so
+// package-level Resolve calls can safely share the instance.
+var defaultRegistry = &Registry{}
+
 // NewRegistry validates user-provided signatures before any query is analyzed.
 func NewRegistry(custom []Signature) (*Registry, error) {
 	r := &Registry{custom: make(map[string][]Signature)}
@@ -131,6 +135,11 @@ func validateSignatureType(value model.Type, parentOptional bool) error {
 			return err
 		}
 		return validateConcreteOrNull(value)
+	}
+	if value.Kind == "Dict" && value.Key != nil {
+		if err := validateDictionaryKey(*value.Key); err != nil {
+			return err
+		}
 	}
 	if value.Key != nil {
 		if err := validateSignatureType(*value.Key, false); err != nil {

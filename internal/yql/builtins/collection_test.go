@@ -55,8 +55,33 @@ func TestResolveCollectionFunctionsKeepOptionalKeys(t *testing.T) {
 	}
 }
 
+func TestResolveCollectionFunctionsRejectNestedOptionalKey(t *testing.T) {
+	stringType := model.Type{Kind: "String"}
+	nested := model.Optional(model.Optional(stringType))
+	list := model.Type{Kind: "List", Elem: &nested}
+	if _, err := Resolve("ToSet", []model.Type{list}); err == nil || !strings.Contains(err.Error(), "nested Optional") {
+		t.Fatalf("ToSet nested Optional key error = %v", err)
+	}
+}
+
 func TestResolveToSetTupleKey(t *testing.T) {
-	key := model.Type{Kind: "Tuple", Items: []model.Type{{Kind: "String"}, model.Optional(model.Type{Kind: "Uint64"})}}
+	inner := model.Type{Kind: "Tuple", Items: []model.Type{{Kind: "String"}, {Kind: "Uint64"}}}
+	for _, key := range []model.Type{
+		{Kind: "Tuple", Items: []model.Type{inner, model.Optional(model.Type{Kind: "Uint64"})}},
+		model.Optional(inner),
+	} {
+		got, err := Resolve("ToSet", []model.Type{{Kind: "List", Elem: &key}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Key == nil || !got.Key.Equal(key) {
+			t.Fatalf("ToSet() = %s", got.String())
+		}
+	}
+}
+
+func TestResolveToSetDecimalKey(t *testing.T) {
+	key := model.Type{Kind: "Decimal", Precision: 22, Scale: 9}
 	got, err := Resolve("ToSet", []model.Type{{Kind: "List", Elem: &key}})
 	if err != nil {
 		t.Fatal(err)
@@ -83,6 +108,7 @@ func TestResolveCollectionFunctionsRejectInvalidCalls(t *testing.T) {
 		{"ToSet", []model.Type{{Kind: "List", Elem: &model.Type{Kind: "Tuple", Items: []model.Type{stringType}}}}, "at least two"},
 		{"ToSet", []model.Type{{Kind: "List", Elem: &model.Type{Kind: "String", Elem: &stringType}}}, "invalid dictionary key"},
 		{"ToSet", []model.Type{{Kind: "List", Elem: &model.Type{Kind: "Json"}}}, "dictionary key"},
+		{"ToSet", []model.Type{{Kind: "List", Elem: &model.Type{Kind: "JsonDocument"}}}, "dictionary key"},
 		{"SetIsDisjoint", []model.Type{model.Optional(model.Type{Kind: "Optional", Elem: &set}), set}, "argument 1"},
 		{"SetIsDisjoint", []model.Type{{Kind: "Dict"}, set}, "argument 1"},
 		{"SetIsDisjoint", []model.Type{set, {Kind: "List", Elem: &uint64Type}}, "same key type"},

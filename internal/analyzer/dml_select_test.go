@@ -56,6 +56,35 @@ func TestInsertAndUpsertExplicitTargetsArePositional(t *testing.T) {
 	}
 }
 
+func TestDMLSelectContextualizesNullForOptionalTargets(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, note Utf8, PRIMARY KEY(id));`}}
+	for _, statement := range []string{
+		"INSERT INTO records (id, note) SELECT 1ul, NULL",
+		"UPSERT INTO records (id, note) SELECT 1ul, NULL",
+		"UPDATE records ON SELECT 1ul AS id, NULL AS note",
+		"DELETE FROM records ON SELECT 1ul AS id, NULL AS note",
+	} {
+		if _, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Write :exec\n" + statement + ";"}}); err != nil {
+			t.Fatalf("%s: %v", statement, err)
+		}
+	}
+}
+
+func TestDMLSelectRejectsNullForRequiredTargets(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, required Utf8 NOT NULL, PRIMARY KEY(id));`}}
+	for _, statement := range []string{
+		"INSERT INTO records (id) SELECT NULL",
+		"UPSERT INTO records (id, required) SELECT 1ul, NULL",
+		"UPDATE records ON SELECT NULL AS id",
+		"DELETE FROM records ON SELECT NULL AS id",
+	} {
+		_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Write :exec\n" + statement + ";"}})
+		if err == nil || !strings.Contains(err.Error(), "requires") {
+			t.Fatalf("%s: %v", statement, err)
+		}
+	}
+}
+
 func TestUpdateOnSelectMatchesColumnsByResultName(t *testing.T) {
 	query := `-- name: UpdateRecords :exec
 DECLARE $rows AS List<Struct<record_id:Utf8,owner_hash:Uint64,payload:String>>;
@@ -153,5 +182,15 @@ func TestOnSelectSourceErrorDoesNotCascade(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "missing primary key") {
 		t.Fatalf("unexpected cascade: %v", err)
+	}
+}
+
+func TestOnSelectQualifiedResultSuggestsAlias(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, note Utf8, PRIMARY KEY(id));`}}
+	query := `-- name: Write :exec
+UPDATE records ON SELECT r.id, r.note FROM records r JOIN records other ON r.id = other.id;`
+	_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
+	if err == nil || !strings.Contains(err.Error(), `unknown target column "r.id"; use AS id`) {
+		t.Fatalf("error = %v", err)
 	}
 }

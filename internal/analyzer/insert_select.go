@@ -135,7 +135,7 @@ func analyzeInsertSelect(catalog model.Catalog, block queryBlock, statement *par
 			continue
 		}
 		from, to := columns[i].Type, column.Type
-		if !from.Equal(to) && !(to.IsOptional() && from.Equal(to.UnwrapOptional())) {
+		if !compatibleDMLSelectTypes(from, to) {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, id, fmt.Sprintf("SELECT column %q has type %s but target column %q requires %s", columns[i].Name, from.String(), name, to.String())))
 		}
 	}
@@ -157,10 +157,14 @@ func analyzeNamedDMLSelect(catalog model.Catalog, block queryBlock, stmt parser.
 		seen[name] = true
 		destination := tableColumn(target, name)
 		if destination == nil {
-			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, context, fmt.Sprintf("unknown target column %q", name)))
+			message := fmt.Sprintf("unknown target column %q", name)
+			if dot := strings.LastIndex(name, "."); dot >= 0 && dot+1 < len(name) {
+				message += fmt.Sprintf("; use AS %s to map the qualified result", name[dot+1:])
+			}
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, context, message))
 			continue
 		}
-		if !source.Type.Equal(destination.Type) && !(destination.Type.IsOptional() && source.Type.Equal(destination.Type.UnwrapOptional())) {
+		if !compatibleDMLSelectTypes(source.Type, destination.Type) {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, context, fmt.Sprintf("source column %q has type %s but target column requires %s", name, source.Type.String(), destination.Type.String())))
 		}
 	}
@@ -170,4 +174,11 @@ func analyzeNamedDMLSelect(catalog model.Catalog, block queryBlock, stmt parser.
 		}
 	}
 	return diagnostics
+}
+
+func compatibleDMLSelectTypes(source, target model.Type) bool {
+	if source.Kind == "Null" {
+		return target.IsOptional()
+	}
+	return source.Equal(target) || target.IsOptional() && source.Equal(target.UnwrapOptional())
 }

@@ -15,11 +15,7 @@ func Resolve(name string, args []model.Type) (model.Type, error) {
 	for i := range args {
 		callArgs[i].Type = args[i]
 	}
-	registry, err := NewRegistry(nil)
-	if err != nil {
-		return model.Type{}, err
-	}
-	return registry.ResolveCall(name, callArgs)
+	return defaultRegistry.ResolveCall(name, callArgs)
 }
 
 func resolveLegacy(name string, args []model.Type) (model.Type, error) {

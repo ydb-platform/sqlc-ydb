@@ -153,6 +153,42 @@ func TestRegistryValidatesNestedConcreteSignatures(t *testing.T) {
 	}
 }
 
+func TestRegistryRejectsInvalidDictionaryKeysRecursively(t *testing.T) {
+	boolType := scalar("Bool")
+	jsonType := scalar("Json")
+	jsonDocumentType := scalar("JsonDocument")
+	stringType := scalar("String")
+	decimalType := model.Type{Kind: "Decimal", Precision: 22, Scale: 9}
+	nestedOptional := model.Optional(model.Optional(stringType))
+	for _, tc := range []struct {
+		name      string
+		typeValue model.Type
+		want      string
+	}{
+		{"top-level Json key", model.Type{Kind: "Dict", Key: &jsonType, Elem: &boolType}, "dictionary key"},
+		{"top-level JsonDocument key", model.Type{Kind: "Dict", Key: &jsonDocumentType, Elem: &boolType}, "dictionary key"},
+		{"Dict nested in List", model.Type{Kind: "List", Elem: &model.Type{Kind: "Dict", Key: &jsonType, Elem: &boolType}}, "dictionary key"},
+		{"Dict nested in Struct", model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "lookup", Type: model.Type{Kind: "Dict", Key: &jsonType, Elem: &boolType}}}}, "dictionary key"},
+		{"nested Optional key", model.Type{Kind: "Dict", Key: &nestedOptional, Elem: &boolType}, "nested Optional"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := NewRegistry([]Signature{{Name: "Acme::Lookup", Arguments: []Parameter{{Type: tc.typeValue}}, Returns: boolType}})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("NewRegistry() error = %v, want %q", err, tc.want)
+			}
+		})
+	}
+	optionalString := model.Optional(stringType)
+	tupleKey := model.Type{Kind: "Tuple", Items: []model.Type{optionalString, scalar("Uint64")}}
+	optionalTupleKey := model.Optional(tupleKey)
+	nestedTupleKey := model.Type{Kind: "Tuple", Items: []model.Type{tupleKey, scalar("Uint64")}}
+	for _, key := range []model.Type{optionalString, tupleKey, optionalTupleKey, nestedTupleKey, decimalType} {
+		if _, err := NewRegistry([]Signature{{Name: "Acme::Lookup", Arguments: []Parameter{{Type: model.Type{Kind: "Dict", Key: &key, Elem: &boolType}}}, Returns: boolType}}); err != nil {
+			t.Errorf("valid dictionary key %s rejected: %v", key.String(), err)
+		}
+	}
+}
+
 func TestResolveDigestSignatureGroups(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -212,5 +248,18 @@ func TestLegacyResolveIncludesDigestCatalog(t *testing.T) {
 	got, err := Resolve("Digest::CityHash", []model.Type{scalar("String")})
 	if err != nil || !got.Equal(scalar("Uint64")) {
 		t.Fatalf("Resolve() = %s, %v", got.String(), err)
+	}
+}
+
+func TestLegacyResolveDoesNotObserveCustomRegistry(t *testing.T) {
+	r, err := NewRegistry([]Signature{{Name: "Acme::OnlyHere", Returns: scalar("Uint64")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.ResolveCall("Acme::OnlyHere", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Resolve("Acme::OnlyHere", nil); err == nil || !strings.Contains(err.Error(), "unsupported YQL function") {
+		t.Fatalf("Resolve observed custom registry: %v", err)
 	}
 }

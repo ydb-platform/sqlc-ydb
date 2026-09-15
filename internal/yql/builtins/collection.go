@@ -88,6 +88,9 @@ func validateDictionaryKey(key model.Type) error {
 		if key.Elem == nil {
 			return fmt.Errorf("dictionary key Optional has no element type")
 		}
+		if key.Elem.Kind == "Optional" {
+			return fmt.Errorf("nested Optional dictionary key is not supported")
+		}
 		return validateDictionaryKey(*key.Elem)
 	}
 	if key.Kind == "Tuple" {
@@ -101,7 +104,7 @@ func validateDictionaryKey(key model.Type) error {
 		}
 		return nil
 	}
-	if !supportedScalarKinds[key.Kind] || key.Kind == "Json" || key.Kind == "Yson" || key.Kind == "Null" || key.Kind == "Void" {
+	if (!supportedScalarKinds[key.Kind] && key.Kind != "Decimal") || key.Kind == "Json" || key.Kind == "JsonDocument" || key.Kind == "Yson" || key.Kind == "Null" || key.Kind == "Void" {
 		return fmt.Errorf("unsupported dictionary key type %s", key.String())
 	}
 	if err := validateConcreteOrNull(key); err != nil {
