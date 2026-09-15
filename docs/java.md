@@ -50,7 +50,7 @@ The native SDK and JDBC profiles bind a single typed list of structs. The elemen
 
 ## jOOQ prototype
 
-`runtime: jooq` translates named YQL queries into the jOOQ DSL. Structured batch inserts and queries containing explicit `DECLARE` use the JDBC paths described below. Unsupported constructs fail generation with the query name and offending syntax. The example families cover: SELECT, projections, aliases, LEFT JOIN, comparisons and logical conditions, ordering, LIMIT, GROUP BY with COUNT(*), INSERT/UPSERT, UPDATE, DELETE and RETURNING. Its YQL function subset includes SetIsDisjoint, ToSet and Yson::ConvertToStringList; other functions require an explicit implementation.
+`runtime: jooq` translates named YQL queries into the jOOQ DSL. Structured batch inserts and queries containing explicit `DECLARE` use the JDBC paths described below. Outside those dedicated JDBC paths, SELECT-backed INSERT/UPSERT and UPDATE/DELETE ON SELECT fail generation; use `runtime: jdbc` or `ydb` for these forms. Unsupported constructs fail generation with the query name and offending syntax or a runtime alternative. The example families cover: SELECT, projections, aliases, LEFT JOIN, comparisons and logical conditions, ordering, LIMIT, GROUP BY with COUNT(*), INSERT/UPSERT, UPDATE, DELETE and RETURNING. Its YQL function subset includes SetIsDisjoint, ToSet and Yson::ConvertToStringList; other functions require an explicit implementation.
 
 ```yaml
 gen:

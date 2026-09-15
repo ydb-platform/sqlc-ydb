@@ -174,35 +174,40 @@ func IsFunctionIdentifier(value string) bool { return signatureIdentifier.MatchS
 func IsParameterIdentifier(value string) bool { return parameterIdentifier.MatchString(value) }
 
 func signaturesOverlap(left, right Signature) bool {
-	leftRequired, rightRequired := requiredCount(left.Arguments), requiredCount(right.Arguments)
-	minimum := leftRequired
-	if rightRequired > minimum {
-		minimum = rightRequired
-	}
 	maximum := len(left.Arguments)
 	if len(right.Arguments) < maximum {
 		maximum = len(right.Arguments)
 	}
-	if minimum > maximum {
-		return false
+	// A call has a positional prefix followed by named arguments. Try every
+	// possible prefix; optional suffix arguments can be omitted.
+	for prefix := 0; prefix <= maximum; prefix++ {
+		if prefix > 0 && !parametersOverlap(left.Arguments[prefix-1], right.Arguments[prefix-1]) {
+			return false
+		}
+		if requiredNamesOverlap(left.Arguments, right.Arguments, prefix) && requiredNamesOverlap(right.Arguments, left.Arguments, prefix) {
+			return true
+		}
 	}
-	for i := 0; i < minimum; i++ {
-		leftBase, _, _ := baseType(left.Arguments[i].Type)
-		rightBase, _, _ := baseType(right.Arguments[i].Type)
-		if !leftBase.Equal(rightBase) {
+	return false
+}
+
+func requiredNamesOverlap(left, right []Parameter, prefix int) bool {
+	for _, parameter := range left[prefix:] {
+		if parameter.Optional {
+			continue
+		}
+		index := parameterIndex(right, parameter.Name)
+		if parameter.Name == "" || index < prefix || !parametersOverlap(parameter, right[index]) {
 			return false
 		}
 	}
 	return true
 }
 
-func requiredCount(parameters []Parameter) int {
-	for i, parameter := range parameters {
-		if parameter.Optional {
-			return i
-		}
-	}
-	return len(parameters)
+func parametersOverlap(left, right Parameter) bool {
+	leftBase, _, _ := baseType(left.Type)
+	rightBase, _, _ := baseType(right.Type)
+	return leftBase.Equal(rightBase)
 }
 
 func signatureShape(signature Signature) string {

@@ -76,6 +76,30 @@ func TestJooqRejectsUnsupportedSyntax(t *testing.T) {
 	}
 }
 
+func TestJooqRejectsSelectBackedDML(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE items (id Uint64 NOT NULL, name Utf8, PRIMARY KEY(id));"}}
+	for _, sql := range []string{
+		"INSERT INTO items (id, name) SELECT id, name FROM items;",
+		"UPSERT INTO items (id, name) SELECT id, name FROM items;",
+		"UPDATE items ON SELECT id, name FROM items;",
+		"DELETE FROM items ON SELECT id FROM items;",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			a, err := analyzer.Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: WriteItems :exec\n" + sql}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			files, err := Generate(a, Options{Runtime: "jooq"})
+			if err == nil || files != nil {
+				t.Fatalf("SELECT-backed DML must not generate a plain SELECT: generated %d files, err=%v", len(files), err)
+			}
+			if !strings.Contains(err.Error(), "WriteItems: SELECT-backed DML is unsupported by the jOOQ DSL; use runtime: jdbc or ydb") {
+				t.Fatalf("missing actionable diagnostic: %v", err)
+			}
+		})
+	}
+}
+
 func TestJooqKeepsEscapedLiteralSemantics(t *testing.T) {
 	for _, literal := range []string{`"line\nnext"u`, `"quote\"value"u`} {
 		a, e := analyzer.Analyze(nil, []model.Source{{Name: "q.sql", Text: "-- name: Literal :one\nSELECT " + literal + " AS value;"}})

@@ -246,6 +246,29 @@ func TestRegistryValidatesCustomSignatures(t *testing.T) {
 	}
 }
 
+func TestRegistryNamedOverloadOverlap(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		left, right []Parameter
+		overlap     bool
+	}{
+		{"reordered names", []Parameter{{Name: "a", Type: scalar("String")}, {Name: "b", Type: scalar("Uint64")}}, []Parameter{{Name: "b", Type: scalar("Uint64")}, {Name: "a", Type: scalar("String")}}, true},
+		{"positional prefix and named suffix", []Parameter{{Type: scalar("Bool")}, {Name: "a", Type: scalar("String")}, {Name: "b", Type: scalar("Uint64")}}, []Parameter{{Type: scalar("Bool")}, {Name: "b", Type: scalar("Uint64")}, {Name: "a", Type: scalar("String")}}, true},
+		{"different named types", []Parameter{{Name: "a", Type: scalar("String")}, {Name: "b", Type: scalar("Uint64")}}, []Parameter{{Name: "b", Type: scalar("Bool")}, {Name: "a", Type: scalar("String")}}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := NewRegistry([]Signature{{Name: "Acme::Call", Arguments: tc.left, Returns: scalar("Bool")}, {Name: "Acme::Call", Arguments: tc.right, Returns: scalar("Bool")}})
+			if tc.overlap {
+				if err == nil || !strings.Contains(err.Error(), "ambiguous overloads") {
+					t.Fatalf("expected ambiguous overloads, got %v", err)
+				}
+			} else if err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
 func TestRegistryAllowsWrongCaseLibraryName(t *testing.T) {
 	if _, err := NewRegistry([]Signature{{Name: "yson::ConvertToStringList", Returns: scalar("Uint64")}}); err != nil {
 		t.Fatalf("NewRegistry() error = %v", err)
