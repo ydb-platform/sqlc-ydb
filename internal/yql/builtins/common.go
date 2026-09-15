@@ -106,6 +106,9 @@ func validateConcreteOrNull(value model.Type) error {
 	if value.Kind == "" || value.Kind == "Any" {
 		return fmt.Errorf("unsupported type %q cannot participate in resolution", value.Kind)
 	}
+	if value.Kind != "Struct" && len(value.Fields) != 0 {
+		return fmt.Errorf("%s has unexpected Struct fields", value.Kind)
+	}
 	switch value.Kind {
 	case "Optional", "List", "Stream", "Flow", "Set":
 		if value.Elem == nil {
@@ -139,6 +142,27 @@ func validateConcreteOrNull(value model.Type) error {
 			}
 		}
 		return nil
+	case "Struct":
+		if len(value.Fields) == 0 {
+			return fmt.Errorf("Struct type requires at least one field")
+		}
+		if value.Key != nil || value.Elem != nil || len(value.Items) != 0 || value.Precision != 0 || value.Scale != 0 {
+			return fmt.Errorf("Struct has unexpected type parameters")
+		}
+		seen := make(map[string]struct{}, len(value.Fields))
+		for _, field := range value.Fields {
+			if field.Name == "" {
+				return fmt.Errorf("Struct field name must not be empty")
+			}
+			if _, exists := seen[field.Name]; exists {
+				return fmt.Errorf("duplicate Struct field %q", field.Name)
+			}
+			seen[field.Name] = struct{}{}
+			if err := validateConcreteOrNull(field.Type); err != nil {
+				return fmt.Errorf("Struct field %q: %w", field.Name, err)
+			}
+		}
+		return nil
 	case "Decimal":
 		if value.Precision < 1 || value.Precision > 35 || value.Scale < 0 || value.Scale > value.Precision {
 			return fmt.Errorf("invalid Decimal(%d,%d): precision must be 1..35 and scale 0..precision", value.Precision, value.Scale)
@@ -167,7 +191,7 @@ var supportedScalarKinds = map[string]bool{
 	"Date32": true, "Datetime64": true, "Timestamp64": true, "Interval64": true,
 	"TzDate": true, "TzDatetime": true, "TzTimestamp": true,
 	"TzDate32": true, "TzDatetime64": true, "TzTimestamp64": true,
-	"Null": true,
+	"Null": true, "Void": true,
 }
 
 func optional(value model.Type) model.Type {

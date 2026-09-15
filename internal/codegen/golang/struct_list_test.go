@@ -12,6 +12,115 @@ func batchInput(fields ...model.StructField) *model.AnalysisResult {
 	return &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "DECLARE $books AS List<Struct<book_id: Uint64, tags: Json, title: Optional<Utf8>>>; INSERT INTO books SELECT * FROM AS_TABLE($books);", Parameters: []model.Parameter{{Name: "books", Type: model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: fields}}}}}}}
 }
 
+func structInput(fields ...model.StructField) *model.AnalysisResult {
+	return &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "UpdateBook", Command: model.Exec, SQL: "DECLARE $book AS Struct<title: Optional<Utf8>, payload: String, tags: Json>; SELECT $book;", Parameters: []model.Parameter{{Name: "book", Type: model.Type{Kind: "Struct", Fields: fields}}}}}}
+}
+
+func TestStructParameterAPIAndBinding(t *testing.T) {
+	in := structInput(
+		model.StructField{Name: "title", Type: model.Optional(model.Type{Kind: "Utf8"})},
+		model.StructField{Name: "payload", Type: model.Type{Kind: "String"}},
+		model.StructField{Name: "tags", Type: model.Type{Kind: "Json"}},
+	)
+	for _, runtime := range []string{"ydb", "database/sql"} {
+		t.Run(runtime, func(t *testing.T) {
+			files, err := Generate(in, Options{Package: "db", Runtime: runtime, EmitInterface: true, EmitJSONTags: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			source := ""
+			for _, f := range files {
+				source += string(f.Content)
+			}
+			for _, want := range []string{"type UpdateBookBook struct", "Title   *string", "Payload []byte", "Tags    string", "json:\"payload\"", "arg UpdateBookBook"} {
+				if !strings.Contains(source, want) {
+					t.Fatalf("missing %q:\n%s", want, source)
+				}
+			}
+			runGeneratedRuntimeTest(t, in, Options{Package: "db", Runtime: runtime}, `package db
+import("testing";"github.com/ydb-platform/ydb-go-sdk/v3/types")
+func TestBindings(t *testing.T) {
+ title:="Unicode ☀"; input:=UpdateBookBook{Title:&title,Payload:[]byte{0,1,255},Tags:"{\"ok\":true}"}
+ value:=bindUpdateBookBook(input); fields,err:=types.StructFields(value);if err!=nil||len(fields)!=3{t.Fatalf("fields=%v err=%v",fields,err)}
+ var titleGot string;if err:=types.CastTo(types.Unwrap(fields["title"]),&titleGot);err!=nil||titleGot!=title{t.Fatalf("title=%q err=%v",titleGot,err)}
+ var payload []byte;if err:=types.CastTo(fields["payload"],&payload);err!=nil||string(payload)!=string(input.Payload)||fields["payload"].Type().Yql()!="String"{t.Fatalf("payload=%v err=%v",payload,err)}
+ var tags string;if err:=types.CastTo(fields["tags"],&tags);err!=nil||tags!=input.Tags||fields["tags"].Type().Yql()!="Json"{t.Fatalf("tags=%q err=%v",tags,err)}
+ nilValue:=bindUpdateBookBook(UpdateBookBook{});nilFields,err:=types.StructFields(nilValue);if err!=nil||!types.IsNull(nilFields["title"]){t.Fatalf("nil fields=%v err=%v",nilFields,err)}
+}
+`)
+		})
+	}
+}
+
+func TestStructParameterMembersBindByWireName(t *testing.T) {
+	in := structInput(model.StructField{Name: "second", Type: model.Type{Kind: "Uint64"}}, model.StructField{Name: "first", Type: model.Type{Kind: "Utf8"}})
+	for _, runtime := range []string{"ydb", "database/sql"} {
+		runGeneratedRuntimeTest(t, in, Options{Package: "db", Runtime: runtime}, `package db
+import("testing";"github.com/ydb-platform/ydb-go-sdk/v3/types")
+func TestNames(t *testing.T){ fields,err:=types.StructFields(bindUpdateBookBook(UpdateBookBook{Second:2,First:"one"}));if err!=nil{t.Fatal(err)};var first string;var second uint64;if err:=types.CastTo(fields["first"],&first);err!=nil{t.Fatal(err)};if err:=types.CastTo(fields["second"],&second);err!=nil{t.Fatal(err)};if first!="one"||second!=2{t.Fatalf("first=%q second=%d",first,second)} }
+`)
+	}
+}
+
+func TestStructParameterScalarFieldsCompile(t *testing.T) {
+	var fields []model.StructField
+	for _, kind := range []string{"Bool", "Int8", "Int16", "Int32", "Int64", "Uint8", "Uint16", "Uint32", "Uint64", "Float", "Double", "String", "Utf8", "Json", "JsonDocument", "Yson", "Date", "Datetime", "Timestamp", "Interval", "UUID", "Decimal"} {
+		typ := model.Type{Kind: kind}
+		if kind == "Decimal" {
+			typ.Precision, typ.Scale = 22, 9
+		}
+		fields = append(fields, model.StructField{Name: "field_" + kind, Type: typ}, model.StructField{Name: "optional_" + kind, Type: model.Optional(typ)})
+	}
+	for _, runtime := range []string{"ydb", "database/sql"} {
+		compileInput(t, structInput(fields...), Options{Package: "db", Runtime: runtime, EmitInterface: true})
+	}
+}
+
+func TestStructParameterRejectsUnsupportedFields(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		fields []model.StructField
+		want   string
+	}{
+		{"empty", nil, "requires at least one field"},
+		{"collision", []model.StructField{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, {Name: "bookID", Type: model.Type{Kind: "Uint64"}}}, "colliding field"},
+		{"nested struct", []model.StructField{{Name: "nested", Type: model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "id", Type: model.Type{Kind: "Uint64"}}}}}}, "must be a scalar"},
+		{"nested list", []model.StructField{{Name: "nested", Type: model.Type{Kind: "List", Elem: ptr(model.Type{Kind: "Uint64"})}}}, "must be a scalar"},
+		{"double optional", []model.StructField{{Name: "nested", Type: model.Optional(model.Optional(model.Type{Kind: "Uint64"}))}}, "must be a scalar"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, runtime := range []string{"ydb", "database/sql"} {
+				_, err := Generate(structInput(tc.fields...), Options{Runtime: runtime})
+				if err == nil || !strings.Contains(err.Error(), tc.want) {
+					t.Fatalf("%s: %v", runtime, err)
+				}
+			}
+		})
+	}
+}
+
+func TestStructParameterDeclarationCollision(t *testing.T) {
+	in := structInput(model.StructField{Name: "id", Type: model.Type{Kind: "Uint64"}})
+	in.Queries[0].Command = model.One
+	in.Queries[0].Parameters[0].Name = "row"
+	in.Queries[0].ResultSets = []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}}}}}
+	_, err := Generate(in, Options{Runtime: "ydb"})
+	if err == nil || !strings.Contains(err.Error(), "declaration UpdateBookRow collides") {
+		t.Fatalf("collision: %v", err)
+	}
+}
+
+func TestStructParameterDecimalMetadataValidated(t *testing.T) {
+	decimal := model.Type{Kind: "Decimal", Precision: 22, Scale: 9}
+	in := structInput(model.StructField{Name: "amount", Type: decimal}, model.StructField{Name: "discount", Type: model.Optional(decimal)})
+	for _, runtime := range []string{"ydb", "database/sql"} {
+		runGeneratedRuntimeTest(t, in, Options{Package: "db", Runtime: runtime}, `package db
+import("context";"strings";"testing";"github.com/ydb-platform/ydb-go-sdk/v3/types")
+func TestMetadata(t *testing.T){good:=types.Decimal{Precision:22,Scale:9};bad:=types.Decimal{Precision:21,Scale:9};q:=New(nil);for _,tc:=range []struct{item UpdateBookBook;field string}{{UpdateBookBook{Amount:bad},"amount"},{UpdateBookBook{Amount:good,Discount:&bad},"discount"}}{err:=q.UpdateBook(context.Background(),tc.item);if err==nil||!strings.Contains(err.Error(),"$book."+tc.field+" expects Decimal(22,9)"){t.Fatalf("err=%v",err)}}}
+`)
+	}
+}
+
 func TestStructListParameterAPIAndBinding(t *testing.T) {
 	in := batchInput(model.StructField{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, model.StructField{Name: "tags", Type: model.Type{Kind: "Json"}}, model.StructField{Name: "title", Type: model.Optional(model.Type{Kind: "Utf8"})})
 	for _, runtime := range []string{"ydb", "database/sql"} {

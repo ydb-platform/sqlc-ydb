@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added
+
+- Analyze typed SELECT sources consistently across read queries and DML, including computed INSERT/UPSERT SELECT projections and UPDATE/DELETE ON SELECT with name-based primary-key validation and wildcard expansion.
+- Configure exact, query-set-scoped concrete function signatures under `sql[].analyzer.functions`; named and omittable arguments and AutoMap behavior are resolved offline without claiming or loading the complete server UDF registry.
+- Generate Go bindings for root `Struct` parameters in both YDB Query SDK and database/sql profiles, and scalar `List` parameters in database/sql. Struct fields bind by YQL name regardless of declaration order.
+
+### Changed
+
+- Treat YQL `Bytes` as binary `String` and `Text` as Unicode `Utf8` throughout schema and declared nested types.
+- Match explicit-target INSERT/UPSERT SELECT columns positionally, with explicit projections and optional source aliases; match UPDATE/DELETE ON SELECT columns by result name and require all primary-key fields with compatible types.
+
 ## v0.1.5
 
 ### Added

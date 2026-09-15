@@ -9,13 +9,25 @@ import (
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
+	"github.com/ydb-platform/sqlc-ydb/internal/yql/builtins"
 	parser "github.com/ydb-platform/yql-parsers/go"
 )
 
 // Analyze builds the schema catalog first and then semantically analyzes every
 // named query against that catalog.
-func Analyze(schema, queries []model.Source) (*model.AnalysisResult, error) {
+func Analyze(schema, queries []model.Source, options ...Options) (*model.AnalysisResult, error) {
 	result := &model.AnalysisResult{}
+	if len(options) > 1 {
+		return result, fmt.Errorf("Analyze accepts at most one Options value")
+	}
+	var signatures []builtins.Signature
+	if len(options) == 1 {
+		signatures = options[0].Functions
+	}
+	functions, err := builtins.NewRegistry(signatures)
+	if err != nil {
+		return result, err
+	}
 	catalog, diagnostics := buildCatalog(schema)
 	result.Catalog = catalog
 	result.Diagnostics = append(result.Diagnostics, diagnostics...)
@@ -25,6 +37,7 @@ func Analyze(schema, queries []model.Source) (*model.AnalysisResult, error) {
 			blocks, blockDiagnostics := queryBlocks(source)
 			result.Diagnostics = append(result.Diagnostics, blockDiagnostics...)
 			for _, block := range blocks {
+				block.functions = functions
 				key := strings.ToLower(block.name)
 				if first, exists := queryNames[key]; exists {
 					result.Diagnostics = append(result.Diagnostics, model.Diagnostic{
@@ -109,11 +122,12 @@ func parseYQL(file, text string, lineOffset int) (parsedYQL, []model.Diagnostic)
 }
 
 type queryBlock struct {
-	name    string
-	command model.Command
-	file    string
-	line    int
-	text    string
+	name      string
+	command   model.Command
+	file      string
+	line      int
+	text      string
+	functions *builtins.Registry
 }
 
 func queryBlocks(source model.Source) ([]queryBlock, []model.Diagnostic) {

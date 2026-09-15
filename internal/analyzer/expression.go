@@ -15,6 +15,7 @@ type expressionScope struct {
 	bindings  map[string]model.Type
 	grouped   bool
 	predicate bool
+	functions *builtins.Registry
 }
 
 func resolveExpression(expr parser.IExprContext, scope expressionScope) (model.Type, error) {
@@ -23,6 +24,9 @@ func resolveExpression(expr parser.IExprContext, scope expressionScope) (model.T
 	}
 	if literal, ok, err := literalType(expr); ok || err != nil {
 		return literal, err
+	}
+	if typ, ok, err := resolveMemberAccess(expr, scope); ok {
+		return typ, err
 	}
 	if bind := directBind(expr); bind != nil {
 		name := bindName(bind)
@@ -126,6 +130,26 @@ func comparisonBoolType(operands []antlr.ParserRuleContext, scope expressionScop
 }
 
 func resolveScalarNode(root antlr.ParserRuleContext, scope expressionScope) (model.Type, error) {
+	if typ, ok, err := resolveMemberAccess(root, scope); ok {
+		return typ, err
+	}
+	var unaryNot *parser.Con_subexprContext
+	descendants(root, func(node antlr.Tree) {
+		ctx, ok := node.(*parser.Con_subexprContext)
+		if ok && sameSpan(root, ctx) && ctx.Unary_op() != nil && ctx.Unary_op().NOT() != nil {
+			unaryNot = ctx
+		}
+	})
+	if unaryNot != nil {
+		typeValue, err := resolveScalarNode(unaryNot.Unary_subexpr(), scope)
+		if err != nil {
+			return model.Type{}, fmt.Errorf("cannot resolve NOT operand: %w", err)
+		}
+		if typeValue.UnwrapOptional().Kind != "Bool" {
+			return model.Type{}, fmt.Errorf("NOT operand has type %s, want Bool", typeValue.String())
+		}
+		return typeValue, nil
+	}
 	var literal parser.ILiteral_valueContext
 	descendants(root, func(node antlr.Tree) {
 		ctx, ok := node.(parser.ILiteral_valueContext)
@@ -356,11 +380,9 @@ func resolveFunction(name string, invoke *parser.Invoke_exprContext, scope expre
 		return model.Type{}, fmt.Errorf("set quantifiers in function %q are unsupported", name)
 	}
 	var args []model.Type
+	var callArgs []builtins.CallArgument
 	if list := invoke.Named_expr_list(); list != nil {
 		for _, named := range list.AllNamed_expr() {
-			if named.AS() != nil {
-				return model.Type{}, fmt.Errorf("named arguments in function %q are unsupported", name)
-			}
 			if isAggregateFunction(name) && containsAggregate(named.Expr()) {
 				return model.Type{}, fmt.Errorf("aggregate function %q cannot contain another aggregate", name)
 			}
@@ -371,15 +393,25 @@ func resolveFunction(name string, invoke *parser.Invoke_exprContext, scope expre
 				return model.Type{}, fmt.Errorf("cannot resolve argument of %s: %w", name, err)
 			}
 			args = append(args, typeValue)
+			argument := builtins.CallArgument{Type: typeValue}
+			if named.AS() != nil {
+				argument.Name = identifier(named.An_id_or_type().GetText())
+			}
+			callArgs = append(callArgs, argument)
 		}
 	}
 	if strings.EqualFold(name, "count") {
+		for _, arg := range callArgs {
+			if arg.Name != "" {
+				return model.Type{}, fmt.Errorf("named arguments in aggregate %q are unsupported", name)
+			}
+		}
 		if len(args) != 1 {
 			return model.Type{}, fmt.Errorf("function %q expects one argument or *", name)
 		}
 		return model.Type{Kind: "Uint64"}, nil
 	}
-	result, err := builtins.Resolve(name, args)
+	result, err := scope.functions.ResolveCall(name, callArgs)
 	if err != nil {
 		return model.Type{}, err
 	}

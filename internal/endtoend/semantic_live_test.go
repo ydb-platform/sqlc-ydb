@@ -49,6 +49,8 @@ func TestLiveYDBSemanticTypes(t *testing.T) {
 		{"libraries", "SELECT String::AsciiToLower(\"ABC\") AS lower, Unicode::GetLength(\"текст\"u) AS size;"},
 	}
 	queries = append(queries, builtinLiveQueries()...)
+	queries = append(queries, digestLiveQueries()...)
+	queries = append(queries, struct{ Name, SQL string }{"collection_predicate", `SELECT SetIsDisjoint(ToSet(Yson::ConvertToStringList(CAST(NULL AS Json?))), Yson::ConvertToStringList(CAST(NULL AS Json?))) AS disjoint, Yson::ConvertToStringList(CAST(NULL AS Yson?)) AS empty_strings, SetIsDisjoint(ToSet(CAST(NULL AS List<String>?)), CAST(NULL AS List<String>?)) AS nullable_disjoint;`})
 	queries = append(queries, struct{ Name, SQL string }{"decimal_aggregates", "SELECT SUM(amount) AS total, AVG(amount) AS mean FROM $TABLE;"})
 	type column struct {
 		Name string `json:"name"`
@@ -118,6 +120,46 @@ assert not errors, "\n".join(errors)
 		t.Fatalf("live semantic validation: %v\n%s", err, out)
 	}
 	t.Log(string(out))
+}
+
+func digestLiveQueries() []struct{ Name, SQL string } {
+	return []struct{ Name, SQL string }{
+		{"digest_cityhash", `SELECT Digest::CityHash("abc") AS plain, Digest::CityHash(CAST(NULL AS String?)) AS null_input, Digest::CityHash("abc", NULL AS Init) AS seed_null, Digest::CityHash("abc", 42ul AS Init) AS seeded;`},
+		{"digest_crc64", `SELECT Digest::Crc64("abc") AS plain, Digest::Crc64(CAST(NULL AS String?)) AS null_input, Digest::Crc64("abc", NULL AS Init) AS seed_null, Digest::Crc64("abc", 42ul AS Init) AS seeded;`},
+		{"digest_fnv64", `SELECT Digest::Fnv64("abc") AS plain, Digest::Fnv64(CAST(NULL AS String?)) AS null_input, Digest::Fnv64("abc", NULL AS Init) AS seed_null, Digest::Fnv64("abc", 42ul AS Init) AS seeded;`},
+		{"digest_murmur_hash", `SELECT Digest::MurMurHash("abc") AS plain, Digest::MurMurHash(CAST(NULL AS String?)) AS null_input, Digest::MurMurHash("abc", NULL AS Init) AS seed_null, Digest::MurMurHash("abc", 42ul AS Init) AS seeded;`},
+		{"digest_murmur_hash_2a", `SELECT Digest::MurMurHash2A("abc") AS plain, Digest::MurMurHash2A(CAST(NULL AS String?)) AS null_input, Digest::MurMurHash2A("abc", NULL AS Init) AS seed_null, Digest::MurMurHash2A("abc", 42ul AS Init) AS seeded;`},
+		{"digest_fnv32", `SELECT Digest::Fnv32("abc") AS plain, Digest::Fnv32(CAST(NULL AS String?)) AS null_input, Digest::Fnv32("abc", NULL AS Init) AS seed_null, Digest::Fnv32("abc", 42u AS Init) AS seeded;`},
+		{"digest_murmur_hash32", `SELECT Digest::MurMurHash32("abc") AS plain, Digest::MurMurHash32(CAST(NULL AS String?)) AS null_input, Digest::MurMurHash32("abc", NULL AS Init) AS seed_null, Digest::MurMurHash32("abc", 42u AS Init) AS seeded;`},
+		{"digest_murmur_hash_2a32", `SELECT Digest::MurMurHash2A32("abc") AS plain, Digest::MurMurHash2A32(CAST(NULL AS String?)) AS null_input, Digest::MurMurHash2A32("abc", NULL AS Init) AS seed_null, Digest::MurMurHash2A32("abc", 42u AS Init) AS seeded;`},
+		{"digest_crc32c", `SELECT Digest::Crc32c("abc") AS plain, Digest::Crc32c(CAST(NULL AS String?)) AS null_input;`},
+		{"digest_farm_hash_fingerprint32", `SELECT Digest::FarmHashFingerprint32("abc") AS plain, Digest::FarmHashFingerprint32(CAST(NULL AS String?)) AS null_input;`},
+		{"digest_super_fast_hash", `SELECT Digest::SuperFastHash("abc") AS plain, Digest::SuperFastHash(CAST(NULL AS String?)) AS null_input;`},
+		{"digest_md5_hex", `SELECT Digest::Md5Hex("abc") AS plain, Digest::Md5Hex(CAST(NULL AS String?)) AS null_input;`},
+		{"digest_md5_raw", `SELECT Digest::Md5Raw("abc") AS plain, Digest::Md5Raw(CAST(NULL AS String?)) AS null_input;`},
+		{"digest_sha1", `SELECT Digest::Sha1("abc") AS plain, Digest::Sha1(CAST(NULL AS String?)) AS null_input;`},
+		{"digest_sha256", `SELECT Digest::Sha256("abc") AS plain, Digest::Sha256(CAST(NULL AS String?)) AS null_input;`},
+		{"digest_md5_half_mix", `SELECT Digest::Md5HalfMix("abc") AS plain, Digest::Md5HalfMix(CAST(NULL AS String?)) AS null_input;`},
+		{"digest_farm_hash_fingerprint64", `SELECT Digest::FarmHashFingerprint64("abc") AS plain, Digest::FarmHashFingerprint64(CAST(NULL AS String?)) AS null_input;`},
+		{"digest_xxh3", `SELECT Digest::XXH3("abc") AS plain, Digest::XXH3(CAST(NULL AS String?)) AS null_input;`},
+		{"digest_numeric_hash", `SELECT Digest::NumericHash(42ul) AS plain, Digest::NumericHash(CAST(NULL AS Uint64?)) AS null_input;`},
+		{"digest_farm_hash_fingerprint", `SELECT Digest::FarmHashFingerprint(42ul) AS plain, Digest::FarmHashFingerprint(CAST(NULL AS Uint64?)) AS null_input;`},
+		{"digest_int_hash64", `SELECT Digest::IntHash64(42ul) AS plain, Digest::IntHash64(CAST(NULL AS Uint64?)) AS null_input;`},
+	}
+}
+
+func TestDigestLiveQueriesAnalyzeOffline(t *testing.T) {
+	for _, probe := range digestLiveQueries() {
+		t.Run(probe.Name, func(t *testing.T) {
+			result, err := analyzer.Analyze(nil, []model.Source{{Name: probe.Name + ".sql", Text: "-- name: Check :one\n" + probe.SQL}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Queries) != 1 || len(result.Queries[0].ResultSets) != 1 || len(result.Queries[0].ResultSets[0].Columns) < 2 {
+				t.Fatalf("unexpected metadata probe result: %#v", result.Queries)
+			}
+		})
+	}
 }
 
 func semanticTypeName(typ model.Type) string {

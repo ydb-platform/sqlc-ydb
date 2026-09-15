@@ -7,6 +7,7 @@ import (
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
+	"github.com/ydb-platform/sqlc-ydb/internal/yql/builtins"
 	parser "github.com/ydb-platform/yql-parsers/go"
 )
 
@@ -107,28 +108,11 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		cores, partials, selectDiagnostics = selectArms(block, selectStatement)
 		diagnostics = append(diagnostics, selectDiagnostics...)
 		for i, core := range cores {
-			armRelations, relationDiagnostics := selectRelations(catalog, block, core, bindings)
-			diagnostics = append(diagnostics, relationDiagnostics...)
-			if len(relationDiagnostics) != 0 {
+			columns, armDiagnostics := analyzeSelectCore(catalog, block, core, partials[i], bindings, inferred, query.Syntax, selectProjection)
+			diagnostics = append(diagnostics, armDiagnostics...)
+			if len(armDiagnostics) != 0 {
 				continue
 			}
-			recordColumnBindings(query.Syntax, core, armRelations)
-			armTree := collectQueryTree(core)
-			inferFromComparisons(armTree, armRelations, inferred)
-			inferFromInLists(armTree.conds, armRelations, inferred)
-			inferFromExpressionContexts(core, declared, inferred)
-			if i < len(partials) {
-				inferLimitOffset(partials[i], inferred)
-			}
-			for name, typeValue := range inferred {
-				if _, exists := bindings[name]; !exists && typeValue.Kind != "" {
-					bindings[name] = typeValue
-				}
-			}
-			columns, projectionDiagnostics := selectProjection(block, core, armRelations, bindings)
-			diagnostics = append(diagnostics, projectionDiagnostics...)
-			diagnostics = append(diagnostics, validateColumnReferences(block, core, armRelations)...)
-			diagnostics = append(diagnostics, validateGrouping(block, core, armRelations, bindings)...)
 			arms = append(arms, columns)
 		}
 		if len(arms) == len(cores) && len(arms) != 0 {
@@ -152,10 +136,17 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		}
 	}
 
-	if selectStatement == nil && len(relations) != 0 && !(len(tree.insert) == 1 && insertSelect(tree.insert[0]) != nil) {
+	if selectStatement == nil && len(relations) != 0 && !(len(tree.insert) == 1 && insertSelect(tree.insert[0]) != nil) && !(len(tree.updates) == 1 && updateSelect(tree.updates[0]) != nil) && !(len(tree.deletes) == 1 && deleteSelect(tree.deletes[0]) != nil) {
 		recordColumnBindings(query.Syntax, parsed.tree, relations)
 		diagnostics = append(diagnostics, validateColumnReferences(block, parsed.tree, relations)...)
 		inferFromComparisons(tree, relations, inferred)
+		inferFromInLists(tree.conds, relations, inferred)
+		for name, typeValue := range inferred {
+			if _, exists := bindings[name]; !exists && typeValue.Kind != "" {
+				bindings[name] = typeValue
+			}
+		}
+		diagnostics = append(diagnostics, validatePredicateContexts(block, parsed.tree, relations, bindings)...)
 	}
 	if target != nil && len(tree.insert) == 1 {
 		if stmt := insertSelect(tree.insert[0]); stmt != nil {
@@ -165,7 +156,28 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		}
 	}
 	if target != nil && len(tree.updates) == 1 {
-		diagnostics = append(diagnostics, inferUpdate(block, tree.updates[0], target, inferred)...)
+		if stmt := updateSelect(tree.updates[0]); stmt != nil {
+			if tree.updates[0].Into_values_source().Pure_column_list() != nil {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, tree.updates[0].Into_values_source().Pure_column_list(), "UPDATE ON SELECT with an explicit source column list is unsupported"))
+			} else {
+				diagnostics = append(diagnostics, analyzeNamedDMLSelect(catalog, block, stmt, tree.updates[0], target, bindings, inferred, query.Syntax)...)
+			}
+		} else if tree.updates[0].ON() != nil {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, tree.updates[0], "UPDATE ON currently requires a SELECT source"))
+		} else {
+			diagnostics = append(diagnostics, inferUpdate(block, tree.updates[0], target, inferred)...)
+		}
+	}
+	if target != nil && len(tree.deletes) == 1 {
+		if stmt := deleteSelect(tree.deletes[0]); stmt != nil {
+			if tree.deletes[0].Into_values_source().Pure_column_list() != nil {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, tree.deletes[0].Into_values_source().Pure_column_list(), "DELETE ON SELECT with an explicit source column list is unsupported"))
+			} else {
+				diagnostics = append(diagnostics, analyzeNamedDMLSelect(catalog, block, stmt, tree.deletes[0], target, bindings, inferred, query.Syntax)...)
+			}
+		} else if tree.deletes[0].ON() != nil {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, tree.deletes[0], "DELETE ON currently requires a SELECT source"))
+		}
 	}
 	for name, localType := range localTypes {
 		if usedType, ok := inferred[name]; ok {
@@ -385,7 +397,7 @@ func localBindings(block queryBlock, tree queryTree, declared map[string]model.T
 		for bindingName, typeValue := range types {
 			bindings[bindingName] = typeValue
 		}
-		typeValue, err := resolveExpression(statement.Expr(), expressionScope{bindings: bindings})
+		typeValue, err := resolveExpression(statement.Expr(), expressionScope{bindings: bindings, functions: block.functions})
 		if err == nil {
 			types[name] = typeValue
 			continue
@@ -474,6 +486,14 @@ func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser
 }
 
 func selectProjection(block queryBlock, selectCore *parser.Select_coreContext, relations []relation, declared map[string]model.Type) ([]model.Column, []model.Diagnostic) {
+	return selectProjectionMode(block, selectCore, relations, declared, true)
+}
+
+func selectDMLProjection(block queryBlock, selectCore *parser.Select_coreContext, relations []relation, declared map[string]model.Type) ([]model.Column, []model.Diagnostic) {
+	return selectProjectionMode(block, selectCore, relations, declared, false)
+}
+
+func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContext, relations []relation, declared map[string]model.Type, requireComputedAlias bool) ([]model.Column, []model.Diagnostic) {
 	var columns []model.Column
 	var diagnostics []model.Diagnostic
 	if selectCore.Without_column_list() != nil {
@@ -498,7 +518,7 @@ func selectProjection(block queryBlock, selectCore *parser.Select_coreContext, r
 			continue
 		}
 		expr := result.Expr()
-		column, pure, err := expressionColumn(expr, relations, declared, selectCore.Group_by_clause() != nil)
+		column, pure, err := expressionColumn(expr, relations, declared, selectCore.Group_by_clause() != nil, block.functions)
 		if err != nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, expr, err.Error()))
 			continue
@@ -514,7 +534,7 @@ func selectProjection(block queryBlock, selectCore *parser.Select_coreContext, r
 			column.Name = alias
 			column.WireName = ""
 		}
-		if alias == "" && !pure {
+		if alias == "" && !pure && requireComputedAlias {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, result, "computed result expressions require an explicit AS alias"))
 			continue
 		}
@@ -529,7 +549,11 @@ func selectProjection(block queryBlock, selectCore *parser.Select_coreContext, r
 	return columns, diagnostics
 }
 
-func expressionColumn(expr parser.IExprContext, relations []relation, declared map[string]model.Type, grouped bool) (model.Column, bool, error) {
+func expressionColumn(expr parser.IExprContext, relations []relation, declared map[string]model.Type, grouped bool, functions *builtins.Registry) (model.Column, bool, error) {
+	scope := expressionScope{relations: relations, bindings: declared, grouped: grouped, functions: functions}
+	if typeValue, ok, err := resolveMemberAccess(expr, scope); ok {
+		return model.Column{Type: typeValue}, false, err
+	}
 	refs := columnRefs(expr)
 	if len(refs) == 1 && isPureColumnExpression(expr) {
 		column, err := resolveColumn(relations, refs[0])
@@ -538,7 +562,7 @@ func expressionColumn(expr parser.IExprContext, relations []relation, declared m
 		}
 		return column, true, nil
 	}
-	typeValue, err := resolveExpression(expr, expressionScope{relations: relations, bindings: declared, grouped: grouped})
+	typeValue, err := resolveExpression(expr, scope)
 	return model.Column{Type: typeValue}, false, err
 }
 

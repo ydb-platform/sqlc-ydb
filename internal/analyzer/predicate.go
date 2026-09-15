@@ -1,0 +1,170 @@
+package analyzer
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/antlr4-go/antlr/v4"
+	"github.com/ydb-platform/sqlc-ydb/internal/model"
+	"github.com/ydb-platform/sqlc-ydb/internal/yql/builtins"
+	parser "github.com/ydb-platform/yql-parsers/go"
+)
+
+func validatePredicateContexts(block queryBlock, root antlr.Tree, relations []relation, bindings map[string]model.Type) []model.Diagnostic {
+	var predicates []parser.IExprContext
+	descendants(root, func(node antlr.Tree) {
+		switch ctx := node.(type) {
+		case *parser.Select_coreContext:
+			if ctx.WHERE() != nil {
+				predicates = append(predicates, ctx.Expr(0))
+			}
+		case *parser.Join_constraintContext:
+			if ctx.ON() != nil && ctx.Expr() != nil {
+				predicates = append(predicates, ctx.Expr())
+			}
+		case *parser.Update_stmtContext:
+			if ctx.WHERE() != nil && ctx.Expr() != nil {
+				predicates = append(predicates, ctx.Expr())
+			}
+		case *parser.Delete_stmtContext:
+			if ctx.WHERE() != nil && ctx.Expr() != nil {
+				predicates = append(predicates, ctx.Expr())
+			}
+		}
+	})
+	seen := map[int]bool{}
+	var diagnostics []model.Diagnostic
+	for _, predicate := range predicates {
+		if predicate == nil || seen[predicate.GetStart().GetStart()] {
+			continue
+		}
+		seen[predicate.GetStart().GetStart()] = true
+		if err := validatePredicate(predicate, expressionScope{relations: relations, bindings: bindings, predicate: true, functions: block.functions}); err != nil {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, predicate, fmt.Sprintf("invalid predicate: %v", err)))
+		}
+	}
+	return diagnostics
+}
+
+func validatePredicate(expr parser.IExprContext, scope expressionScope) error {
+	if len(expr.AllOr_subexpr()) == 0 {
+		return fmt.Errorf("unsupported predicate %q", expr.GetText())
+	}
+	for _, or := range expr.AllOr_subexpr() {
+		for _, and := range or.AllAnd_subexpr() {
+			for _, xor := range and.AllXor_subexpr() {
+				atom, ok := xor.(*parser.Xor_subexprContext)
+				if !ok {
+					return fmt.Errorf("unsupported predicate %q", xor.GetText())
+				}
+				if err := validatePredicateAtom(atom, scope); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func validatePredicateAtom(atom *parser.Xor_subexprContext, scope expressionScope) error {
+	if condition := atom.Cond_expr(); condition != nil {
+		left, err := resolveScalarNode(atom.Eq_subexpr(), scope)
+		if err != nil {
+			return fmt.Errorf("cannot resolve predicate operand %q: %w", atom.Eq_subexpr().GetText(), err)
+		}
+		if condition.ISNULL() != nil || condition.NOTNULL() != nil || condition.NULL() != nil {
+			return nil
+		}
+		if condition.IN() != nil && condition.In_expr() != nil {
+			types := []model.Type{left}
+			inExpr := condition.In_expr()
+			if bind := directBind(inExpr); bind != nil && inExpr.GetText() == bind.GetText() {
+				typeValue, ok := scope.bindings[bindName(bind)]
+				if !ok || typeValue.Kind != "List" || typeValue.Elem == nil {
+					return fmt.Errorf("direct IN operand %q requires a List parameter", bind.GetText())
+				}
+				types = append(types, *typeValue.Elem)
+			} else {
+				var expressions []parser.IExprContext
+				descendants(inExpr, func(node antlr.Tree) {
+					candidate, ok := node.(parser.IExprContext)
+					if !ok {
+						return
+					}
+					for parent := candidate.GetParent(); parent != nil && parent != inExpr; parent = parent.GetParent() {
+						if _, nested := parent.(parser.IExprContext); nested {
+							return
+						}
+					}
+					expressions = append(expressions, candidate)
+				})
+				if len(expressions) == 0 {
+					return fmt.Errorf("unsupported IN operand %q", inExpr.GetText())
+				}
+				for _, expression := range expressions {
+					typeValue, err := resolveExpression(expression, scope)
+					if err != nil {
+						return fmt.Errorf("cannot resolve IN operand %q: %w", expression.GetText(), err)
+					}
+					types = append(types, typeValue)
+				}
+			}
+			if _, err := builtins.CommonType(types...); err != nil {
+				return fmt.Errorf("predicate operands have incompatible types: %w", err)
+			}
+			return nil
+		}
+		var types []model.Type
+		types = append(types, left)
+		for _, operand := range condition.AllEq_subexpr() {
+			typeValue, err := resolveScalarNode(operand, scope)
+			if err != nil {
+				return fmt.Errorf("cannot resolve predicate operand %q: %w", operand.GetText(), err)
+			}
+			if condition.IN() != nil && typeValue.Kind == "List" && typeValue.Elem != nil {
+				typeValue = *typeValue.Elem
+			}
+			types = append(types, typeValue)
+		}
+		if len(types) < 2 {
+			return fmt.Errorf("unsupported predicate %q", atom.GetText())
+		}
+		if _, err := builtins.CommonType(types...); err != nil {
+			return fmt.Errorf("predicate operands have incompatible types: %w", err)
+		}
+		return nil
+	}
+
+	eq := atom.Eq_subexpr()
+	if len(eq.AllNeq_subexpr()) > 1 {
+		operands := make([]antlr.ParserRuleContext, 0, len(eq.AllNeq_subexpr()))
+		for _, operand := range eq.AllNeq_subexpr() {
+			operands = append(operands, operand)
+		}
+		_, _, err := comparisonBoolType(operands, scope)
+		return err
+	}
+	typeValue, err := resolveScalarNode(eq, scope)
+	if err != nil {
+		var nested parser.IExprContext
+		descendants(eq, func(node antlr.Tree) {
+			if nested != nil {
+				return
+			}
+			if candidate, ok := node.(parser.IExprContext); ok {
+				nested = candidate
+			}
+		})
+		if nested != nil {
+			text := eq.GetText()
+			if text == "("+nested.GetText()+")" || strings.EqualFold(text, "NOT("+nested.GetText()+")") {
+				return validatePredicate(nested, scope)
+			}
+		}
+		return fmt.Errorf("cannot resolve predicate operand %q: %w", eq.GetText(), err)
+	}
+	if typeValue.UnwrapOptional().Kind != "Bool" {
+		return fmt.Errorf("predicate expression has type %s, want Bool", typeValue.String())
+	}
+	return nil
+}

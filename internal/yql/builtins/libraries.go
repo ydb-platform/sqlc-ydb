@@ -8,6 +8,8 @@ import (
 
 func resolveLibrary(name string, args []model.Type) (model.Type, error) {
 	switch name {
+	case "Yson::ConvertToStringList":
+		return resolveYsonConvertToStringList(args)
 	case "String::Base64Encode", "String::EscapeC", "String::UnescapeC", "String::HexEncode",
 		"String::EncodeHtml", "String::DecodeHtml", "String::CgiEscape", "String::CgiUnescape",
 		"String::Strip", "String::Collapse", "String::AsciiToLower", "String::AsciiToUpper", "String::AsciiToTitle":

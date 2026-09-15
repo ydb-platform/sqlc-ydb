@@ -11,6 +11,18 @@ import (
 // result type. SQL built-ins are case-insensitive; C++ library module and
 // function names use their documented case-sensitive Module::Function spelling.
 func Resolve(name string, args []model.Type) (model.Type, error) {
+	callArgs := make([]CallArgument, len(args))
+	for i := range args {
+		callArgs[i].Type = args[i]
+	}
+	registry, err := NewRegistry(nil)
+	if err != nil {
+		return model.Type{}, err
+	}
+	return registry.ResolveCall(name, callArgs)
+}
+
+func resolveLegacy(name string, args []model.Type) (model.Type, error) {
 	if strings.Contains(name, "::") {
 		return resolveLibrary(name, args)
 	}
@@ -30,6 +42,10 @@ func Resolve(name string, args []model.Type) (model.Type, error) {
 		return resolveAffix(name, args)
 	case "ABS":
 		return resolveAbs(args)
+	case "TOSET":
+		return resolveToSet(args)
+	case "SETISDISJOINT":
+		return resolveSetIsDisjoint(args)
 	case "COUNT":
 		return resolveCount(args)
 	case "MIN", "MAX":

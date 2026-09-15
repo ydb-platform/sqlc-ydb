@@ -296,7 +296,11 @@ func prepare(c *config.Config, generate bool) ([]output, error) {
 				inputs[path] = true
 			}
 		}
-		result, err := analyzer.Analyze(schemas, queries)
+		analysisOptions, err := functionOptions(s.Analyzer)
+		if err != nil {
+			return nil, err
+		}
+		result, err := analyzer.Analyze(schemas, queries, analysisOptions)
 		if err != nil {
 			return nil, err
 		}

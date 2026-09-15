@@ -54,6 +54,48 @@ func TestRejectUnsupportedConfiguration(t *testing.T) {
 	}
 }
 
+func TestFunctionSignatureConfiguration(t *testing.T) {
+	c, err := Parse([]byte(`version: "2"
+sql:
+- engine: ydb
+  schema: schema.sql
+  queries: queries.sql
+  analyzer:
+    functions:
+    - name: Acme::Score
+      args:
+      - {name: value, type: Utf8, auto_map: true}
+      - {name: mode, type: Uint32, optional: true}
+      returns: Double
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := c.SQL[0].Analyzer.Functions[0]
+	if got.Name != "Acme::Score" || got.Returns != "Double" || len(got.Args) != 2 || got.Args[0].Name != "value" || !got.Args[0].AutoMap || !got.Args[1].Optional {
+		t.Fatalf("unexpected function signature: %+v", got)
+	}
+}
+
+func TestRejectInvalidFunctionSignatureConfiguration(t *testing.T) {
+	base := "version: '2'\nsql:\n- engine: ydb\n  schema: s.sql\n  queries: q.sql\n  analyzer:\n    functions:\n"
+	for _, tc := range []struct{ name, input, want string }{
+		{"empty function name", "    - name: ''\n      args: [{type: Utf8}]\n      returns: Uint64\n", "function name"},
+		{"invalid function name", "    - name: Acme::bad-name\n      args: [{type: Utf8}]\n      returns: Uint64\n", "function name"},
+		{"empty argument type", "    - name: Acme::Hash\n      args: [{type: ''}]\n      returns: Uint64\n", "argument 1 type"},
+		{"invalid argument name", "    - name: Acme::Hash\n      args: [{name: bad-name, type: Utf8}]\n      returns: Uint64\n", "argument 1 name"},
+		{"duplicate argument name", "    - name: Acme::Hash\n      args: [{name: value, type: Utf8}, {name: value, type: Uint64}]\n      returns: Uint64\n", "duplicate argument name"},
+		{"empty return type", "    - name: Acme::Hash\n      args: [{type: Utf8}]\n      returns: ''\n", "return type"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Parse([]byte(base + tc.input))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v; want %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestAdditionalBuiltinTargets(t *testing.T) {
 	base := "version: '2'\nsql:\n- engine: ydb\n  schema: s.sql\n  queries: q.sql\n  gen:\n"
 	c, err := Parse([]byte(base + "    cpp:\n      out: cpp\n    csharp:\n      out: cs\n    java:\n      out: java\n    typescript:\n      out: js\n    rust:\n      out: rust\n    php:\n      out: php\n"))

@@ -1,0 +1,337 @@
+package builtins
+
+import (
+	"fmt"
+	"regexp"
+	"strings"
+
+	"github.com/ydb-platform/sqlc-ydb/internal/model"
+)
+
+// CallArgument is a resolved positional or named function argument.
+type CallArgument struct {
+	Name string
+	Type model.Type
+}
+
+// Parameter is one concrete function parameter. Optional means the argument
+// may be omitted; AutoMap propagates an optional input to the result.
+type Parameter struct {
+	Name     string
+	Type     model.Type
+	Optional bool
+	AutoMap  bool
+}
+
+// Signature is an offline type contract for one function overload.
+type Signature struct {
+	Name      string
+	Arguments []Parameter
+	Returns   model.Type
+}
+
+// Registry combines the shipped, verified signatures with user-provided
+// concrete contracts.
+type Registry struct {
+	custom map[string][]Signature
+}
+
+// NewRegistry validates user-provided signatures before any query is analyzed.
+func NewRegistry(custom []Signature) (*Registry, error) {
+	r := &Registry{custom: make(map[string][]Signature)}
+	seen := make(map[string]struct{})
+	for i, signature := range custom {
+		if isKnownFunction(signature.Name) {
+			return nil, fmt.Errorf("function signature %d %q conflicts with a known built-in function", i+1, signature.Name)
+		}
+		if err := validateSignature(signature); err != nil {
+			return nil, fmt.Errorf("function signature %d %q: %w", i+1, signature.Name, err)
+		}
+		key := signatureShape(signature)
+		if _, exists := seen[key]; exists {
+			return nil, fmt.Errorf("function signature %d %q is an ambiguous duplicate overload", i+1, signature.Name)
+		}
+		for _, other := range r.custom[signature.Name] {
+			if signaturesOverlap(other, signature) {
+				return nil, fmt.Errorf("function signature %d %q creates ambiguous overloads", i+1, signature.Name)
+			}
+		}
+		seen[key] = struct{}{}
+		r.custom[signature.Name] = append(r.custom[signature.Name], signature)
+	}
+	return r, nil
+}
+
+// ResolveCall validates named/positional arguments and returns one concrete
+// result type. Library and user function names are case-sensitive.
+func (r *Registry) ResolveCall(name string, args []CallArgument) (model.Type, error) {
+	if signatures := standardSignatures(name); len(signatures) != 0 {
+		return resolveSignatures(name, args, signatures)
+	}
+	if r != nil {
+		if signatures := r.custom[name]; len(signatures) != 0 {
+			return resolveSignatures(name, args, signatures)
+		}
+	}
+	plain := make([]model.Type, len(args))
+	for i, argument := range args {
+		if argument.Name != "" {
+			return model.Type{}, fmt.Errorf("%s does not support named argument %q in the offline resolver", name, argument.Name)
+		}
+		plain[i] = argument.Type
+	}
+	return resolveLegacy(name, plain)
+}
+
+func validateSignature(signature Signature) error {
+	if !signatureIdentifier.MatchString(signature.Name) {
+		return fmt.Errorf("function name must be a non-empty YQL identifier")
+	}
+	if err := validateConcreteOrNull(signature.Returns); err != nil || signature.Returns.Kind == "Null" {
+		if err == nil {
+			err = fmt.Errorf("Null is not a concrete result type")
+		}
+		return fmt.Errorf("invalid return type %s: %w", signature.Returns.String(), err)
+	}
+	seenNames := make(map[string]struct{})
+	optionalSeen := false
+	for i, parameter := range signature.Arguments {
+		if err := validateConcreteOrNull(parameter.Type); err != nil || parameter.Type.Kind == "Null" {
+			if err == nil {
+				err = fmt.Errorf("Null is not a concrete parameter type")
+			}
+			return fmt.Errorf("argument %d has invalid type %s: %w", i+1, parameter.Type.String(), err)
+		}
+		if parameter.Name != "" {
+			if !parameterIdentifier.MatchString(parameter.Name) {
+				return fmt.Errorf("argument %d name must be a YQL identifier", i+1)
+			}
+			if _, exists := seenNames[parameter.Name]; exists {
+				return fmt.Errorf("duplicate argument name %q", parameter.Name)
+			}
+			seenNames[parameter.Name] = struct{}{}
+		}
+		if parameter.AutoMap && parameter.Type.IsOptional() {
+			return fmt.Errorf("argument %d cannot combine AutoMap with an Optional parameter type; declare the base type", i+1)
+		}
+		if optionalSeen && !parameter.Optional {
+			return fmt.Errorf("required argument %d follows an optional argument", i+1)
+		}
+		optionalSeen = optionalSeen || parameter.Optional
+	}
+	return nil
+}
+
+var signatureIdentifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*$`)
+var parameterIdentifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+func signaturesOverlap(left, right Signature) bool {
+	leftRequired, rightRequired := requiredCount(left.Arguments), requiredCount(right.Arguments)
+	minimum := leftRequired
+	if rightRequired > minimum {
+		minimum = rightRequired
+	}
+	maximum := len(left.Arguments)
+	if len(right.Arguments) < maximum {
+		maximum = len(right.Arguments)
+	}
+	if minimum > maximum {
+		return false
+	}
+	for i := 0; i < minimum; i++ {
+		leftBase, _, _ := baseType(left.Arguments[i].Type)
+		rightBase, _, _ := baseType(right.Arguments[i].Type)
+		if !leftBase.Equal(rightBase) {
+			return false
+		}
+	}
+	return true
+}
+
+func requiredCount(parameters []Parameter) int {
+	for i, parameter := range parameters {
+		if parameter.Optional {
+			return i
+		}
+	}
+	return len(parameters)
+}
+
+func signatureShape(signature Signature) string {
+	var b strings.Builder
+	b.WriteString(signature.Name)
+	for _, parameter := range signature.Arguments {
+		fmt.Fprintf(&b, "|%s:%s:%t:%t", parameter.Name, parameter.Type.String(), parameter.Optional, parameter.AutoMap)
+	}
+	return b.String()
+}
+
+func resolveSignatures(name string, args []CallArgument, signatures []Signature) (model.Type, error) {
+	var matches []model.Type
+	var failures []string
+	for _, signature := range signatures {
+		result, err := matchSignature(name, args, signature)
+		if err == nil {
+			matches = append(matches, result)
+		} else {
+			failures = append(failures, err.Error())
+		}
+	}
+	if len(matches) == 1 {
+		return matches[0], nil
+	}
+	if len(matches) > 1 {
+		return model.Type{}, fmt.Errorf("%s call is ambiguous between %d configured overloads", name, len(matches))
+	}
+	if len(failures) == 1 {
+		return model.Type{}, fmt.Errorf("%s: %s", name, failures[0])
+	}
+	return model.Type{}, fmt.Errorf("%s has no matching overload: %s", name, strings.Join(failures, "; "))
+}
+
+func matchSignature(name string, args []CallArgument, signature Signature) (model.Type, error) {
+	bound := make([]*CallArgument, len(signature.Arguments))
+	positional := 0
+	namedSeen := false
+	for i := range args {
+		argument := &args[i]
+		if argument.Name == "" {
+			if namedSeen {
+				return model.Type{}, fmt.Errorf("positional argument %d follows a named argument", i+1)
+			}
+			if positional >= len(bound) {
+				return model.Type{}, fmt.Errorf("expects at most %d arguments, got %d", len(bound), len(args))
+			}
+			bound[positional] = argument
+			positional++
+			continue
+		}
+		namedSeen = true
+		index := parameterIndex(signature.Arguments, argument.Name)
+		if index < 0 {
+			return model.Type{}, fmt.Errorf("unknown named argument %q", argument.Name)
+		}
+		if bound[index] != nil {
+			return model.Type{}, fmt.Errorf("argument %q is specified more than once", argument.Name)
+		}
+		bound[index] = argument
+	}
+	nullable := false
+	for i, parameter := range signature.Arguments {
+		if bound[i] == nil {
+			if !parameter.Optional {
+				return model.Type{}, fmt.Errorf("expects required argument %d%s", i+1, parameterLabel(parameter))
+			}
+			continue
+		}
+		propagate, err := matchParameter(bound[i].Type, parameter)
+		if err != nil {
+			return model.Type{}, fmt.Errorf("argument %d%s: %w", i+1, parameterLabel(parameter), err)
+		}
+		nullable = nullable || propagate
+	}
+	if nullable && !signature.Returns.IsOptional() {
+		return model.Optional(signature.Returns), nil
+	}
+	return signature.Returns, nil
+}
+
+func matchParameter(actual model.Type, parameter Parameter) (bool, error) {
+	expectedBase, expectedOptional, err := baseType(parameter.Type)
+	if err != nil {
+		return false, err
+	}
+	actualBase, actualOptional, err := baseType(actual)
+	if err != nil {
+		return false, err
+	}
+	if actualBase.Kind == "Null" && (parameter.AutoMap || expectedOptional) {
+		return parameter.AutoMap, nil
+	}
+	if !actualBase.Equal(expectedBase) {
+		return false, fmt.Errorf("must be %s, got %s", parameter.Type.String(), actual.String())
+	}
+	if actualOptional && !parameter.AutoMap && !expectedOptional {
+		return false, fmt.Errorf("must be %s, got %s", parameter.Type.String(), actual.String())
+	}
+	return parameter.AutoMap && actualOptional, nil
+}
+
+func parameterIndex(parameters []Parameter, name string) int {
+	for i, parameter := range parameters {
+		if parameter.Name == name {
+			return i
+		}
+	}
+	return -1
+}
+
+func parameterLabel(parameter Parameter) string {
+	if parameter.Name == "" {
+		return ""
+	}
+	return " (" + parameter.Name + ")"
+}
+
+func standardSignatures(name string) []Signature {
+	stringAutoMap := func(result string) Signature {
+		return Signature{Name: name, Arguments: []Parameter{{Type: model.Type{Kind: "String"}, AutoMap: true}}, Returns: model.Type{Kind: result}}
+	}
+	seeded := func(seed, result string) Signature {
+		return Signature{Name: name, Arguments: []Parameter{{Type: model.Type{Kind: "String"}, AutoMap: true}, {Name: "Init", Type: model.Optional(model.Type{Kind: seed}), Optional: true}}, Returns: model.Type{Kind: result}}
+	}
+	switch name {
+	case "Digest::CityHash", "Digest::Crc64", "Digest::Fnv64", "Digest::MurMurHash", "Digest::MurMurHash2A":
+		return []Signature{seeded("Uint64", "Uint64")}
+	case "Digest::Fnv32", "Digest::MurMurHash32", "Digest::MurMurHash2A32":
+		return []Signature{seeded("Uint32", "Uint32")}
+	case "Digest::Crc32c", "Digest::FarmHashFingerprint32", "Digest::SuperFastHash":
+		return []Signature{stringAutoMap("Uint32")}
+	case "Digest::Md5Hex", "Digest::Md5Raw", "Digest::Sha1", "Digest::Sha256":
+		return []Signature{stringAutoMap("String")}
+	case "Digest::Md5HalfMix", "Digest::FarmHashFingerprint64", "Digest::XXH3":
+		return []Signature{stringAutoMap("Uint64")}
+	case "Digest::NumericHash", "Digest::FarmHashFingerprint", "Digest::IntHash64":
+		return []Signature{{Name: name, Arguments: []Parameter{{Type: model.Type{Kind: "Uint64"}, AutoMap: true}}, Returns: model.Type{Kind: "Uint64"}}}
+	default:
+		return nil
+	}
+}
+
+func isKnownFunction(name string) bool {
+	if len(standardSignatures(name)) != 0 {
+		return true
+	}
+	if knownLibraryFunctions[name] {
+		return true
+	}
+	switch strings.ToUpper(name) {
+	case "COALESCE", "NVL", "IF", "LENGTH", "LEN", "SUBSTRING", "FIND", "RFIND", "STARTSWITH", "ENDSWITH", "ABS", "TOSET", "SETISDISJOINT", "COUNT", "MIN", "MAX", "SUM", "AVG":
+		return true
+	default:
+		return false
+	}
+}
+
+var knownLibraryFunctions = map[string]bool{
+	"Yson::ConvertToStringList": true,
+	"String::Base64Encode":      true, "String::EscapeC": true, "String::UnescapeC": true,
+	"String::HexEncode": true, "String::EncodeHtml": true, "String::DecodeHtml": true,
+	"String::CgiEscape": true, "String::CgiUnescape": true, "String::Strip": true,
+	"String::Collapse": true, "String::AsciiToLower": true, "String::AsciiToUpper": true,
+	"String::AsciiToTitle": true, "String::Base64Decode": true, "String::Base64StrictDecode": true,
+	"String::HexDecode": true, "String::Find": true, "String::ReverseFind": true,
+	"String::Substring": true, "String::ReplaceAll": true, "String::ReplaceFirst": true,
+	"String::ReplaceLast": true, "Unicode::IsUtf": true, "Unicode::GetLength": true,
+	"Unicode::Find": true, "Unicode::RFind": true, "Unicode::Substring": true,
+	"Unicode::ToLower": true, "Unicode::ToUpper": true, "Unicode::ToTitle": true,
+	"Unicode::Normalize": true, "Unicode::NormalizeNFC": true, "Unicode::NormalizeNFD": true,
+	"Unicode::NormalizeNFKC": true, "Unicode::NormalizeNFKD": true,
+	"DateTime::GetYear": true, "DateTime::GetDayOfYear": true, "DateTime::GetMonth": true,
+	"DateTime::GetMonthName": true, "DateTime::GetWeekOfYear": true,
+	"DateTime::GetWeekOfYearIso8601": true, "DateTime::GetDayOfMonth": true,
+	"DateTime::GetDayOfWeek": true, "DateTime::GetDayOfWeekName": true,
+	"DateTime::GetHour": true, "DateTime::GetMinute": true, "DateTime::GetSecond": true,
+	"DateTime::GetMillisecondOfSecond": true, "DateTime::GetMicrosecondOfSecond": true,
+	"DateTime::GetTimezoneId": true, "DateTime::GetTimezoneName": true,
+}

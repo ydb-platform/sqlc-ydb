@@ -5,6 +5,7 @@ This package is a strict, offline type resolver for the YQL expressions that `sq
 The public package API is:
 
 - `Resolve(name string, args []model.Type) (model.Type, error)` for functions;
+- `NewRegistry(signatures []Signature)` and `Registry.ResolveCall` for validated concrete custom signatures and named arguments;
 - `CommonType(types ...model.Type) (model.Type, error)` for branches and homogeneous values;
 - `Cast(source, target model.Type) (model.Type, error)` for the supported primitive `CAST` matrix.
 
@@ -17,6 +18,7 @@ SQL built-in names are case-insensitive:
 - `COALESCE`/`NVL`, `IF`;
 - `LENGTH`/`LEN`, `SUBSTRING`, `FIND`, `RFIND`, `StartsWith`, `EndsWith`;
 - `ABS`;
+- `ToSet` and `SetIsDisjoint` for concrete List/Dict key types;
 - `COUNT`, `MIN`, `MAX`, `SUM`, `AVG`.
 
 C++ library names use the documented, case-sensitive `Module::Function` spelling:
@@ -24,6 +26,8 @@ C++ library names use the documented, case-sensitive `Module::Function` spelling
 - `String::Base64Encode`, `Base64Decode`, `Base64StrictDecode`, `EscapeC`, `UnescapeC`, `HexEncode`, `HexDecode`, `EncodeHtml`, `DecodeHtml`, `CgiEscape`, `CgiUnescape`, `Strip`, `Collapse`, `Find`, `ReverseFind`, `Substring`, `AsciiToLower`, `AsciiToUpper`, `AsciiToTitle`, `ReplaceAll`, `ReplaceFirst`, and `ReplaceLast`;
 - `Unicode::IsUtf`, `GetLength`, `Find`, `RFind`, `Substring`, `ToLower`, `ToUpper`, `ToTitle`, `Normalize`, `NormalizeNFC`, `NormalizeNFD`, `NormalizeNFKC`, and `NormalizeNFKD`;
 - `DateTime::GetYear`, `GetDayOfYear`, `GetMonth`, `GetMonthName`, `GetWeekOfYear`, `GetWeekOfYearIso8601`, `GetDayOfMonth`, `GetDayOfWeek`, `GetDayOfWeekName`, `GetHour`, `GetMinute`, `GetSecond`, `GetMillisecondOfSecond`, `GetMicrosecondOfSecond`, `GetTimezoneId`, and `GetTimezoneName`, when called with primitive date/time values that YQL can implicitly split into the library resource.
+- `Yson::ConvertToStringList` for `Json` and `Yson` inputs, including optional inputs; verified YDB behavior keeps its `List<String>` result non-optional.
+- the scalar `Digest` subset documented in [function signatures](../../../docs/functions.md), including `Digest::CityHash` with its named, omittable `Init` argument.
 
 The aggregate resolver models empty-input behavior: `COUNT` is non-optional `Uint64`; the other supported aggregates are optional when an empty input is possible. A grouped aggregate over a non-optional argument is non-optional and the analyzer removes that wrapper using its group context. `SUM` widens signed and unsigned integers to `Int64` and `Uint64`, respectively, and widens Decimal precision to 35 while preserving its scale. `AVG` converts integer, `Float`, and interval input to `Double`, while preserving Decimal precision and scale. The strict `MIN`/`MAX` subset accepts primitive numeric values plus `String` and `Utf8`.
 
@@ -44,6 +48,8 @@ Rules and signatures were checked against the primary YDB documentation:
 - [primitive types and numeric result matrix](https://ydb.tech/docs/en/yql/reference/types/primitive)
 - [`CAST` nullability and container rules](https://ydb.tech/docs/en/yql/reference/types/cast)
 - [`String` library](https://ydb.tech/docs/en/yql/reference/udf/list/string)
+- [dictionary and set functions](https://ydb.tech/docs/en/yql/reference/builtins/dict)
+- [`Yson` library](https://ydb.tech/docs/en/yql/reference/udf/list/yson)
 - [`Unicode` library](https://ydb.tech/docs/en/yql/reference/udf/list/unicode)
 - [`DateTime` library](https://ydb.tech/docs/en/yql/reference/udf/list/datetime)
 
