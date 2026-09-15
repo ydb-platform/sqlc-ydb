@@ -22,7 +22,6 @@ func structListValue(t model.Type, parameter string) string {
 		}
 		fieldName, _ := name(field.Name, false)
 		value := parameterValue(model.Parameter{Type: field.Type}, "_batchItem."+fieldName)
-		value = strings.ReplaceAll(value, "OptionalType.of(PrimitiveType.", "tech.ydb.table.values.OptionalType.of(tech.ydb.table.values.PrimitiveType.")
 		types = append(types, quoted(field.Name)+" to "+fieldType)
 		values = append(values, quoted(field.Name)+" to "+value)
 	}

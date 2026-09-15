@@ -569,11 +569,7 @@ func methodArgs(q model.AnalyzedQuery, o Options) string {
 		args = ", arg " + q.Name + "Params"
 	} else if len(q.Parameters) == 1 {
 		t, _ := parameterGoType(q, q.Parameters[0])
-		name := "arg"
-		if isStructList(q.Parameters[0].Type) {
-			name = structParameterName(q.Parameters[0])
-		}
-		args = ", " + name + " " + t
+		args = ", arg " + t
 	}
 	if o.Runtime == "ydb" {
 		args += ", opts ...query.ExecuteOption"
@@ -583,9 +579,6 @@ func methodArgs(q model.AnalyzedQuery, o Options) string {
 func varRef(q model.AnalyzedQuery, p model.Parameter) string {
 	if len(q.Parameters) > 1 {
 		return "arg." + goName(p.Name)
-	}
-	if len(q.Parameters) == 1 && isStructList(p.Type) {
-		return structParameterName(p)
 	}
 	return "arg"
 }

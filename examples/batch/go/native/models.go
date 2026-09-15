@@ -90,5 +90,5 @@ type Querier interface {
 	CreateBook(ctx context.Context, arg CreateBookParams, opts ...query.ExecuteOption) (CreateBookRow, error)
 	UpdateBook(ctx context.Context, arg UpdateBookParams, opts ...query.ExecuteOption) error
 	GetBiography(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetBiographyRow, error)
-	CreateBooks(ctx context.Context, books []CreateBooksBooksItem, opts ...query.ExecuteOption) error
+	CreateBooks(ctx context.Context, arg []CreateBooksBooksItem, opts ...query.ExecuteOption) error
 }

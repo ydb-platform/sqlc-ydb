@@ -24,7 +24,7 @@ func TestStructListParameterAPIAndBinding(t *testing.T) {
 			for _, f := range files {
 				source += string(f.Content)
 			}
-			sig := "CreateBooks(ctx context.Context, books []CreateBooksBooksItem"
+			sig := "CreateBooks(ctx context.Context, arg []CreateBooksBooksItem"
 			if runtime == "ydb" {
 				sig += ", opts ...query.ExecuteOption"
 			}
@@ -84,6 +84,8 @@ func TestStructListRejectsUnsupportedFields(t *testing.T) {
 		{"empty", nil, "requires at least one field"},
 		{"collision", []model.StructField{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, {Name: "bookID", Type: model.Type{Kind: "Uint64"}}}, "colliding field"},
 		{"nested", []model.StructField{{Name: "nested", Type: model.Type{Kind: "List", Elem: &model.Type{Kind: "Uint64"}}}}, "must be a scalar"},
+		{"dict", []model.StructField{{Name: "nested", Type: model.Type{Kind: "Dict", Key: &model.Type{Kind: "Utf8"}, Elem: &model.Type{Kind: "Uint64"}}}}, "must be a scalar"},
+		{"optional dict", []model.StructField{{Name: "nested", Type: model.Optional(model.Type{Kind: "Dict", Key: &model.Type{Kind: "Utf8"}, Elem: &model.Type{Kind: "Uint64"}})}}, "must be a scalar"},
 		{"double optional", []model.StructField{{Name: "nested", Type: model.Optional(model.Optional(model.Type{Kind: "Uint64"}))}}, "must be a scalar"},
 		{"temporal", []model.StructField{{Name: "date", Type: model.Type{Kind: "Date32"}}}, "extended temporal"},
 	} {
@@ -131,12 +133,18 @@ func TestMetadata(t *testing.T) {
 
 func TestStructListParameterNamesDoNotShadowRuntime(t *testing.T) {
 	in := &model.AnalysisResult{}
-	for i, name := range []string{"ctx", "opts", "q", "parameters", "callOptions", "err", "item", "row", "rows", "result", "items", "resultSet", "ydb", "query", "sql", "types", "xerrors", "errors", "io", "type", "books"} {
+	for i, name := range []string{"ctx", "q", "query", "type", "nil", "append", "books"} {
 		q := batchInput(model.StructField{Name: "id", Type: model.Type{Kind: "Uint64"}}).Queries[0]
 		q.Name = fmt.Sprintf("Insert%d", i)
 		q.Parameters[0].Name = name
 		in.Queries = append(in.Queries, q)
 	}
+	lookup := batchInput(model.StructField{Name: "id", Type: model.Type{Kind: "Uint64"}}).Queries[0]
+	lookup.Name = "Lookup"
+	lookup.Command = model.One
+	lookup.Parameters[0].Name = "LookupRow"
+	lookup.ResultSets = []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}}}}}
+	in.Queries = append(in.Queries, lookup)
 	for _, runtime := range []string{"ydb", "database/sql"} {
 		t.Run(runtime, func(t *testing.T) { compileInput(t, in, Options{Package: "db", Runtime: runtime}) })
 	}

@@ -13,5 +13,5 @@ type CreateBooksBooksItem struct {
 }
 
 type Querier interface {
-	CreateBooks(ctx context.Context, books []CreateBooksBooksItem, opts ...query.ExecuteOption) error
+	CreateBooks(ctx context.Context, arg []CreateBooksBooksItem, opts ...query.ExecuteOption) error
 }

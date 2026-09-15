@@ -286,7 +286,7 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     pub async fn say_hello(&mut self, name: String) -> ydb::YdbResult<SayHelloRow> {
         let mut row = self
             .client
-            .query_row(r#"SELECT "hello "u || $name AS greeting;"#)
+            .query_row("SELECT \"hello \"u || $name AS greeting;")
             .param("$name", name)
             .await?;
         Ok(SayHelloRow {

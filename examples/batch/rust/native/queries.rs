@@ -14,34 +14,34 @@ impl From<JsonParam> for ydb::Value {
 impl From<CreateBooksBooksItem> for ydb::Value {
     fn from(item: CreateBooksBooksItem) -> Self {
         ydb::Value::struct_from_fields(vec![
-            (r"book_id".to_string(), item.book_id.into()),
-            (r"author_id".to_string(), item.author_id.into()),
-            (r"isbn".to_string(), item.isbn.into()),
-            (r"book_type".to_string(), item.book_type.into()),
-            (r"title".to_string(), item.title.into()),
-            (r"year".to_string(), item.year.into()),
+            ("book_id".to_string(), item.book_id.into()),
+            ("author_id".to_string(), item.author_id.into()),
+            ("isbn".to_string(), item.isbn.into()),
+            ("book_type".to_string(), item.book_type.into()),
+            ("title".to_string(), item.title.into()),
+            ("year".to_string(), item.year.into()),
             (
-                r"available".to_string(),
+                "available".to_string(),
                 ydb::Value::Timestamp(item.available).into(),
             ),
-            (r"tags".to_string(), JsonParam(item.tags).into()),
+            ("tags".to_string(), JsonParam(item.tags).into()),
         ])
     }
 }
 
 fn create_books_books_item_type() -> ydb::Value {
     ydb::Value::struct_from_fields(vec![
-        (r"book_id".to_string(), <u64>::default().into()),
-        (r"author_id".to_string(), <u64>::default().into()),
-        (r"isbn".to_string(), <String>::default().into()),
-        (r"book_type".to_string(), <String>::default().into()),
-        (r"title".to_string(), <String>::default().into()),
-        (r"year".to_string(), <i32>::default().into()),
+        ("book_id".to_string(), <u64>::default().into()),
+        ("author_id".to_string(), <u64>::default().into()),
+        ("isbn".to_string(), <String>::default().into()),
+        ("book_type".to_string(), <String>::default().into()),
+        ("title".to_string(), <String>::default().into()),
+        ("year".to_string(), <i32>::default().into()),
         (
-            r"available".to_string(),
+            "available".to_string(),
             ydb::Value::Timestamp(std::time::SystemTime::UNIX_EPOCH).into(),
         ),
-        (r"tags".to_string(), JsonParam(<String>::default()).into()),
+        ("tags".to_string(), JsonParam(<String>::default()).into()),
     ])
 }
 

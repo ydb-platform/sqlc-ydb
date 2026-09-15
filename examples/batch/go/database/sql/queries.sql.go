@@ -184,7 +184,7 @@ func (q *Queries) GetBiography(ctx context.Context, arg uint64) (GetBiographyRow
 }
 
 // -- name: CreateBooks :exec
-func (q *Queries) CreateBooks(ctx context.Context, books []CreateBooksBooksItem) error {
+func (q *Queries) CreateBooks(ctx context.Context, arg []CreateBooksBooksItem) error {
 	_, err := q.db.ExecContext(ctx, ""+
 		"DECLARE $books AS List<Struct<\n"+
 		"    book_id: Uint64,\n"+
@@ -202,7 +202,7 @@ func (q *Queries) CreateBooks(ctx context.Context, books []CreateBooksBooksItem)
 		"SELECT\n"+
 		"    book_id, author_id, isbn, book_type, title, year, available, tags\n"+
 		"FROM AS_TABLE($books);",
-		sql.Named("books", bindCreateBooksBooksItem(books)),
+		sql.Named("books", bindCreateBooksBooksItem(arg)),
 	)
 
 	return err

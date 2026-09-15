@@ -27,17 +27,5 @@ func jooqBatchSQL(q model.AnalyzedQuery, sql string) (string, error) {
 	if ref == nil || ref.Simple_table_ref() == nil || ref.Simple_table_ref().Simple_table_ref_core() == nil {
 		return "", fmt.Errorf("%s: jOOQ batch insert requires a static target table", q.Name)
 	}
-	target := ref.Simple_table_ref().Simple_table_ref_core().GetText()
-	constant, err := jooqConstant(jooqID(target))
-	if err != nil {
-		return "", err
-	}
-	span := ref.Simple_table_ref().Simple_table_ref_core()
-	shift := len([]rune(sql)) - len([]rune(q.SQL))
-	start, end := span.GetStart().GetStart()+shift, span.GetStop().GetStop()+1+shift
-	runes := []rune(sql)
-	if start < 0 || end > len(runes) || start > end {
-		return "", fmt.Errorf("%s: invalid resolved batch target span", q.Name)
-	}
-	return sqlLiteral(string(runes[:start])) + " + dsl.render(" + constant + ") + " + sqlLiteral(string(runes[end:])), nil
+	return jooqDeclaredSQL(q, sql)
 }

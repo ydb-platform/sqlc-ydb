@@ -290,9 +290,9 @@ func (q *Queries) GetBiography(ctx context.Context, arg uint64, opts ...query.Ex
 }
 
 // -- name: CreateBooks :exec
-func (q *Queries) CreateBooks(ctx context.Context, books []CreateBooksBooksItem, opts ...query.ExecuteOption) error {
+func (q *Queries) CreateBooks(ctx context.Context, arg []CreateBooksBooksItem, opts ...query.ExecuteOption) error {
 	parameters := ydb.ParamsBuilder()
-	parameters = parameters.Param("$books").Any(bindCreateBooksBooksItem(books))
+	parameters = parameters.Param("$books").Any(bindCreateBooksBooksItem(arg))
 
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))

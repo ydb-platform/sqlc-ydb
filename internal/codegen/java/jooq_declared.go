@@ -78,7 +78,7 @@ func jooqDeclaredSQL(q model.AnalyzedQuery, sql string) (string, error) {
 	var parts []string
 	cursor := 0
 	for _, replacement := range replacements {
-		if replacement.start < cursor || replacement.end > len(runes) {
+		if replacement.start < cursor || replacement.end < replacement.start || replacement.end > len(runes) {
 			return "", fmt.Errorf("%s: invalid resolved table span", q.Name)
 		}
 		parts = append(parts, sqlLiteral(string(runes[cursor:replacement.start])), replacement.expression)

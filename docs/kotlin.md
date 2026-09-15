@@ -26,7 +26,7 @@ The [authors example](../examples/authors/kotlin) builds all three profiles from
 
 ## Explicit declarations
 
-Source `DECLARE` statements and their named references remain in generated SQL for every runtime. JDBC and Exposed unwrap the borrowed `YdbConnection` and prepare the named query with `YdbPrepareMode.DATA_QUERY`, which avoids automatic batch flattening. Standard scalar setters bind by the original parameter names using the declared types; `Uint64` and structured lists use typed SDK values; the driver sends the prepared text unchanged. If a query mixes explicit and inferred parameters, only the missing inferred declarations are prefixed to the preserved source. Connection settings must allow data-query preparation. Native execution passes the original SQL and typed parameters to the Query SDK.
+Source `DECLARE` statements and their named references remain in generated SQL for every runtime. JDBC and Exposed use the same [named DATA_QUERY preparation contract as Java](java.md#explicit-declarations), including inferred declarations when needed. Connection settings must allow data-query preparation. Native execution passes the original SQL and typed parameters to the Query SDK.
 
 ## Type coverage
 
@@ -57,4 +57,4 @@ The harness uses a disposable YDB database and runs profiles sequentially. It ch
 
 The [batch harness](../tests/examples/kotlin/pom.xml) compiles the native, JDBC and Exposed batch APIs. Run `mvn -f tests/examples/kotlin/pom.xml test-compile` to compile it, or `YDB_CONNECTION_STRING=grpc://localhost:2136/local sh tests/examples/kotlin/run-smoke.sh` against a disposable database without a `books` table to verify empty batches, multiple rows, JSON, unsigned IDs and caller rollback sequentially.
 
-JDBC timestamp inputs use `setTimestamp(Timestamp.from(value))`. Nullable JDBC primitive results use `getObject(index, Type::class.javaObjectType)`; reference getters already return null. Native text, bytes, JSON and timestamp getters also return null directly; nullable primitive SDK getters require a presence check. Present optional bindings use `makeOptional()`.
+JDBC setter and nullable-getter choices follow the shared [Java SDK evidence](../.agents/sdk-evidence.md#jdbc-declarations-and-scalar-setters).

@@ -43,7 +43,7 @@ func validateStructList(t model.Type) error {
 		if scalar.IsOptional() && scalar.Elem != nil {
 			scalar = *scalar.Elem
 		}
-		if scalar.IsOptional() || strings.EqualFold(scalar.Kind, "List") || strings.EqualFold(scalar.Kind, "Struct") {
+		if scalar.IsOptional() || strings.EqualFold(scalar.Kind, "List") || strings.EqualFold(scalar.Kind, "Struct") || strings.EqualFold(scalar.Kind, "Dict") {
 			return fmt.Errorf("List<Struct> field %s must be a scalar or Optional<scalar>", f.Name)
 		}
 		if _, err := goType(scalar); err != nil {
@@ -136,18 +136,6 @@ func writeStructDecimalValidations(b *bytes.Buffer, q model.AnalyzedQuery, p mod
 		}
 	}
 	b.WriteString("}\n")
-}
-
-func structParameterName(p model.Parameter) string {
-	name := p.Name
-	if !ident(name) {
-		return "arg"
-	}
-	switch name {
-	case "ctx", "opts", "q", "parameters", "callOptions", "err", "item", "row", "rows", "result", "items", "resultSet", "ydb", "query", "sql", "types", "xerrors", "errors", "io":
-		return "arg"
-	}
-	return name
 }
 
 func validateStructDeclarations(in *model.AnalysisResult) error {

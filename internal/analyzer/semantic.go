@@ -87,19 +87,19 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	localPositions, localNames, localTypes, localDiagnostics := localBindings(block, tree, declared)
 	diagnostics = append(diagnostics, localDiagnostics...)
 
+	bindings := make(map[string]model.Type, len(declared)+len(localTypes))
+	for name, typeValue := range declared {
+		bindings[name] = typeValue
+	}
+	for name, typeValue := range localTypes {
+		bindings[name] = typeValue
+	}
 	inferred := map[string]model.Type{}
 	var relations []relation
 	var resultColumns []model.Column
 	var target *model.Table
 	switch {
 	case selectStatement != nil:
-		bindings := make(map[string]model.Type, len(declared)+len(localTypes))
-		for name, typeValue := range declared {
-			bindings[name] = typeValue
-		}
-		for name, typeValue := range localTypes {
-			bindings[name] = typeValue
-		}
 		var selectDiagnostics []model.Diagnostic
 		var arms [][]model.Column
 		var partials []parser.ISelect_kind_partialContext
@@ -159,13 +159,6 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	}
 	if target != nil && len(tree.insert) == 1 {
 		if stmt := insertSelect(tree.insert[0]); stmt != nil {
-			bindings := make(map[string]model.Type)
-			for name, typ := range declared {
-				bindings[name] = typ
-			}
-			for name, typ := range localTypes {
-				bindings[name] = typ
-			}
 			diagnostics = append(diagnostics, analyzeInsertSelect(catalog, block, tree.insert[0], target, bindings, inferred, query.Syntax)...)
 		} else {
 			diagnostics = append(diagnostics, inferInsert(block, tree.insert[0], target, inferred)...)

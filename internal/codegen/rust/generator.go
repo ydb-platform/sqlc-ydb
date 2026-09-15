@@ -461,48 +461,13 @@ func querySQL(q model.AnalyzedQuery) string {
 			if line == "" {
 				continue
 			}
-			b.WriteString("                " + rustSQLLine(line))
+			b.WriteString("                " + rustString(line))
 			b.WriteString(",\n")
 		}
 		b.WriteString("            )")
 		return b.String()
 	}
 	return rustString(sql)
-}
-
-func rustString(s string) string {
-	parts := make([]string, 0, 3)
-	start := 0
-	for i, r := range s {
-		if r != '\r' && r != 0 && (r >= 0x20 || r == '\t') && r != 0x7f {
-			continue
-		}
-		if start < i {
-			parts = append(parts, rawString(s[start:i]))
-		}
-		width := utf8.RuneLen(r)
-		if width < 1 {
-			width = 1
-		}
-		parts = append(parts, fmt.Sprintf("\"\\x%02x\"", []byte(s[i : i+width])[0]))
-		start = i + width
-	}
-	if start < len(s) || len(parts) == 0 {
-		parts = append(parts, rawString(s[start:]))
-	}
-	if len(parts) == 1 {
-		return parts[0]
-	}
-	return "concat!(" + strings.Join(parts, ", ") + ")"
-}
-
-func rawString(s string) string {
-	for hashes := 0; ; hashes++ {
-		delim := strings.Repeat("#", hashes)
-		if !strings.Contains(s, "\""+delim) {
-			return "r" + delim + "\"" + s + "\"" + delim
-		}
-	}
 }
 
 func words(s string) []string {
@@ -570,7 +535,7 @@ var rustKeywords = func() map[string]bool {
 	return out
 }()
 
-func rustSQLLine(s string) string {
+func rustString(s string) string {
 	var b strings.Builder
 	b.WriteByte('"')
 	for _, r := range s {

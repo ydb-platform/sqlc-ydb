@@ -225,6 +225,11 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			if o.Runtime == "ydb" || jdbc.HasDeclarations(q) || isStructList(p.Type) || strings.HasPrefix(p.Type.UnwrapOptional().Kind, "Uint") || p.Type.UnwrapOptional().Kind == "Json" || p.Type.UnwrapOptional().Kind == "Timestamp" {
 				needsValues = true
 				needsOptional = needsOptional || p.Type.IsOptional()
+				if isStructList(p.Type) {
+					for _, field := range p.Type.Elem.Fields {
+						needsOptional = needsOptional || field.Type.IsOptional()
+					}
+				}
 			}
 		}
 	}

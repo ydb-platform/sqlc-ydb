@@ -217,9 +217,9 @@ func TestTemporalInputsUseExactConstructibleYDBValues(t *testing.T) {
 	}
 }
 
-func TestGeneratedRawSQLRoundTripsThroughRustCompiler(t *testing.T) {
+func TestGeneratedSQLRoundTripsThroughRustCompiler(t *testing.T) {
 	for _, sql := range []string{
-		"-- Привет\r\nSELECT r###\"quoted\"###, '# hashes', '\x00', '\\n';\r\n",
+		"-- Привет 😀\r\nSELECT r###\"quoted\"###, '# hashes', '\x00', '\\n';\r\n",
 		"-- name: SpecialSQL :exec\n\n-- preserve comment\nDECLARE $books AS List<Struct<\n    book_id: Uint64, \n\tdata: Json\n>>;\n\nINSERT INTO books (book_id, data)\nSELECT\n    book_id,\n    data\nFROM AS_TABLE($books);  \n",
 		"-- name: SpecialSQL :exec\nSELECT @@first line\n    value indentation\n\nlast line@@ AS value;\n",
 	} {

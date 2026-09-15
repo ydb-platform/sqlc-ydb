@@ -619,6 +619,8 @@ assert.equal(typeof descriptor.get,'function');
 assert.equal(descriptor.set,undefined);
 assert.equal(descriptor.configurable,true);
 assert.equal(Object.isExtensible(probe),true);
+assert.throws(() => { probe.text='SELECT 2;'; },TypeError);
+assert.equal(Object.hasOwn({...probe},'text'),false);
 const configure = stmt => {
  configurations++;
  const own=Object.getOwnPropertyDescriptor(stmt,'text');
