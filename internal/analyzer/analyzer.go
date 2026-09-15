@@ -15,16 +15,15 @@ import (
 
 // Analyze builds the schema catalog first and then semantically analyzes every
 // named query against that catalog.
-func Analyze(schema, queries []model.Source, options ...Options) (*model.AnalysisResult, error) {
+func Analyze(schema, queries []model.Source) (*model.AnalysisResult, error) {
+	return AnalyzeWithOptions(schema, queries, Options{})
+}
+
+// AnalyzeWithOptions analyzes queries using one explicit compilation contract.
+// The zero value of Options selects the shipped function catalog.
+func AnalyzeWithOptions(schema, queries []model.Source, options Options) (*model.AnalysisResult, error) {
 	result := &model.AnalysisResult{}
-	if len(options) > 1 {
-		return result, fmt.Errorf("Analyze accepts at most one Options value")
-	}
-	var signatures []builtins.Signature
-	if len(options) == 1 {
-		signatures = options[0].Functions
-	}
-	functions, err := builtins.NewRegistry(signatures)
+	functions, err := builtins.NewRegistry(options.Functions)
 	if err != nil {
 		return result, err
 	}

@@ -87,19 +87,13 @@ func validateSignature(signature Signature) error {
 	if !signatureIdentifier.MatchString(signature.Name) {
 		return fmt.Errorf("function name must be a non-empty YQL identifier")
 	}
-	if err := validateConcreteOrNull(signature.Returns); err != nil || signature.Returns.Kind == "Null" {
-		if err == nil {
-			err = fmt.Errorf("Null is not a concrete result type")
-		}
+	if err := validateSignatureType(signature.Returns, false); err != nil {
 		return fmt.Errorf("invalid return type %s: %w", signature.Returns.String(), err)
 	}
 	seenNames := make(map[string]struct{})
 	optionalSeen := false
 	for i, parameter := range signature.Arguments {
-		if err := validateConcreteOrNull(parameter.Type); err != nil || parameter.Type.Kind == "Null" {
-			if err == nil {
-				err = fmt.Errorf("Null is not a concrete parameter type")
-			}
+		if err := validateSignatureType(parameter.Type, false); err != nil {
 			return fmt.Errorf("argument %d has invalid type %s: %w", i+1, parameter.Type.String(), err)
 		}
 		if parameter.Name != "" {
@@ -120,6 +114,45 @@ func validateSignature(signature Signature) error {
 		optionalSeen = optionalSeen || parameter.Optional
 	}
 	return nil
+}
+
+func validateSignatureType(value model.Type, parentOptional bool) error {
+	if value.Kind == "Null" {
+		return fmt.Errorf("Null is not allowed in a configured signature")
+	}
+	if value.Kind == "Optional" {
+		if parentOptional {
+			return fmt.Errorf("nested Optional is not allowed in a configured signature")
+		}
+		if value.Elem == nil {
+			return fmt.Errorf("Optional type has no element type")
+		}
+		if err := validateSignatureType(*value.Elem, true); err != nil {
+			return err
+		}
+		return validateConcreteOrNull(value)
+	}
+	if value.Key != nil {
+		if err := validateSignatureType(*value.Key, false); err != nil {
+			return err
+		}
+	}
+	if value.Elem != nil {
+		if err := validateSignatureType(*value.Elem, false); err != nil {
+			return err
+		}
+	}
+	for _, item := range value.Items {
+		if err := validateSignatureType(item, false); err != nil {
+			return err
+		}
+	}
+	for _, field := range value.Fields {
+		if err := validateSignatureType(field.Type, false); err != nil {
+			return err
+		}
+	}
+	return validateConcreteOrNull(value)
 }
 
 var signatureIdentifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*$`)

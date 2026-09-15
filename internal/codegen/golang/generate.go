@@ -443,7 +443,8 @@ func queryFile(source string, qs []model.AnalyzedQuery, o Options) []byte {
 	for _, q := range qs {
 		needsYDBMany = needsYDBMany || (o.Runtime == "ydb" && q.Command == model.Many)
 		for _, p := range q.Parameters {
-			if len(q.Parameters) == 1 && !isStructParameter(p.Type) {
+			usesParameterType := !isStructParameter(p.Type) && (len(q.Parameters) == 1 || (o.Runtime == "database/sql" && strings.EqualFold(p.Type.Kind, "List")))
+			if usesParameterType {
 				parameterImports.add(p.Type)
 			}
 			kind := strings.ToLower(p.Type.UnwrapOptional().Kind)
@@ -451,7 +452,7 @@ func queryFile(source string, qs []model.AnalyzedQuery, o Options) []byte {
 			if kind == "json" || kind == "jsondocument" {
 				needsJSON = true
 			}
-			needsUUID = needsUUID || (len(q.Parameters) == 1 && !isStructParameter(p.Type) && hasKind(p.Type, "uuid"))
+			needsUUID = needsUUID || (usesParameterType && hasKind(p.Type, "uuid"))
 			needsTypes = needsTypes || isStructParameter(p.Type) || hasKind(p.Type, "list") ||
 				(o.Runtime == "database/sql" && (kind == "uuid" || kind == "decimal")) ||
 				(o.Runtime == "ydb" && (hasKind(p.Type, "list") || (len(q.Parameters) == 1 && hasKind(p.Type, "decimal"))))

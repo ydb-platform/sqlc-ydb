@@ -28,7 +28,7 @@ sql:
       out: db
 ```
 
-`type` and `returns` use canonical YQL type syntax. Each configured overload must use concrete argument and return types; `Any`, type variables, implicit coercion guesses, and server-assisted discovery are not supported. `optional: true` means that a trailing argument may be omitted. A `name` permits YQL named-argument syntax. `auto_map: true` accepts the optional form of that exact argument type and propagates its nullability to the declared return type.
+`type` and `returns` use canonical YQL type syntax. Each configured overload must use concrete argument and return types; `Any`, `Null` anywhere in the type, nested `Optional<Optional<T>>`, type variables, implicit coercion guesses, and server-assisted discovery are not supported. Ordinary concrete container and Struct types remain valid when all nested types meet these rules. `optional: true` means that a trailing argument may be omitted. A `name` permits YQL named-argument syntax. `auto_map: true` accepts the optional form of that exact argument type and propagates its nullability to the declared return type.
 
 `optional` controls whether an argument may be left out; it does not make the argument value nullable. Use an `Optional<T>` argument type when the function accepts an optional value. AutoMap must be declared on the base type `T`, not `Optional<T>`: it lifts `T` and `Optional<T>` calls and, when the input is `NULL`, returns `NULL` without invoking the function. Consequently an optional call wraps any non-optional declared result, including a concrete container or Struct, in one `Optional` level. This follows YQL's [callable argument flag contract](https://ydb.tech/docs/en/yql/reference/types/type_string). No other implicit argument conversion is assumed.
 

@@ -2,7 +2,6 @@ package analyzer
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
@@ -144,22 +143,30 @@ func validatePredicateAtom(atom *parser.Xor_subexprContext, scope expressionScop
 		_, _, err := comparisonBoolType(operands, scope)
 		return err
 	}
+	var unaryNot *parser.Con_subexprContext
+	descendants(eq, func(node antlr.Tree) {
+		ctx, ok := node.(*parser.Con_subexprContext)
+		if ok && sameSpan(eq, ctx) && ctx.Unary_op() != nil && ctx.Unary_op().NOT() != nil {
+			unaryNot = ctx
+		}
+	})
+	if unaryNot != nil {
+		if nested := nestedBooleanExpression(unaryNot.Unary_subexpr()); nested != nil {
+			return validatePredicate(nested, scope)
+		}
+		typeValue, err := resolveScalarNode(unaryNot.Unary_subexpr(), scope)
+		if err != nil {
+			return fmt.Errorf("cannot resolve NOT operand: %w", err)
+		}
+		if typeValue.UnwrapOptional().Kind != "Bool" {
+			return fmt.Errorf("NOT operand has type %s, want Bool", typeValue.String())
+		}
+		return nil
+	}
 	typeValue, err := resolveScalarNode(eq, scope)
 	if err != nil {
-		var nested parser.IExprContext
-		descendants(eq, func(node antlr.Tree) {
-			if nested != nil {
-				return
-			}
-			if candidate, ok := node.(parser.IExprContext); ok {
-				nested = candidate
-			}
-		})
-		if nested != nil {
-			text := eq.GetText()
-			if text == "("+nested.GetText()+")" || strings.EqualFold(text, "NOT("+nested.GetText()+")") {
-				return validatePredicate(nested, scope)
-			}
+		if nested := nestedBooleanExpression(eq); nested != nil {
+			return validatePredicate(nested, scope)
 		}
 		return fmt.Errorf("cannot resolve predicate operand %q: %w", eq.GetText(), err)
 	}
@@ -167,4 +174,45 @@ func validatePredicateAtom(atom *parser.Xor_subexprContext, scope expressionScop
 		return fmt.Errorf("predicate expression has type %s, want Bool", typeValue.String())
 	}
 	return nil
+}
+
+func nestedBooleanExpression(root antlr.ParserRuleContext) parser.IExprContext {
+	var result parser.IExprContext
+	descendants(root, func(node antlr.Tree) {
+		candidate, ok := node.(parser.IExprContext)
+		if !ok || result != nil {
+			return
+		}
+		for current := antlr.Tree(candidate); current != root; {
+			parent := current.GetParent()
+			if parent == nil {
+				return
+			}
+			ruleChildren := 0
+			for i := 0; i < parent.GetChildCount(); i++ {
+				child := parent.GetChild(i)
+				if rule, ok := child.(antlr.ParserRuleContext); ok {
+					if rule.GetText() != "" {
+						ruleChildren++
+					}
+					continue
+				}
+				terminal, ok := child.(antlr.TerminalNode)
+				if !ok {
+					return
+				}
+				switch terminal.GetSymbol().GetTokenType() {
+				case parser.YQLLexerLPAREN, parser.YQLLexerRPAREN, parser.YQLLexerNOT:
+				default:
+					return
+				}
+			}
+			if ruleChildren != 1 {
+				return
+			}
+			current = parent
+		}
+		result = candidate
+	})
+	return result
 }

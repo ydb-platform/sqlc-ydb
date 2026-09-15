@@ -1187,6 +1187,21 @@ func TestCompileListParameterMatrix(t *testing.T) {
 	}
 }
 
+func TestDatabaseSQLMultiParameterTemporalAndUUIDListBuildersCompile(t *testing.T) {
+	timestamp := model.Type{Kind: "Timestamp"}
+	uuid := model.Type{Kind: "Uuid"}
+	in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name: "BindLists", Command: model.Exec,
+		Parameters: []model.Parameter{
+			{Name: "timestamps", Type: model.Type{Kind: "List", Elem: &timestamp}},
+			{Name: "optional_timestamps", Type: model.Type{Kind: "List", Elem: ptr(model.Optional(timestamp))}},
+			{Name: "ids", Type: model.Type{Kind: "List", Elem: &uuid}},
+			{Name: "optional_ids", Type: model.Type{Kind: "List", Elem: ptr(model.Optional(uuid))}},
+		},
+	}}}
+	compileInput(t, in, Options{Package: "db", Runtime: "database/sql"})
+}
+
 func TestRejectsExtendedTemporalNativeListParameters(t *testing.T) {
 	for _, kind := range []string{"Date32", "Datetime64", "Timestamp64", "Interval64"} {
 		for _, optional := range []bool{false, true} {

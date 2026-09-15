@@ -114,6 +114,8 @@ func TestOnSelectDiagnostics(t *testing.T) {
 		{"update source list", "UPDATE records ON (owner_hash, record_id) SELECT owner_hash, record_id FROM records", `UPDATE ON SELECT with an explicit source column list is unsupported`},
 		{"delete source list", "DELETE FROM records ON (owner_hash, record_id) SELECT owner_hash, record_id FROM records", `DELETE ON SELECT with an explicit source column list is unsupported`},
 		{"ambiguous stars", "UPDATE records ON SELECT * FROM records a JOIN records b ON a.owner_hash = b.owner_hash", `duplicate source column "owner_hash"`},
+		{"update union", "UPDATE records ON SELECT owner_hash, record_id FROM records UNION ALL SELECT owner_hash, record_id FROM records", `DML SELECT supports one SELECT input`},
+		{"delete cte", "DELETE FROM records ON WITH keys AS (SELECT owner_hash, record_id FROM records) SELECT owner_hash, record_id FROM keys", `CTEs are not yet supported`},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := Analyze(typedDMLSchema, []model.Source{{Name: "query.sql", Text: "-- name: Change :exec\n" + tt.statement + ";"}})

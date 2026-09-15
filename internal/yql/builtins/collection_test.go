@@ -35,6 +35,37 @@ func TestResolveCollectionFunctions(t *testing.T) {
 	}
 }
 
+func TestResolveCollectionFunctionsKeepOptionalKeys(t *testing.T) {
+	stringType := model.Type{Kind: "String"}
+	optionalString := model.Optional(stringType)
+	list := model.Type{Kind: "List", Elem: &optionalString}
+	set, err := Resolve("ToSet", []model.Type{list})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if set.Kind != "Dict" || set.Key == nil || !set.Key.Equal(optionalString) {
+		t.Fatalf("ToSet(List<String?>) = %s", set.String())
+	}
+	got, err := Resolve("SetIsDisjoint", []model.Type{set, list})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Equal(model.Type{Kind: "Bool"}) {
+		t.Fatalf("SetIsDisjoint() = %s", got.String())
+	}
+}
+
+func TestResolveToSetTupleKey(t *testing.T) {
+	key := model.Type{Kind: "Tuple", Items: []model.Type{{Kind: "String"}, model.Optional(model.Type{Kind: "Uint64"})}}
+	got, err := Resolve("ToSet", []model.Type{{Kind: "List", Elem: &key}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Key == nil || !got.Key.Equal(key) {
+		t.Fatalf("ToSet() = %s", got.String())
+	}
+}
+
 func TestResolveCollectionFunctionsRejectInvalidCalls(t *testing.T) {
 	stringType := model.Type{Kind: "String"}
 	uint64Type := model.Type{Kind: "Uint64"}
@@ -46,10 +77,25 @@ func TestResolveCollectionFunctionsRejectInvalidCalls(t *testing.T) {
 		want string
 	}{
 		{"ToSet", []model.Type{stringType}, "List"},
+		{"ToSet", nil, "expects 1"},
+		{"ToSet", []model.Type{{Kind: "List"}}, "List"},
+		{"ToSet", []model.Type{{Kind: "List", Elem: &model.Type{Kind: "Optional"}}}, "Optional has no element"},
+		{"ToSet", []model.Type{{Kind: "List", Elem: &model.Type{Kind: "Tuple", Items: []model.Type{stringType}}}}, "at least two"},
+		{"ToSet", []model.Type{{Kind: "List", Elem: &model.Type{Kind: "String", Elem: &stringType}}}, "invalid dictionary key"},
 		{"ToSet", []model.Type{{Kind: "List", Elem: &model.Type{Kind: "Json"}}}, "dictionary key"},
+		{"SetIsDisjoint", []model.Type{model.Optional(model.Type{Kind: "Optional", Elem: &set}), set}, "argument 1"},
+		{"SetIsDisjoint", []model.Type{{Kind: "Dict"}, set}, "argument 1"},
 		{"SetIsDisjoint", []model.Type{set, {Kind: "List", Elem: &uint64Type}}, "same key type"},
+		{"SetIsDisjoint", []model.Type{set, {Kind: "Optional"}}, "argument 2"},
+		{"SetIsDisjoint", []model.Type{set, {Kind: "List"}}, "no element type"},
+		{"SetIsDisjoint", []model.Type{set, {Kind: "Dict"}}, "requires key and value"},
+		{"SetIsDisjoint", []model.Type{set, stringType}, "argument 2"},
+		{"SetIsDisjoint", []model.Type{{Kind: "Dict", Key: &model.Type{Kind: "Json"}, Elem: &voidType}, {Kind: "List", Elem: &model.Type{Kind: "Json"}}}, "argument 1"},
+		{"SetIsDisjoint", []model.Type{set, {Kind: "List", Elem: &model.Type{Kind: "Yson"}}}, "argument 2"},
+		{"SetIsDisjoint", []model.Type{set, {Kind: "Dict", Key: &model.Type{Kind: "Json"}, Elem: &voidType}}, "argument 2"},
 		{"SetIsDisjoint", []model.Type{{Kind: "List", Elem: &stringType}, {Kind: "List", Elem: &stringType}}, "argument 1"},
 		{"Yson::ConvertToStringList", []model.Type{stringType}, "Json or Yson"},
+		{"Yson::ConvertToStringList", nil, "expects 1"},
 	} {
 		_, err := Resolve(tc.name, tc.args)
 		if err == nil || !strings.Contains(err.Error(), tc.want) {

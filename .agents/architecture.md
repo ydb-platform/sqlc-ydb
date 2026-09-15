@@ -26,7 +26,7 @@ The language packages in `internal/codegen` produce files from that resolved mod
 
 ## Compilation boundary
 
-`analyzer.Analyze(...) -> model.AnalysisResult` is the compilation entry point. The CLI invokes it once per `sql` configuration entry and gives the result to every selected generator. `compile` stops after analysis. Planned macro processing belongs inside this boundary; see [the roadmap](roadmap.md). A separate compiler package is unnecessary while the analyzer owns these stages.
+`analyzer.Analyze(schema, queries)` is the default compilation entry point; `AnalyzeWithOptions(schema, queries, Options)` accepts an explicit function contract with a fixed arity. The CLI invokes the latter once per `sql` configuration entry and gives the resolved result to every selected generator. `compile` stops after analysis. Planned macro processing belongs inside this boundary; see [the roadmap](roadmap.md). A separate compiler package is unnecessary while the analyzer owns these stages.
 
 `model.Type` owns structural equality and YQL type formatting. The analyzer, built-in function resolver and Python model reuse checks share those operations. Go's native and database/sql generators bind root Struct parameters and list-of-Struct batches through generated named types; both bind scalar List parameters, while nested Struct/List fields remain unsupported. SDK-specific type mapping stays in each generator.
 

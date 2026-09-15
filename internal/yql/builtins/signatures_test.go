@@ -95,6 +95,84 @@ func TestRegistryAutoMapWrapsConcreteContainerResult(t *testing.T) {
 	}
 }
 
+func TestRegistryResolveCallDiagnostics(t *testing.T) {
+	stringType := scalar("String")
+	uint64Type := scalar("Uint64")
+	r, err := NewRegistry([]Signature{
+		{Name: "Acme::Pick", Arguments: []Parameter{{Name: "value", Type: model.Optional(stringType)}}, Returns: stringType},
+		{Name: "Acme::Pick", Arguments: []Parameter{{Name: "value", Type: model.Optional(uint64Type)}}, Returns: uint64Type},
+		{Name: "Acme::Strict", Arguments: []Parameter{{Name: "value", Type: stringType}}, Returns: stringType},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name string
+		args []CallArgument
+		want string
+	}{
+		{"Acme::Pick", []CallArgument{{Type: scalar("Null")}}, "ambiguous"},
+		{"Acme::Pick", []CallArgument{{Type: scalar("Bool")}}, "no matching overload"},
+		{"Acme::Strict", []CallArgument{{Type: stringType}, {Type: stringType}}, "at most 1"},
+		{"Acme::Strict", []CallArgument{{Type: stringType}, {Name: "value", Type: stringType}}, "more than once"},
+		{"Acme::Strict", []CallArgument{{Type: model.Optional(stringType)}}, "must be String"},
+		{"Acme::Strict", []CallArgument{{Type: model.Type{Kind: "Optional"}}}, "element type"},
+	} {
+		_, err := r.ResolveCall(tc.name, tc.args)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("ResolveCall(%s) error = %v, want %q", tc.name, err, tc.want)
+		}
+	}
+	var nilRegistry *Registry
+	if _, err := nilRegistry.ResolveCall("ABS", []CallArgument{{Name: "value", Type: scalar("Int32")}}); err == nil || !strings.Contains(err.Error(), "does not support named") {
+		t.Fatalf("nil registry named argument error = %v", err)
+	}
+}
+
+func TestRegistryValidatesNestedConcreteSignatures(t *testing.T) {
+	stringType := scalar("String")
+	uint64Type := scalar("Uint64")
+	valueType := scalar("Bool")
+	valid := Signature{
+		Name:      "Acme::Nested",
+		Arguments: []Parameter{{Type: model.Type{Kind: "Dict", Key: &stringType, Elem: &uint64Type}}},
+		Returns:   model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "items", Type: model.Type{Kind: "List", Elem: &valueType}}}},
+	}
+	if _, err := NewRegistry([]Signature{valid}); err != nil {
+		t.Fatal(err)
+	}
+	invalidKey := valid
+	invalidKey.Arguments = []Parameter{{Type: model.Type{Kind: "Dict", Key: typePointer(scalar("Null")), Elem: &uint64Type}}}
+	if _, err := NewRegistry([]Signature{invalidKey}); err == nil || !strings.Contains(err.Error(), "Null") {
+		t.Fatalf("nested Dict Null error = %v", err)
+	}
+	invalidField := valid
+	invalidField.Returns = model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "bad", Type: scalar("Null")}}}
+	if _, err := NewRegistry([]Signature{invalidField}); err == nil || !strings.Contains(err.Error(), "Null") {
+		t.Fatalf("nested Struct Null error = %v", err)
+	}
+}
+
+func TestResolveDigestSignatureGroups(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		arg  model.Type
+		want string
+	}{
+		{"Digest::Crc64", scalar("String"), "Uint64"},
+		{"Digest::Fnv32", scalar("String"), "Uint32"},
+		{"Digest::Crc32c", scalar("String"), "Uint32"},
+		{"Digest::Md5Raw", scalar("String"), "String"},
+		{"Digest::XXH3", scalar("String"), "Uint64"},
+		{"Digest::IntHash64", scalar("Uint64"), "Uint64"},
+	} {
+		got, err := Resolve(tc.name, []model.Type{tc.arg})
+		if err != nil || got.Kind != tc.want {
+			t.Errorf("Resolve(%s) = %s, %v; want %s", tc.name, got.String(), err, tc.want)
+		}
+	}
+}
+
 func TestRegistryValidatesCustomSignatures(t *testing.T) {
 	valid := Signature{Name: "Acme::Hash", Arguments: []Parameter{{Name: "value", Type: scalar("String")}}, Returns: scalar("Uint64")}
 	for _, tc := range []struct {
@@ -104,6 +182,14 @@ func TestRegistryValidatesCustomSignatures(t *testing.T) {
 	}{
 		{"unknown argument type", []Signature{{Name: "Acme::Hash", Arguments: []Parameter{{Type: scalar("Mystery")}}, Returns: scalar("Uint64")}}, "argument 1"},
 		{"unknown return type", []Signature{{Name: "Acme::Hash", Returns: scalar("Mystery")}}, "return type"},
+		{"null nested in argument", []Signature{{Name: "Acme::Hash", Arguments: []Parameter{{Type: model.Type{Kind: "List", Elem: typePointer(scalar("Null"))}}}, Returns: scalar("Uint64")}}, "Null"},
+		{"null nested in result", []Signature{{Name: "Acme::Hash", Returns: model.Type{Kind: "Tuple", Items: []model.Type{scalar("Uint64"), scalar("Null")}}}}, "Null"},
+		{"nested optional argument", []Signature{{Name: "Acme::Hash", Arguments: []Parameter{{Type: model.Optional(model.Optional(scalar("Uint64")))}}, Returns: scalar("Uint64")}}, "nested Optional"},
+		{"nested optional result", []Signature{{Name: "Acme::Hash", Returns: model.Type{Kind: "List", Elem: typePointer(model.Optional(model.Optional(scalar("Uint64"))))}}}, "nested Optional"},
+		{"empty Struct result", []Signature{{Name: "Acme::Hash", Returns: model.Type{Kind: "Struct"}}}, "at least one field"},
+		{"unnamed Struct field", []Signature{{Name: "Acme::Hash", Returns: model.Type{Kind: "Struct", Fields: []model.StructField{{Type: scalar("String")}}}}}, "field name must not be empty"},
+		{"duplicate Struct field", []Signature{{Name: "Acme::Hash", Returns: model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "value", Type: scalar("String")}, {Name: "value", Type: scalar("Uint64")}}}}}, "duplicate Struct field"},
+		{"malformed Struct result", []Signature{{Name: "Acme::Hash", Returns: model.Type{Kind: "Struct", Elem: typePointer(scalar("String")), Fields: []model.StructField{{Name: "value", Type: scalar("String")}}}}}, "unexpected type parameters"},
 		{"invalid function name", []Signature{{Name: "Acme::bad-name", Returns: scalar("Uint64")}}, "function name"},
 		{"invalid argument name", []Signature{{Name: "Acme::Hash", Arguments: []Parameter{{Name: "bad-name", Type: scalar("String")}}, Returns: scalar("Uint64")}}, "argument 1 name"},
 		{"duplicate argument name", []Signature{{Name: "Acme::Hash", Arguments: []Parameter{{Name: "value", Type: scalar("String")}, {Name: "value", Type: scalar("String")}}, Returns: scalar("Uint64")}}, "duplicate argument"},

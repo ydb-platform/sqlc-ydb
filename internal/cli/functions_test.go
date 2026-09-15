@@ -75,6 +75,12 @@ func TestConfiguredFunctionDiagnostics(t *testing.T) {
 		want      string
 	}{
 		{
+			name:      "unknown argument type",
+			functions: strings.Replace(customHashConfig, "type: String", "type: Mystery", 1),
+			query:     "SELECT Acme::Hash(payload) AS value FROM records;",
+			want:      `function "Acme::Hash" argument 1`,
+		},
+		{
 			name:      "unknown result type",
 			functions: strings.Replace(customHashConfig, "returns: Uint64", "returns: Mystery", 1),
 			query:     "SELECT Acme::Hash(payload) AS value FROM records;",

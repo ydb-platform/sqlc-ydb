@@ -30,6 +30,8 @@ func TestPredicateValidationAcceptsBooleanCompositionAndTypedIN(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, label Utf8, PRIMARY KEY(id));`}}
 	for _, predicate := range []string{
 		"(id IN $ids OR id IS NULL) AND NOT (label IS NULL)",
+		"id BETWEEN 1u AND 10u",
+		`label LIKE "x%"u`,
 		`StartsWith(label, "x"u)`,
 		"ABS(id) > 1u",
 		"IF(id = 1u, true, false)",
@@ -39,6 +41,37 @@ func TestPredicateValidationAcceptsBooleanCompositionAndTypedIN(t *testing.T) {
 		if _, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}}); err != nil {
 			t.Fatalf("%s: %v", predicate, err)
 		}
+	}
+}
+
+func TestPredicateOperatorsRejectIncompatibleOperands(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, label Utf8, PRIMARY KEY(id));`}}
+	for _, predicate := range []string{
+		"NOT id = 1u",
+		`id BETWEEN "a"u AND "z"u`,
+		"label LIKE 1u",
+		"1u + (id = 1u)",
+		"-(id = 1u)",
+	} {
+		query := "-- name: Read :many\nSELECT id FROM records WHERE " + predicate + ";"
+		_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
+		if err == nil || (!strings.Contains(err.Error(), "incompatible types") && !strings.Contains(err.Error(), "NOT operand has type") && !strings.Contains(err.Error(), "unsupported scalar expression")) {
+			t.Fatalf("%s: %v", predicate, err)
+		}
+	}
+}
+
+func TestNotPrecedenceMatchesYDB(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, flag Bool NOT NULL, other Bool NOT NULL, PRIMARY KEY(id));`}}
+	for _, predicate := range []string{"NOT flag = other", "NOT (id = 1u)"} {
+		query := "-- name: Read :many\nSELECT id FROM records WHERE " + predicate + ";"
+		if _, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}}); err != nil {
+			t.Fatalf("%s: %v", predicate, err)
+		}
+	}
+	_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\nSELECT id FROM records WHERE NOT id = 1u;"}})
+	if err == nil || !strings.Contains(err.Error(), "NOT operand has type Uint64") {
+		t.Fatalf("numeric NOT must be rejected before comparison: %v", err)
 	}
 }
 

@@ -100,7 +100,7 @@ func analyzeInsertSelect(catalog model.Catalog, block queryBlock, statement *par
 		return []model.Diagnostic{diagnosticAt(block.file, block.line-1, statement, "INSERT/UPSERT SELECT requires an explicit target column list")}
 	}
 	stmt := insertSelect(statement)
-	cores, _, diagnostics := selectArms(block, stmt)
+	cores, partials, diagnostics := selectArms(block, stmt)
 	if len(diagnostics) != 0 {
 		return diagnostics
 	}
@@ -113,7 +113,7 @@ func analyzeInsertSelect(catalog model.Catalog, block queryBlock, statement *par
 			return []model.Diagnostic{diagnosticAt(block.file, block.line-1, result, "INSERT/UPSERT SELECT requires explicit source columns; wildcard column order is not guaranteed")}
 		}
 	}
-	columns, ds := analyzeSelectRows(catalog, block, stmt, bindings, inferred, syntax, selectDMLProjection)
+	columns, ds := analyzeSelectCore(catalog, block, core, partials[0], bindings, inferred, syntax, selectDMLProjection)
 	diagnostics = append(diagnostics, ds...)
 	if len(ds) != 0 {
 		return diagnostics

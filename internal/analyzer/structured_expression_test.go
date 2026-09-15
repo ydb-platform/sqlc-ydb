@@ -49,7 +49,7 @@ func TestFunctionReturningStructMemberAccessUsesFieldNames(t *testing.T) {
 		{Name: "id", Type: model.Type{Kind: "Uint64"}},
 	}}
 	options := Options{Functions: []builtins.Signature{{Name: "MakeRecord", Returns: resultType}}}
-	got, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nSELECT MakeRecord().id AS value;"}}, options)
+	got, err := AnalyzeWithOptions(nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nSELECT MakeRecord().id AS value;"}}, options)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,10 +60,10 @@ func TestFunctionReturningStructMemberAccessUsesFieldNames(t *testing.T) {
 
 func TestUnaryNotResolvesFunctionAtomically(t *testing.T) {
 	options := Options{Functions: []builtins.Signature{{Name: "IsReady", Returns: model.Type{Kind: "Bool"}}}}
-	if _, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nSELECT true AS value WHERE NOT IsReady();"}}, options); err != nil {
+	if _, err := AnalyzeWithOptions(nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nSELECT true AS value WHERE NOT IsReady();"}}, options); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nSELECT true AS value WHERE NOT Unknown::Ready();"}}, options)
+	_, err := AnalyzeWithOptions(nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nSELECT true AS value WHERE NOT Unknown::Ready();"}}, options)
 	if err == nil || !strings.Contains(err.Error(), "unsupported YQL function") {
 		t.Fatalf("unknown function under NOT: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestConfiguredStructTypeValidation(t *testing.T) {
 		{Kind: "Struct", Fields: []model.StructField{{Name: "", Type: model.Type{Kind: "Uint64"}}}},
 		{Kind: "Uint64", Fields: []model.StructField{{Name: "hidden", Type: model.Type{Kind: "Utf8"}}}},
 	} {
-		_, err := Analyze(nil, nil, Options{Functions: []builtins.Signature{{Name: "Broken", Returns: typ}}})
+		_, err := AnalyzeWithOptions(nil, nil, Options{Functions: []builtins.Signature{{Name: "Broken", Returns: typ}}})
 		if err == nil {
 			t.Fatalf("accepted invalid configured type: %#v", typ)
 		}
@@ -92,6 +92,33 @@ func TestUnknownFunctionsCannotHideInStructuredExpressions(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "unsupported YQL function") {
 			t.Fatalf("%s: %v", expression, err)
 		}
+	}
+}
+
+func TestStructuredMemberBasesAndSuffixes(t *testing.T) {
+	for _, test := range []struct{ name, query, want string }{
+		{"undeclared base", "SELECT $missing.id AS value;", "cannot resolve type of parameter"},
+		{"indexed suffix", "DECLARE $key AS Struct<id:Uint64>; SELECT $key.id[0] AS value;", "unsupported member access"},
+		{"invocation after field", "DECLARE $key AS Struct<id:Uint64>; SELECT $key.id() AS value;", "unsupported member invocation"},
+		{"literal base", "SELECT 1u.field AS value;", "unsupported member base"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\n" + test.query}})
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestStructuredTableColumnMemberAccess(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, payload Struct<label:Utf8,count:Uint64> NOT NULL, PRIMARY KEY(id));`}}
+	got, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\nSELECT r.payload.count AS value FROM records r;"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Queries[0].ResultSets[0].Columns[0].Type.Kind != "Uint64" {
+		t.Fatal(got.Queries[0])
 	}
 }
 

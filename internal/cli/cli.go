@@ -300,7 +300,7 @@ func prepare(c *config.Config, generate bool) ([]output, error) {
 		if err != nil {
 			return nil, err
 		}
-		result, err := analyzer.Analyze(schemas, queries, analysisOptions)
+		result, err := analyzer.AnalyzeWithOptions(schemas, queries, analysisOptions)
 		if err != nil {
 			return nil, err
 		}

@@ -30,6 +30,9 @@ func resolveSetIsDisjoint(args []model.Type) (model.Type, error) {
 	if err != nil || left.Kind != "Dict" || left.Key == nil || left.Elem == nil {
 		return model.Type{}, fmt.Errorf("SetIsDisjoint argument 1 must be Dict<K,V> or Optional<Dict<K,V>>")
 	}
+	if err := validateDictionaryKey(*left.Key); err != nil {
+		return model.Type{}, fmt.Errorf("SetIsDisjoint argument 1: %w", err)
+	}
 	right, rightNullable, err := collectionBase(args[1])
 	if err != nil {
 		return model.Type{}, fmt.Errorf("SetIsDisjoint argument 2: %w", err)
@@ -48,6 +51,9 @@ func resolveSetIsDisjoint(args []model.Type) (model.Type, error) {
 		rightKey = *right.Key
 	default:
 		return model.Type{}, fmt.Errorf("SetIsDisjoint argument 2 must be List<K>, Dict<K,V>, or an Optional form")
+	}
+	if err := validateDictionaryKey(rightKey); err != nil {
+		return model.Type{}, fmt.Errorf("SetIsDisjoint argument 2: %w", err)
 	}
 	if !left.Key.Equal(rightKey) {
 		return model.Type{}, fmt.Errorf("SetIsDisjoint arguments must have the same key type, got %s and %s", left.Key.String(), rightKey.String())
