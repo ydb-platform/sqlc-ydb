@@ -26,9 +26,9 @@ func representativeAnalysis() *model.AnalysisResult {
 		Queries: []model.AnalyzedQuery{
 			{
 				Name: "GetAuthor", Command: model.One,
-				SQL:                    "DECLARE $author_id AS Uint64;\nSELECT author_id, name, biography FROM authors WHERE author_id = $author_id;\n",
-				SQLWithoutDeclarations: "\nSELECT author_id, name, biography FROM authors WHERE author_id = $author_id;\n",
-				Parameters:             []model.Parameter{{Name: "author_id", Type: u64}},
+				SQL: "DECLARE $author_id AS Uint64;\nSELECT author_id, name, biography FROM authors WHERE author_id = $author_id;\n",
+
+				Parameters: []model.Parameter{{Name: "author_id", Type: u64}},
 				ResultSets: []model.ResultSet{{Columns: []model.Column{
 					{Name: "author_id", Type: u64},
 					{Name: "name", Type: utf8},
@@ -37,8 +37,8 @@ func representativeAnalysis() *model.AnalysisResult {
 			},
 			{
 				Name: "CreateBook", Command: model.One,
-				SQL:                    "DECLARE $book_id AS Uint64;\nDECLARE $year AS Int32;\nDECLARE $available AS Timestamp;\nDECLARE $tags AS Json;\nINSERT INTO books (book_id, year, available, tags) VALUES ($book_id, $year, $available, $tags) RETURNING book_id, year, available, tags;",
-				SQLWithoutDeclarations: "\n\n\n\nINSERT INTO books (book_id, year, available, tags) VALUES ($book_id, $year, $available, $tags) RETURNING book_id, year, available, tags;",
+				SQL: "DECLARE $book_id AS Uint64;\nDECLARE $year AS Int32;\nDECLARE $available AS Timestamp;\nDECLARE $tags AS Json;\nINSERT INTO books (book_id, year, available, tags) VALUES ($book_id, $year, $available, $tags) RETURNING book_id, year, available, tags;",
+
 				Parameters: []model.Parameter{
 					{Name: "book_id", Type: u64},
 					{Name: "year", Type: i32},
@@ -52,7 +52,7 @@ func representativeAnalysis() *model.AnalysisResult {
 					{Name: "tags", Type: jsonType},
 				}}},
 			},
-			{Name: "DeleteAuthor", Command: model.Exec, SQL: "DELETE FROM authors;", SQLWithoutDeclarations: "DELETE FROM authors;"},
+			{Name: "DeleteAuthor", Command: model.Exec, SQL: "DELETE FROM authors;"},
 		},
 	}
 }
@@ -133,7 +133,7 @@ func TestGenerateUsesLosslessOfficialSDKContract(t *testing.T) {
 func TestOneManyExecAndOptionalShapes(t *testing.T) {
 	a := representativeAnalysis()
 	a.Queries = append(a.Queries, model.AnalyzedQuery{
-		Name: "ListAuthors", Command: model.Many, SQL: "SELECT author_id, name, biography FROM authors;", SQLWithoutDeclarations: "SELECT author_id, name, biography FROM authors;",
+		Name: "ListAuthors", Command: model.Many, SQL: "SELECT author_id, name, biography FROM authors;",
 		ResultSets: []model.ResultSet{{Columns: a.Queries[0].ResultSets[0].Columns}},
 	})
 	files, err := Generate(a, Options{})
@@ -187,6 +187,9 @@ func TestSQLLiteralRoundTripsThroughPHP(t *testing.T) {
 		nowdoc bool
 	}{
 		{name: "newline", value: "SELECT 1;\nSELECT 2;", nowdoc: true},
+		{name: "declared relative indentation", value: "  DECLARE $id AS Uint64; -- keep\n\n    SELECT 'first\n  second';\n", nowdoc: true},
+		{name: "trailing source whitespace", value: "DECLARE $id AS Uint64; \n \t \nSELECT $id;\t", nowdoc: false},
+
 		{name: "trailing LF", value: "SELECT 1;\n", nowdoc: true},
 		{name: "CRLF", value: "SELECT 1;\r\nSELECT 2;\r\n", nowdoc: true},
 		{name: "delimiter collisions", value: "-- SQLC_YDB_YQL\n-- SQLC_YDB_YQL_2\nSELECT 1;", nowdoc: true},
@@ -242,7 +245,7 @@ func TestRejectsUnsupportedInputsAndCollisions(t *testing.T) {
 			Name: "objects", Columns: []model.Column{{Name: "this", Type: model.Type{Kind: "Utf8"}}},
 		}}}}, want: `invalid generated property name "this"`},
 		{name: "type", a: &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
-			Name: "Bad", Command: model.Exec, SQL: "SELECT $x;", SQLWithoutDeclarations: "SELECT $x;",
+			Name: "Bad", Command: model.Exec, SQL: "SELECT $x;",
 			Parameters: []model.Parameter{{Name: "x", Type: model.Type{Kind: "List"}}},
 		}}}, want: `unsupported YQL type "List"`},
 		{name: "malformed result", a: &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
@@ -304,7 +307,7 @@ func TestSupportsAllScalarTypesWithoutFallbacks(t *testing.T) {
 		columns = append(columns, model.Column{Name: name, Type: typ}, model.Column{Name: "optional_" + name, Type: model.Optional(typ)})
 	}
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
-		Name: "AllTypes", Command: model.One, SQL: "SELECT 1;", SQLWithoutDeclarations: "SELECT 1;",
+		Name: "AllTypes", Command: model.One, SQL: "SELECT 1;",
 		Parameters: params, ResultSets: []model.ResultSet{{Columns: columns}},
 	}}}
 	if _, err := Generate(a, Options{}); err != nil {
@@ -314,4 +317,86 @@ func TestSupportsAllScalarTypesWithoutFallbacks(t *testing.T) {
 
 func phpQuote(value string) string {
 	return "'" + strings.ReplaceAll(strings.ReplaceAll(value, `\`, `\\`), `'`, `\'`) + "'"
+}
+
+func TestStructListParameter(t *testing.T) {
+	typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, {Name: "tags", Type: model.Optional(model.Type{Kind: "Json"})}}}}
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
+	files, err := Generate(a, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output strings.Builder
+	for _, f := range files {
+		output.Write(f.Content)
+	}
+	for _, want := range []string{"CreateBooksBooksItem", "list<CreateBooksBooksItem>", "new \\Ydb\\ListType", "new \\Ydb\\StructMember", "typedOptionalJson($item->tags", "array_values($books)", "\n                    'list_type' => new \\Ydb\\ListType([\n                        'item'", "\n                    'items' => array_map(\n                        static fn"} {
+		if !strings.Contains(output.String(), want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+	a.Queries[0].Parameters[0].Type.Elem.Fields[1].Type = model.Type{Kind: "List", Elem: &model.Type{Kind: "Utf8"}}
+	if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), "unsupported YQL type") {
+		t.Fatalf("nested list: %v", err)
+	}
+}
+
+func TestStructFieldCollision(t *testing.T) {
+	typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, {Name: "bookId", Type: model.Type{Kind: "Uint64"}}}}}
+	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
+	if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), "collision") {
+		t.Fatalf("field collision: %v", err)
+	}
+}
+
+func TestSQLLiteralBlankLinesDoNotAddTrailingWhitespace(t *testing.T) {
+	for _, sql := range []string{"DECLARE $id AS Uint64;\n\nSELECT $id;", "DECLARE $id AS Uint64; \n \t \nSELECT $id;\t"} {
+		literal := phpSQLString(sql, "    ")
+		for _, line := range strings.Split(literal, "\n") {
+			if strings.HasSuffix(line, " ") || strings.HasSuffix(line, "\t") {
+				t.Fatalf("SQL literal adds source trailing whitespace: %q", line)
+			}
+		}
+	}
+}
+
+func TestStructListParametersHaveNamedDTOsAndRejectInvalidShapes(t *testing.T) {
+	typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "id", Type: model.Type{Kind: "Uint64"}}}}}
+	query := model.AnalyzedQuery{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT 1;", Parameters: []model.Parameter{{Name: "books", Type: typ}, {Name: "minimum", Type: model.Type{Kind: "Uint64"}}}}
+	files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{query}}, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output strings.Builder
+	for _, file := range files {
+		output.Write(file.Content)
+	}
+	for _, want := range []string{"@var list<CreateBooksBooksItem>", "public readonly array $books", "$params->books", "final class CreateBooksBooksItem"} {
+		if !strings.Contains(output.String(), want) {
+			t.Errorf("missing named parameter contract %s", want)
+		}
+	}
+	for _, tc := range []struct {
+		name   string
+		fields []model.StructField
+		table  string
+		want   string
+	}{
+		{name: "empty struct", want: "at least one scalar field"},
+		{name: "invalid property", fields: []model.StructField{{Name: "123", Type: model.Type{Kind: "Uint64"}}}, want: "invalid generated property"},
+		{name: "type collision", fields: typ.Elem.Fields, table: "create_books_books_item", want: "class name collision"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			q := query
+			q.Parameters = append([]model.Parameter(nil), query.Parameters...)
+			q.Parameters[0].Type = model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: tc.fields}}
+			a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{q}}
+			if tc.table != "" {
+				a.Catalog.Tables = []model.Table{{Name: tc.table, Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}}}}}
+			}
+			if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v, want %s", err, tc.want)
+			}
+		})
+	}
 }

@@ -34,7 +34,7 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "SELECT COUNT(*) AS pilot_count FROM pilots;", TxMode.SERIALIZABLE_RW, _params))
+                    "SELECT COUNT(*) AS pilot_count FROM pilots;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -53,7 +53,7 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "SELECT id, name FROM pilots ORDER BY id LIMIT 5;", TxMode.SERIALIZABLE_RW, _params))
+                    "SELECT id, name FROM pilots ORDER BY id LIMIT 5;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -77,7 +77,7 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 _session.createQuery(
-                "DELETE FROM pilots WHERE id = \$pilot_id;", TxMode.SERIALIZABLE_RW, _params).execute()
+                    "DELETE FROM pilots WHERE id = \$pilot_id;", TxMode.SERIALIZABLE_RW, _params).execute()
             }.join().getStatus().expectSuccess()
         }
     }

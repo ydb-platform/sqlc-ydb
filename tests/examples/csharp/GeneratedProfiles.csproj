@@ -10,6 +10,7 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="../../../examples/*/csharp/dapper/*.cs" />
+    <Compile Include="../../../examples/batch/csharp/adonet/*.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Dapper" Version="2.1.79" />

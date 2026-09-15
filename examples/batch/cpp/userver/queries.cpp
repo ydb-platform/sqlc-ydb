@@ -6,10 +6,8 @@ namespace batch::userver {
 // -- name: GetAuthor :one
 std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(
-            SELECT author_id, name, biography FROM authors
-            WHERE author_id = $author_id;
-        )sql",
+        "SELECT author_id, name, biography FROM authors\n"
+        "WHERE author_id = $author_id;",
         ::userver::ydb::Query::Name{"GetAuthor"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -32,10 +30,8 @@ std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
 // -- name: DeleteBookExecResult :exec
 void Queries::DeleteBookExecResult(std::uint64_t book_id) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(
-            DELETE FROM books
-            WHERE book_id = $book_id;
-        )sql",
+        "DELETE FROM books\n"
+        "WHERE book_id = $book_id;",
         ::userver::ydb::Query::Name{"DeleteBookExecResult"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -49,10 +45,8 @@ void Queries::DeleteBookExecResult(std::uint64_t book_id) const {
 // -- name: DeleteBook :exec
 void Queries::DeleteBook(std::uint64_t book_id) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(
-            DELETE FROM books
-            WHERE book_id = $book_id;
-        )sql",
+        "DELETE FROM books\n"
+        "WHERE book_id = $book_id;",
         ::userver::ydb::Query::Name{"DeleteBook"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -66,10 +60,8 @@ void Queries::DeleteBook(std::uint64_t book_id) const {
 // -- name: DeleteBookNamedFunc :exec
 void Queries::DeleteBookNamedFunc(std::uint64_t book_id) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(
-            DELETE FROM books
-            WHERE book_id = $book_id;
-        )sql",
+        "DELETE FROM books\n"
+        "WHERE book_id = $book_id;",
         ::userver::ydb::Query::Name{"DeleteBookNamedFunc"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -83,10 +75,8 @@ void Queries::DeleteBookNamedFunc(std::uint64_t book_id) const {
 // -- name: DeleteBookNamedSign :exec
 void Queries::DeleteBookNamedSign(std::uint64_t book_id) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(
-            DELETE FROM books
-            WHERE book_id = $book_id;
-        )sql",
+        "DELETE FROM books\n"
+        "WHERE book_id = $book_id;",
         ::userver::ydb::Query::Name{"DeleteBookNamedSign"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -100,11 +90,9 @@ void Queries::DeleteBookNamedSign(std::uint64_t book_id) const {
 // -- name: BooksByYear :many
 std::vector<BooksByYearRow> Queries::BooksByYear(std::int32_t year) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(
-            SELECT book_id, author_id, isbn, book_type, title, year, available, tags
-            FROM books
-            WHERE year = $year;
-        )sql",
+        "SELECT book_id, author_id, isbn, book_type, title, year, available, tags\n"
+        "FROM books\n"
+        "WHERE year = $year;",
         ::userver::ydb::Query::Name{"BooksByYear"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -133,11 +121,9 @@ std::vector<BooksByYearRow> Queries::BooksByYear(std::int32_t year) const {
 // -- name: CreateAuthor :one
 std::optional<CreateAuthorRow> Queries::CreateAuthor(std::uint64_t author_id, const ::userver::ydb::Utf8& name, const std::optional<::userver::formats::json::Value>& biography) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(
-            INSERT INTO authors (author_id, name, biography)
-            VALUES ($author_id, $name, $biography)
-            RETURNING author_id, name, biography;
-        )sql",
+        "INSERT INTO authors (author_id, name, biography)\n"
+        "VALUES ($author_id, $name, $biography)\n"
+        "RETURNING author_id, name, biography;",
         ::userver::ydb::Query::Name{"CreateAuthor"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -160,11 +146,9 @@ std::optional<CreateAuthorRow> Queries::CreateAuthor(std::uint64_t author_id, co
 // -- name: CreateBook :one
 std::optional<CreateBookRow> Queries::CreateBook(std::uint64_t book_id, std::uint64_t author_id, const ::userver::ydb::Utf8& isbn, const ::userver::ydb::Utf8& book_type, const ::userver::ydb::Utf8& title, std::int32_t year, const std::chrono::system_clock::time_point& available, const ::userver::formats::json::Value& tags) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(
-            INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)
-            VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)
-            RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;
-        )sql",
+        "INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)\n"
+        "VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)\n"
+        "RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;",
         ::userver::ydb::Query::Name{"CreateBook"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -192,11 +176,9 @@ std::optional<CreateBookRow> Queries::CreateBook(std::uint64_t book_id, std::uin
 // -- name: UpdateBook :exec
 void Queries::UpdateBook(const ::userver::ydb::Utf8& title, const ::userver::formats::json::Value& tags, std::uint64_t book_id) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(
-            UPDATE books
-            SET title = $title, tags = $tags
-            WHERE book_id = $book_id;
-        )sql",
+        "UPDATE books\n"
+        "SET title = $title, tags = $tags\n"
+        "WHERE book_id = $book_id;",
         ::userver::ydb::Query::Name{"UpdateBook"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -210,10 +192,8 @@ void Queries::UpdateBook(const ::userver::ydb::Utf8& title, const ::userver::for
 // -- name: GetBiography :one
 std::optional<GetBiographyRow> Queries::GetBiography(std::uint64_t author_id) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(
-            SELECT biography FROM authors
-            WHERE author_id = $author_id;
-        )sql",
+        "SELECT biography FROM authors\n"
+        "WHERE author_id = $author_id;",
         ::userver::ydb::Query::Name{"GetBiography"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -229,6 +209,35 @@ std::optional<GetBiographyRow> Queries::GetBiography(std::uint64_t author_id) co
     return GetBiographyRow{
         sqlc_row.Get<std::optional<::userver::formats::json::Value>>("biography"),
     };
+}
+
+// -- name: CreateBooks :exec
+void Queries::CreateBooks(const std::vector<CreateBooksBooksItem>& books) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "DECLARE $books AS List<Struct<\n"
+        "    book_id: Uint64,\n"
+        "    author_id: Uint64,\n"
+        "    isbn: Utf8,\n"
+        "    book_type: Utf8,\n"
+        "    title: Utf8,\n"
+        "    year: Int32,\n"
+        "    available: Timestamp,\n"
+        "    tags: Json\n"
+        ">>;\n"
+        "INSERT INTO books (\n"
+        "    book_id, author_id, isbn, book_type, title, year, available, tags\n"
+        ")\n"
+        "SELECT\n"
+        "    book_id, author_id, isbn, book_type, title, year, available, tags\n"
+        "FROM AS_TABLE($books);",
+        ::userver::ydb::Query::Name{"CreateBooks"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    static_cast<void>(
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$books", books)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$books", books)
+    );
 }
 
 }  // namespace batch::userver

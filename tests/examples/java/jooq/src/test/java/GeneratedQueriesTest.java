@@ -22,11 +22,12 @@ class GeneratedQueriesTest {
             statements.add(ctx.sql());
             return new MockResult[] {new MockResult(0, DSL.using(YDB.DIALECT).newResult())};
         })) {
-            var dsl = YDB.using(connection);
+            var dsl = YDB.using(withNamedBinding(connection));
             for (String family : List.of("authors", "batch", "booktest", "jets", "ondeck")) {
                 Class<?> type = Class.forName(family + ".jooq.Queries");
                 Object queries = type.getConstructor(tech.ydb.jooq.YdbDSLContext.class).newInstance(dsl);
                 for (Method method : type.getDeclaredMethods()) {
+                    if (!java.lang.reflect.Modifier.isPublic(method.getModifiers()) || method.isSynthetic()) continue;
                     Object[] args = new Object[method.getParameterCount()];
                     for (int i = 0; i < args.length; i++) {
                         Class<?> parameter = method.getParameterTypes()[i];
@@ -34,6 +35,7 @@ class GeneratedQueriesTest {
                         else if (parameter == String.class) args[i] = "value";
                         else if (parameter == Integer.class) args[i] = 2026;
                         else if (parameter == Instant.class) args[i] = Instant.parse("2026-01-01T00:00:00.123456Z");
+                        else if (parameter == List.class) args[i] = List.of(new batch.jooq.CreateBooksBooksItem(-1L, 42L, "isbn", "paper", "Batch", 2026, Instant.EPOCH, "[]"));
                         else if (parameter == JSON.class) args[i] = JSON.valueOf("[\"tag\"]");
                         else fail("uncovered parameter type " + parameter);
                     }
@@ -46,16 +48,75 @@ class GeneratedQueriesTest {
                     assertEquals(before + 1, statements.size(), family + "." + method.getName());
                     String sql = statements.get(before);
                     assertFalse(sql.contains("-- name:"), sql);
-                    if (method.getName().startsWith("create") || method.getName().equals("updateVenueName")) {
+                    if ((method.getName().startsWith("create") && !method.getName().equals("createBooks")) || method.getName().equals("updateVenueName")) {
                         assertTrue(sql.toLowerCase().contains("returning"), sql);
                     }
                     if (method.getName().equals("booksByTags")) {
                         assertTrue(sql.contains("Yson::ConvertToStringList"), sql);
-                        assertTrue(sql.contains("left outer join") || sql.contains("left join"), sql);
+                        assertTrue(sql.toLowerCase().contains("left outer join") || sql.toLowerCase().contains("left join"), sql);
                     }
                 }
             }
         }
-        assertEquals(40, statements.size());
+        assertEquals(41, statements.size());
     }
+    @Test
+    void declaredQueryReadsDialectCarriers() throws Exception {
+        var schema = booktest.jooq.Tables.BOOKS;
+        var authors = booktest.jooq.Tables.AUTHORS;
+        try (var connection = new MockConnection(ctx -> {
+            assertTrue(ctx.sql().contains("DECLARE $tags AS Json;"));
+            var dsl = DSL.using(YDB.DIALECT);
+            var result = dsl.newResult(schema.BOOK_ID, schema.TITLE, authors.NAME, schema.ISBN, schema.TAGS);
+            result.add(dsl.newRecord(schema.BOOK_ID, schema.TITLE, authors.NAME, schema.ISBN, schema.TAGS)
+                    .values(ULong.MAX, "Book", null, "isbn", JSON.valueOf("[1,true]")));
+            return new MockResult[]{new MockResult(1, result)};
+        })) {
+            var queries = new booktest.jooq.Queries(YDB.using(withNamedBinding(connection)));
+            var rows = queries.booksByTags(JSON.valueOf("[]"));
+            assertEquals(1, rows.size());
+            assertEquals(ULong.MAX, rows.get(0).bookId());
+            assertNull(rows.get(0).name());
+            assertEquals("[1,true]", rows.get(0).tags().data());
+        }
+    }
+
+    // The mock has no YDB extension; adapt named setters while retaining SQL execution tracing.
+    // Published-driver named value conversion is exercised by the generator SDK tests.
+    private static java.sql.Connection withNamedBinding(java.sql.Connection connection) {
+        var named = (tech.ydb.jdbc.YdbConnection) java.lang.reflect.Proxy.newProxyInstance(
+                GeneratedQueriesTest.class.getClassLoader(), new Class<?>[]{tech.ydb.jdbc.YdbConnection.class}, (proxy, method, args) -> {
+                    if (!method.getName().equals("prepareStatement")) throw new AssertionError(method);
+                    assertEquals(tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY, args[1]);
+                    assertTrue(((String) args[0]).contains("DECLARE"));
+                    var statement = connection.prepareStatement((String) args[0]);
+                    return java.lang.reflect.Proxy.newProxyInstance(GeneratedQueriesTest.class.getClassLoader(),
+                            new Class<?>[]{tech.ydb.jdbc.YdbPreparedStatement.class}, (statementProxy, operation, values) -> {
+                                if (operation.getName().startsWith("set") && values[0] instanceof String) {
+                                    if (operation.getName().equals("setObject")) assertInstanceOf(tech.ydb.table.values.Value.class, values[1]);
+                                    return null;
+                                }
+                                if (operation.getName().equals("executeQuery")) {
+                                    var rows = statement.executeQuery();
+                                    return java.lang.reflect.Proxy.newProxyInstance(GeneratedQueriesTest.class.getClassLoader(),
+                                            new Class<?>[]{tech.ydb.jdbc.YdbResultSet.class}, (rowProxy, getter, indexes) -> {
+                                                if (getter.getName().equals("getMetaData")) {
+                                                    var metadata = rows.getMetaData();
+                                                    return java.lang.reflect.Proxy.newProxyInstance(GeneratedQueriesTest.class.getClassLoader(),
+                                                            new Class<?>[]{tech.ydb.jdbc.YdbResultSetMetaData.class}, (metaProxy, property, arguments) ->
+                                                                    java.sql.ResultSetMetaData.class.getMethod(property.getName(), property.getParameterTypes()).invoke(metadata, arguments));
+                                                }
+                                                return java.sql.ResultSet.class.getMethod(getter.getName(), getter.getParameterTypes()).invoke(rows, indexes);
+                                            });
+                                }
+                                return java.sql.PreparedStatement.class.getMethod(operation.getName(), operation.getParameterTypes()).invoke(statement, values);
+                            });
+                });
+        return (java.sql.Connection) java.lang.reflect.Proxy.newProxyInstance(GeneratedQueriesTest.class.getClassLoader(),
+                new Class<?>[]{java.sql.Connection.class}, (proxy, method, args) -> {
+                    if (method.getName().equals("unwrap") && args[0] == tech.ydb.jdbc.YdbConnection.class) return named;
+                    return method.invoke(connection, args);
+                });
+    }
+
 }

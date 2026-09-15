@@ -35,7 +35,7 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "SELECT id, name, bio FROM authors WHERE id = \$author_id;", TxMode.SERIALIZABLE_RW, _params))
+                    "SELECT id, name, bio FROM authors WHERE id = \$author_id;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -43,7 +43,7 @@ class Queries {
         if (!_rows.next()) return null
         val _value0: Long = _rows.getColumn(0).getUint64()
         val _value1: String = _rows.getColumn(1).getText()
-        val _value2: String? = if (_rows.getColumn(2).isOptionalItemPresent()) _rows.getColumn(2).getOptionalItem().getText() else null
+        val _value2: String? = _rows.getColumn(2).getText()
         return GetAuthorRow(_value0, _value1, _value2)
     }
 
@@ -56,7 +56,7 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "SELECT id, name, bio FROM authors ORDER BY name;", TxMode.SERIALIZABLE_RW, _params))
+                    "SELECT id, name, bio FROM authors ORDER BY name;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -65,7 +65,7 @@ class Queries {
         while (_rows.next()) {
             val _value0: Long = _rows.getColumn(0).getUint64()
             val _value1: String = _rows.getColumn(1).getText()
-            val _value2: String? = if (_rows.getColumn(2).isOptionalItemPresent()) _rows.getColumn(2).getOptionalItem().getText() else null
+            val _value2: String? = _rows.getColumn(2).getText()
             _items.add(ListAuthorsRow(_value0, _value1, _value2))
         }
         return _items
@@ -81,7 +81,7 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "SELECT name FROM authors WHERE id = \$author_id;", TxMode.SERIALIZABLE_RW, _params))
+                    "SELECT name FROM authors WHERE id = \$author_id;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -96,7 +96,7 @@ class Queries {
         val _params = Params.create()
         _params.put("\$author_id", PrimitiveValue.newUint64(authorId))
         _params.put("\$author_name", PrimitiveValue.newText(authorName))
-        _params.put("\$biography", if (biography == null) OptionalType.of(PrimitiveType.Text).emptyValue() else OptionalType.of(PrimitiveType.Text).newValue(PrimitiveValue.newText(biography)))
+        _params.put("\$biography", if (biography == null) OptionalType.of(PrimitiveType.Text).emptyValue() else PrimitiveValue.newText(biography).makeOptional())
         val _query = if (transaction != null) {
             QueryReader.readFrom(transaction.createQuery(
                 "INSERT INTO `authors` (`id`, `name`, `bio`)\n" +
@@ -105,9 +105,9 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "INSERT INTO `authors` (`id`, `name`, `bio`)\n" +
-                "VALUES (\$author_id, \$author_name, \$biography)\n" +
-                "RETURNING `id`, `name`, `bio`;", TxMode.SERIALIZABLE_RW, _params))
+                    "INSERT INTO `authors` (`id`, `name`, `bio`)\n" +
+                    "VALUES (\$author_id, \$author_name, \$biography)\n" +
+                    "RETURNING `id`, `name`, `bio`;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -115,7 +115,7 @@ class Queries {
         if (!_rows.next()) return null
         val _value0: Long = _rows.getColumn(0).getUint64()
         val _value1: String = _rows.getColumn(1).getText()
-        val _value2: String? = if (_rows.getColumn(2).isOptionalItemPresent()) _rows.getColumn(2).getOptionalItem().getText() else null
+        val _value2: String? = _rows.getColumn(2).getText()
         return CreateAuthorRow(_value0, _value1, _value2)
     }
 
@@ -124,7 +124,7 @@ class Queries {
         val _params = Params.create()
         _params.put("\$author_id", PrimitiveValue.newUint64(authorId))
         _params.put("\$author_name", PrimitiveValue.newText(authorName))
-        _params.put("\$biography", if (biography == null) OptionalType.of(PrimitiveType.Text).emptyValue() else OptionalType.of(PrimitiveType.Text).newValue(PrimitiveValue.newText(biography)))
+        _params.put("\$biography", if (biography == null) OptionalType.of(PrimitiveType.Text).emptyValue() else PrimitiveValue.newText(biography).makeOptional())
         if (transaction != null) {
             transaction.createQuery(
                 "UPSERT INTO authors (id, name, bio)\n" +
@@ -132,8 +132,8 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 _session.createQuery(
-                "UPSERT INTO authors (id, name, bio)\n" +
-                "VALUES (\$author_id, \$author_name, \$biography);", TxMode.SERIALIZABLE_RW, _params).execute()
+                    "UPSERT INTO authors (id, name, bio)\n" +
+                    "VALUES (\$author_id, \$author_name, \$biography);", TxMode.SERIALIZABLE_RW, _params).execute()
             }.join().getStatus().expectSuccess()
         }
     }
@@ -148,7 +148,7 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 _session.createQuery(
-                "DELETE FROM authors WHERE id = \$author_id;", TxMode.SERIALIZABLE_RW, _params).execute()
+                    "DELETE FROM authors WHERE id = \$author_id;", TxMode.SERIALIZABLE_RW, _params).execute()
             }.join().getStatus().expectSuccess()
         }
     }

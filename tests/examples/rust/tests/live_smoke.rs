@@ -9,7 +9,11 @@ async fn exec(client: &mut ydb::QueryClient, sql: &str) -> ydb::YdbResult<()> {
 }
 
 async fn authors_smoke(client: &mut ydb::QueryClient) -> ydb::YdbResult<()> {
-    exec(client, include_str!("../../../../examples/authors/schema.sql")).await?;
+    exec(
+        client,
+        include_str!("../../../../examples/authors/schema.sql"),
+    )
+    .await?;
     let result = async {
         let mut queries = authors::queries::Queries::new(client);
         let created = queries
@@ -41,7 +45,11 @@ async fn authors_smoke(client: &mut ydb::QueryClient) -> ydb::YdbResult<()> {
 }
 
 async fn batch_smoke(client: &mut ydb::QueryClient) -> ydb::YdbResult<()> {
-    exec(client, include_str!("../../../../examples/batch/schema.sql")).await?;
+    exec(
+        client,
+        include_str!("../../../../examples/batch/schema.sql"),
+    )
+    .await?;
     let result = async {
         let available = SystemTime::UNIX_EPOCH
             + Duration::from_secs(1_700_000_000)
@@ -80,6 +88,52 @@ async fn batch_smoke(client: &mut ydb::QueryClient) -> ydb::YdbResult<()> {
         assert_eq!(book.tags, "[\"rust\"]");
         assert_eq!(book.available, available);
         assert_eq!(queries.books_by_year().year(2026).call().await?.len(), 1);
+        queries
+            .create_books()
+            .books(Vec::<batch::models::CreateBooksBooksItem>::new())
+            .call()
+            .await?;
+        let books = [
+            batch::models::CreateBooksBooksItem {
+                book_id: u64::MAX,
+                author_id: 1,
+                isbn: "batch-high".into(),
+                book_type: "FICTION".into(),
+                title: "Unicode ☀".into(),
+                year: 2027,
+                available,
+                tags: "[\"batch\"]".into(),
+            },
+            batch::models::CreateBooksBooksItem {
+                book_id: 3,
+                author_id: 1,
+                isbn: "batch-3".into(),
+                book_type: "REFERENCE".into(),
+                title: "Third".into(),
+                year: 2027,
+                available,
+                tags: "{}".into(),
+            },
+        ];
+        queries
+            .create_books()
+            .books(books.as_slice())
+            .call()
+            .await?;
+        let inserted = queries.books_by_year().year(2027).call().await?;
+        assert_eq!(inserted.len(), 2);
+        assert!(inserted.iter().any(|book| book.book_id == u64::MAX
+            && book.title == "Unicode ☀"
+            && book.tags == "[\"batch\"]"
+            && book.available == available));
+        assert!(
+            queries
+                .create_books()
+                .books(books.iter().take(1))
+                .call()
+                .await
+                .is_err()
+        );
         queries
             .update_book()
             .title("Updated")
@@ -120,7 +174,11 @@ async fn batch_smoke(client: &mut ydb::QueryClient) -> ydb::YdbResult<()> {
 }
 
 async fn booktest_smoke(client: &mut ydb::QueryClient) -> ydb::YdbResult<()> {
-    exec(client, include_str!("../../../../examples/booktest/schema.sql")).await?;
+    exec(
+        client,
+        include_str!("../../../../examples/booktest/schema.sql"),
+    )
+    .await?;
     let result = async {
         let mut queries = booktest::queries::Queries::new(client);
         let available = SystemTime::UNIX_EPOCH + Duration::from_secs(1_710_000_000);

@@ -18,10 +18,8 @@ std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
             .AddParam("$author_id").Uint64(author_id).Build()
             .Build();
         auto sqlc_result = sqlc_session.ExecuteQuery(
-            R"sql(
-                SELECT author_id, name, biography FROM authors
-                WHERE author_id = $author_id;
-            )sql",
+            "SELECT author_id, name, biography FROM authors\n"
+            "WHERE author_id = $author_id;",
             sqlc_tx,
             sqlc_params,
             this->execute_settings_
@@ -65,10 +63,8 @@ void Queries::DeleteBookExecResult(std::uint64_t book_id) const {
             .AddParam("$book_id").Uint64(book_id).Build()
             .Build();
         auto sqlc_result = sqlc_session.ExecuteQuery(
-            R"sql(
-                DELETE FROM books
-                WHERE book_id = $book_id;
-            )sql",
+            "DELETE FROM books\n"
+            "WHERE book_id = $book_id;",
             sqlc_tx,
             sqlc_params,
             this->execute_settings_
@@ -93,10 +89,8 @@ void Queries::DeleteBook(std::uint64_t book_id) const {
             .AddParam("$book_id").Uint64(book_id).Build()
             .Build();
         auto sqlc_result = sqlc_session.ExecuteQuery(
-            R"sql(
-                DELETE FROM books
-                WHERE book_id = $book_id;
-            )sql",
+            "DELETE FROM books\n"
+            "WHERE book_id = $book_id;",
             sqlc_tx,
             sqlc_params,
             this->execute_settings_
@@ -121,10 +115,8 @@ void Queries::DeleteBookNamedFunc(std::uint64_t book_id) const {
             .AddParam("$book_id").Uint64(book_id).Build()
             .Build();
         auto sqlc_result = sqlc_session.ExecuteQuery(
-            R"sql(
-                DELETE FROM books
-                WHERE book_id = $book_id;
-            )sql",
+            "DELETE FROM books\n"
+            "WHERE book_id = $book_id;",
             sqlc_tx,
             sqlc_params,
             this->execute_settings_
@@ -149,10 +141,8 @@ void Queries::DeleteBookNamedSign(std::uint64_t book_id) const {
             .AddParam("$book_id").Uint64(book_id).Build()
             .Build();
         auto sqlc_result = sqlc_session.ExecuteQuery(
-            R"sql(
-                DELETE FROM books
-                WHERE book_id = $book_id;
-            )sql",
+            "DELETE FROM books\n"
+            "WHERE book_id = $book_id;",
             sqlc_tx,
             sqlc_params,
             this->execute_settings_
@@ -178,11 +168,9 @@ std::vector<BooksByYearRow> Queries::BooksByYear(std::int32_t year) const {
             .AddParam("$year").Int32(year).Build()
             .Build();
         auto sqlc_result = sqlc_session.ExecuteQuery(
-            R"sql(
-                SELECT book_id, author_id, isbn, book_type, title, year, available, tags
-                FROM books
-                WHERE year = $year;
-            )sql",
+            "SELECT book_id, author_id, isbn, book_type, title, year, available, tags\n"
+            "FROM books\n"
+            "WHERE year = $year;",
             sqlc_tx,
             sqlc_params,
             this->execute_settings_
@@ -235,11 +223,9 @@ std::optional<CreateAuthorRow> Queries::CreateAuthor(std::uint64_t author_id, co
             .AddParam("$biography").OptionalJson(biography).Build()
             .Build();
         auto sqlc_result = sqlc_session.ExecuteQuery(
-            R"sql(
-                INSERT INTO authors (author_id, name, biography)
-                VALUES ($author_id, $name, $biography)
-                RETURNING author_id, name, biography;
-            )sql",
+            "INSERT INTO authors (author_id, name, biography)\n"
+            "VALUES ($author_id, $name, $biography)\n"
+            "RETURNING author_id, name, biography;",
             sqlc_tx,
             sqlc_params,
             this->execute_settings_
@@ -291,11 +277,9 @@ std::optional<CreateBookRow> Queries::CreateBook(std::uint64_t book_id, std::uin
             .AddParam("$tags").Json(tags).Build()
             .Build();
         auto sqlc_result = sqlc_session.ExecuteQuery(
-            R"sql(
-                INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)
-                VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)
-                RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;
-            )sql",
+            "INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)\n"
+            "VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)\n"
+            "RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;",
             sqlc_tx,
             sqlc_params,
             this->execute_settings_
@@ -346,11 +330,9 @@ void Queries::UpdateBook(const std::string& title, const std::string& tags, std:
             .AddParam("$book_id").Uint64(book_id).Build()
             .Build();
         auto sqlc_result = sqlc_session.ExecuteQuery(
-            R"sql(
-                UPDATE books
-                SET title = $title, tags = $tags
-                WHERE book_id = $book_id;
-            )sql",
+            "UPDATE books\n"
+            "SET title = $title, tags = $tags\n"
+            "WHERE book_id = $book_id;",
             sqlc_tx,
             sqlc_params,
             this->execute_settings_
@@ -376,10 +358,8 @@ std::optional<GetBiographyRow> Queries::GetBiography(std::uint64_t author_id) co
             .AddParam("$author_id").Uint64(author_id).Build()
             .Build();
         auto sqlc_result = sqlc_session.ExecuteQuery(
-            R"sql(
-                SELECT biography FROM authors
-                WHERE author_id = $author_id;
-            )sql",
+            "SELECT biography FROM authors\n"
+            "WHERE author_id = $author_id;",
             sqlc_tx,
             sqlc_params,
             this->execute_settings_
@@ -412,6 +392,76 @@ std::optional<GetBiographyRow> Queries::GetBiography(std::uint64_t author_id) co
         sqlc_parser.ColumnParser("biography").GetOptionalJson(),
     };
     return sqlc_row;
+}
+
+namespace {
+NYdb::TValue sqlc_bind_CreateBooksBooksItem(const std::vector<CreateBooksBooksItem>& sqlc_items) {
+    const auto sqlc_type = NYdb::TTypeBuilder().BeginList().BeginStruct()
+        .AddMember("book_id").Primitive(NYdb::EPrimitiveType::Uint64)
+        .AddMember("author_id").Primitive(NYdb::EPrimitiveType::Uint64)
+        .AddMember("isbn").Primitive(NYdb::EPrimitiveType::Utf8)
+        .AddMember("book_type").Primitive(NYdb::EPrimitiveType::Utf8)
+        .AddMember("title").Primitive(NYdb::EPrimitiveType::Utf8)
+        .AddMember("year").Primitive(NYdb::EPrimitiveType::Int32)
+        .AddMember("available").Primitive(NYdb::EPrimitiveType::Timestamp)
+        .AddMember("tags").Primitive(NYdb::EPrimitiveType::Json)
+        .EndStruct().EndList().Build();
+    NYdb::TValueBuilder sqlc_builder(sqlc_type);
+    sqlc_builder.BeginList();
+    for (const auto& sqlc_item : sqlc_items) {
+        sqlc_builder.AddListItem().BeginStruct()
+            .AddMember("book_id").Uint64(sqlc_item.book_id)
+            .AddMember("author_id").Uint64(sqlc_item.author_id)
+            .AddMember("isbn").Utf8(sqlc_item.isbn)
+            .AddMember("book_type").Utf8(sqlc_item.book_type)
+            .AddMember("title").Utf8(sqlc_item.title)
+            .AddMember("year").Int32(sqlc_item.year)
+            .AddMember("available").Timestamp(sqlc_item.available)
+            .AddMember("tags").Json(sqlc_item.tags)
+            .EndStruct();
+    }
+    return sqlc_builder.EndList().Build();
+}
+}  // namespace
+
+// -- name: CreateBooks :exec
+void Queries::CreateBooks(const std::vector<CreateBooksBooksItem>& books) const {
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_params = NYdb::TParamsBuilder()
+            .AddParam("$books", sqlc_bind_CreateBooksBooksItem(books))
+            .Build();
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            "DECLARE $books AS List<Struct<\n"
+            "    book_id: Uint64,\n"
+            "    author_id: Uint64,\n"
+            "    isbn: Utf8,\n"
+            "    book_type: Utf8,\n"
+            "    title: Utf8,\n"
+            "    year: Int32,\n"
+            "    available: Timestamp,\n"
+            "    tags: Json\n"
+            ">>;\n"
+            "INSERT INTO books (\n"
+            "    book_id, author_id, isbn, book_type, title, year, available, tags\n"
+            ")\n"
+            "SELECT\n"
+            "    book_id, author_id, isbn, book_type, title, year, available, tags\n"
+            "FROM AS_TABLE($books);",
+            sqlc_tx,
+            sqlc_params,
+            this->execute_settings_
+        ).GetValueSync();
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
 }
 
 }  // namespace batch::native

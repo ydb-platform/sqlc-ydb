@@ -68,6 +68,17 @@ type GetBiographyRow struct {
 	Biography *string `json:"biography"`
 }
 
+type CreateBooksBooksItem struct {
+	BookID    uint64    `json:"book_id"`
+	AuthorID  uint64    `json:"author_id"`
+	Isbn      string    `json:"isbn"`
+	BookType  string    `json:"book_type"`
+	Title     string    `json:"title"`
+	Year      int32     `json:"year"`
+	Available time.Time `json:"available"`
+	Tags      string    `json:"tags"`
+}
+
 type Querier interface {
 	GetAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorRow, error)
 	DeleteBookExecResult(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error
@@ -79,4 +90,5 @@ type Querier interface {
 	CreateBook(ctx context.Context, arg CreateBookParams, opts ...query.ExecuteOption) (CreateBookRow, error)
 	UpdateBook(ctx context.Context, arg UpdateBookParams, opts ...query.ExecuteOption) error
 	GetBiography(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetBiographyRow, error)
+	CreateBooks(ctx context.Context, arg []CreateBooksBooksItem, opts ...query.ExecuteOption) error
 }

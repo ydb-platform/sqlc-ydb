@@ -13,11 +13,11 @@ public final class Queries {
 
     // -- name: GetAuthor :one
     public java.util.Optional<GetAuthorRow> getAuthor(long authorId) throws java.sql.SQLException {
-        try (var _prepared = client.prepareStatement("""
-              \s
-            SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = ?;\
-            """)) {
-            _prepared.setObject(1, PrimitiveValue.newUint64(authorId));
+        try (var _prepared = client.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+            DECLARE $author_id AS Uint64;
+            SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;\
+            """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+            _prepared.setObject("author_id", PrimitiveValue.newUint64(authorId));
             try (var _rows = _prepared.executeQuery()) {
                 if (!_rows.next()) return java.util.Optional.empty();
                 long _value0 = _rows.getLong(1);

@@ -57,7 +57,6 @@ func TestAnalyzeUpdateMultipleAssignments(t *testing.T) {
 func TestAnalyzeRejectsUnsupportedQueryForms(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, label Utf8, PRIMARY KEY (id));`}}
 	for _, tt := range []struct{ name, command, sql, want string }{
-		{"insert select", ":exec", "INSERT INTO records (id, label) SELECT id, label FROM records;", "requires an explicit column list and VALUES rows"},
 		{"tuple update", ":exec", "UPDATE records SET (id, label) = ($id, $label);", "only individual UPDATE SET assignments are supported"},
 		{"computed update", ":exec", "DECLARE $label AS Utf8; UPDATE records SET label = COALESCE($label, label);", "DML values must be direct external parameters"},
 		{"exec select", ":exec", "SELECT id FROM records;", "command :exec cannot be used with a row-returning statement"},
@@ -65,7 +64,7 @@ func TestAnalyzeRejectsUnsupportedQueryForms(t *testing.T) {
 		{"query ddl", ":exec", "CREATE TABLE other (id Uint64, PRIMARY KEY (id));", "exactly one supported SELECT, INSERT/UPSERT, UPDATE, or DELETE statement; found 0"},
 		{"join using", ":many", "SELECT a.id FROM records a JOIN records b USING (id);", "JOIN USING is not yet supported; use an explicit ON condition"},
 		{"derived table", ":many", "SELECT id FROM (SELECT id FROM records) r;", "only named catalog tables are supported in FROM and JOIN"},
-		{"table function", ":many", "SELECT id FROM AS_TABLE($rows);", "dynamic table references are unsupported"},
+		{"table function", ":many", "SELECT id FROM AS_TABLE($rows);", "requires DECLARE $rows AS List<Struct<...>>"},
 		{"order by result alias", ":many", "SELECT id AS result FROM records ORDER BY result;", "unknown column \"result\""},
 		{"in subquery", ":many", "SELECT id FROM records WHERE id IN (SELECT r.id FROM records r UNION SELECT r.id FROM records r);", "unknown column \"r.id\""},
 		{"delete subquery", ":exec", "DELETE FROM records WHERE id NOT IN (SELECT r.id FROM records r);", "unknown column \"r.id\""},

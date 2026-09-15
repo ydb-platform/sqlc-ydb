@@ -17,7 +17,7 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     pub async fn author(&mut self, author_id: u64) -> ydb::YdbResult<GetAuthorRow> {
         let mut row = self
             .client
-            .query_row(r"SELECT id, name, bio FROM authors WHERE id = $author_id;")
+            .query_row("SELECT id, name, bio FROM authors WHERE id = $author_id;")
             .param("$author_id", author_id)
             .await?;
         Ok(GetAuthorRow {
@@ -31,7 +31,7 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     #[builder(on(String, into))]
     pub async fn list_authors(&mut self) -> ydb::YdbResult<Vec<ListAuthorsRow>> {
         self.client
-            .query_result_set(r"SELECT id, name, bio FROM authors ORDER BY name;")
+            .query_result_set("SELECT id, name, bio FROM authors ORDER BY name;")
             .await?
             .rows()
             .map(|mut row| {
@@ -49,7 +49,7 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     pub async fn author_name(&mut self, author_id: u64) -> ydb::YdbResult<GetAuthorNameRow> {
         let mut row = self
             .client
-            .query_row(r"SELECT name FROM authors WHERE id = $author_id;")
+            .query_row("SELECT name FROM authors WHERE id = $author_id;")
             .param("$author_id", author_id)
             .await?;
         Ok(GetAuthorNameRow {
@@ -67,12 +67,11 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     ) -> ydb::YdbResult<CreateAuthorRow> {
         let mut row = self
             .client
-            .query_row(
-                r"
-                 INSERT INTO `authors` (`id`, `name`, `bio`)
-                 VALUES ($author_id, $author_name, $biography)
-                 RETURNING `id`, `name`, `bio`;",
-            )
+            .query_row(concat!(
+                "INSERT INTO `authors` (`id`, `name`, `bio`)\n",
+                "VALUES ($author_id, $author_name, $biography)\n",
+                "RETURNING `id`, `name`, `bio`;",
+            ))
             .param("$author_id", author_id)
             .param("$author_name", author_name)
             .param("$biography", biography)
@@ -93,11 +92,10 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
         #[builder(required, into)] biography: Option<String>,
     ) -> ydb::YdbResult<()> {
         self.client
-            .exec(
-                r"
-                 UPSERT INTO authors (id, name, bio)
-                 VALUES ($author_id, $author_name, $biography);",
-            )
+            .exec(concat!(
+                "UPSERT INTO authors (id, name, bio)\n",
+                "VALUES ($author_id, $author_name, $biography);",
+            ))
             .param("$author_id", author_id)
             .param("$author_name", author_name)
             .param("$biography", biography)
@@ -108,7 +106,7 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     #[builder(on(String, into))]
     pub async fn delete_author(&mut self, author_id: u64) -> ydb::YdbResult<()> {
         self.client
-            .exec(r"DELETE FROM authors WHERE id = $author_id;")
+            .exec("DELETE FROM authors WHERE id = $author_id;")
             .param("$author_id", author_id)
             .await
     }

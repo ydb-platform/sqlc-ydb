@@ -26,7 +26,9 @@ class Querier:
         }
         result_sets = self._execute(
             ("DECLARE $author_id AS Uint64;\n"
-             "SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;"), parameters)
+             "SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;"),
+            parameters,
+        )
         if len(result_sets) != 1:
             raise ValueError("expected exactly one YDB result set")
         rows = result_sets[0].rows

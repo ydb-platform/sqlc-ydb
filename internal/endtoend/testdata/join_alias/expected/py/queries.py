@@ -15,9 +15,13 @@ class Querier:
     def list_author_books(self) -> list[_models.ListAuthorBooksRow]:
         parameters = {
         }
-        result = self._connection.execute(_text(
-            ("SELECT a.id AS author_id, a.name AS author_name, b.title AS book_title\n"
-             "FROM authors AS a JOIN books AS b ON a.id = b.author_id;")), parameters)
+        result = self._connection.execute(
+            _text(
+                ("SELECT a.id AS author_id, a.name AS author_name, b.title AS book_title\n"
+                 "FROM authors AS a JOIN books AS b ON a.id = b.author_id;")
+            ),
+            parameters,
+        )
         try:
             rows = result.fetchall()
         finally:

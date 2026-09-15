@@ -36,8 +36,14 @@ type Type struct {
 	Elem      *Type
 	Key       *Type
 	Items     []Type
+	Fields    []StructField
 	Precision int
 	Scale     int
+}
+
+type StructField struct {
+	Name string
+	Type Type
 }
 
 func Optional(t Type) Type      { return Type{Kind: "Optional", Elem: &t} }
@@ -54,7 +60,7 @@ func (t Type) Equal(other Type) bool {
 	if t.Kind != other.Kind || t.Precision != other.Precision || t.Scale != other.Scale {
 		return false
 	}
-	if (t.Elem == nil) != (other.Elem == nil) || (t.Key == nil) != (other.Key == nil) || len(t.Items) != len(other.Items) {
+	if (t.Elem == nil) != (other.Elem == nil) || (t.Key == nil) != (other.Key == nil) || len(t.Items) != len(other.Items) || len(t.Fields) != len(other.Fields) {
 		return false
 	}
 	if t.Elem != nil && !t.Elem.Equal(*other.Elem) {
@@ -65,6 +71,18 @@ func (t Type) Equal(other Type) bool {
 	}
 	for i := range t.Items {
 		if !t.Items[i].Equal(other.Items[i]) {
+			return false
+		}
+	}
+	// Struct members have names rather than positional identity. Preserve their
+	// declaration order for generation while comparing their names and types.
+	fields := make(map[string]Type, len(other.Fields))
+	for _, field := range other.Fields {
+		fields[field.Name] = field.Type
+	}
+	for _, field := range t.Fields {
+		otherType, ok := fields[field.Name]
+		if !ok || !field.Type.Equal(otherType) {
 			return false
 		}
 	}
@@ -82,6 +100,12 @@ func (t Type) String() string {
 		if t.Key != nil && t.Elem != nil {
 			return "Dict<" + t.Key.String() + "," + t.Elem.String() + ">"
 		}
+	case "Struct":
+		fields := make([]string, len(t.Fields))
+		for i, field := range t.Fields {
+			fields[i] = "`" + strings.ReplaceAll(field.Name, "`", "``") + "`:" + field.Type.String()
+		}
+		return "Struct<" + strings.Join(fields, ",") + ">"
 	case "Tuple":
 		items := make([]string, len(t.Items))
 		for i := range t.Items {
@@ -146,15 +170,23 @@ type ColumnBinding struct {
 type AnalyzedQuery struct {
 	Syntax *QuerySyntax `json:"-"`
 
-	Name    string
-	Command Command
-	SQL     string
-	// SQLWithoutDeclarations preserves the source except DECLARE tokens. SDKs that
-	// synthesize declarations from typed parameters execute this form instead.
-	SQLWithoutDeclarations string
-	Parameters             []Parameter // names without the leading dollar sign
-	ResultSets             []ResultSet
-	Source                 Position
+	Name               string
+	Command            Command
+	SQL                string
+	Parameters         []Parameter // names without the leading dollar sign
+	DeclaredParameters []string    `json:",omitempty"` // names explicitly declared in the original SQL
+	ResultSets         []ResultSet
+	Source             Position
+}
+
+// IsDeclaredParameter reports whether the source explicitly declares this parameter.
+func (q AnalyzedQuery) IsDeclaredParameter(name string) bool {
+	for _, declared := range q.DeclaredParameters {
+		if declared == name {
+			return true
+		}
+	}
+	return false
 }
 
 // QueryAnnotation returns the sqlc metadata comment associated with q.

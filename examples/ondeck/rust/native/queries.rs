@@ -39,12 +39,11 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     #[builder(on(String, into))]
     pub async fn list_cities(&mut self) -> ydb::YdbResult<Vec<ListCitiesRow>> {
         self.client
-            .query_result_set(
-                r"
-                 SELECT slug, name
-                 FROM city
-                 ORDER BY name;",
-            )
+            .query_result_set(concat!(
+                "SELECT slug, name\n",
+                "FROM city\n",
+                "ORDER BY name;",
+            ))
             .await?
             .rows()
             .map(|mut row| {
@@ -61,12 +60,11 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     pub async fn city(&mut self, slug: String) -> ydb::YdbResult<GetCityRow> {
         let mut row = self
             .client
-            .query_row(
-                r"
-                 SELECT slug, name
-                 FROM city
-                 WHERE slug = $slug;",
-            )
+            .query_row(concat!(
+                "SELECT slug, name\n",
+                "FROM city\n",
+                "WHERE slug = $slug;",
+            ))
             .param("$slug", slug)
             .await?;
         Ok(GetCityRow {
@@ -84,16 +82,15 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     ) -> ydb::YdbResult<CreateCityRow> {
         let mut row = self
             .client
-            .query_row(
-                r"
-                 INSERT INTO city (
-                     name,
-                     slug
-                 ) VALUES (
-                     $name,
-                     $slug
-                 ) RETURNING slug, name;",
-            )
+            .query_row(concat!(
+                "INSERT INTO city (\n",
+                "    name,\n",
+                "    slug\n",
+                ") VALUES (\n",
+                "    $name,\n",
+                "    $slug\n",
+                ") RETURNING slug, name;",
+            ))
             .param("$name", name)
             .param("$slug", slug)
             .await?;
@@ -107,12 +104,11 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     #[builder(on(String, into))]
     pub async fn update_city_name(&mut self, name: String, slug: String) -> ydb::YdbResult<()> {
         self.client
-            .exec(
-                r"
-                 UPDATE city
-                 SET name = $name
-                 WHERE slug = $slug;",
-            )
+            .exec(concat!(
+                "UPDATE city\n",
+                "SET name = $name\n",
+                "WHERE slug = $slug;",
+            ))
             .param("$name", name)
             .param("$slug", slug)
             .await
@@ -122,13 +118,12 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     #[builder(on(String, into))]
     pub async fn list_venues(&mut self, city: String) -> ydb::YdbResult<Vec<ListVenuesRow>> {
         self.client
-            .query_result_set(
-                r"
-                 SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
-                 FROM venue
-                 WHERE city = $city
-                 ORDER BY name;",
-            )
+            .query_result_set(concat!(
+                "SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n",
+                "FROM venue\n",
+                "WHERE city = $city\n",
+                "ORDER BY name;",
+            ))
             .param("$city", city)
             .await?
             .rows()
@@ -153,11 +148,10 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     #[builder(on(String, into))]
     pub async fn delete_venue(&mut self, slug: String) -> ydb::YdbResult<()> {
         self.client
-            .exec(
-                r"
-                 DELETE FROM venue
-                 WHERE slug = $slug AND slug = $slug;",
-            )
+            .exec(concat!(
+                "DELETE FROM venue\n",
+                "WHERE slug = $slug AND slug = $slug;",
+            ))
             .param("$slug", slug)
             .await
     }
@@ -167,12 +161,11 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     pub async fn venue(&mut self, slug: String, city: String) -> ydb::YdbResult<GetVenueRow> {
         let mut row = self
             .client
-            .query_row(
-                r"
-                 SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
-                 FROM venue
-                 WHERE slug = $slug AND city = $city;",
-            )
+            .query_row(concat!(
+                "SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at\n",
+                "FROM venue\n",
+                "WHERE slug = $slug AND city = $city;",
+            ))
             .param("$slug", slug)
             .param("$city", city)
             .await?;
@@ -206,30 +199,29 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     ) -> ydb::YdbResult<CreateVenueRow> {
         let mut row = self
             .client
-            .query_row(
-                r"
-                 INSERT INTO venue (
-                     id,
-                     slug,
-                     name,
-                     city,
-                     created_at,
-                     spotify_playlist,
-                     status,
-                     statuses,
-                     tags
-                 ) VALUES (
-                     $id,
-                     $slug,
-                     $name,
-                     $city,
-                     $created_at,
-                     $spotify_playlist,
-                     $status,
-                     $statuses,
-                     $tags
-                 ) RETURNING id;",
-            )
+            .query_row(concat!(
+                "INSERT INTO venue (\n",
+                "    id,\n",
+                "    slug,\n",
+                "    name,\n",
+                "    city,\n",
+                "    created_at,\n",
+                "    spotify_playlist,\n",
+                "    status,\n",
+                "    statuses,\n",
+                "    tags\n",
+                ") VALUES (\n",
+                "    $id,\n",
+                "    $slug,\n",
+                "    $name,\n",
+                "    $city,\n",
+                "    $created_at,\n",
+                "    $spotify_playlist,\n",
+                "    $status,\n",
+                "    $statuses,\n",
+                "    $tags\n",
+                ") RETURNING id;",
+            ))
             .param("$id", id)
             .param("$slug", slug)
             .param("$name", name)
@@ -254,13 +246,12 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     ) -> ydb::YdbResult<UpdateVenueNameRow> {
         let mut row = self
             .client
-            .query_row(
-                r"
-                 UPDATE venue
-                 SET name = $name
-                 WHERE slug = $slug
-                 RETURNING id;",
-            )
+            .query_row(concat!(
+                "UPDATE venue\n",
+                "SET name = $name\n",
+                "WHERE slug = $slug\n",
+                "RETURNING id;",
+            ))
             .param("$name", name)
             .param("$slug", slug)
             .await?;
@@ -273,15 +264,14 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     #[builder(on(String, into))]
     pub async fn venue_count_by_city(&mut self) -> ydb::YdbResult<Vec<VenueCountByCityRow>> {
         self.client
-            .query_result_set(
-                r"
-                 SELECT
-                     city,
-                     COUNT(*) AS venue_count
-                 FROM venue
-                 GROUP BY city
-                 ORDER BY city;",
-            )
+            .query_result_set(concat!(
+                "SELECT\n",
+                "    city,\n",
+                "    COUNT(*) AS venue_count\n",
+                "FROM venue\n",
+                "GROUP BY city\n",
+                "ORDER BY city;",
+            ))
             .await?
             .rows()
             .map(|mut row| {

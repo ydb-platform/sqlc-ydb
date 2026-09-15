@@ -42,6 +42,10 @@ func (q *Queries) BindNativeTypes(ctx context.Context, arg BindNativeTypesParams
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx, ""+
+		"DECLARE $ids AS List<Uint64>;\n"+
+		"DECLARE $optional_ids AS List<Optional<Uint64>>;\n"+
+		"DECLARE $amount AS Decimal(22, 9);\n"+
+		"DECLARE $id AS Uuid;\n"+
 		"SELECT $ids AS ids, $optional_ids AS optional_ids, $amount AS amount, $id AS id;",
 		callOptions...,
 	)

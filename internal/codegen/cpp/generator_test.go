@@ -172,6 +172,9 @@ func TestUserverRuntimeQueryConstructor(t *testing.T) {
 		t.Fatal("missing Query initializer end")
 	}
 	query := generated[start : start+end+len("\n    }")]
+	if !strings.Contains(query, "\n        \"SELECT 1;\\n\"\n        \"SELECT 2;\"") {
+		t.Fatal("SQL literals must align with the query constructor arguments")
+	}
 	// The generated runtime Name selects the overload that owns the query text.
 	program := `#include <optional>
 #include <string>
@@ -190,7 +193,7 @@ struct Query {
 }
 int main() {
   auto query = ` + query + `;
-	return query.text != "\n            SELECT 1;\n            SELECT 2;\n        " || !query.name || query.name->value != "Named";
+	return query.text != "SELECT 1;\nSELECT 2;" || !query.name || query.name->value != "Named";
 }
 `
 	dir := t.TempDir()
@@ -403,53 +406,47 @@ func TestScalarWidthsAndStringKindsRemainDistinct(t *testing.T) {
 	}
 }
 
-func TestSQLLiteralUsesOneReadableRawString(t *testing.T) {
+func TestSQLLiteralPreservesSourceBytes(t *testing.T) {
 	compiler, err := exec.LookPath("clang++")
 	if err != nil {
 		t.Skip("clang++ is unavailable")
 	}
-	tests := []struct {
-		name      string
-		sql       string
-		want      string
-		wantValue string
+	cases := []struct {
+		name, sql string
 	}{
-		{
-			"multiline",
-			"-- Привет\nSELECT '\\\"', `name`\nFROM authors;",
-			"R\"sql(\n    -- Привет\n    SELECT '\\\"', `name`\n    FROM authors;\n)sql\"",
-			"\n    -- Привет\n    SELECT '\\\"', `name`\n    FROM authors;\n",
-		},
-		{
-			"delimiter collision",
-			"SELECT ')sql\"', ')sql1\"';",
-			"R\"sql2(\n    SELECT ')sql\"', ')sql1\"';\n)sql2\"",
-			"\n    SELECT ')sql\"', ')sql1\"';\n",
-		},
+		{"multiline", "-- Привет\nSELECT '\\\"', `name`\nFROM authors;"},
+		{"delimiter collision", "SELECT ')sql\"', ')sql1\"';"},
+		{"declared indentation", "  DECLARE $id AS Uint64; -- keep\n\n    SELECT 'first\n  second';\n"},
+		{"CRLF and whitespace", "DECLARE $id AS Uint64; \r\n \t \r\nSELECT $id;\t"},
+		{"control byte", "SELECT '\x00A\x01';"},
 	}
-	for _, tc := range tests {
+	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			literal := sqlLiteral(tc.sql, "    ", "")
-			if literal != tc.want {
-				t.Fatalf("literal mismatch:\n got: %s\nwant: %s", literal, tc.want)
+			literal := sqlLiteral(tc.sql)
+			if strings.HasPrefix(literal, "R\"") {
+				t.Fatalf("unexpected literal form: %s", literal)
+			}
+			for _, line := range strings.Split(literal, "\n") {
+				if strings.HasSuffix(line, " ") || strings.HasSuffix(line, "\t") {
+					t.Fatalf("literal adds trailing whitespace: %q", line)
+				}
 			}
 			dir := t.TempDir()
-			source := "#include <iostream>\n#include <string>\nint main() { const std::string value = " + literal + "; std::cout.write(value.data(), value.size()); }\n"
 			input := filepath.Join(dir, "literal.cpp")
 			binary := filepath.Join(dir, "literal")
+			source := "#include <iostream>\n#include <string>\nint main(){const std::string sql=" + literal + ";std::cout.write(sql.data(),sql.size());}\n"
 			if err := os.WriteFile(input, []byte(source), 0600); err != nil {
 				t.Fatal(err)
 			}
-			cmd := exec.Command(compiler, "-std=c++20", input, "-o", binary)
-			if out, err := cmd.CombinedOutput(); err != nil {
-				t.Fatalf("compile SQL literal: %v\n%s\n%s", err, out, source)
+			if output, err := exec.Command(compiler, "-std=c++20", input, "-o", binary).CombinedOutput(); err != nil {
+				t.Fatalf("compile: %v %s", err, output)
 			}
-			got, err := exec.Command(binary).Output()
+			actual, err := exec.Command(binary).Output()
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !bytes.Equal(got, []byte(tc.wantValue)) {
-				t.Fatalf("round trip mismatch:\n got: %q\nwant: %q\nliteral: %s", got, []byte(tc.wantValue), literal)
+			if !bytes.Equal(actual, []byte(tc.sql)) {
+				t.Fatalf("SQL source changed: got %q want %q", actual, tc.sql)
 			}
 		})
 	}
@@ -522,5 +519,62 @@ func TestJsonTimestampTypes(t *testing.T) {
 				t.Fatal(models)
 			}
 		}
+	}
+}
+
+func TestStructListParameter(t *testing.T) {
+	for _, runtime := range []string{"ydb", "userver"} {
+		t.Run(runtime, func(t *testing.T) {
+			typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, {Name: "tags", Type: model.Optional(model.Type{Kind: "Json"})}, {Name: "available", Type: model.Type{Kind: "Timestamp"}}}}}
+			a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
+			files, err := Generate(a, Options{Runtime: runtime})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var output strings.Builder
+			for _, f := range files {
+				output.Write(f.Content)
+			}
+			expected := []string{"struct CreateBooksBooksItem final", "const std::vector<CreateBooksBooksItem>& books"}
+			if runtime == "ydb" {
+				expected = append(expected, "NYdb::TValueBuilder sqlc_builder(sqlc_type)", ".BeginList().BeginStruct()", ".AddMember(\"tags\").BeginOptional().Primitive(NYdb::EPrimitiveType::Json).EndOptional()", ".OptionalJson(sqlc_item.tags)")
+			} else {
+				expected = append(expected, "static constexpr ::userver::ydb::StructMemberNames kYdbMemberNames{}", "std::optional<::userver::formats::json::Value>", "#include <chrono>")
+			}
+			for _, want := range expected {
+				if !strings.Contains(output.String(), want) {
+					t.Errorf("missing %s", want)
+				}
+			}
+			typ.Elem.Fields[1].Type = model.Type{Kind: "List", Elem: &model.Type{Kind: "Utf8"}}
+			if _, err := Generate(a, Options{Runtime: runtime}); err == nil || !strings.Contains(err.Error(), "unsupported YQL type") {
+				t.Fatalf("nested list: %v", err)
+			}
+		})
+	}
+}
+
+func TestStructListRejectsInvalidFieldsAndAmbiguousTypeNames(t *testing.T) {
+	makeQuery := func(name, param string, fields []model.StructField) model.AnalyzedQuery {
+		return model.AnalyzedQuery{Name: name, Command: model.Exec, SQL: "SELECT 1;", Parameters: []model.Parameter{{Name: param, Type: model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: fields}}}}}
+	}
+	valid := []model.StructField{{Name: "id", Type: model.Type{Kind: "Uint64"}}}
+	for _, tc := range []struct {
+		name, runtime string
+		queries       []model.AnalyzedQuery
+		want          string
+	}{
+		{name: "empty struct", queries: []model.AnalyzedQuery{makeQuery("CreateBooks", "books", nil)}, want: "at least one scalar field"},
+		{name: "invalid identifier", queries: []model.AnalyzedQuery{makeQuery("CreateBooks", "books", []model.StructField{{Name: "class", Type: model.Type{Kind: "Utf8"}}})}, want: "C++ keyword"},
+		{name: "duplicate field", queries: []model.AnalyzedQuery{makeQuery("CreateBooks", "books", append(valid, valid...))}, want: "duplicate struct field"},
+		{name: "member shadows item type", queries: []model.AnalyzedQuery{makeQuery("CreateBooks", "books", []model.StructField{{Name: "CreateBooksBooksItem", Type: model.Type{Kind: "Uint64"}}})}, want: "collides with generated member"},
+		{name: "userver metadata", runtime: "userver", queries: []model.AnalyzedQuery{makeQuery("CreateBooks", "books", []model.StructField{{Name: "kYdbMemberNames", Type: model.Type{Kind: "Uint64"}}})}, want: "collides with generated member"},
+		{name: "ambiguous item type", queries: []model.AnalyzedQuery{makeQuery("CreateBooks", "values", valid), makeQuery("Create", "Books_values", valid)}, want: "collides"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := Generate(&model.AnalysisResult{Queries: tc.queries}, Options{Runtime: tc.runtime}); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v, want %s", err, tc.want)
+			}
+		})
 	}
 }

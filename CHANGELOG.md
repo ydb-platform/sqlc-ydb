@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Generate typed list-of-struct parameters for SQL batch inserts through `AS_TABLE`, with a `CreateBooks` query and runtime checks in the existing batch example. Support covers all language targets, including native and framework adapters.
+
 ## v0.1.4
 
 ### Added

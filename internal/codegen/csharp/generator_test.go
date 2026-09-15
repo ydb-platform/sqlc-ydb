@@ -107,7 +107,7 @@ func TestJsonAndTimestampUseRealSDKTypesInEveryRuntime(t *testing.T) {
 
 func TestSQLLiteralPreservesControlsQuotesAndBackslashes(t *testing.T) {
 	a := authorsAnalysis()
-	sql := "SELECT '\"', '\\\\', '" + string(rune(0)) + "', '" + string(rune(0x1f)) + "';\r\n-- \"\"\" delimiter-looking text\n"
+	sql := declaredBatchSQL + "SELECT '\"', '\\\\', '" + string(rune(0)) + "', '" + string(rune(0x1f)) + "';\r\n-- \"\"\" delimiter-looking text\n"
 	a.Queries = a.Queries[:1]
 	a.Queries[0].SQL = sql
 	_, queries := generated(t, a)
@@ -342,7 +342,7 @@ func TestSQLLiteralRoundTripsThroughCSharpRuntime(t *testing.T) {
 	if dotnet == "" {
 		t.Skip("set SQLC_YDB_CSHARP_DOTNET to run the C# SQL-literal check")
 	}
-	sql := "SELECT '\"', '\\\\', '" + string(rune(0)) + "', '" + string(rune(0x1f)) + "';\r\n-- \"\"\" delimiter-looking text\n"
+	sql := declaredBatchSQL + "SELECT '\"', '\\\\', '" + string(rune(0)) + "', '" + string(rune(0x1f)) + "';\r\n-- \"\"\" delimiter-looking text\n"
 	in := authorsAnalysis()
 	in.Queries = in.Queries[:1]
 	in.Queries[0].SQL = sql
@@ -469,7 +469,7 @@ func TestDapperRawLiteralRuntime(t *testing.T) {
 	if dotnet == "" {
 		t.Skip("set SQLC_YDB_CSHARP_DOTNET")
 	}
-	samples := []string{"SELECT 1;", "SELECT \"\"\"\";\n\t-- конец\n", "\n  SELECT 1;\n\n", "SELECT 1;\r\n", "SELECT '\x00';", ""}
+	samples := []string{declaredBatchSQL, "SELECT 1;", "SELECT \"\"\"\";\n\t-- конец\n", "\n  SELECT 1;\n\n", "SELECT 1;\r\n", "SELECT '\x00';", ""}
 	var program strings.Builder
 	program.WriteString("using System; using System.Text; class Program { static void Main() {\n")
 	for _, sql := range samples {
@@ -489,3 +489,6 @@ func TestDapperRawLiteralRuntime(t *testing.T) {
 		t.Fatalf("%v\n%s", err, out)
 	}
 }
+
+// Mixed whitespace and a multiline SQL value distinguish formatting from SQL semantics.
+const declaredBatchSQL = "  DECLARE $books AS List<Struct<\n    book_id: Uint64,\n\tdata: Json\n  >>;\n\n  -- batch books\n  INSERT INTO books (book_id, data)\n  SELECT\n      book_id,\n\t  data\n  FROM AS_TABLE($books);\n  SELECT 'first\n    second';\n"

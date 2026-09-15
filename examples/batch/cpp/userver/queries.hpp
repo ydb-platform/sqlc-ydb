@@ -31,6 +31,7 @@ public:
     std::optional<CreateBookRow> CreateBook(std::uint64_t book_id, std::uint64_t author_id, const ::userver::ydb::Utf8& isbn, const ::userver::ydb::Utf8& book_type, const ::userver::ydb::Utf8& title, std::int32_t year, const std::chrono::system_clock::time_point& available, const ::userver::formats::json::Value& tags) const;
     void UpdateBook(const ::userver::ydb::Utf8& title, const ::userver::formats::json::Value& tags, std::uint64_t book_id) const;
     std::optional<GetBiographyRow> GetBiography(std::uint64_t author_id) const;
+    void CreateBooks(const std::vector<CreateBooksBooksItem>& books) const;
 
 private:
     ::userver::ydb::TableClient* client_;

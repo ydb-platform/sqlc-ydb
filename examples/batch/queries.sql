@@ -41,3 +41,21 @@ WHERE book_id = $book_id;
 -- name: GetBiography :one
 SELECT biography FROM authors
 WHERE author_id = $author_id;
+
+-- name: CreateBooks :exec
+DECLARE $books AS List<Struct<
+    book_id: Uint64,
+    author_id: Uint64,
+    isbn: Utf8,
+    book_type: Utf8,
+    title: Utf8,
+    year: Int32,
+    available: Timestamp,
+    tags: Json
+>>;
+INSERT INTO books (
+    book_id, author_id, isbn, book_type, title, year, available, tags
+)
+SELECT
+    book_id, author_id, isbn, book_type, title, year, available, tags
+FROM AS_TABLE($books);

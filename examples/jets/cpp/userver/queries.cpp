@@ -6,9 +6,7 @@ namespace jets::userver {
 // -- name: CountPilots :one
 std::optional<CountPilotsRow> Queries::CountPilots() const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(
-            SELECT COUNT(*) AS pilot_count FROM pilots;
-        )sql",
+        "SELECT COUNT(*) AS pilot_count FROM pilots;",
         ::userver::ydb::Query::Name{"CountPilots"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -29,9 +27,7 @@ std::optional<CountPilotsRow> Queries::CountPilots() const {
 // -- name: ListPilots :many
 std::vector<ListPilotsRow> Queries::ListPilots() const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(
-            SELECT id, name FROM pilots ORDER BY id LIMIT 5;
-        )sql",
+        "SELECT id, name FROM pilots ORDER BY id LIMIT 5;",
         ::userver::ydb::Query::Name{"ListPilots"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };
@@ -54,9 +50,7 @@ std::vector<ListPilotsRow> Queries::ListPilots() const {
 // -- name: DeletePilot :exec
 void Queries::DeletePilot(std::int32_t pilot_id) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(
-            DELETE FROM pilots WHERE id = $pilot_id;
-        )sql",
+        "DELETE FROM pilots WHERE id = $pilot_id;",
         ::userver::ydb::Query::Name{"DeletePilot"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };

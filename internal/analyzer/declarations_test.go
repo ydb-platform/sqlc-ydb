@@ -54,53 +54,32 @@ func TestDecimalPrecisionAndScaleBoundaries(t *testing.T) {
 	}
 }
 
-func TestDeclarationFreeSQLPreservesNonDeclarationSource(t *testing.T) {
-	const sql = `-- name: Greeting :one
--- Привет: DECLARE in a comment
-DECLARE /* тип */ $name
-AS Utf8; -- trailing comment
-$prefix = "DECLARE $other AS Utf8; "u;
-SELECT $name AS greeting;`
-	const want = `-- name: Greeting :one
--- Привет: DECLARE in a comment` + "\n /* тип */ \n" + `  -- trailing comment
-$prefix = "DECLARE $other AS Utf8; "u;
-SELECT $name AS greeting;`
-	result, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	query := result.Queries[0]
-	if query.SQL != sql || query.SQLWithoutDeclarations != want {
-		t.Fatalf("original = %q\nwithout declarations = %q\nwant = %q", query.SQL, query.SQLWithoutDeclarations, want)
-	}
-	// Parsing the SDK's reconstructed query checks that removing tokens does not
-	// splice comments or statements into a different YQL program.
-	_, diagnostics := parseYQL("query.sql", "DECLARE $name AS Utf8;\n"+query.SQLWithoutDeclarations, 0)
-	if len(diagnostics) != 0 {
-		t.Fatal(diagnostics)
-	}
-}
-
-func TestDeclarationFreeSQLWithoutDeclarations(t *testing.T) {
-	const sql = "-- name: Answer :one\nSELECT 42 AS answer;"
-	result, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Queries[0].SQLWithoutDeclarations != sql {
-		t.Fatal("source without declarations changed")
-	}
-}
-
-func TestDeclarationFreeSQLMultipleDeclarations(t *testing.T) {
-	const sql = "DECLARE $one AS Uint64;\r\nDECLARE $two AS Optional<Utf8>;\nSELECT $one AS one, $two AS two;"
-	parsed, diagnostics := parseYQL("query.sql", sql, 0)
-	if len(diagnostics) != 0 {
-		t.Fatal(diagnostics)
-	}
-	got := withoutDeclarations(sql, parsed.tokens, collectQueryTree(parsed.tree).declares)
-	if strings.Contains(got, "DECLARE") || !strings.HasSuffix(got, "SELECT $one AS one, $two AS two;") || !strings.Contains(got, "\r\n") {
-		t.Fatalf("unexpected declaration-free SQL: %q", got)
+func TestDeclarationsPreserveSourceAndMetadata(t *testing.T) {
+	for _, sql := range []string{
+		"-- name: Greeting :one\n-- DECLARE in a comment\nDECLARE /* type */ $name\nAS Utf8; -- trailing comment\n$prefix = \"DECLARE $other AS Utf8; \"u;\nSELECT $name AS greeting;",
+		"-- name: Answer :one\nSELECT 42 AS answer;",
+		"-- name: Pair :one\nDECLARE $one AS Uint64;\r\nDECLARE $two AS Optional<Utf8>;\nSELECT $one AS one, $two AS two;",
+	} {
+		result, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: sql}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		q := result.Queries[0]
+		if q.SQL != sql {
+			t.Fatalf("SQL changed: %q", q.SQL)
+		}
+		if q.IsDeclaredParameter("other") {
+			t.Fatal("literal mistaken for declaration")
+		}
+		if strings.Contains(sql, "Greeting") && (!q.IsDeclaredParameter("name") || len(q.DeclaredParameters) != 1) {
+			t.Fatal(q.DeclaredParameters)
+		}
+		if strings.Contains(sql, "Answer") && len(q.DeclaredParameters) != 0 {
+			t.Fatal(q.DeclaredParameters)
+		}
+		if strings.Contains(sql, "Pair") && (!q.IsDeclaredParameter("one") || !q.IsDeclaredParameter("two") || len(q.DeclaredParameters) != 2) {
+			t.Fatal(q.DeclaredParameters)
+		}
 	}
 }
 
@@ -130,5 +109,19 @@ func TestRejectsUnknownYQLTypesAtAnalysisBoundary(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestDeclaredParameterMetadata(t *testing.T) {
+	result, err := Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE items (id Uint64 NOT NULL, name Utf8 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "query.sql", Text: "-- name: Put :exec\nDECLARE $id AS Uint64;\nUPSERT INTO items (id,name) VALUES ($id,$name);"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := result.Queries[0]
+	if len(q.DeclaredParameters) != 1 || q.DeclaredParameters[0] != "id" || !q.IsDeclaredParameter("id") || q.IsDeclaredParameter("name") {
+		t.Fatalf("declared parameter metadata: %#v", q.DeclaredParameters)
+	}
+	if len(q.Parameters) != 2 {
+		t.Fatalf("parameters: %#v", q.Parameters)
 	}
 }

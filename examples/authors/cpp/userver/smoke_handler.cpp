@@ -134,6 +134,18 @@ std::string SmokeHandler::HandleRequest(server::http::HttpRequest&, server::requ
         book->tags["id"].As<std::uint64_t>() != kMaxId || books.size() != 1 || books[0].available != timestamp) {
         throw std::runtime_error("userver Json/Timestamp round-trip failed");
     }
+    batch_queries.CreateBooks({});
+    batch_queries.CreateBooks({
+        {3, 1, ydb::Utf8{"batch"}, ydb::Utf8{"batch"}, ydb::Utf8{"batch"}, 2027, timestamp, json},
+        {4, 1, ydb::Utf8{"batch"}, ydb::Utf8{"batch"}, ydb::Utf8{"batch"}, 2027, timestamp, json},
+    });
+    const auto inserted = batch_queries.BooksByYear(2027);
+    if (inserted.size() != 2) throw std::runtime_error("batch INSERT SELECT row count");
+    for (const auto& row : inserted) {
+        if ((row.book_id != 3 && row.book_id != 4) || row.available != timestamp || row.tags["id"].As<std::uint64_t>() != kMaxId) {
+            throw std::runtime_error("batch INSERT SELECT field values");
+        }
+    }
     batch_books.Drop();
     batch_authors.Drop();
 

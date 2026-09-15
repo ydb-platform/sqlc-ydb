@@ -69,8 +69,8 @@ func (q *Queries) GetAuthorName(ctx context.Context, arg uint64) (GetAuthorNameR
 func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (CreateAuthorRow, error) {
 	var row CreateAuthorRow
 	err := q.db.QueryRowContext(ctx, ""+
-		"INSERT INTO `authors` (`id`, `name`, `bio`) "+
-		"VALUES ($author_id, $author_name, $biography) "+
+		"INSERT INTO `authors` (`id`, `name`, `bio`)\n"+
+		"VALUES ($author_id, $author_name, $biography)\n"+
 		"RETURNING `id`, `name`, `bio`;",
 		sql.Named("author_id", arg.AuthorID),
 		sql.Named("author_name", arg.AuthorName),
@@ -87,7 +87,7 @@ func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (Cre
 // -- name: UpsertAuthor :exec
 func (q *Queries) UpsertAuthor(ctx context.Context, arg UpsertAuthorParams) error {
 	_, err := q.db.ExecContext(ctx, ""+
-		"UPSERT INTO authors (id, name, bio) "+
+		"UPSERT INTO authors (id, name, bio)\n"+
 		"VALUES ($author_id, $author_name, $biography);",
 		sql.Named("author_id", arg.AuthorID),
 		sql.Named("author_name", arg.AuthorName),

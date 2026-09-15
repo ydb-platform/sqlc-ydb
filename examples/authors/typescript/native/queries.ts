@@ -49,7 +49,9 @@ export class Queries {
 
   // -- name: GetAuthor :one
   async getAuthor(authorId: bigint, configure?: ConfigureQuery): Promise<GetAuthorRow | null> {
-    const stmt = this.#sql<[GetAuthorRow]>`SELECT id, name, bio FROM authors WHERE id = $author_id;`
+    const stmt = this.#sql<[GetAuthorRow]>(
+      "SELECT id, name, bio FROM authors WHERE id = $author_id;"
+    )
       .parameter("author_id", new Uint64(authorId));
     configure?.(stmt);
     const [rows] = await stmt;
@@ -59,7 +61,9 @@ export class Queries {
 
   // -- name: ListAuthors :many
   async listAuthors(configure?: ConfigureQuery): Promise<ListAuthorsRow[]> {
-    const stmt = this.#sql<[ListAuthorsRow]>`SELECT id, name, bio FROM authors ORDER BY name;`;
+    const stmt = this.#sql<[ListAuthorsRow]>(
+      "SELECT id, name, bio FROM authors ORDER BY name;"
+    );
     configure?.(stmt);
     const [rows] = await stmt;
 
@@ -68,7 +72,9 @@ export class Queries {
 
   // -- name: GetAuthorName :one
   async getAuthorName(authorId: bigint, configure?: ConfigureQuery): Promise<GetAuthorNameRow | null> {
-    const stmt = this.#sql<[GetAuthorNameRow]>`SELECT name FROM authors WHERE id = $author_id;`
+    const stmt = this.#sql<[GetAuthorNameRow]>(
+      "SELECT name FROM authors WHERE id = $author_id;"
+    )
       .parameter("author_id", new Uint64(authorId));
     configure?.(stmt);
     const [rows] = await stmt;
@@ -78,9 +84,11 @@ export class Queries {
 
   // -- name: CreateAuthor :one
   async createAuthor(args: CreateAuthorParams, configure?: ConfigureQuery): Promise<CreateAuthorRow | null> {
-    const stmt = this.#sql<[CreateAuthorRow]>`INSERT INTO \`authors\` (\`id\`, \`name\`, \`bio\`)
-      VALUES ($author_id, $author_name, $biography)
-      RETURNING \`id\`, \`name\`, \`bio\`;`
+    const stmt = this.#sql<[CreateAuthorRow]>(
+      "INSERT INTO `authors` (`id`, `name`, `bio`)\n" +
+      "VALUES ($author_id, $author_name, $biography)\n" +
+      "RETURNING `id`, `name`, `bio`;"
+    )
       .parameter("author_id", new Uint64(args.authorId))
       .parameter("author_name", new Utf8(args.authorName))
       .parameter("biography", new Optional(args.biography === null ? null : new Utf8(args.biography), new Utf8Type()));
@@ -92,8 +100,10 @@ export class Queries {
 
   // -- name: UpsertAuthor :exec
   async upsertAuthor(args: UpsertAuthorParams, configure?: ConfigureQuery): Promise<void> {
-    const stmt = this.#sql`UPSERT INTO authors (id, name, bio)
-      VALUES ($author_id, $author_name, $biography);`
+    const stmt = this.#sql(
+      "UPSERT INTO authors (id, name, bio)\n" +
+      "VALUES ($author_id, $author_name, $biography);"
+    )
       .parameter("author_id", new Uint64(args.authorId))
       .parameter("author_name", new Utf8(args.authorName))
       .parameter("biography", new Optional(args.biography === null ? null : new Utf8(args.biography), new Utf8Type()));
@@ -103,7 +113,9 @@ export class Queries {
 
   // -- name: DeleteAuthor :exec
   async deleteAuthor(authorId: bigint, configure?: ConfigureQuery): Promise<void> {
-    const stmt = this.#sql`DELETE FROM authors WHERE id = $author_id;`
+    const stmt = this.#sql(
+      "DELETE FROM authors WHERE id = $author_id;"
+    )
       .parameter("author_id", new Uint64(authorId));
     configure?.(stmt);
     await stmt;

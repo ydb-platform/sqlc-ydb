@@ -38,7 +38,9 @@ await client.transaction(async (tx, signal) => {
 
 Every method has a final optional `ConfigureQuery` callback. It receives the fully parameterized SDK `Query` before execution. Use it for SDK controls such as `signal`, `timeout`, `idempotent`, `isolation` and `withStats`. The callback returns `void`; awaiting the statement starts execution.
 
-The generator writes one `queries.ts` file containing the implementation and its exported parameter and result type aliases. SQL appears directly in indented tagged templates such as `sql<[GetAuthorRow]>\`SELECT ...\``. The analyzer supplies SQL with top-level `DECLARE` statements removed: `@ydbjs/query` reconstructs those declarations from the explicit typed values passed through `.parameter()`. Comments, string literals and non-parameter local bindings are preserved. SQL source lines are indented within the method, and lines emptied by declaration removal are omitted.
+The generator writes one `queries.ts` file containing the implementation and its exported parameter and result type aliases. SQL appears directly as indented concatenated string literals in the public SQL function call, such as `sql<[GetAuthorRow]>("SELECT ...")`. Explicit `DECLARE` statements remain in the SQL, including their type spelling, comments and formatting. SQL source bytes, including relative indentation, blank lines and whitespace inside string literals, are preserved.
+
+The SDK normally generates declarations from typed parameters. For explicitly declared queries, generated code preserves the source declarations and adds only missing inferred declarations. This uses a compatibility adapter for the pinned SDK; see [SDK evidence](../.agents/sdk-evidence.md#typescript-declarations). Query configuration, retries and caller-owned transactions use the same SDK query object.
 
 A method with one parameter accepts that value directly. Methods with multiple parameters accept a named object. `:one` returns the first typed row, or `null` when YDB returns no rows. `:many` returns an array, including an empty array for no rows. `:exec` resolves to `undefined`. `:execrows` is rejected because the SDK does not expose a portable affected-row count. Result types describe the SDK's decoded rows; generated code adds no runtime row validators. Result properties use the exact column names returned by YDB, including explicit SQL aliases. Names that require quoting are emitted as quoted TypeScript property keys. Rows are returned directly from the SDK, with no generated property mapping or SQL alias rewriting. Method and input parameter names remain camelCase.
 
@@ -49,3 +51,7 @@ The verified dependencies are `@ydbjs/core` 6.3.1, `@ydbjs/query` 6.3.0 and `@yd
 The offline check type-checks every generated example module against the pinned SDK and verifies representative typed bindings. The smoke command runs all five example families sequentially against an already-running disposable YDB. Commands are in [development](../.agents/development.md#generated-runtime-checks).
 
 Primary references: the YDB documentation for [installing the JavaScript SDK](https://ydb.tech/docs/en/reference/ydb-sdk/install), the [`@ydbjs/query` API](https://github.com/ydb-platform/ydb-js-sdk/tree/main/packages/query), and the SDK [`@ydbjs/value` implementation](https://github.com/ydb-platform/ydb-js-sdk/tree/main/packages/value).
+
+## Structured batch parameters
+
+`List<Struct<...>>` parameters use arrays of generated item interfaces. Fields follow the parameter mappings above; the binder constructs an explicit SDK `ListType` and `StructType`, including for an empty array. The SQL executes once with one list parameter. See the [batch example](../examples/batch/README.md).

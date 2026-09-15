@@ -53,7 +53,7 @@ Result values are read by resolved projection position through `Row::remove_fiel
 
 `:many` decodes rows with a fallible iterator collected into a `Vec`, returning the first decoding error. Result structs derive `Debug`, `Clone`, `PartialEq` and `PartialOrd`. `Eq`, `Hash` and `Ord` are emitted only when no field contains `Float` or `Double`, including inside `Option` or `Vec`; floating-point NaN prevents total equality and ordering. Structs also derive `Copy` when every field is copyable, including optional scalars and timestamps.
 
-SQL is emitted as readable Rust raw strings without `DECLARE` statements because the generated typed SDK parameters supply their YQL types. The delimiter grows when the SQL contains quote/hash sequences, and control bytes that Rust source cannot hold literally are represented with `concat!` and byte escapes. Query annotations become Rust comments before methods. Multiline SQL receives leading whitespace for alignment; declaration gaps and leading/trailing blank lines are removed. Generated Rust source passes `rustfmt --check` without a formatting rewrite.
+Multiline SQL is emitted as aligned quoted lines inside `concat!`, preserving explicit `DECLARE` statements, relative indentation, blank lines and control bytes. The outer indentation matches the surrounding call without adding whitespace to the runtime query. Query annotations become Rust comments before methods. Generated Rust source passes `rustfmt --check` without a formatting rewrite.
 
 The shared examples pin `ydb` 0.18.2 and require Rust 1.88 or newer, matching the SDK's published minimum supported Rust version. `:execrows`, containers other than the list parameters described below, decimal values, UUID values, and other unmapped YQL types produce a generation error. Query names that normalize to `new` are rejected because `Queries::new` is the generated constructor; choose a different query annotation name.
 
@@ -79,3 +79,7 @@ queries.find().ids(Vec::<u64>::new()).call().await?;
 ```
 
 The iterator is collected into a typed SDK list when the query executes. Empty lists retain their SQL element type. Lists support the scalar types in the table above; nested lists, nullable lists and nullable list elements are unsupported.
+
+## Structured batch parameters
+
+`List<Struct<...>>` parameters use generated item structs and retain the borrowed `IntoIterator` API. Fields follow the scalar mapping, including optional scalar fields as `Option<T>`. The binder collects the iterator into one typed SDK list; an empty iterator still carries the declared struct schema and executes the query. See the [batch example](../examples/batch/README.md).

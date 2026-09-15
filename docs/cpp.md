@@ -65,12 +65,16 @@ Both profiles currently buffer query results, then construct result DTOs; `:many
 | `Timestamp` | `TInstant` | `std::chrono::system_clock::time_point` |
 | `Optional<T>` | `std::optional<T>` | `std::optional<T>` |
 
-The native mapping retains the `String` versus `Utf8` distinction in its parameter builders and result parsers even though both values use `std::string`. userver uses its strong `Utf8` typedef, so the distinction is also visible in the public C++ type. Nested optionals and non-scalar containers are rejected explicitly.
+The native mapping retains the `String` versus `Utf8` distinction in its parameter builders and result parsers even though both values use `std::string`. userver uses its strong `Utf8` typedef, so the distinction is also visible in the public C++ type. Nested optionals and containers other than the [structured batch parameters](#structured-batch-parameters) below are rejected explicitly.
 
-Identifiers must be ASCII C++ identifiers, must not be C++20 keywords, and must not start with `_` or the generator-reserved `sqlc_` prefix. Duplicate query, parameter, or result-column names are rejected, as are names that collide with generated row types, the `Queries` class, its client member, or their execution-settings members. Identifiers containing `__` are also rejected because C++ reserves them. Generated SQL normally remains readable as a multiline raw string. The generator selects a raw-string delimiter absent from the SQL.
+Identifiers must be ASCII C++ identifiers, must not be C++20 keywords, and must not start with `_` or the generator-reserved `sqlc_` prefix. Duplicate query, parameter, or result-column names are rejected, as are names that collide with generated row types, the `Queries` class, its client member, or their execution-settings members. Identifiers containing `__` are also rejected because C++ reserves them. Generated SQL uses adjacent quoted lines aligned with the surrounding call. Explicit line-ending escapes preserve the source SQL, including its declarations, relative indentation and multiline values.
 
 ## Dependencies and examples
 
 Generated code requires C++20. Native applications link the SDK `Driver`, `Params`, and `Query` components; userver applications link `userver::ydb`. The bundled [CMake project](../examples/authors/cpp/CMakeLists.txt) builds both profiles for authors, batch, booktest, jets, and ondeck. Its [container environment](../examples/authors/cpp/Dockerfile) pins YDB C++ SDK 3.21.1 and userver 3.2-rc.
 
 See the [authors configuration](../examples/authors/sqlc.yaml) for both output profiles. Instructions for reproducing the pinned example environment and its packaging workarounds are in the [maintainer build notes](../.agents/cpp-development.md#build-and-smoke).
+
+## Structured batch parameters
+
+`List<Struct<...>>` parameters use `std::vector<QueryParameterItem>` with generated field types. Native bindings build a typed SDK list; userver item structs expose `kYdbMemberNames` for its structural serializers. Empty collections retain the declared element type and execute the original query. See the [batch example](../examples/batch/README.md).

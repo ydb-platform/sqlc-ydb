@@ -10,8 +10,8 @@ import (
 // -- name: ListCities :many
 func (q *Queries) ListCities(ctx context.Context) ([]ListCitiesRow, error) {
 	rows, err := q.db.QueryContext(ctx, ""+
-		"SELECT slug, name "+
-		"FROM city "+
+		"SELECT slug, name\n"+
+		"FROM city\n"+
 		"ORDER BY name;",
 	)
 	if err != nil {
@@ -42,8 +42,8 @@ func (q *Queries) ListCities(ctx context.Context) ([]ListCitiesRow, error) {
 func (q *Queries) GetCity(ctx context.Context, arg string) (GetCityRow, error) {
 	var row GetCityRow
 	err := q.db.QueryRowContext(ctx, ""+
-		"SELECT slug, name "+
-		"FROM city "+
+		"SELECT slug, name\n"+
+		"FROM city\n"+
 		"WHERE slug = $slug;",
 		sql.Named("slug", arg),
 	).Scan(
@@ -58,12 +58,12 @@ func (q *Queries) GetCity(ctx context.Context, arg string) (GetCityRow, error) {
 func (q *Queries) CreateCity(ctx context.Context, arg CreateCityParams) (CreateCityRow, error) {
 	var row CreateCityRow
 	err := q.db.QueryRowContext(ctx, ""+
-		"INSERT INTO city ( "+
-		"name, "+
-		"slug "+
-		") VALUES ( "+
-		"$name, "+
-		"$slug "+
+		"INSERT INTO city (\n"+
+		"    name,\n"+
+		"    slug\n"+
+		") VALUES (\n"+
+		"    $name,\n"+
+		"    $slug\n"+
 		") RETURNING slug, name;",
 		sql.Named("name", arg.Name),
 		sql.Named("slug", arg.Slug),
@@ -78,8 +78,8 @@ func (q *Queries) CreateCity(ctx context.Context, arg CreateCityParams) (CreateC
 // -- name: UpdateCityName :exec
 func (q *Queries) UpdateCityName(ctx context.Context, arg UpdateCityNameParams) error {
 	_, err := q.db.ExecContext(ctx, ""+
-		"UPDATE city "+
-		"SET name = $name "+
+		"UPDATE city\n"+
+		"SET name = $name\n"+
 		"WHERE slug = $slug;",
 		sql.Named("name", arg.Name),
 		sql.Named("slug", arg.Slug),

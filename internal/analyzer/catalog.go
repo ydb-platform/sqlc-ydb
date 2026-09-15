@@ -337,7 +337,10 @@ func (r *typeReader) readType() (model.Type, error) {
 		switch strings.ToLower(name) {
 		case "optional", "list", "stream", "flow", "set":
 			elem, err := r.readType()
-			if err != nil || !r.consume('>') {
+			if err != nil {
+				return model.Type{}, err
+			}
+			if !r.consume('>') {
 				return model.Type{}, fmt.Errorf("unsupported YQL type %q", r.text)
 			}
 			out = model.Type{Kind: canonicalConstructor(name), Elem: &elem}
@@ -347,10 +350,37 @@ func (r *typeReader) readType() (model.Type, error) {
 				return model.Type{}, fmt.Errorf("unsupported YQL type %q", r.text)
 			}
 			value, err := r.readType()
-			if err != nil || !r.consume('>') {
+			if err != nil {
+				return model.Type{}, err
+			}
+			if !r.consume('>') {
 				return model.Type{}, fmt.Errorf("unsupported YQL type %q", r.text)
 			}
 			out = model.Type{Kind: "Dict", Key: &key, Elem: &value}
+		case "struct":
+			out = model.Type{Kind: "Struct"}
+			seen := map[string]bool{}
+			for {
+				field, err := r.readStructFieldName()
+				if err != nil || field == "" || !r.consume(':') {
+					return model.Type{}, fmt.Errorf("invalid or unsupported Struct field in %q", r.text)
+				}
+				if seen[field] {
+					return model.Type{}, fmt.Errorf("duplicate Struct field %q", field)
+				}
+				seen[field] = true
+				typ, err := r.readType()
+				if err != nil {
+					return model.Type{}, err
+				}
+				out.Fields = append(out.Fields, model.StructField{Name: field, Type: typ})
+				if r.consume('>') {
+					break
+				}
+				if !r.consume(',') {
+					return model.Type{}, fmt.Errorf("unsupported YQL type %q", r.text)
+				}
+			}
 		case "tuple":
 			var items []model.Type
 			for {
@@ -445,4 +475,58 @@ var serialTypes = map[string]string{
 	"smallserial": "Int16", "serial2": "Int16",
 	"serial": "Int32", "serial4": "Int32",
 	"serial8": "Int64", "bigserial": "Int64",
+}
+
+func (r *typeReader) readStructFieldName() (string, error) {
+	if r.index >= len(r.text) {
+		return "", fmt.Errorf("missing field name")
+	}
+	start := r.index
+	quote := r.text[r.index]
+	if quote == '`' || quote == '\'' || quote == '"' {
+		r.index++
+		for r.index < len(r.text) {
+			c := r.text[r.index]
+			r.index++
+			if c == '\\' && quote != '`' {
+				if r.index < len(r.text) {
+					r.index++
+				}
+				continue
+			}
+			if c != quote {
+				continue
+			}
+			if quote == '`' && r.index < len(r.text) && r.text[r.index] == '`' {
+				r.index++
+				continue
+			}
+			text := r.text[start:r.index]
+			if quote == '`' {
+				return identifier(text), nil
+			}
+			body := text[1 : len(text)-1]
+			var out strings.Builder
+			for body != "" {
+				char, _, tail, err := strconv.UnquoteChar(body, quote)
+				if err != nil {
+					return "", err
+				}
+				out.WriteRune(char)
+				body = tail
+			}
+			return out.String(), nil
+		}
+		return "", fmt.Errorf("unterminated quoted field name")
+	}
+	for r.index < len(r.text) && r.text[r.index] != ':' {
+		r.index++
+	}
+	name := r.text[start:r.index]
+	// Dynamic type tags ($name) require evaluating a type expression; they are
+	// not literal Struct member names.
+	if name == "" || strings.ContainsAny(name, "$<>,?()") {
+		return "", fmt.Errorf("unsupported field name")
+	}
+	return name, nil
 }

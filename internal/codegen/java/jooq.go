@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
+	"github.com/ydb-platform/sqlc-ydb/internal/codegen/jdbc"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 	parser "github.com/ydb-platform/yql-parsers/go"
 )
@@ -80,9 +81,61 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 	tables.WriteString("}\n")
 	files = append(files, model.File{Name: "Tables.java", Content: []byte(tables.String())})
 	var b strings.Builder
-	b.WriteString(header + "import java.util.List;\nimport java.util.Objects;\nimport java.util.Optional;\n\nimport org.jooq.impl.SQLDataType;\nimport tech.ydb.jooq.YdbDSLContext;\nimport tech.ydb.jooq.YdbTypes;\n\nimport static org.jooq.impl.DSL.*;\nimport static org.jooq.Records.mapping;\nimport static " + o.Package + ".Tables.*;\n\npublic final class Queries {\n    private final YdbDSLContext dsl;\n\n    public Queries(YdbDSLContext dsl) {\n        this.dsl = Objects.requireNonNull(dsl);\n    }\n")
+	b.WriteString(header + "import java.util.List;\nimport java.util.Objects;\nimport java.util.Optional;\n\nimport org.jooq.impl.SQLDataType;\nimport tech.ydb.jooq.YdbDSLContext;\nimport tech.ydb.jooq.YdbTypes;\n\n" + batchImports(a) + "import static org.jooq.impl.DSL.*;\nimport static org.jooq.Records.mapping;\nimport static " + o.Package + ".Tables.*;\n\npublic final class Queries {\n    private final YdbDSLContext dsl;\n\n    public Queries(YdbDSLContext dsl) {\n        this.dsl = Objects.requireNonNull(dsl);\n    }\n")
 	methods := map[string]bool{}
 	for _, q := range a.Queries {
+		if hasStructList(q) {
+			if q.Command != model.Exec {
+				return nil, fmt.Errorf("%s: jOOQ List<Struct> parameters require :exec", q.Name)
+			}
+			method, err := name(q.Name, false)
+			if err != nil {
+				return nil, err
+			}
+			if methods[method] {
+				return nil, fmt.Errorf("Java method name collision: %s", method)
+			}
+			methods[method] = true
+			// Reuse the JDBC DTO validation and binding contract for structured input.
+			generated, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{q}}, Options{Package: o.Package, Runtime: "jdbc"})
+			if err != nil {
+				return nil, err
+			}
+			for _, file := range generated {
+				if file.Name == "Queries.java" {
+					continue
+				}
+				for _, existing := range files {
+					if existing.Name == file.Name {
+						return nil, fmt.Errorf("Java type name collision: %s", file.Name)
+					}
+				}
+				files = append(files, file)
+			}
+			var parameters, names []string
+			for _, p := range q.Parameters {
+				pn, _ := name(p.Name, false)
+				_, typ, _ := typeInfo(p.Type)
+				if isStructList(p.Type) {
+					qn, _ := name(q.Name, true)
+					n, _ := name(p.Name, true)
+					typ = "java.util.List<" + qn + n + "Item>"
+				}
+				parameters = append(parameters, typ+" "+pn)
+				names = append(names, pn)
+			}
+			fmt.Fprintf(&b, "\n    // %s\n    public void %s(%s) {\n", model.QueryAnnotation(q), method, strings.Join(parameters, ", "))
+			emitUnsignedChecks(&b, q, names)
+			b.WriteString("        dsl.connection(_connection -> {\n")
+			text, bindings := jdbc.SQL(q)
+			mappedSQL, err := jooqBatchSQL(q, text)
+			if err != nil {
+				return nil, err
+			}
+			emitJDBCOn(&b, q, names, bindings, mappedSQL, "", "_connection", "            ")
+			b.WriteString("        });\n    }\n")
+			continue
+		}
 		if q.Syntax == nil {
 			return nil, fmt.Errorf("%s: jOOQ requires analyzed YQL syntax", q.Name)
 		}
@@ -131,6 +184,9 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		r := jooqRenderer{query: q, aliases: map[string]string{}, parameters: map[string]string{}}
 		var params []string
 		seen := map[string]bool{"dsl": true, "stmt": true}
+		if jdbc.HasDeclarations(q) {
+			seen["tech"] = true
+		}
 		for _, p := range q.Parameters {
 			pn, e := name(p.Name, false)
 			if e != nil {
@@ -152,6 +208,21 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			parameterList = "\n            " + strings.Join(params, ",\n            ") + "\n    "
 		}
 		fmt.Fprintf(&b, "\n    // %s\n    public %s %s(%s) {\n", model.QueryAnnotation(q), ret, method, parameterList)
+		if jdbc.HasDeclarations(q) {
+			text, _ := jdbc.SQL(q)
+			sql, err := jooqDeclaredSQL(q, text)
+			if err != nil {
+				return nil, err
+			}
+			var names []string
+			for _, p := range q.Parameters {
+				n, _ := name(p.Name, false)
+				names = append(names, n)
+			}
+			emitJooqDeclared(&b, q, names, sql, row)
+			b.WriteString("    }\n")
+			continue
+		}
 		for _, rel := range q.Syntax.Relations {
 			tn, e := jooqConstant(rel.Table)
 			if e != nil {

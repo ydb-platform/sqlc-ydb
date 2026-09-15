@@ -37,9 +37,9 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "SELECT author_id, name\n" +
-                "FROM authors\n" +
-                "WHERE author_id = \$author_id;", TxMode.SERIALIZABLE_RW, _params))
+                    "SELECT author_id, name\n" +
+                    "FROM authors\n" +
+                    "WHERE author_id = \$author_id;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -62,9 +62,9 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags\n" +
-                "FROM books\n" +
-                "WHERE book_id = \$book_id;", TxMode.SERIALIZABLE_RW, _params))
+                    "SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags\n" +
+                    "FROM books\n" +
+                    "WHERE book_id = \$book_id;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -92,8 +92,8 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 _session.createQuery(
-                "DELETE FROM books\n" +
-                "WHERE book_id = \$book_id;", TxMode.SERIALIZABLE_RW, _params).execute()
+                    "DELETE FROM books\n" +
+                    "WHERE book_id = \$book_id;", TxMode.SERIALIZABLE_RW, _params).execute()
             }.join().getStatus().expectSuccess()
         }
     }
@@ -111,9 +111,9 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags\n" +
-                "FROM books\n" +
-                "WHERE title = \$title AND publication_year = \$publication_year;", TxMode.SERIALIZABLE_RW, _params))
+                    "SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags\n" +
+                    "FROM books\n" +
+                    "WHERE title = \$title AND publication_year = \$publication_year;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -155,19 +155,19 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "DECLARE \$tags AS Json;\n" +
-                "SELECT\n" +
-                "    b.book_id,\n" +
-                "    b.title,\n" +
-                "    a.name,\n" +
-                "    b.isbn,\n" +
-                "    b.tags\n" +
-                "FROM books AS b\n" +
-                "LEFT JOIN authors AS a ON b.author_id = a.author_id\n" +
-                "WHERE NOT SetIsDisjoint(\n" +
-                "    ToSet(Yson::ConvertToStringList(b.tags)),\n" +
-                "    Yson::ConvertToStringList(\$tags)\n" +
-                ");", TxMode.SERIALIZABLE_RW, _params))
+                    "DECLARE \$tags AS Json;\n" +
+                    "SELECT\n" +
+                    "    b.book_id,\n" +
+                    "    b.title,\n" +
+                    "    a.name,\n" +
+                    "    b.isbn,\n" +
+                    "    b.tags\n" +
+                    "FROM books AS b\n" +
+                    "LEFT JOIN authors AS a ON b.author_id = a.author_id\n" +
+                    "WHERE NOT SetIsDisjoint(\n" +
+                    "    ToSet(Yson::ConvertToStringList(b.tags)),\n" +
+                    "    Yson::ConvertToStringList(\$tags)\n" +
+                    ");", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -176,7 +176,7 @@ class Queries {
         while (_rows.next()) {
             val _value0: Long = _rows.getColumn(0).getUint64()
             val _value1: String = _rows.getColumn(1).getText()
-            val _value2: String? = if (_rows.getColumn(2).isOptionalItemPresent()) _rows.getColumn(2).getOptionalItem().getText() else null
+            val _value2: String? = _rows.getColumn(2).getText()
             val _value3: String = _rows.getColumn(3).getText()
             val _value4: String = _rows.getColumn(4).getJson()
             _items.add(BooksByTagsRow(_value0, _value1, _value2, _value3, _value4))
@@ -197,9 +197,9 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "INSERT INTO authors (author_id, name)\n" +
-                "VALUES (\$author_id, \$name)\n" +
-                "RETURNING author_id, name;", TxMode.SERIALIZABLE_RW, _params))
+                    "INSERT INTO authors (author_id, name)\n" +
+                    "VALUES (\$author_id, \$name)\n" +
+                    "RETURNING author_id, name;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -246,26 +246,26 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "INSERT INTO books (\n" +
-                "    book_id,\n" +
-                "    author_id,\n" +
-                "    isbn,\n" +
-                "    book_type,\n" +
-                "    title,\n" +
-                "    publication_year,\n" +
-                "    available,\n" +
-                "    tags\n" +
-                ") VALUES (\n" +
-                "    \$book_id,\n" +
-                "    \$author_id,\n" +
-                "    \$isbn,\n" +
-                "    \$book_type,\n" +
-                "    \$title,\n" +
-                "    \$publication_year,\n" +
-                "    \$available,\n" +
-                "    \$tags\n" +
-                ")\n" +
-                "RETURNING book_id, author_id, isbn, book_type, title, publication_year, available, tags;", TxMode.SERIALIZABLE_RW, _params))
+                    "INSERT INTO books (\n" +
+                    "    book_id,\n" +
+                    "    author_id,\n" +
+                    "    isbn,\n" +
+                    "    book_type,\n" +
+                    "    title,\n" +
+                    "    publication_year,\n" +
+                    "    available,\n" +
+                    "    tags\n" +
+                    ") VALUES (\n" +
+                    "    \$book_id,\n" +
+                    "    \$author_id,\n" +
+                    "    \$isbn,\n" +
+                    "    \$book_type,\n" +
+                    "    \$title,\n" +
+                    "    \$publication_year,\n" +
+                    "    \$available,\n" +
+                    "    \$tags\n" +
+                    ")\n" +
+                    "RETURNING book_id, author_id, isbn, book_type, title, publication_year, available, tags;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
@@ -296,9 +296,9 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 _session.createQuery(
-                "UPDATE books\n" +
-                "SET title = \$title, tags = \$tags\n" +
-                "WHERE book_id = \$book_id;", TxMode.SERIALIZABLE_RW, _params).execute()
+                    "UPDATE books\n" +
+                    "SET title = \$title, tags = \$tags\n" +
+                    "WHERE book_id = \$book_id;", TxMode.SERIALIZABLE_RW, _params).execute()
             }.join().getStatus().expectSuccess()
         }
     }
@@ -318,9 +318,9 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 _session.createQuery(
-                "UPDATE books\n" +
-                "SET title = \$title, tags = \$tags, isbn = \$isbn\n" +
-                "WHERE book_id = \$book_id;", TxMode.SERIALIZABLE_RW, _params).execute()
+                    "UPDATE books\n" +
+                    "SET title = \$title, tags = \$tags, isbn = \$isbn\n" +
+                    "WHERE book_id = \$book_id;", TxMode.SERIALIZABLE_RW, _params).execute()
             }.join().getStatus().expectSuccess()
         }
     }
@@ -337,8 +337,8 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 _session.createQuery(
-                "DELETE FROM books\n" +
-                "WHERE publication_year < \$publication_year AND author_id = \$author_id;", TxMode.SERIALIZABLE_RW, _params).execute()
+                    "DELETE FROM books\n" +
+                    "WHERE publication_year < \$publication_year AND author_id = \$author_id;", TxMode.SERIALIZABLE_RW, _params).execute()
             }.join().getStatus().expectSuccess()
         }
     }
@@ -353,7 +353,7 @@ class Queries {
         } else {
             client!!.supplyResult { _session ->
                 QueryReader.readFrom(_session.createQuery(
-                "SELECT \"hello \"u || \$name AS greeting;", TxMode.SERIALIZABLE_RW, _params))
+                    "SELECT \"hello \"u || \$name AS greeting;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
         kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }

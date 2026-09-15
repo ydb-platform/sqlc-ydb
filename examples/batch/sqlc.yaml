@@ -5,6 +5,16 @@ sql:
     schema: schema.sql
     queries: queries.sql
     gen:
+      python:
+        out: python/native
+        runtime: ydb
+      csharp:
+        namespace: Batch.AdoNet
+        out: csharp/adonet
+      java:
+        package: batch.nativeapi
+        out: java/native
+        runtime: ydb
       kotlin:
         package: batch.nativeapi
         out: kotlin/nativeapi
@@ -30,6 +40,17 @@ sql:
     schema: schema.sql
     queries: queries.sql
     gen:
+      python:
+        out: python/dbapi
+        runtime: dbapi
+      java:
+        package: batch.jdbc
+        out: java/jdbc
+        runtime: jdbc
+      kotlin:
+        package: batch.jdbc
+        out: kotlin/jdbc
+        runtime: jdbc
       go:
         package: batch
         out: go/database/sql
@@ -70,3 +91,21 @@ sql:
         namespace: batch::userver
         out: cpp/userver
         runtime: userver
+  - name: sqlalchemy
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      python:
+        out: python/sqlalchemy
+        runtime: sqlalchemy
+        emit_sync_querier: true
+  - name: exposed
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      kotlin:
+        package: batch.exposed
+        out: kotlin/exposed
+        runtime: exposed

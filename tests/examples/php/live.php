@@ -157,6 +157,17 @@ function runBatch(Table $table, bool $transaction = false): void
         ));
         check($book?->bookId === $bookId && $book->available === $available && $book->tags === '["history","science-fiction"]', 'batch: Uint64/Timestamp/Json decode failed');
         check($queries->booksByYear(1979)[0]->authorId === $authorId, 'batch: filtered :many failed');
+        $queries->createBooks([]);
+        $queries->createBooks(array_map(static fn(string $id): Batch\Native\CreateBooksBooksItem => new Batch\Native\CreateBooksBooksItem(
+            bookId: $id, authorId: $authorId, isbn: 'batch', bookType: 'novel', title: 'Batch', year: 1980, available: $available, tags: '{"batch":true}',
+        ), ['1', '2']));
+        $inserted = $queries->booksByYear(1980);
+        check(count($inserted) === 2, 'batch: INSERT SELECT row count');
+        $ids = array_map(static fn($row): string => $row->bookId, $inserted);
+        sort($ids);
+        check($ids === ['1', '2'], 'batch: INSERT SELECT ids');
+        foreach ($inserted as $row) { check($row->available === $available && $row->tags === '{"batch":true}', 'batch: INSERT SELECT field values'); }
+
         $queries->updateBook(new Batch\Native\UpdateBookParams(
             title: 'Kindred (updated)',
             tags: '{"shelf":"read"}',

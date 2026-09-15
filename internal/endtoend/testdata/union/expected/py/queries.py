@@ -26,7 +26,9 @@ class Querier:
         result_sets = self._execute(
             ("SELECT id, label FROM local_labels\n"
              "UNION\n"
-             "SELECT id, label FROM imported_labels;"), parameters)
+             "SELECT id, label FROM imported_labels;"),
+            parameters,
+        )
         if len(result_sets) != 1:
             raise ValueError("expected exactly one YDB result set")
         rows = result_sets[0].rows
@@ -42,7 +44,9 @@ class Querier:
         result_sets = self._execute(
             ("SELECT a.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id\n"
              "UNION ALL\n"
-             "SELECT b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id;"), parameters)
+             "SELECT b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id;"),
+            parameters,
+        )
         if len(result_sets) != 1:
             raise ValueError("expected exactly one YDB result set")
         rows = result_sets[0].rows
@@ -58,7 +62,9 @@ class Querier:
         result_sets = self._execute(
             ("SELECT a.id, b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id\n"
              "UNION ALL\n"
-             "SELECT a.id, b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id;"), parameters)
+             "SELECT a.id, b.id FROM local_labels AS a JOIN imported_labels AS b ON a.id = b.id;"),
+            parameters,
+        )
         if len(result_sets) != 1:
             raise ValueError("expected exactly one YDB result set")
         rows = result_sets[0].rows
@@ -74,7 +80,9 @@ class Querier:
         result_sets = self._execute(
             ("SELECT id, label FROM local_labels\n"
              "UNION ALL\n"
-             "SELECT id, label FROM imported_labels;"), parameters)
+             "SELECT id, label FROM imported_labels;"),
+            parameters,
+        )
         if len(result_sets) != 1:
             raise ValueError("expected exactly one YDB result set")
         rows = result_sets[0].rows

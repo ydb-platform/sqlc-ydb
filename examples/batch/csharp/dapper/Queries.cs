@@ -78,6 +78,104 @@ public sealed class Queries
     private static DateTime? NormalizeTimestamp(DateTime? value) =>
         value.HasValue ? NormalizeTimestamp(value.Value) : null;
 
+    private static YdbValue BindCreateBooksBooksItem(IReadOnlyList<CreateBooksBooksItem> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        // The SDK has no complex empty-list factory. GetProto exposes the mutable wire type.
+        var result = YdbValue.MakeEmptyList(YdbTypeId.Uint64);
+        var proto = result.GetProto();
+        proto.Type.ListType.Item = new global::Ydb.Type
+        {
+            StructType = new global::Ydb.StructType
+            {
+                Members =
+                {
+                    new global::Ydb.StructMember
+                    {
+                        Name = "book_id",
+                        Type = new global::Ydb.Type
+                        {
+                            TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Uint64
+                        }
+                    },
+                    new global::Ydb.StructMember
+                    {
+                        Name = "author_id",
+                        Type = new global::Ydb.Type
+                        {
+                            TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Uint64
+                        }
+                    },
+                    new global::Ydb.StructMember
+                    {
+                        Name = "isbn",
+                        Type = new global::Ydb.Type
+                        {
+                            TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Utf8
+                        }
+                    },
+                    new global::Ydb.StructMember
+                    {
+                        Name = "book_type",
+                        Type = new global::Ydb.Type
+                        {
+                            TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Utf8
+                        }
+                    },
+                    new global::Ydb.StructMember
+                    {
+                        Name = "title",
+                        Type = new global::Ydb.Type
+                        {
+                            TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Utf8
+                        }
+                    },
+                    new global::Ydb.StructMember
+                    {
+                        Name = "year",
+                        Type = new global::Ydb.Type
+                        {
+                            TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Int32
+                        }
+                    },
+                    new global::Ydb.StructMember
+                    {
+                        Name = "available",
+                        Type = new global::Ydb.Type
+                        {
+                            TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Timestamp
+                        }
+                    },
+                    new global::Ydb.StructMember
+                    {
+                        Name = "tags",
+                        Type = new global::Ydb.Type
+                        {
+                            TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Json
+                        }
+                    },
+                }
+            }
+        };
+        foreach (var item in items)
+        {
+            ArgumentNullException.ThrowIfNull(item);
+            var row = YdbValue.MakeStruct(new global::System.Collections.Generic.Dictionary<string, YdbValue>
+            {
+                ["book_id"] = YdbValue.MakeUint64(item.BookID),
+                ["author_id"] = YdbValue.MakeUint64(item.AuthorID),
+                ["isbn"] = YdbValue.MakeUtf8(item.Isbn),
+                ["book_type"] = YdbValue.MakeUtf8(item.BookType),
+                ["title"] = YdbValue.MakeUtf8(item.Title),
+                ["year"] = YdbValue.MakeInt32(item.Year),
+                ["available"] = YdbValue.MakeTimestamp(NormalizeTimestamp(item.Available)),
+                ["tags"] = YdbValue.MakeJson(item.Tags),
+            });
+            proto.Value.Items.Add(row.GetProto().Value);
+        }
+        return result;
+    }
+
     // -- name: GetAuthor :one
     public async Task<GetAuthorRow> GetAuthorAsync(ulong authorId, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
@@ -291,6 +389,40 @@ public sealed class Queries
             cancellationToken: cancellationToken);
 
         return await _connection.QueryFirstAsync<GetBiographyRow>(command).ConfigureAwait(false);
+    }
+
+    // -- name: CreateBooks :exec
+    public async Task CreateBooksAsync(IReadOnlyList<CreateBooksBooksItem> books, CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var parameters = new YdbParameters(
+            new YdbParameter("$books", BindCreateBooksBooksItem(books))
+        );
+
+        var command = new CommandDefinition(
+            commandText: """
+            DECLARE $books AS List<Struct<
+                book_id: Uint64,
+                author_id: Uint64,
+                isbn: Utf8,
+                book_type: Utf8,
+                title: Utf8,
+                year: Int32,
+                available: Timestamp,
+                tags: Json
+            >>;
+            INSERT INTO books (
+                book_id, author_id, isbn, book_type, title, year, available, tags
+            )
+            SELECT
+                book_id, author_id, isbn, book_type, title, year, available, tags
+            FROM AS_TABLE($books);
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
 
     private sealed class YdbParameters : SqlMapper.IDynamicParameters

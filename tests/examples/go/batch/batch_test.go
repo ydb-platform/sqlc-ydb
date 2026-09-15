@@ -135,3 +135,58 @@ func TestBulkUpsertEmptyInput(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestCreateBooksFromStructList(t *testing.T) {
+	db := testdb.Open(t)
+	db.Apply(t, "../../../../examples/batch/schema.sql", "DROP TABLE books;", "DROP TABLE authors;")
+	nq, sqlq := native.New(db.Native), sq.New(db.SQL)
+	available := time.Date(2026, time.January, 2, 3, 4, 5, 123456000, time.UTC)
+	for _, books := range [][]native.CreateBooksBooksItem{nil, {}} {
+		if err := nq.CreateBooks(db.Context, books); err != nil {
+			t.Fatalf("native empty: %v", err)
+		}
+	}
+	for _, books := range [][]sq.CreateBooksBooksItem{nil, {}} {
+		if err := sqlq.CreateBooks(db.Context, books); err != nil {
+			t.Fatalf("database/sql empty: %v", err)
+		}
+	}
+	nativeBooks := []native.CreateBooksBooksItem{
+		{BookID: ^uint64(0), AuthorID: 1, Isbn: "high", BookType: "FICTION", Title: "Unicode ☀", Year: 2026, Available: available, Tags: `{"kind":"native"}`},
+		{BookID: 1, AuthorID: 1, Isbn: "one", BookType: "FICTION", Title: "Second", Year: 2026, Available: available, Tags: `[]`},
+	}
+	if err := nq.CreateBooks(db.Context, nativeBooks); err != nil {
+		t.Fatal(err)
+	}
+	sqlBooks := []sq.CreateBooksBooksItem{
+		{BookID: 2, AuthorID: 1, Isbn: "two", BookType: "REFERENCE", Title: "SQL batch", Year: 2026, Available: available, Tags: `["sql"]`},
+		{BookID: 3, AuthorID: 1, Isbn: "three", BookType: "REFERENCE", Title: "Fourth", Year: 2026, Available: available, Tags: `{}`},
+	}
+	if err := sqlq.CreateBooks(db.Context, sqlBooks); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := nq.BooksByYear(db.Context, 2026)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertBooks(t, rows, map[uint64]string{^uint64(0): `{"kind":"native"}`, 1: `[]`, 2: `["sql"]`, 3: `{}`})
+	for _, row := range rows {
+		if !row.Available.Equal(available) {
+			t.Fatalf("timestamp lost precision: %v", row.Available)
+		}
+	}
+	if err := nq.CreateBooks(db.Context, nativeBooks[:1]); err == nil {
+		t.Fatal("native duplicate INSERT must fail")
+	}
+	if err := sqlq.CreateBooks(db.Context, sqlBooks[:1]); err == nil {
+		t.Fatal("database/sql duplicate INSERT must fail")
+	}
+	cancelled, cancel := context.WithCancel(db.Context)
+	cancel()
+	if err := nq.CreateBooks(cancelled, nativeBooks); err == nil {
+		t.Fatal("native cancelled INSERT succeeded")
+	}
+	if err := sqlq.CreateBooks(cancelled, sqlBooks); err == nil {
+		t.Fatal("database/sql cancelled INSERT succeeded")
+	}
+}

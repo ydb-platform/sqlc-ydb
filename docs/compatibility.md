@@ -50,7 +50,7 @@ This check covers regular files directly in directories the current generation w
 
 ## Current analyzer coverage
 
-The analyzer supports explicit `CREATE TABLE` catalogs and the schema migration operations listed above, table column projections and `*`, table/column aliases, supported joins and their optional sides, supported scalar/aggregate functions, `DECLARE`, direct comparison parameter inference, selected scalar local bindings, `INSERT`/`UPSERT ... VALUES`, `UPDATE ... SET`, `DELETE`, and `RETURNING`. It validates names outside the projection and conflicting parameter constraints. Diagnostics include source file, line and column. Table, column, alias and parameter names are case-sensitive, as in YQL.
+The analyzer supports explicit `CREATE TABLE` catalogs and the schema migration operations listed above, table column projections and `*`, table/column aliases, supported joins and their optional sides, supported scalar/aggregate functions, `DECLARE`, direct comparison parameter inference, selected scalar local bindings, `INSERT`/`UPSERT ... VALUES`, `INSERT`/`UPSERT ... SELECT` with an explicit target column list, `UPDATE ... SET`, `DELETE`, and `RETURNING`. It validates names outside the projection and conflicting parameter constraints. Diagnostics include source file, line and column. Table, column, alias and parameter names are case-sensitive, as in YQL.
 
 Schema and declared `Decimal(P,S)` types require `1 <= P <= 35` and `0 <= S <= P`, including inside containers. Invalid values fail during analysis.
 
@@ -81,3 +81,7 @@ An ALTER with several supported column actions is applied atomically to the in-m
 `ALTER COLUMN` changes to types/nullability/defaults and other ALTER actions such as indexes, changefeeds or table settings are currently rejected. External tables, views, table stores and CREATE TABLE AS are also outside this catalog's scope. Physical CREATE options that do not affect modeled columns are not represented in the catalog; this is not a full server DDL validator.
 
 References: YDB [columns](https://ydb.tech/docs/en/yql/reference/syntax/alter_table/columns), [table rename](https://ydb.tech/docs/en/yql/reference/syntax/alter_table/rename), and [DROP TABLE](https://ydb.tech/docs/en/yql/reference/syntax/drop_table). Shared macros and database-assisted analysis remain planned; the supported workflow above does not include them. Implementation planning is maintained in [the contributor roadmap](../.agents/roadmap.md).
+
+### Structured batch parameters
+
+`DECLARE $books AS List<Struct<...>>` can supply an `AS_TABLE($books)` source. The analyzer resolves its column names and types from the declaration and checks the SELECT projection against the explicit INSERT/UPSERT target columns. INSERT/UPSERT SELECT requires explicit projection fields and currently accepts one SELECT input; wildcard projections and UNION inputs are rejected. All nine language generators support list-of-struct parameters with fields supported by the selected runtime's scalar and optional-scalar mapping. Nested containers and nested structs remain unsupported by these bindings. Generated APIs expose named item types and preserve the declared type for empty lists. See the [batch example](../examples/batch/README.md).

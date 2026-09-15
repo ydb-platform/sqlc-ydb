@@ -29,7 +29,7 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
             ydb::Value::list_from(item_type, values)?
         };
         self.client
-            .query_result_set(r"SELECT id FROM records WHERE id IN $ids ORDER BY id;")
+            .query_result_set("SELECT id FROM records WHERE id IN $ids ORDER BY id;")
             .param("$ids", ids)
             .await?
             .rows()
@@ -58,7 +58,7 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
             ydb::Value::list_from(item_type, values)?
         };
         self.client
-            .query_result_set(r"SELECT id FROM records WHERE id NOT IN $ids ORDER BY id;")
+            .query_result_set("SELECT id FROM records WHERE id NOT IN $ids ORDER BY id;")
             .param("$ids", ids)
             .await?
             .rows()
@@ -74,7 +74,7 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     #[builder(on(String, into))]
     pub async fn find_single(&mut self, id: u64) -> ydb::YdbResult<Vec<FindSingleRow>> {
         self.client
-            .query_result_set(r"SELECT id FROM records WHERE id IN ($id);")
+            .query_result_set("SELECT id FROM records WHERE id IN ($id);")
             .param("$id", id)
             .await?
             .rows()

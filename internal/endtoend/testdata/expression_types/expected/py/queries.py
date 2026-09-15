@@ -37,7 +37,9 @@ class Querier:
              "    LENGTH(COALESCE(nickname, $fallback)) AS normalized_length,\n"
              "    ABS(score) AS absolute_score\n"
              "FROM profiles\n"
-             "WHERE score >= $minimum_score;"), parameters)
+             "WHERE score >= $minimum_score;"),
+            parameters,
+        )
         if len(result_sets) != 1:
             raise ValueError("expected exactly one YDB result set")
         rows = result_sets[0].rows

@@ -2,6 +2,7 @@
 package typescript
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -42,7 +43,7 @@ var typescriptTypes = map[string]typeInfo{
 }
 
 var reserved = func() map[string]bool {
-	m := map[string]bool{"constructor": true, "configure": true, "sql": true, "stmt": true, "rows": true, "row": true, "args": true}
+	m := map[string]bool{"constructor": true, "configure": true, "structList": true, "sql": true, "stmt": true, "rows": true, "row": true, "args": true}
 	for _, word := range strings.Fields("await break case catch class const continue debugger default delete do else enum export extends false finally for function if implements import in instanceof interface let new null package private protected public return static super switch this throw true try typeof var void while with yield arguments eval") {
 		m[word] = true
 	}
@@ -74,7 +75,17 @@ func Generate(a *model.AnalysisResult, options Options) ([]model.File, error) {
 
 func validate(a *model.AnalysisResult) error {
 	methods := map[string]string{}
+	itemTypes := map[string]bool{}
 	for _, query := range a.Queries {
+		for _, p := range query.Parameters {
+			if isStructList(p.Type) {
+				name := exportedName(query.Name) + exportedName(p.Name) + "Item"
+				if itemTypes[name] {
+					return fmt.Errorf("typescript generator: generated item type name collision %q", name)
+				}
+				itemTypes[name] = true
+			}
+		}
 		switch query.Command {
 		case model.One, model.Many, model.Exec:
 		case model.ExecRows:
@@ -103,16 +114,11 @@ func validate(a *model.AnalysisResult) error {
 				return fmt.Errorf("typescript generator: query %q: parameter name collision %q between %q and %q", query.Name, field, previous, parameter.Name)
 			}
 			seenParameters[field] = parameter.Name
-			if _, err := tsType(parameter.Type); err != nil {
+			if _, err := parameterType(query.Name, parameter.Name, parameter.Type); err != nil {
 				return fmt.Errorf("typescript generator: query %q parameter %q: %w", query.Name, parameter.Name, err)
 			}
 		}
-		if len(query.Parameters) != 0 && query.SQLWithoutDeclarations == "" {
-			return fmt.Errorf("typescript generator: query %q: analyzer did not provide SQL without declarations required for typed SDK parameters", query.Name)
-		}
-		if !utf8.ValidString(query.SQLWithoutDeclarations) {
-			return fmt.Errorf("typescript generator: query %q: SQL without declarations is not valid UTF-8", query.Name)
-		}
+
 		if query.Command == model.One || query.Command == model.Many {
 			if len(query.ResultSets) != 1 {
 				return fmt.Errorf("typescript generator: query %q: expected one result set, got %d", query.Name, len(query.ResultSets))
@@ -167,14 +173,23 @@ func resultType(t model.Type) string {
 func renderTypeScript(a *model.AnalysisResult) (string, error) {
 
 	classes := map[string]bool{}
-	optional, jsonResult := false, false
+	optional, jsonResult, batch := false, false, false
 	for _, q := range a.Queries {
 		for _, p := range q.Parameters {
-			info := typescriptTypes[p.Type.UnwrapOptional().Kind]
-			classes[info.valueClass] = true
-			if p.Type.IsOptional() {
-				optional = true
-				classes[info.typeClass] = true
+			fields := []model.StructField{{Type: p.Type}}
+			if isStructList(p.Type) {
+				batch = true
+				fields = p.Type.Elem.Fields
+			}
+			for _, field := range fields {
+				info := typescriptTypes[field.Type.UnwrapOptional().Kind]
+				classes[info.valueClass] = true
+				if field.Type.IsOptional() {
+					optional = true
+				}
+				if field.Type.IsOptional() || isStructList(p.Type) {
+					classes[info.typeClass] = true
+				}
 			}
 		}
 		for _, rs := range q.ResultSets {
@@ -197,16 +212,37 @@ func renderTypeScript(a *model.AnalysisResult) (string, error) {
 	if len(imports) > 0 {
 		b.WriteString("import { " + strings.Join(imports, ", ") + " } from \"@ydbjs/value/primitive\";\n")
 	}
+	if batch {
+		b.WriteString("import { List, ListType } from \"@ydbjs/value/list\";\nimport { Struct, StructType } from \"@ydbjs/value/struct\";\nimport type { Value } from \"@ydbjs/value\";\n")
+	}
 	if optional {
-		b.WriteString("import { Optional } from \"@ydbjs/value/optional\";\n")
+		if batch {
+			b.WriteString("import { Optional, OptionalType } from \"@ydbjs/value/optional\";\n")
+		} else {
+			b.WriteString("import { Optional } from \"@ydbjs/value/optional\";\n")
+		}
 	}
 	b.WriteString("\nexport type ConfigureQuery = (query: Query) => void;\n\n")
+	if batch {
+		b.WriteString("// The SDK infers Null for an empty List, so retain the declared item type.\nfunction structList(items: Struct[], type: StructType): Value<ListType> {\n  const list = new List<Struct>();\n  for (const item of items) list.items.push(item);\n  return { type: new ListType(type), encode: () => list.encode() };\n}\n\n")
+	}
 	for _, q := range a.Queries {
+		for _, p := range q.Parameters {
+			if isStructList(p.Type) {
+				b.WriteString("export type " + exportedName(q.Name) + exportedName(p.Name) + "Item = {\n")
+				for _, f := range p.Type.Elem.Fields {
+					field, _ := identifier(f.Name, false)
+					typ, _ := tsType(f.Type)
+					b.WriteString("  readonly " + field + ": " + typ + ";\n")
+				}
+				b.WriteString("};\n\n")
+			}
+		}
 		if len(q.Parameters) > 1 {
 			b.WriteString("export type " + exportedName(q.Name) + "Params = {\n")
 			for _, p := range q.Parameters {
 				field, _ := identifier(p.Name, false)
-				typ, _ := tsType(p.Type)
+				typ, _ := parameterType(q.Name, p.Name, p.Type)
 				b.WriteString("  readonly " + field + ": " + typ + ";\n")
 			}
 			b.WriteString("};\n\n")
@@ -222,23 +258,6 @@ func renderTypeScript(a *model.AnalysisResult) (string, error) {
 	}
 	b.WriteString("}\n")
 	return b.String(), nil
-}
-
-// DECLARE removal leaves whitespace so analyzer source offsets stay stable.
-// Omit only the emptied lines, retaining original blank lines and comments.
-func omitDeclarationLines(original, executable string) string {
-	originalLines, lines := strings.Split(original, "\n"), strings.Split(executable, "\n")
-	if len(originalLines) != len(lines) {
-		return executable
-	}
-	kept := make([]string, 0, len(lines))
-	for i, line := range lines {
-		if strings.TrimSpace(line) == "" && strings.TrimSpace(originalLines[i]) != "" {
-			continue
-		}
-		kept = append(kept, line)
-	}
-	return strings.Join(kept, "\n")
 }
 
 func renderRowType(b *strings.Builder, name string, q model.AnalyzedQuery) {
@@ -268,7 +287,7 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 	if len(q.Parameters) == 1 {
 		p := q.Parameters[0]
 		field, _ := identifier(p.Name, false)
-		typ, _ := tsType(p.Type)
+		typ, _ := parameterType(q.Name, p.Name, p.Type)
 		params = field + ": " + typ + ", "
 	}
 	if len(q.Parameters) > 1 {
@@ -285,20 +304,39 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 	}
 	b.WriteString("\n  // " + model.QueryAnnotation(q) + "\n")
 	b.WriteString("  async " + method + "(" + params + "configure?: ConfigureQuery): Promise<" + ret + "> {\n")
-	sql := q.SQL
-	if len(q.Parameters) > 0 {
-		sql = omitDeclarationLines(q.SQL, q.SQLWithoutDeclarations)
-	}
-	sql = model.WithoutQueryAnnotation(sql)
-	b.WriteString("    const stmt = this.#sql" + generic + sqlLiteral(strings.TrimSpace(sql)))
+
+	sql := model.WithoutQueryAnnotation(q.SQL)
+	b.WriteString("    const stmt = this.#sql" + generic + sqlLiteral(sql))
+	declared := len(q.DeclaredParameters) > 0
 	for _, p := range q.Parameters {
+		if q.IsDeclaredParameter(p.Name) {
+			continue
+		}
 		field, _ := identifier(p.Name, false)
 		if len(q.Parameters) > 1 {
 			field = "args." + field
 		}
 		b.WriteString("\n      .parameter(" + strconv.Quote(p.Name) + ", " + bindExpression(p.Type, field) + ")")
 	}
-	b.WriteString(";\n    configure?.(stmt);\n")
+	b.WriteString(";\n")
+	if declared {
+		b.WriteString("    // Keep explicit DECLARE statements; the SDK otherwise prepends duplicates.\n")
+		b.WriteString("    Object.defineProperty(stmt, \"text\", { value: stmt.text, writable: false });\n")
+		b.WriteString("    stmt")
+		for _, p := range q.Parameters {
+			if !q.IsDeclaredParameter(p.Name) {
+				continue
+			}
+			field, _ := identifier(p.Name, false)
+			if len(q.Parameters) > 1 {
+				field = "args." + field
+			}
+			b.WriteString("\n      .parameter(" + strconv.Quote(p.Name) + ", " + bindExpression(p.Type, field) + ")")
+		}
+		b.WriteString(";\n")
+	}
+	b.WriteString("    configure?.(stmt);\n")
+
 	if q.Command == model.Exec {
 		b.WriteString("    await stmt;\n  }\n")
 		return
@@ -313,6 +351,21 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 }
 
 func bindExpression(t model.Type, value string) string {
+	if isStructList(t) {
+		var fields, names, types []string
+		for _, f := range t.Elem.Fields {
+			field, _ := identifier(f.Name, false)
+			fields = append(fields, "["+strconv.Quote(f.Name)+"]: "+bindExpression(f.Type, "item."+field))
+			names = append(names, strconv.Quote(f.Name))
+			info := typescriptTypes[f.Type.UnwrapOptional().Kind]
+			typ := "new " + info.typeClass + "()"
+			if f.Type.IsOptional() {
+				typ = "new OptionalType(" + typ + ")"
+			}
+			types = append(types, typ)
+		}
+		return "structList(\n        " + value + ".map(item => new Struct({\n          " + strings.Join(fields, ",\n          ") + ",\n        })),\n        new StructType(\n          [\n            " + strings.Join(names, ",\n            ") + ",\n          ],\n          [\n            " + strings.Join(types, ",\n            ") + ",\n          ],\n        ),\n      )"
+	}
 	info := typescriptTypes[t.UnwrapOptional().Kind]
 	wrapped := "new " + info.valueClass + "(" + value + ")"
 	if t.IsOptional() {
@@ -322,57 +375,20 @@ func bindExpression(t model.Type, value string) string {
 }
 
 func sqlLiteral(value string) string {
-	var b strings.Builder
-	b.WriteByte('`')
-	for i := 0; i < len(value); {
-		if value[i] == ' ' || value[i] == '\t' {
-			end := i
-			for end < len(value) && (value[end] == ' ' || value[end] == '\t') {
-				end++
-			}
-			if end == len(value) || value[end] == '\r' || value[end] == '\n' {
-				for ; i < end; i++ {
-					if value[i] == ' ' {
-						b.WriteString(`\x20`)
-					} else {
-						b.WriteString(`\t`)
-					}
-				}
-			} else {
-				b.WriteString(value[i:end])
-				i = end
-			}
-			continue
+	var lines []string
+	for _, line := range strings.SplitAfter(value, "\n") {
+		if line != "" {
+			var quoted strings.Builder
+			encoder := json.NewEncoder(&quoted)
+			encoder.SetEscapeHTML(false)
+			_ = encoder.Encode(line)
+			lines = append(lines, strings.TrimSuffix(quoted.String(), "\n"))
 		}
-		r, size := utf8.DecodeRuneInString(value[i:])
-		switch r {
-		case '\\':
-			b.WriteString(`\\`)
-		case '`':
-			b.WriteString("\\`")
-		case '$':
-			if i+size < len(value) && value[i+size] == '{' {
-				b.WriteString(`\$`)
-			} else {
-				b.WriteRune(r)
-			}
-		case '\r':
-			b.WriteString(`\r`)
-		case '\n':
-			b.WriteString("\n      ")
-		default:
-			if r < 0x20 && r != '\n' && r != '\t' {
-				fmt.Fprintf(&b, "\\x%02x", r)
-			} else if r == 0x7f || r == '\u2028' || r == '\u2029' {
-				fmt.Fprintf(&b, "\\u%04x", r)
-			} else {
-				b.WriteRune(r)
-			}
-		}
-		i += size
 	}
-	b.WriteByte('`')
-	return b.String()
+	if len(lines) == 0 {
+		lines = []string{`""`}
+	}
+	return "(\n      " + strings.Join(lines, " +\n      ") + "\n    )"
 }
 
 func identifier(value string, exported bool) (string, error) {
@@ -434,4 +450,31 @@ func splitWords(value string) []string {
 func exportedName(value string) string {
 	result, _ := identifier(value, true)
 	return result
+}
+
+func isStructList(t model.Type) bool {
+	return t.Kind == "List" && t.Elem != nil && t.Elem.Kind == "Struct"
+}
+func parameterType(query, name string, t model.Type) (string, error) {
+	if !isStructList(t) {
+		return tsType(t)
+	}
+	if len(t.Elem.Fields) == 0 {
+		return "", fmt.Errorf("List<Struct> requires at least one scalar field")
+	}
+	seen := map[string]bool{}
+	for _, f := range t.Elem.Fields {
+		field, err := identifier(f.Name, false)
+		if err != nil {
+			return "", err
+		}
+		if seen[field] {
+			return "", fmt.Errorf("struct field name collision %q", field)
+		}
+		seen[field] = true
+		if _, err := tsType(f.Type); err != nil {
+			return "", fmt.Errorf("struct field %q: %w", f.Name, err)
+		}
+	}
+	return "ReadonlyArray<" + exportedName(query) + exportedName(name) + "Item>", nil
 }

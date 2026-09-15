@@ -33,9 +33,9 @@ func TestGeneratedSQLUsesQuotedLinesAndPreservesText(t *testing.T) {
 	for _, tc := range []struct {
 		sql, wantLiteral, wantSQL string
 	}{
-		{"-- name: GetUser :one\nDECLARE $id AS Uint64;\nSELECT id, bio FROM users WHERE id = $id;", "\"DECLARE $id AS Uint64; \"+\n", "DECLARE $id AS Uint64; SELECT id, bio FROM users WHERE id = $id;"},
-		{"-- name: GetUser :one\nSELECT `id`, `bio` FROM `my/tbl`\nWHERE name = 'Автор' AND path = 'C:\\data';", "\"SELECT `id`, `bio` FROM `my/tbl` \"+\n", "SELECT `id`, `bio` FROM `my/tbl` WHERE name = 'Автор' AND path = 'C:\\data';"},
-		{"-- name: GetUser :one\r\nSELECT id, bio FROM users;\r\n", "\"SELECT id, bio FROM users;\"", "SELECT id, bio FROM users;"},
+		{"-- name: GetUser :one\nDECLARE $id AS Uint64;\nSELECT id, bio FROM users WHERE id = $id;", "\"DECLARE $id AS Uint64;\\n\"+\n", "DECLARE $id AS Uint64;\nSELECT id, bio FROM users WHERE id = $id;"},
+		{"-- name: GetUser :one\nSELECT `id`, `bio` FROM `my/tbl`\nWHERE name = 'Автор' AND path = 'C:\\data';", "\"SELECT `id`, `bio` FROM `my/tbl`\\n\"+\n", "SELECT `id`, `bio` FROM `my/tbl`\nWHERE name = 'Автор' AND path = 'C:\\data';"},
+		{"-- name: GetUser :one\r\nSELECT id, bio FROM users;\r\n", "\"SELECT id, bio FROM users;\\r\\n\"", "SELECT id, bio FROM users;\r\n"},
 		{"-- name: GetUser :one\nSELECT '\x00' FROM users;", "\"SELECT '\\x00' FROM users;\"", "SELECT '\x00' FROM users;"},
 	} {
 		for _, runtime := range []string{"database/sql", "ydb"} {
@@ -47,7 +47,7 @@ func TestGeneratedSQLUsesQuotedLinesAndPreservesText(t *testing.T) {
 				t.Fatalf("%s query annotation is not attached to the generated method:\n%s", runtime, source)
 			}
 			if got := generatedSQLValue(t, source); got != tc.wantSQL {
-				t.Fatalf("%s SQL = %q, want compact SQL %q", runtime, got, tc.wantSQL)
+				t.Fatalf("%s SQL = %q, want original SQL %q", runtime, got, tc.wantSQL)
 			}
 		}
 	}
@@ -56,7 +56,7 @@ func TestGeneratedSQLUsesQuotedLinesAndPreservesText(t *testing.T) {
 func TestGeneratedSQLAlignsMultilineQuotedLines(t *testing.T) {
 	for _, runtime := range []string{"database/sql", "ydb"} {
 		source := string(generatedSQLSource(t, runtime, "SELECT id, bio\nFROM users;"))
-		want := "(ctx, \"\"+\n\t\t\"SELECT id, bio \"+\n\t\t\"FROM users;\","
+		want := "(ctx, \"\"+\n\t\t\"SELECT id, bio\\n\"+\n\t\t\"FROM users;\","
 		if !strings.Contains(source, want) {
 			t.Fatalf("%s multiline SQL literals are not aligned after gofmt:\n%s", runtime, source)
 		}
@@ -73,16 +73,13 @@ func TestGeneratedSQLPrefixesSingleLineWithEmptyLiteral(t *testing.T) {
 	}
 }
 
-func TestGeneratedSQLUsesDeclarationFreeVariant(t *testing.T) {
-	const executableSQL = "SELECT id, bio FROM users WHERE id = $id;"
+func TestGeneratedSQLPreservesExplicitDeclarations(t *testing.T) {
 	in := sample()
 	in.Queries = in.Queries[:1]
-	in.Queries[0].SQLWithoutDeclarations = "-- name: GetUser :one\n   \nSELECT id, bio FROM users WHERE id = $id;"
-
 	for _, runtime := range []string{"database/sql", "ydb"} {
 		source := generatedSQLSourceForAnalysis(t, runtime, in)
-		if got := generatedSQLValue(t, source); got != executableSQL {
-			t.Fatalf("%s executable SQL = %q, want declaration-free SQL %q", runtime, got, executableSQL)
+		if got := generatedSQLValue(t, source); got != in.Queries[0].SQL {
+			t.Fatalf("%s executable SQL=%q, want original %q", runtime, got, in.Queries[0].SQL)
 		}
 	}
 }
@@ -362,37 +359,13 @@ func TestGeneratedSQLSpecialCharacters(t *testing.T) {
 		for _, tc := range cases {
 			t.Run(runtime+"/"+tc.name, func(t *testing.T) {
 				got := generatedSQLValue(t, generatedSQLSource(t, runtime, tc.sql))
-				want := compactSQLForTest(tc.sql)
+				want := tc.sql
 				if got != want {
-					t.Fatalf("SQL = %q, want compact SQL %q", got, want)
+					t.Fatalf("SQL = %q, want original SQL %q", got, want)
 				}
 			})
 		}
 	}
-}
-
-func compactSQLForTest(sql string) string {
-	lines := strings.Split(sql, "\n")
-	compact := lines[:0]
-	for _, line := range lines {
-		line = strings.Trim(line, " \t\r")
-		if line != "" {
-			compact = append(compact, line)
-		}
-	}
-	var result strings.Builder
-	for i, line := range compact {
-		result.WriteString(line)
-		if i+1 == len(compact) {
-			continue
-		}
-		if strings.Contains(line, "--") {
-			result.WriteByte('\n')
-		} else {
-			result.WriteByte(' ')
-		}
-	}
-	return result.String()
 }
 
 func generatedSQLSource(t *testing.T, runtime, sql string) []byte {
@@ -1195,6 +1168,19 @@ func TestRejectsExtendedTemporalNativeListParameters(t *testing.T) {
 					t.Fatalf("unexpected error: %v", err)
 				}
 			})
+		}
+	}
+}
+
+func TestGeneratedBatchSQLPreservesIndentationAndLineBreaks(t *testing.T) {
+	const body = "DECLARE $books AS List<Struct<\r\n    book_id: Uint64, \r\n\tdata: Json\r\n>>;\r\n\r\nINSERT INTO books (book_id, data)\r\nSELECT\r\n    book_id,\r\n    data\r\nFROM\r\n    AS_TABLE($books)\r\n;  \r\n"
+	for _, runtime := range []string{"database/sql", "ydb"} {
+		source := generatedSQLSource(t, runtime, "-- name: GetUser :one\r\n"+body)
+		if got := generatedSQLValue(t, source); got != body {
+			t.Fatalf("%s changed original batch SQL bytes:\ngot %q\nwant %q", runtime, got, body)
+		}
+		if !strings.Contains(string(source), `"    book_id: Uint64, \r\n"`) {
+			t.Fatalf("%s lost readable Struct indentation:\n%s", runtime, source)
 		}
 	}
 }

@@ -16,8 +16,12 @@ class Querier:
         parameters = {
             "author_id": (author_id, _ydb.PrimitiveType.Uint64),
         }
-        result = self._connection.execute(_text(
-            ("SELECT id, name, bio FROM authors WHERE id = :author_id;")), parameters)
+        result = self._connection.execute(
+            _text(
+                ("SELECT id, name, bio FROM authors WHERE id = :author_id;")
+            ),
+            parameters,
+        )
         try:
             row = result.fetchone()
         finally:
@@ -34,8 +38,12 @@ class Querier:
     def list_authors(self) -> list[_models.Authors]:
         parameters = {
         }
-        result = self._connection.execute(_text(
-            ("SELECT id, name, bio FROM authors ORDER BY name;")), parameters)
+        result = self._connection.execute(
+            _text(
+                ("SELECT id, name, bio FROM authors ORDER BY name;")
+            ),
+            parameters,
+        )
         try:
             rows = result.fetchall()
         finally:
@@ -51,8 +59,12 @@ class Querier:
         parameters = {
             "author_id": (author_id, _ydb.PrimitiveType.Uint64),
         }
-        result = self._connection.execute(_text(
-            ("SELECT name FROM authors WHERE id = :author_id;")), parameters)
+        result = self._connection.execute(
+            _text(
+                ("SELECT name FROM authors WHERE id = :author_id;")
+            ),
+            parameters,
+        )
         try:
             row = result.fetchone()
         finally:
@@ -70,10 +82,14 @@ class Querier:
             "author_name": (author_name, _ydb.PrimitiveType.Utf8),
             "biography": (biography, _ydb.OptionalType(_ydb.PrimitiveType.Utf8)),
         }
-        result = self._connection.execute(_text(
-            ("INSERT INTO `authors` (`id`, `name`, `bio`)\n"
-             "VALUES (:author_id, :author_name, :biography)\n"
-             "RETURNING `id`, `name`, `bio`;")), parameters)
+        result = self._connection.execute(
+            _text(
+                ("INSERT INTO `authors` (`id`, `name`, `bio`)\n"
+                 "VALUES (:author_id, :author_name, :biography)\n"
+                 "RETURNING `id`, `name`, `bio`;")
+            ),
+            parameters,
+        )
         try:
             row = result.fetchone()
         finally:
@@ -93,9 +109,13 @@ class Querier:
             "author_name": (author_name, _ydb.PrimitiveType.Utf8),
             "biography": (biography, _ydb.OptionalType(_ydb.PrimitiveType.Utf8)),
         }
-        result = self._connection.execute(_text(
-            ("UPSERT INTO authors (id, name, bio)\n"
-             "VALUES (:author_id, :author_name, :biography);")), parameters)
+        result = self._connection.execute(
+            _text(
+                ("UPSERT INTO authors (id, name, bio)\n"
+                 "VALUES (:author_id, :author_name, :biography);")
+            ),
+            parameters,
+        )
         result.close()
         return None
 
@@ -104,7 +124,11 @@ class Querier:
         parameters = {
             "author_id": (author_id, _ydb.PrimitiveType.Uint64),
         }
-        result = self._connection.execute(_text(
-            ("DELETE FROM authors WHERE id = :author_id;")), parameters)
+        result = self._connection.execute(
+            _text(
+                ("DELETE FROM authors WHERE id = :author_id;")
+            ),
+            parameters,
+        )
         result.close()
         return None

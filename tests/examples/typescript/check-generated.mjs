@@ -16,9 +16,10 @@ for (const generated of modules) {
 function recordingClient(resultSets = [[]]) {
   const calls = [];
   const client = (text) => {
-    const call = { text: text.join(""), parameters: new Map() };
+    const call = { text, parameters: new Map() };
     calls.push(call);
     const stmt = Promise.resolve(resultSets);
+    Object.defineProperty(stmt, "text", { value: call.text, configurable: true });
     stmt.parameter = (name, value) => {
       call.parameters.set(name, value);
       return stmt;
@@ -67,5 +68,24 @@ const [book] = await new modules[1].Queries(bookProbe.client).booksByYear(2026);
 assert.equal(book.available.getTime(), 1788957296789);
 assert.deepEqual(book.tags, { genre: "novel" });
 assert.match(bookProbe.calls[0].text, /book_id/);
+
+
+const batchInput = { bookId: 18446744073709551615n, authorId: 2n, isbn: "batch", bookType: "novel", title: "batch", year: 2026, available: new Date(1788957296789), tags: '{"batch":true}' };
+for (const books of [[], [batchInput], [batchInput, { ...batchInput, bookId: 3n }]]) {
+  const probe = recordingClient();
+  await new modules[1].Queries(probe.client).createBooks(books);
+  const parameter = probe.calls[0].parameters.get("books");
+  const type = parameter.type.encode().type;
+  assert.equal(type.case, "listType");
+  assert.equal(type.value.item.type.case, "structType");
+  const names = type.value.item.type.value.members.map(member => member.name);
+  const rows = parameter.encode().items;
+  assert.equal(rows.length, books.length);
+  for (let i = 0; i < books.length; i++) {
+    assert.equal(rows[i].items[names.indexOf("book_id")].value.value, books[i].bookId);
+    assert.equal(rows[i].items[names.indexOf("tags")].value.value, books[i].tags);
+    assert.equal(rows[i].items[names.indexOf("available")].value.value, 1788957296789000n);
+  }
+}
 
 console.log("Imported generated TypeScript for all five examples against the pinned YDB SDK.");

@@ -71,6 +71,12 @@ async function runBatch() {
     assert.deepEqual(book.available, available);
     assert.deepEqual(book.tags, ["history", "science-fiction"]);
     assert.equal((await queries.booksByYear(1979))[0].author_id, authorId);
+    await queries.createBooks([]);
+    await queries.createBooks([1n, 2n].map(bookId => ({ bookId, authorId, isbn: "batch", bookType: "novel", title: "Batch", year: 1980, available, tags: '{"batch":true}' })));
+    const inserted = await queries.booksByYear(1980);
+    assert.deepEqual(inserted.map(row => row.book_id).sort(), [1n, 2n]);
+    for (const row of inserted) { assert.deepEqual(row.available, available); assert.deepEqual(row.tags, { batch: true }); }
+
     await queries.updateBook({ title: "Kindred (updated)", tags: '{"shelf":"read"}', bookId });
     assert.deepEqual((await queries.getBiography(authorId)).biography, { born: 1947 });
     await queries.deleteBook(bookId);

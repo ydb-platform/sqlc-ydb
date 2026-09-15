@@ -6,10 +6,8 @@ namespace authors::userver {
 // -- name: GetAuthor :one
 std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
     const auto sqlc_query = ::userver::ydb::Query{
-        R"sql(
-            DECLARE $author_id AS Uint64;
-            SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;
-        )sql",
+        "DECLARE $author_id AS Uint64;\n"
+        "SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;",
         ::userver::ydb::Query::Name{"GetAuthor"},
         ::userver::ydb::Query::LogMode::kNameOnly,
     };

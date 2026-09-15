@@ -103,7 +103,19 @@ class LiveTest {
                 queries.createBook(ULong.valueOf(i), ULong.MAX, "isbn", "paper", "Title", 2026,
                         Instant.parse("2026-01-01T00:00:00.123456Z"), JSON.valueOf("[]"));
             }
+            queries.createBooks(List.of());
             assertEquals(4, queries.booksByYear(2026).size());
+            queries.createBooks(List.of(new batch.jooq.CreateBooksBooksItem(-1L, -1L, "batch-isbn", "paper", "Batch", 2027,
+                    Instant.parse("2026-01-01T00:00:00.123456Z"), "[1,true]")));
+            assertEquals(ULong.MAX, queries.booksByYear(2027).get(0).bookId());
+            assertEquals("[1,true]", queries.booksByYear(2027).get(0).tags().data());
+            queries.deleteBook(ULong.MAX);
+            fixture.connection.setAutoCommit(false);
+            queries.createBooks(List.of(new batch.jooq.CreateBooksBooksItem(42L, -1L, "rollback", "paper", "Rollback", 2028,
+                    Instant.EPOCH, "[]")));
+            fixture.connection.rollback();
+            fixture.connection.setAutoCommit(true);
+            assertTrue(queries.booksByYear(2028).isEmpty());
             queries.updateBook("Updated", JSON.valueOf("[1]"), ULong.valueOf(1));
             assertTrue(queries.booksByYear(2026).stream().anyMatch(row -> row.title().equals("Updated")));
             queries.deleteBook(ULong.valueOf(1));

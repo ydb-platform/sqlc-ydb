@@ -93,6 +93,9 @@ func validateDecimalParameter(name string, value types.Decimal, precision, scale
 }
 
 func validate(in *model.AnalysisResult, o Options) error {
+	if err := validateStructDeclarations(in); err != nil {
+		return err
+	}
 	seen := map[string]bool{}
 	outputs := map[string]string{}
 	for _, q := range in.Queries {
@@ -124,10 +127,14 @@ func validate(in *model.AnalysisResult, o Options) error {
 				return fmt.Errorf("%s: colliding parameter %q", q.Name, p.Name)
 			}
 			field[goName(p.Name)] = true
-			if _, err := goType(p.Type); err != nil {
+			if _, err := parameterGoType(q, p); err != nil {
 				return fmt.Errorf("%s parameter %s: %w", q.Name, p.Name, err)
 			}
-			if hasKind(p.Type, "list") {
+			if isStructList(p.Type) {
+				if err := validateStructList(p.Type); err != nil {
+					return fmt.Errorf("%s parameter %s: %w", q.Name, p.Name, err)
+				}
+			} else if hasKind(p.Type, "list") {
 				if o.Runtime == "database/sql" {
 					return fmt.Errorf("%s parameter %s: List parameters are unsupported by database/sql", q.Name, p.Name)
 				}
@@ -294,6 +301,11 @@ func models(in *model.AnalysisResult, o Options) []byte {
 	var b bytes.Buffer
 	var imports typeImports
 	for _, q := range in.Queries {
+		for _, p := range q.Parameters {
+			if isStructList(p.Type) {
+				writeStructModel(&b, q, p, o, &imports)
+			}
+		}
 		if q.Command == model.One || q.Command == model.Many {
 			r := q.ResultSets[0]
 			b.WriteString("type " + q.Name + "Row struct {\n")
@@ -311,8 +323,10 @@ func models(in *model.AnalysisResult, o Options) []byte {
 		if len(q.Parameters) > 1 {
 			b.WriteString("type " + q.Name + "Params struct {\n")
 			for _, p := range q.Parameters {
-				typ, _ := goType(p.Type)
-				imports.add(p.Type)
+				typ, _ := parameterGoType(q, p)
+				if !isStructList(p.Type) {
+					imports.add(p.Type)
+				}
 				b.WriteString(goName(p.Name) + " " + typ)
 				if o.EmitJSONTags {
 					b.WriteString(" `json:" + strconv.Quote(p.Name) + "`")
@@ -326,7 +340,9 @@ func models(in *model.AnalysisResult, o Options) []byte {
 		b.WriteString("type Querier interface {\n")
 		for _, q := range in.Queries {
 			for _, p := range q.Parameters {
-				imports.add(p.Type)
+				if !isStructList(p.Type) {
+					imports.add(p.Type)
+				}
 			}
 			sig := methodArgs(q, o)
 			ret := "error"
@@ -380,13 +396,24 @@ func (i *typeImports) add(t model.Type) {
 	if t.Elem != nil {
 		i.add(*t.Elem)
 	}
+	for _, f := range t.Fields {
+		i.add(f.Type)
+	}
 }
 
 func hasKind(t model.Type, kind string) bool {
 	if strings.EqualFold(t.Kind, kind) {
 		return true
 	}
-	return t.Elem != nil && hasKind(*t.Elem, kind)
+	if t.Elem != nil && hasKind(*t.Elem, kind) {
+		return true
+	}
+	for _, f := range t.Fields {
+		if hasKind(f.Type, kind) {
+			return true
+		}
+	}
+	return false
 }
 
 func db(o Options) []byte {
@@ -419,7 +446,7 @@ func queryFile(source string, qs []model.AnalyzedQuery, o Options) []byte {
 	for _, q := range qs {
 		needsYDBMany = needsYDBMany || (o.Runtime == "ydb" && q.Command == model.Many)
 		for _, p := range q.Parameters {
-			if len(q.Parameters) == 1 {
+			if len(q.Parameters) == 1 && !isStructList(p.Type) {
 				parameterImports.add(p.Type)
 			}
 			kind := strings.ToLower(p.Type.UnwrapOptional().Kind)
@@ -427,14 +454,15 @@ func queryFile(source string, qs []model.AnalyzedQuery, o Options) []byte {
 			if kind == "json" || kind == "jsondocument" {
 				needsJSON = true
 			}
-			needsUUID = needsUUID || (len(q.Parameters) == 1 && hasKind(p.Type, "uuid"))
-			needsTypes = needsTypes ||
+			needsUUID = needsUUID || (len(q.Parameters) == 1 && !isStructList(p.Type) && hasKind(p.Type, "uuid"))
+			needsTypes = needsTypes || isStructList(p.Type) ||
 				(o.Runtime == "database/sql" && (kind == "uuid" || kind == "decimal")) ||
 				(o.Runtime == "ydb" && (hasKind(p.Type, "list") || (len(q.Parameters) == 1 && hasKind(p.Type, "decimal"))))
 			needsYDB = needsYDB || o.Runtime == "ydb"
 		}
 	}
 	stdlibImports := []string{"\"context\""}
+
 	externalImports := []string{}
 	if parameterImports.time {
 		stdlibImports = append(stdlibImports, "\"time\"")
@@ -473,6 +501,11 @@ func queryFile(source string, qs []model.AnalyzedQuery, o Options) []byte {
 
 	for _, q := range qs {
 		writeQuery(&b, q, o)
+		for _, p := range q.Parameters {
+			if isStructList(p.Type) {
+				writeStructListBuilder(&b, q, p)
+			}
+		}
 	}
 	return b.Bytes()
 }
@@ -496,60 +529,21 @@ func writeQuery(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 	b.WriteString("}\n\n")
 }
 
-func cleanWhitespaceOnlyLines(sql string) string {
-	lines := strings.SplitAfter(sql, "\n")
-	for i, line := range lines {
-		if strings.TrimSpace(line) != "" {
-			continue
-		}
-		switch {
-		case strings.HasSuffix(line, "\r\n"):
-			lines[i] = "\r\n"
-		case strings.HasSuffix(line, "\n"):
-			lines[i] = "\n"
-		default:
-			lines[i] = ""
-		}
-	}
-	return strings.Join(lines, "")
-}
-
 func sqlLiteral(sql string) string {
 	if sql == "" {
 		return `""`
 	}
-	lines := strings.Split(sql, "\n")
-	compact := lines[:0]
-	for _, line := range lines {
-		line = strings.Trim(line, " \t\r")
+	parts := []string{`""`}
+	for _, line := range strings.SplitAfter(sql, "\n") {
 		if line != "" {
-			compact = append(compact, line)
+			parts = append(parts, strconv.Quote(line))
 		}
 	}
-	for i, line := range compact {
-		if i+1 < len(compact) {
-			if strings.Contains(line, "--") {
-				line += "\n"
-			} else {
-				line += " "
-			}
-		}
-		compact[i] = strconv.Quote(line)
-	}
-	if len(compact) == 0 {
-		return `""`
-	}
-	compact = append([]string{`""`}, compact...)
-	return strings.Join(compact, " +\n")
+	return strings.Join(parts, " +\n")
 }
 
 func querySQL(q model.AnalyzedQuery) string {
-	sql := q.SQLWithoutDeclarations
-	if sql == "" {
-		sql = q.SQL
-	} else {
-		sql = cleanWhitespaceOnlyLines(sql)
-	}
+	sql := q.SQL
 	if line, rest, ok := strings.Cut(sql, "\n"); queryAnnotation(line) {
 		if ok {
 			sql = rest
@@ -574,7 +568,7 @@ func methodArgs(q model.AnalyzedQuery, o Options) string {
 	if len(q.Parameters) > 1 {
 		args = ", arg " + q.Name + "Params"
 	} else if len(q.Parameters) == 1 {
-		t, _ := goType(q.Parameters[0].Type)
+		t, _ := parameterGoType(q, q.Parameters[0])
 		args = ", arg " + t
 	}
 	if o.Runtime == "ydb" {
@@ -592,6 +586,10 @@ func sqlArgumentList(q model.AnalyzedQuery) []string {
 	x := make([]string, len(q.Parameters))
 	for i, p := range q.Parameters {
 		value := varRef(q, p)
+		if isStructList(p.Type) {
+			x[i] = "sql.Named(" + strconv.Quote(p.Name) + ", " + structListBuilderName(q, p) + "(" + value + "))"
+			continue
+		}
 		typeValue := p.Type.UnwrapOptional()
 		switch strings.ToLower(typeValue.Kind) {
 		case "json":
@@ -679,7 +677,11 @@ func writeYDB(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 		writeDecimalValidations(b, q, o)
 		b.WriteString("parameters := ydb.ParamsBuilder()\n")
 		for i, p := range q.Parameters {
-			writeYDBParameter(b, p, varRef(q, p), i)
+			if isStructList(p.Type) {
+				b.WriteString("parameters = parameters.Param(" + strconv.Quote("$"+p.Name) + ").Any(" + structListBuilderName(q, p) + "(" + varRef(q, p) + "))\n")
+			} else {
+				writeYDBParameter(b, p, varRef(q, p), i)
+			}
 		}
 		// Execute options are applied in order by the SDK. Put generated parameters
 		// last so callers can supply execution settings but cannot replace bindings
@@ -723,6 +725,10 @@ func writeYDB(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 func writeDecimalValidations(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 	for i, p := range q.Parameters {
 		value := varRef(q, p)
+		if isStructList(p.Type) {
+			writeStructDecimalValidations(b, q, p, o)
+			continue
+		}
 		failure := decimalValidationFailure(q, o)
 		if strings.EqualFold(p.Type.UnwrapOptional().Kind, "Decimal") {
 			precision, scale := decimalArgs(p.Type.UnwrapOptional())

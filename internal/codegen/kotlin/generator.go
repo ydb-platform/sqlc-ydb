@@ -251,7 +251,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			return nil, fmt.Errorf("%s: Kotlin does not support %s", q.Name, q.Command)
 		}
 		params, names := []string{}, []string{}
-		seen := map[string]bool{"client": true, "transaction": true, "kotlin": true, "tech": true}
+		seen := map[string]bool{"client": true, "transaction": true, "kotlin": true, "tech": true, "_batchItem": true}
 		for _, p := range q.Parameters {
 			n, err := name(p.Name, false)
 			if err != nil {
@@ -261,7 +261,20 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 				return nil, fmt.Errorf("%s: Kotlin parameter name collision: %s", q.Name, n)
 			}
 			seen[n] = true
-			_, typ, err := typeInfo(p.Type)
+			var typ string
+			if isStructList(p.Type) {
+				queryName, _ := name(q.Name, true)
+				parameterName, _ := name(p.Name, true)
+				itemName := queryName + parameterName + "Item"
+				columns := make([]model.Column, len(p.Type.Elem.Fields))
+				for i, field := range p.Type.Elem.Fields {
+					columns[i] = model.Column{Name: field.Name, Type: field.Type}
+				}
+				err = addRecord(itemName, columns)
+				typ = "List<" + itemName + ">"
+			} else {
+				_, typ, err = typeInfo(p.Type)
+			}
 			if err != nil {
 				return nil, fmt.Errorf("%s parameter %s: %w", q.Name, p.Name, err)
 			}
@@ -269,18 +282,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			names = append(names, n)
 		}
 		fmt.Fprintf(&b, "\n    // %s\n    fun %s(%s): %s {\n", model.QueryAnnotation(q), method, strings.Join(params, ", "), ret)
-		for i, p := range q.Parameters {
-			max := map[string]string{"Uint8": "255", "Uint16": "65535", "Uint32": "4294967295L"}[p.Type.UnwrapOptional().Kind]
-			if max == "" {
-				continue
-			}
-			n := names[i]
-			condition := n + " >= 0 && " + n + " <= " + max
-			if p.Type.IsOptional() {
-				condition = n + " == null || (" + condition + ")"
-			}
-			fmt.Fprintf(&b, "        kotlin.require(%s) { %s }\n", condition, quoted("parameter $"+p.Name+" is outside "+p.Type.UnwrapOptional().Kind+" range"))
-		}
+		emitUnsignedChecks(&b, q, names)
 		if o.Runtime == "ydb" {
 			emitNative(&b, q, names, sql, row)
 		} else {
@@ -294,11 +296,14 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 }
 
 func parameterValue(p model.Parameter, n string) string {
+	if isStructList(p.Type) {
+		return structListValue(p.Type, n)
+	}
 	s, _, _ := typeInfo(p.Type)
 	value := "PrimitiveValue.new" + s.sdk + "(" + n + ")"
 	if p.Type.IsOptional() {
 		o := "OptionalType.of(PrimitiveType." + s.sdk + ")"
-		value = "if (" + n + " == null) " + o + ".emptyValue() else " + o + ".newValue(" + value + ")"
+		value = "if (" + n + " == null) " + o + ".emptyValue() else " + value + ".makeOptional()"
 	}
 	return value
 }
@@ -306,19 +311,19 @@ func emitNative(b *strings.Builder, q model.AnalyzedQuery, names []string, sql, 
 	sql = strings.ReplaceAll(sql, "\n", "\n    ")
 	b.WriteString("        val _params = Params.create()\n")
 	for i, p := range q.Parameters {
-		fmt.Fprintf(b, "        _params.put(%s, %s)\n", quoted("$"+p.Name), parameterValue(p, names[i]))
+		fmt.Fprintf(b, "        _params.put(%s, %s)\n", quoted("$"+p.Name), indentExpression(parameterValue(p, names[i]), "        "))
 	}
 	if q.Command == model.Exec {
 		b.WriteString("        if (transaction != null) {\n")
 		fmt.Fprintf(b, "            transaction.createQuery(%s, _params).execute().join().getStatus().expectSuccess()\n", sql)
 		b.WriteString("        } else {\n            client!!.supplyResult { _session ->\n")
-		fmt.Fprintf(b, "                _session.createQuery(%s, TxMode.SERIALIZABLE_RW, _params).execute()\n            }.join().getStatus().expectSuccess()\n        }\n", sql)
+		fmt.Fprintf(b, "                _session.createQuery(%s, TxMode.SERIALIZABLE_RW, _params).execute()\n            }.join().getStatus().expectSuccess()\n        }\n", indentExpression(sql, "    "))
 		return
 	}
 	b.WriteString("        val _query = if (transaction != null) {\n")
 	fmt.Fprintf(b, "            QueryReader.readFrom(transaction.createQuery(%s, _params)).join().getValue()\n", sql)
 	b.WriteString("        } else {\n            client!!.supplyResult { _session ->\n")
-	fmt.Fprintf(b, "                QueryReader.readFrom(_session.createQuery(%s, TxMode.SERIALIZABLE_RW, _params))\n            }.join().getValue()\n        }\n", sql)
+	fmt.Fprintf(b, "                QueryReader.readFrom(_session.createQuery(%s, TxMode.SERIALIZABLE_RW, _params))\n            }.join().getValue()\n        }\n", indentExpression(sql, "    "))
 	b.WriteString("        kotlin.check(_query.getResultSetCount() == 1) { \"Expected one result set\" }\n        val _rows = _query.getResultSet(0)\n")
 	emitRows(b, q, row, "        ", true)
 }
@@ -328,7 +333,32 @@ func emitJDBC(b *strings.Builder, q model.AnalyzedQuery, names []string, binding
 		b.WriteString("        val _connection = client.connection.connection as java.sql.Connection\n")
 		connection = "_connection"
 	}
-	fmt.Fprintf(b, "        %s.prepareStatement(%s).use { _prepared ->\n", connection, sql)
+	if jdbc.HasDeclarations(q) {
+		fmt.Fprintf(b, "        %s.unwrap(tech.ydb.jdbc.YdbConnection::class.java).prepareStatement(%s, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY).use { _prepared ->\n", connection, sql)
+		for i, p := range q.Parameters {
+			kind := p.Type.UnwrapOptional().Kind
+			if !isStructList(p.Type) && kind != "Uint64" {
+				scalar, _, _ := typeInfo(p.Type)
+				value := names[i]
+				if kind == "Timestamp" {
+					value = "java.sql.Timestamp.from(" + value + ")"
+					if p.Type.IsOptional() {
+						value = names[i] + "?.let { java.sql.Timestamp.from(it) }"
+					}
+				}
+				if p.Type.IsOptional() && scalar.typ != "String" && scalar.typ != "ByteArray" && kind != "Timestamp" {
+					fmt.Fprintf(b, "            if (%s == null) _prepared.setNull(%s, java.sql.Types.NULL) else ", names[i], quoted(p.Name))
+				} else {
+					b.WriteString("            ")
+				}
+				fmt.Fprintf(b, "_prepared.set%s(%s, %s)\n", scalar.jdbc, quoted(p.Name), value)
+				continue
+			}
+			fmt.Fprintf(b, "            _prepared.setObject(%s, %s)\n", quoted(p.Name), indentExpression(parameterValue(p, names[i]), "            "))
+		}
+	} else {
+		fmt.Fprintf(b, "        %s.prepareStatement(%s).use { _prepared ->\n", connection, sql)
+	}
 	for position, parameter := range bindings {
 		emitJDBCParameter(b, q.Parameters[parameter], names[parameter], position+1)
 	}
@@ -344,8 +374,16 @@ func emitJDBC(b *strings.Builder, q model.AnalyzedQuery, names []string, binding
 
 func emitJDBCParameter(b *strings.Builder, p model.Parameter, name string, position int) {
 	kind := p.Type.UnwrapOptional().Kind
-	if strings.HasPrefix(kind, "Uint") || kind == "Json" || kind == "Timestamp" {
-		fmt.Fprintf(b, "            _prepared.setObject(%d, %s)\n", position, parameterValue(p, name))
+	if kind == "Timestamp" {
+		value := "java.sql.Timestamp.from(" + name + ")"
+		if p.Type.IsOptional() {
+			value = name + "?.let { java.sql.Timestamp.from(it) }"
+		}
+		fmt.Fprintf(b, "            _prepared.setTimestamp(%d, %s)\n", position, value)
+		return
+	}
+	if isStructList(p.Type) || strings.HasPrefix(kind, "Uint") || kind == "Json" {
+		fmt.Fprintf(b, "            _prepared.setObject(%d, %s)\n", position, indentExpression(parameterValue(p, name), "            "))
 		return
 	}
 	s, _, _ := typeInfo(p.Type)
@@ -373,7 +411,7 @@ func emitRows(b *strings.Builder, q model.AnalyzedQuery, row, indent string, nat
 		if native {
 			reader := fmt.Sprintf("_rows.getColumn(%d)", i)
 			value := reader + ".get" + s.sdk + "()"
-			if c.Type.IsOptional() {
+			if c.Type.IsOptional() && s.typ != "String" && s.typ != "ByteArray" && s.sdk != "Timestamp" {
 				value = "if (" + reader + ".isOptionalItemPresent()) " + reader + ".getOptionalItem().get" + s.sdk + "() else null"
 			}
 			fmt.Fprintf(b, "%sval %s: %s = %s\n", indent, n, typ, value)
@@ -385,8 +423,10 @@ func emitRows(b *strings.Builder, q model.AnalyzedQuery, row, indent string, nat
 			if c.Type.IsOptional() {
 				if c.Type.UnwrapOptional().Kind == "Timestamp" {
 					fmt.Fprintf(b, "%sval %sRaw = _rows.getTimestamp(%d)\n%sval %s: %s = %sRaw?.toInstant()\n", indent, n, i+1, indent, n, typ, n)
+				} else if s.typ != "String" && s.typ != "ByteArray" {
+					fmt.Fprintf(b, "%sval %s: %s = _rows.getObject(%d, %s::class.javaObjectType)\n", indent, n, typ, i+1, s.typ)
 				} else {
-					fmt.Fprintf(b, "%sval %sRaw = %s\n%sval %s: %s = if (_rows.wasNull()) null else %sRaw\n", indent, n, value, indent, n, typ, n)
+					fmt.Fprintf(b, "%sval %s: %s = %s\n", indent, n, typ, value)
 				}
 			} else {
 				fmt.Fprintf(b, "%sval %s: %s = %s\n", indent, n, typ, value)
@@ -402,4 +442,8 @@ func emitRows(b *strings.Builder, q model.AnalyzedQuery, row, indent string, nat
 		indent = strings.TrimSuffix(indent, "    ")
 		b.WriteString(indent + "}\n" + indent + "return _items\n")
 	}
+}
+
+func indentExpression(s, indent string) string {
+	return strings.ReplaceAll(s, "\n", "\n"+indent)
 }

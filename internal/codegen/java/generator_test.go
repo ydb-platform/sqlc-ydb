@@ -25,6 +25,7 @@ func TestSQLLiteralRoundTripsThroughJava17(t *testing.T) {
 		sql  string
 	}{
 		{"empty", ""},
+		{"declare_indent", "DECLARE $books AS List<Struct<\n    id: Uint64,\n    data: Json\n>>;\n\nINSERT INTO books\nSELECT\n    id,\n    data\nFROM AS_TABLE($books);"},
 		{"ordinary", "SELECT 1;"},
 		{"leading_lf", "\nSELECT 1;"},
 		{"trailing_lf", "SELECT 1;\n"},
@@ -78,7 +79,7 @@ func TestSQLLiteralRoundTripsThroughJava17(t *testing.T) {
 func TestJDBCUsesStandardPositionalParameters(t *testing.T) {
 	querySQL := "-- name: GetAuthor :one\nSELECT id FROM authors WHERE id = $author_id;"
 	files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{
-		Name: "GetAuthor", Command: model.One, SQL: querySQL, SQLWithoutDeclarations: querySQL,
+		Name: "GetAuthor", Command: model.One, SQL: querySQL,
 		Parameters: []model.Parameter{{Name: "author_id", Type: model.Type{Kind: "Uint64"}}},
 		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}}}}},
 	}}}, Options{Package: "authors.jdbc", Runtime: "jdbc"})
@@ -114,7 +115,7 @@ func TestGenerateRejectsInvalidContracts(t *testing.T) {
 		{"runtime", &model.AnalysisResult{}, Options{Runtime: "unknown"}, "unsupported Java runtime"},
 		{"removed_spring_runtime", &model.AnalysisResult{}, Options{Runtime: "spring"}, "unsupported Java runtime"},
 		{"removed_hibernate_runtime", &model.AnalysisResult{}, Options{Runtime: "hibernate"}, "unsupported Java runtime"},
-		{"unsupported_parameter", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.Exec, Parameters: []model.Parameter{{Name: "p", Type: model.Type{Kind: "Json"}}}}}}, Options{}, "unsupported Java type"},
+		{"unsupported_parameter", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.Exec, Parameters: []model.Parameter{{Name: "p", Type: model.Type{Kind: "Tuple"}}}}}}, Options{}, "unsupported Java type"},
 		{"unsupported_result", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.One, ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "value", Type: model.Type{Kind: "List"}}}}}}}}, Options{}, "unsupported Java type"},
 		{"execrows", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.ExecRows}}}, Options{}, "does not support"},
 		{"one_no_results", &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.One}}}, Options{}, "requires one nonempty result set"},
@@ -146,7 +147,7 @@ func TestAllSupportedScalarsCompileAgainstAuthorsMavenProfiles(t *testing.T) {
 	types := []model.Type{
 		{Kind: "Bool"}, {Kind: "Int8"}, {Kind: "Uint8"}, {Kind: "Int16"}, {Kind: "Uint16"},
 		{Kind: "Int32"}, {Kind: "Uint32"}, {Kind: "Int64"}, {Kind: "Uint64"}, {Kind: "Float"},
-		{Kind: "Double"}, {Kind: "Utf8"}, {Kind: "String"},
+		{Kind: "Double"}, {Kind: "Utf8"}, {Kind: "String"}, {Kind: "Json"}, {Kind: "Timestamp"},
 	}
 	var parameters []model.Parameter
 	var columns []model.Column
@@ -171,7 +172,7 @@ func TestAllSupportedScalarsCompileAgainstAuthorsMavenProfiles(t *testing.T) {
 		t.Run(profile.runtime, func(t *testing.T) {
 			files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{
 				Name: "AllScalars", Command: model.One, SQL: "SELECT 1;", Parameters: parameters, ResultSets: []model.ResultSet{{Columns: columns}},
-			}}}, Options{Package: profile.pkg, Runtime: profile.runtime})
+			}, batchQuery(), optionalBatchQuery(), listBooksQuery(), declaredBatchQuery(), declaredMixedQuery()}}, Options{Package: profile.pkg, Runtime: profile.runtime})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -239,6 +240,7 @@ func TestGeneratedJDBCUsesTypedDriverValuesAndGuardsUnsignedRanges(t *testing.T)
 			{Name: "payload", Type: model.Optional(model.Type{Kind: "String"})},
 		}}},
 	})
+	queries = append(queries, batchQuery(), optionalBatchQuery(), listBooksQuery(), declaredBatchQuery(), declaredMixedQuery())
 	files, err := Generate(&model.AnalysisResult{Queries: queries}, Options{Package: "synthetic.jdbc", Runtime: "jdbc"})
 	if err != nil {
 		t.Fatal(err)
@@ -303,6 +305,27 @@ public final class Main {
         expectRange(() -> guarded.bad32(4294967296L));
 
         YdbTypes types = new YdbTypes(false, DecimalType.getDefault());
+        var scalarQuery = YdbQuery.parseQuery(new QueryKey("DECLARE $j AS Json; DECLARE $u AS Uint8; SELECT $j, $u;"), new YdbQueryProperties(new Properties()), types);
+        var scalarPrepared = new tech.ydb.jdbc.query.params.PreparedQuery(types, scalarQuery, java.util.Map.of("$j", PrimitiveType.Json, "$u", PrimitiveType.Uint8));
+        scalarPrepared.setParam("j", "{}", Types.VARCHAR);
+        scalarPrepared.setParam("u", 255, Types.INTEGER);
+        check(scalarPrepared.getCurrentParams().values().get("$j").equals(PrimitiveValue.newJson("{}")), "declared Json rejected setString");
+        check(scalarPrepared.getCurrentParams().values().get("$u").equals(PrimitiveValue.newUint8(255)), "declared Uint8 rejected setInt");
+        var setterQuery = YdbQuery.parseQuery(new QueryKey("SELECT ?, ?, ?;"), new YdbQueryProperties(new Properties()), types);
+        var setters = new tech.ydb.jdbc.query.params.InMemoryQuery(setterQuery, false);
+        setters.setParam(1, "{}", Types.VARCHAR);
+        setters.setParam(2, 255, Types.INTEGER);
+        setters.setParam(3, java.sql.Timestamp.from(java.time.Instant.EPOCH), Types.TIMESTAMP);
+        check(setters.getCurrentParams().values().get("$jp1").getType().equals(PrimitiveType.Text), "setString does not infer Json");
+        check(setters.getCurrentParams().values().get("$jp2").getType().equals(PrimitiveType.Int32), "setInt does not infer Uint8");
+        check(setters.getCurrentParams().values().get("$jp3").equals(PrimitiveValue.newTimestamp(java.time.Instant.EPOCH)), "setTimestamp lost the timestamp type");
+        for (PrimitiveType optionalType : new PrimitiveType[]{PrimitiveType.Text, PrimitiveType.Bytes, PrimitiveType.Json, PrimitiveType.Timestamp}) {
+            var empty = OptionalType.of(optionalType).emptyValue();
+            var reader = tech.ydb.table.result.impl.ProtoValueReaders.forTypedValue(tech.ydb.proto.ValueProtos.TypedValue.newBuilder().setType(empty.getType().toPb()).setValue(empty.toPb()).build());
+            Object actual = optionalType == PrimitiveType.Text ? reader.getText() : optionalType == PrimitiveType.Bytes ? reader.getBytes() : optionalType == PrimitiveType.Json ? reader.getJson() : reader.getTimestamp();
+            check(actual == null, "optional reference getter did not return null");
+        }
+
         YdbQuery query = YdbQuery.parseQuery(new QueryKey("SELECT ?, ?, ?, ?;"), new YdbQueryProperties(new Properties()), types);
         tech.ydb.jdbc.query.params.InMemoryQuery bound = new tech.ydb.jdbc.query.params.InMemoryQuery(query, false);
         new Queries(bindingConnection(bound)).bind(-1L, null, "typed text", new byte[] { 0, 1, (byte) 255 });
@@ -313,6 +336,64 @@ public final class Main {
         check(OptionalType.of(PrimitiveType.Uint16).emptyValue().equals(values.values().get("$jp2")), "optional null lost its declared type");
         check(PrimitiveValue.newText("typed text").equals(values.values().get("$jp3")), "Utf8 lost its type");
         check(PrimitiveValue.newBytes(new byte[] { 0, 1, (byte) 255 }).equals(values.values().get("$jp4")), "String lost its binary type");
+        YdbQuery batch = YdbQuery.parseQuery(new QueryKey("INSERT INTO books SELECT * FROM AS_TABLE(?);"), new YdbQueryProperties(new Properties()), types);
+        tech.ydb.jdbc.query.params.InMemoryQuery batchBound = new tech.ydb.jdbc.query.params.InMemoryQuery(batch, false);
+        Queries batchQueries = new Queries(bindingConnection(batchBound));
+        batchQueries.createBooks(java.util.List.of());
+        tech.ydb.table.values.ListValue emptyBatch = (tech.ydb.table.values.ListValue) batchBound.getCurrentParams().values().get("$jp1");
+        check(emptyBatch.size() == 0, "emptyBatch batch contains rows");
+        tech.ydb.table.values.StructType itemType = (tech.ydb.table.values.StructType) emptyBatch.getType().getItemType();
+        check(itemType.getMembersCount() == 8, "emptyBatch batch lost struct schema");
+        check(itemType.getMemberType(itemType.getMemberIndex("tags")).equals(PrimitiveType.Json), "Json field lost type");
+        batchQueries.createBooks(java.util.List.of(new CreateBooksBooksItem(-1L, 42L, "isbn", "paper", "Book", 2026, java.time.Instant.EPOCH, "{\"ok\":true}")));
+        tech.ydb.table.values.ListValue filledBatch = (tech.ydb.table.values.ListValue) batchBound.getCurrentParams().values().get("$jp1");
+        check(filledBatch.size() == 1 && filledBatch.getType().equals(emptyBatch.getType()), "batch changed declared type");
+        tech.ydb.table.values.StructValue book = (tech.ydb.table.values.StructValue) filledBatch.get(0);
+        check(book.getMemberValue(itemType.getMemberIndex("book_id")).equals(PrimitiveValue.newUint64(-1L)), "batch Uint64 lost unsigned bits");
+        check(book.getMemberValue(itemType.getMemberIndex("tags")).equals(PrimitiveValue.newJson("{\"ok\":true}")), "batch Json lost bytes");
+        java.util.Map<String, tech.ydb.table.values.Value<?>> expectedBook = java.util.Map.ofEntries(
+            java.util.Map.entry("book_id", PrimitiveValue.newUint64(-1L)), java.util.Map.entry("author_id", PrimitiveValue.newUint64(42L)),
+            java.util.Map.entry("isbn", PrimitiveValue.newText("isbn")), java.util.Map.entry("book_type", PrimitiveValue.newText("paper")),
+            java.util.Map.entry("title", PrimitiveValue.newText("Book")), java.util.Map.entry("year", PrimitiveValue.newInt32(2026)),
+            java.util.Map.entry("available", PrimitiveValue.newTimestamp(java.time.Instant.EPOCH)), java.util.Map.entry("tags", PrimitiveValue.newJson("{\"ok\":true}")));
+        String previousName = "";
+        for (int i = 0; i < itemType.getMembersCount(); i++) {
+            String field = itemType.getMemberName(i);
+            check(previousName.compareTo(field) < 0, "SDK struct type is not canonical by name");
+            check(itemType.toPb().getStructType().getMembers(i).getName().equals(field), "wire type changed field order");
+            check(book.toPb().getItems(i).equals(expectedBook.get(field).toPb()), "wire value mismatched field " + field);
+            previousName = field;
+        }
+        expectRange(() -> guarded.optionalBooks(java.util.List.of(new OptionalBooksBooksItem(-1, null))));
+        YdbQuery optionalBatch = YdbQuery.parseQuery(new QueryKey("SELECT * FROM AS_TABLE(?);"), new YdbQueryProperties(new Properties()), types);
+        tech.ydb.jdbc.query.params.InMemoryQuery optionalBound = new tech.ydb.jdbc.query.params.InMemoryQuery(optionalBatch, false);
+        new Queries(bindingConnection(optionalBound)).optionalBooks(java.util.List.of(new OptionalBooksBooksItem(null, null)));
+        tech.ydb.table.values.ListValue optionalRows = (tech.ydb.table.values.ListValue) optionalBound.getCurrentParams().values().get("$jp1");
+        tech.ydb.table.values.StructValue optionalRow = (tech.ydb.table.values.StructValue) optionalRows.get(0);
+        check(optionalRow.getMemberValue(optionalRow.getType().getMemberIndex("rank")).equals(OptionalType.of(PrimitiveType.Uint8).emptyValue()), "optional batch null lost type");
+        String declaredSQL = "DECLARE $books AS List<Struct<book_id:Uint64,author_id:Uint64,isbn:Utf8,book_type:Utf8,title:Utf8,year:Int32,available:Timestamp,tags:Json>>;\nINSERT INTO books SELECT * FROM AS_TABLE($books);";
+        var declaredQuery = YdbQuery.parseQuery(new QueryKey(declaredSQL), new YdbQueryProperties(new Properties()), types);
+        var declared = new tech.ydb.jdbc.query.params.PreparedQuery(types, declaredQuery, java.util.Map.of("$books", emptyBatch.getType()));
+        var autoBatch = tech.ydb.jdbc.query.params.BatchedQuery.tryCreateBatched(types, declaredQuery, java.util.Map.of("$books", emptyBatch.getType()));
+        check(autoBatch != null && autoBatch.parametersCount() == 8, "AUTO did not flatten struct members into parameters");
+        try { autoBatch.setParam("books", emptyBatch, Types.JAVA_OBJECT); throw new AssertionError("AUTO unexpectedly accepted the named list"); } catch (java.sql.SQLException expected) { }
+        try { autoBatch.setParam(1, emptyBatch, Types.JAVA_OBJECT); throw new AssertionError("AUTO unexpectedly accepted a positional list"); } catch (java.sql.SQLException expected) { }
+
+        var declaredQueries = new Queries(declaredConnection(declared, declaredSQL));
+        declaredQueries.declaredBooks(java.util.List.of());
+        check(declared.getQueryText(declared.getCurrentParams()).equals(declaredSQL), "driver changed explicit DECLARE");
+        check(declared.getCurrentParams().values().get("$books").getType().equals(emptyBatch.getType()), "declared empty list lost schema or name");
+        declaredQueries.declaredBooks(java.util.List.of(new DeclaredBooksBooksItem(-1L,42L,"isbn","paper","Book",2026,java.time.Instant.EPOCH,"[]")));
+        check(((tech.ydb.table.values.ListValue)declared.getCurrentParams().values().get("$books")).size()==1,"declared row missing");
+        String mixedSQL = "DECLARE $a AS Utf8;\nDECLARE $z AS Uint64;\nSELECT $z, $a, $z;";
+        var mixedQuery = YdbQuery.parseQuery(new QueryKey(mixedSQL), new YdbQueryProperties(new Properties()), types);
+        var mixed = new tech.ydb.jdbc.query.params.PreparedQuery(types, mixedQuery, java.util.Map.of("$a", PrimitiveType.Text, "$z",PrimitiveType.Uint64));
+        new Queries(declaredConnection(mixed,mixedSQL)).declaredMixed("text",-1L);
+        check(mixed.getQueryText(mixed.getCurrentParams()).equals(mixedSQL),"mixed declarations changed");
+        check(mixed.getCurrentParams().values().get("$z").equals(PrimitiveValue.newUint64(-1L)),"named parameter lost type");
+
+
+
         String endpoint = System.getenv("YDB_CONNECTION_STRING");
         if (endpoint != null && !endpoint.isBlank()) {
             try (Connection connection = java.sql.DriverManager.getConnection("jdbc:ydb:" + endpoint)) {
@@ -323,6 +404,25 @@ public final class Main {
                 check(filled.number() == 42L && !filled.flag() && java.util.Arrays.equals(filled.payload(), new byte[]{0, (byte)255}), "nullable getters lost values");
             }
         }
+    }
+
+
+    private static Connection declaredConnection(tech.ydb.jdbc.query.params.PreparedQuery query, String expectedSQL) {
+        var statement = (tech.ydb.jdbc.YdbPreparedStatement) Proxy.newProxyInstance(Main.class.getClassLoader(), new Class<?>[]{tech.ydb.jdbc.YdbPreparedStatement.class}, (proxy,method,args) -> {
+            if (method.getName().equals("setObject") || method.getName().equals("setString")) { query.setParam((String)args[0],args[1],method.getName().equals("setString") ? Types.VARCHAR : Types.JAVA_OBJECT); return null; }
+            if (method.getName().equals("execute")) return false;
+            if (method.getName().equals("close")) return null;
+            throw new AssertionError(method);
+        });
+        return (Connection) Proxy.newProxyInstance(Main.class.getClassLoader(),new Class<?>[]{tech.ydb.jdbc.YdbConnection.class},(proxy,method,args) -> {
+            if (method.getName().equals("unwrap")) return proxy;
+            if (method.getName().equals("prepareStatement")) {
+                check(args[0].equals(expectedSQL),"source SQL was rewritten: " + args[0]);
+                check(args.length==2 && args[1]==tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY,"auto-batch mode was not disabled");
+                return statement;
+            }
+            throw new AssertionError(method);
+        });
     }
 
     private static Connection refusingConnection() {

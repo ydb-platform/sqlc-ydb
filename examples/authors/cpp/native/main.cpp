@@ -167,6 +167,18 @@ int main() {
             !book || book->available != timestamp || book->tags != json || books.size() != 1 || books[0].available != timestamp) {
             throw std::runtime_error("native Json/Timestamp round-trip failed");
         }
+        batch_queries.CreateBooks({});
+        batch_queries.CreateBooks({
+            {3, 1, "batch", "batch", "batch", 2027, timestamp, json},
+            {4, 1, "batch", "batch", "batch", 2027, timestamp, json},
+        });
+        const auto inserted = batch_queries.BooksByYear(2027);
+        if (inserted.size() != 2) throw std::runtime_error("batch INSERT SELECT row count");
+        for (const auto& row : inserted) {
+            if ((row.book_id != 3 && row.book_id != 4) || row.available != timestamp || row.tags != json) {
+                throw std::runtime_error("batch INSERT SELECT field values");
+            }
+        }
         batch_books.Drop();
         batch_authors.Drop();
 

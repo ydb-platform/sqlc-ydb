@@ -63,3 +63,14 @@ type UpdateBookParams struct {
 type GetBiographyRow struct {
 	Biography *string
 }
+
+type CreateBooksBooksItem struct {
+	BookID    uint64
+	AuthorID  uint64
+	Isbn      string
+	BookType  string
+	Title     string
+	Year      int32
+	Available time.Time
+	Tags      string
+}
