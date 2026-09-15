@@ -37,7 +37,7 @@ func parameterRustType(q model.AnalyzedQuery, p model.Parameter) (string, error)
 		}
 		seen[n] = true
 		scalar := f.Type.UnwrapOptional()
-		if scalar.Kind == "List" || scalar.Kind == "Struct" || scalar.IsOptional() || (f.Type.IsOptional() && (f.Type.Elem == nil || f.Type.Elem.IsOptional())) {
+		if scalar.Kind == "List" || scalar.Kind == "Struct" || scalar.IsOptional() {
 			return "", fmt.Errorf("List<Struct> field %s must be scalar or Optional<scalar>", f.Name)
 		}
 		if _, err := rustType(scalar); err != nil {
@@ -57,8 +57,7 @@ func renderStructModel(b *strings.Builder, q model.AnalyzedQuery, p model.Parame
 func renderStructBinding(b *strings.Builder, q model.AnalyzedQuery, p model.Parameter) {
 	fmt.Fprintf(b, "impl From<%s> for ydb::Value {\n    fn from(item: %s) -> Self {\n        ydb::Value::struct_from_fields(vec![\n", structName(q, p), structName(q, p))
 	for _, f := range p.Type.Elem.Fields {
-		value := bindExpression(model.Parameter{Name: "field_value", Type: f.Type})
-		value = strings.ReplaceAll(value, "field_value", "item."+snakeName(f.Name))
+		value := bindValue(f.Type, "item."+snakeName(f.Name))
 		writeStructFieldValue(b, f.Name, value, "            ")
 	}
 	b.WriteString("        ])\n    }\n}\n\n")
@@ -69,8 +68,7 @@ func renderStructBinding(b *strings.Builder, q model.AnalyzedQuery, p model.Para
 		if temporalVariant(f.Type.Kind) != "" {
 			value = "std::time::SystemTime::UNIX_EPOCH"
 		}
-		binding := bindExpression(model.Parameter{Name: "field_value", Type: f.Type})
-		binding = strings.ReplaceAll(binding, "field_value", value)
+		binding := bindValue(f.Type, value)
 		writeStructFieldValue(b, f.Name, binding, "        ")
 	}
 	b.WriteString("    ])\n}\n\n")

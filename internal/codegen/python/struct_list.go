@@ -31,9 +31,6 @@ func parameterType(q model.AnalyzedQuery, p model.Parameter) (string, error) {
 		if _, ok := pythonPrimitiveTypes[strings.ToLower(scalar.Kind)]; !ok {
 			return "", fmt.Errorf("List<Struct> field %s must be a supported scalar or Optional<scalar>, got %s", f.Name, f.Type.String())
 		}
-		if f.Type.IsOptional() && (f.Type.Elem == nil || f.Type.Elem.IsOptional()) {
-			return "", fmt.Errorf("List<Struct> field %s: nested Optional is unsupported", f.Name)
-		}
 	}
 	return "list[_models." + structClass(q, p) + "]", nil
 }

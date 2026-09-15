@@ -122,3 +122,51 @@ for text, expected in [('{}',{}), ('[1,true,null]',[1,True,None]), ('"hello"','h
 		t.Fatalf("SDK decoded JSON: %v\n%s", err, out)
 	}
 }
+
+func TestNestedJSONResultContainers(t *testing.T) {
+	json := model.Type{Kind: "JsonDocument"}
+	key := model.Type{Kind: "Utf8"}
+	set := model.Type{Kind: "Set", Elem: &json}
+	dict := model.Type{Kind: "Dict", Key: &key, Elem: &set}
+	for _, runtime := range []string{"ydb", "dbapi", "sqlalchemy"} {
+		want := "Optional[dict[str, set[str]]]"
+		if runtime == "ydb" {
+			want = "Optional[dict[str, set[JSONValue]]]"
+		}
+		got, err := resultPyType(model.Optional(dict), Options{Runtime: runtime})
+		if err != nil || got != want {
+			t.Fatalf("%s: type=%q, err=%v", runtime, got, err)
+		}
+	}
+}
+
+func TestNativeJSONTableModelAnnotation(t *testing.T) {
+	in := &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "documents", Columns: []model.Column{{Name: "payload", Type: model.Type{Kind: "Json"}}}}}}}
+	files, err := Generate(in, Options{Runtime: "ydb"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if f.Name == "models.py" {
+			if !strings.Contains(string(f.Content), "payload: JSONValue") || !strings.Contains(string(f.Content), "JSONValue = Union[") {
+				t.Fatalf("missing table JSON annotation:\n%s", f.Content)
+			}
+			return
+		}
+	}
+	t.Fatal("missing models.py")
+}
+
+func TestJSONInsideUnsupportedResultShapesIsRejected(t *testing.T) {
+	json := model.Type{Kind: "Json"}
+	for _, typ := range []model.Type{{Kind: "Struct", Fields: []model.StructField{{Name: "payload", Type: json}}}, {Kind: "Tuple", Items: []model.Type{json}}} {
+		for _, runtime := range []string{"ydb", "dbapi", "sqlalchemy"} {
+			in := jsonResultInput()
+			in.Queries[0].ResultSets[0].Columns = []model.Column{{Name: "payload", Type: typ}}
+			files, err := Generate(in, Options{Runtime: runtime})
+			if err == nil || !strings.Contains(err.Error(), "unsupported YQL type") || len(files) != 0 {
+				t.Fatalf("%s %s: files=%d err=%v", runtime, typ.Kind, len(files), err)
+			}
+		}
+	}
+}

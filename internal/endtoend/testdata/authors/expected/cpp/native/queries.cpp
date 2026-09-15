@@ -18,10 +18,8 @@ std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
             .AddParam("$author_id").Uint64(author_id).Build()
             .Build();
         auto sqlc_result = sqlc_session.ExecuteQuery(
-            R"sql(
-                DECLARE $author_id AS Uint64;
-                SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;
-            )sql",
+            R"sql(DECLARE $author_id AS Uint64;
+SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;)sql",
             sqlc_tx,
             sqlc_params,
             this->execute_settings_

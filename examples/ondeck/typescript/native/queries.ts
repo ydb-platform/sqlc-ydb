@@ -103,8 +103,8 @@ export class Queries {
   // -- name: ListCities :many
   async listCities(configure?: ConfigureQuery): Promise<ListCitiesRow[]> {
     const stmt = this.#sql<[ListCitiesRow]>`SELECT slug, name
-      FROM city
-      ORDER BY name;`;
+FROM city
+ORDER BY name;`;
     configure?.(stmt);
     const [rows] = await stmt;
 
@@ -114,8 +114,8 @@ export class Queries {
   // -- name: GetCity :one
   async getCity(slug: string, configure?: ConfigureQuery): Promise<GetCityRow | null> {
     const stmt = this.#sql<[GetCityRow]>`SELECT slug, name
-      FROM city
-      WHERE slug = $slug;`
+FROM city
+WHERE slug = $slug;`
       .parameter("slug", new Utf8(slug));
     configure?.(stmt);
     const [rows] = await stmt;
@@ -126,12 +126,12 @@ export class Queries {
   // -- name: CreateCity :one
   async createCity(args: CreateCityParams, configure?: ConfigureQuery): Promise<CreateCityRow | null> {
     const stmt = this.#sql<[CreateCityRow]>`INSERT INTO city (
-          name,
-          slug
-      ) VALUES (
-          $name,
-          $slug
-      ) RETURNING slug, name;`
+    name,
+    slug
+) VALUES (
+    $name,
+    $slug
+) RETURNING slug, name;`
       .parameter("name", new Utf8(args.name))
       .parameter("slug", new Utf8(args.slug));
     configure?.(stmt);
@@ -143,8 +143,8 @@ export class Queries {
   // -- name: UpdateCityName :exec
   async updateCityName(args: UpdateCityNameParams, configure?: ConfigureQuery): Promise<void> {
     const stmt = this.#sql`UPDATE city
-      SET name = $name
-      WHERE slug = $slug;`
+SET name = $name
+WHERE slug = $slug;`
       .parameter("name", new Utf8(args.name))
       .parameter("slug", new Utf8(args.slug));
     configure?.(stmt);
@@ -154,9 +154,9 @@ export class Queries {
   // -- name: ListVenues :many
   async listVenues(city: string, configure?: ConfigureQuery): Promise<ListVenuesRow[]> {
     const stmt = this.#sql<[ListVenuesRow]>`SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
-      FROM venue
-      WHERE city = $city
-      ORDER BY name;`
+FROM venue
+WHERE city = $city
+ORDER BY name;`
       .parameter("city", new Utf8(city));
     configure?.(stmt);
     const [rows] = await stmt;
@@ -167,7 +167,7 @@ export class Queries {
   // -- name: DeleteVenue :exec
   async deleteVenue(slug: string, configure?: ConfigureQuery): Promise<void> {
     const stmt = this.#sql`DELETE FROM venue
-      WHERE slug = $slug AND slug = $slug;`
+WHERE slug = $slug AND slug = $slug;`
       .parameter("slug", new Utf8(slug));
     configure?.(stmt);
     await stmt;
@@ -176,8 +176,8 @@ export class Queries {
   // -- name: GetVenue :one
   async getVenue(args: GetVenueParams, configure?: ConfigureQuery): Promise<GetVenueRow | null> {
     const stmt = this.#sql<[GetVenueRow]>`SELECT id, slug, name, city, status, statuses, spotify_playlist, songkick_id, tags, created_at
-      FROM venue
-      WHERE slug = $slug AND city = $city;`
+FROM venue
+WHERE slug = $slug AND city = $city;`
       .parameter("slug", new Utf8(args.slug))
       .parameter("city", new Utf8(args.city));
     configure?.(stmt);
@@ -189,26 +189,26 @@ export class Queries {
   // -- name: CreateVenue :one
   async createVenue(args: CreateVenueParams, configure?: ConfigureQuery): Promise<CreateVenueRow | null> {
     const stmt = this.#sql<[CreateVenueRow]>`INSERT INTO venue (
-          id,
-          slug,
-          name,
-          city,
-          created_at,
-          spotify_playlist,
-          status,
-          statuses,
-          tags
-      ) VALUES (
-          $id,
-          $slug,
-          $name,
-          $city,
-          $created_at,
-          $spotify_playlist,
-          $status,
-          $statuses,
-          $tags
-      ) RETURNING id;`
+    id,
+    slug,
+    name,
+    city,
+    created_at,
+    spotify_playlist,
+    status,
+    statuses,
+    tags
+) VALUES (
+    $id,
+    $slug,
+    $name,
+    $city,
+    $created_at,
+    $spotify_playlist,
+    $status,
+    $statuses,
+    $tags
+) RETURNING id;`
       .parameter("id", new Uint64(args.id))
       .parameter("slug", new Utf8(args.slug))
       .parameter("name", new Utf8(args.name))
@@ -227,9 +227,9 @@ export class Queries {
   // -- name: UpdateVenueName :one
   async updateVenueName(args: UpdateVenueNameParams, configure?: ConfigureQuery): Promise<UpdateVenueNameRow | null> {
     const stmt = this.#sql<[UpdateVenueNameRow]>`UPDATE venue
-      SET name = $name
-      WHERE slug = $slug
-      RETURNING id;`
+SET name = $name
+WHERE slug = $slug
+RETURNING id;`
       .parameter("name", new Utf8(args.name))
       .parameter("slug", new Utf8(args.slug));
     configure?.(stmt);
@@ -241,11 +241,11 @@ export class Queries {
   // -- name: VenueCountByCity :many
   async venueCountByCity(configure?: ConfigureQuery): Promise<VenueCountByCityRow[]> {
     const stmt = this.#sql<[VenueCountByCityRow]>`SELECT
-          city,
-          COUNT(*) AS venue_count
-      FROM venue
-      GROUP BY city
-      ORDER BY city;`;
+    city,
+    COUNT(*) AS venue_count
+FROM venue
+GROUP BY city
+ORDER BY city;`;
     configure?.(stmt);
     const [rows] = await stmt;
 

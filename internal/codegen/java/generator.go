@@ -293,7 +293,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 				return nil, fmt.Errorf("%s: Java parameter name collision: %s", q.Name, n)
 			}
 			seen[n] = true
-			_, typ, err := typeInfo(p.Type)
+			var typ string
 			if isStructList(p.Type) {
 				queryName, _ := name(q.Name, true)
 				parameterName, _ := name(p.Name, true)
@@ -304,6 +304,8 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 				}
 				err = addRecord(itemName, columns)
 				typ = "java.util.List<" + itemName + ">"
+			} else {
+				_, typ, err = typeInfo(p.Type)
 			}
 			if err != nil {
 				return nil, fmt.Errorf("%s parameter %s: %w", q.Name, p.Name, err)

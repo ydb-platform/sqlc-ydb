@@ -82,3 +82,40 @@ func TestBatchStructRejectsDynamicFieldName(t *testing.T) {
 		t.Fatalf("err=%v", err)
 	}
 }
+
+func TestBatchInsertSourceDiagnostics(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, label Json, PRIMARY KEY(id));`}}
+	for _, tc := range []struct{ name, statement, want string }{
+		{"missing target list", "INSERT INTO records SELECT id,label FROM AS_TABLE($books)", "explicit target column list"},
+		{"union", "INSERT INTO records (id,label) SELECT id,label FROM AS_TABLE($books) UNION ALL SELECT id,label FROM AS_TABLE($books)", "UNION is not yet supported"},
+		{"unknown source", "INSERT INTO records (id,label) SELECT id,label FROM missing_table", "unknown table"},
+		{"other function", "INSERT INTO records (id,label) SELECT id,label FROM OtherTable($books)", "dynamic table references"},
+		{"multiple args", "INSERT INTO records (id,label) SELECT id,label FROM AS_TABLE($books,$books)", "dynamic table references"},
+		{"expression arg", "INSERT INTO records (id,label) SELECT id,label FROM AS_TABLE(ListReverse($books))", "one direct List<Struct> parameter"},
+		{"named arg", "INSERT INTO records (id,label) SELECT id,label FROM AS_TABLE($books AS rows)", "one direct List<Struct> parameter"},
+		{"alias typo", "INSERT INTO records (id,label) SELECT missing.id,r.label FROM AS_TABLE($books) r", "unknown column"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: InsertRows :exec\nDECLARE $books AS List<Struct<id:Uint64,label:Json>>;\n" + tc.statement + ";"}})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v, want %s", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestBatchInsertSourceInfersFilterParameters(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, label Json, PRIMARY KEY(id));`}}
+	query := "-- name: InsertRows :exec\nDECLARE $books AS List<Struct<id:Uint64,label:Json>>;\nINSERT INTO records (id,label) SELECT r.id,r.label FROM AS_TABLE($books) AS r WHERE r.id >= $minimum LIMIT $count;"
+	result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	params := map[string]string{}
+	for _, p := range result.Queries[0].Parameters {
+		params[p.Name] = p.Type.Kind
+	}
+	if params["books"] != "List" || params["minimum"] != "Uint64" || params["count"] != "Uint64" {
+		t.Fatalf("parameters: %v", params)
+	}
+}

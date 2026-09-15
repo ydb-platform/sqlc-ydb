@@ -18,9 +18,8 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
         let mut row = self
             .client
             .query_row(
-                r"
-                 DECLARE $author_id AS Uint64;
-                 SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;",
+                r"DECLARE $author_id AS Uint64;
+SELECT `id`, `name`, `bio` FROM `authors` WHERE `id` = $author_id;",
             )
             .param("$author_id", author_id)
             .await?;

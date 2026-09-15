@@ -187,6 +187,9 @@ func TestSQLLiteralRoundTripsThroughPHP(t *testing.T) {
 		nowdoc bool
 	}{
 		{name: "newline", value: "SELECT 1;\nSELECT 2;", nowdoc: true},
+		{name: "declared relative indentation", value: "  DECLARE $id AS Uint64; -- keep\n\n    SELECT 'first\n  second';\n", nowdoc: true},
+		{name: "trailing source whitespace", value: "DECLARE $id AS Uint64; \n \t \nSELECT $id;\t", nowdoc: false},
+
 		{name: "trailing LF", value: "SELECT 1;\n", nowdoc: true},
 		{name: "CRLF", value: "SELECT 1;\r\nSELECT 2;\r\n", nowdoc: true},
 		{name: "delimiter collisions", value: "-- SQLC_YDB_YQL\n-- SQLC_YDB_YQL_2\nSELECT 1;", nowdoc: true},
@@ -343,5 +346,57 @@ func TestStructFieldCollision(t *testing.T) {
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
 	if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), "collision") {
 		t.Fatalf("field collision: %v", err)
+	}
+}
+
+func TestSQLLiteralBlankLinesDoNotAddTrailingWhitespace(t *testing.T) {
+	for _, sql := range []string{"DECLARE $id AS Uint64;\n\nSELECT $id;", "DECLARE $id AS Uint64; \n \t \nSELECT $id;\t"} {
+		literal := phpSQLString(sql, "    ")
+		for _, line := range strings.Split(literal, "\n") {
+			if strings.HasSuffix(line, " ") || strings.HasSuffix(line, "\t") {
+				t.Fatalf("SQL literal adds source trailing whitespace: %q", line)
+			}
+		}
+	}
+}
+
+func TestStructListParametersHaveNamedDTOsAndRejectInvalidShapes(t *testing.T) {
+	typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "id", Type: model.Type{Kind: "Uint64"}}}}}
+	query := model.AnalyzedQuery{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT 1;", Parameters: []model.Parameter{{Name: "books", Type: typ}, {Name: "minimum", Type: model.Type{Kind: "Uint64"}}}}
+	files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{query}}, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output strings.Builder
+	for _, file := range files {
+		output.Write(file.Content)
+	}
+	for _, want := range []string{"@var list<CreateBooksBooksItem>", "public readonly array $books", "$params->books", "final class CreateBooksBooksItem"} {
+		if !strings.Contains(output.String(), want) {
+			t.Errorf("missing named parameter contract %s", want)
+		}
+	}
+	for _, tc := range []struct {
+		name   string
+		fields []model.StructField
+		table  string
+		want   string
+	}{
+		{name: "empty struct", want: "at least one scalar field"},
+		{name: "invalid property", fields: []model.StructField{{Name: "123", Type: model.Type{Kind: "Uint64"}}}, want: "invalid generated property"},
+		{name: "type collision", fields: typ.Elem.Fields, table: "create_books_books_item", want: "class name collision"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			q := query
+			q.Parameters = append([]model.Parameter(nil), query.Parameters...)
+			q.Parameters[0].Type = model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: tc.fields}}
+			a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{q}}
+			if tc.table != "" {
+				a.Catalog.Tables = []model.Table{{Name: tc.table, Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}}}}}
+			}
+			if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v, want %s", err, tc.want)
+			}
+		})
 	}
 }

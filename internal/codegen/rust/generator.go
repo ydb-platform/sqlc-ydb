@@ -239,12 +239,12 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 		}
 		elem, _ := parameterElementType(q, p)
 		name := snakeName(p.Name)
-		value := bindExpression(model.Parameter{Name: "item", Type: *p.Type.Elem})
+		value := bindValue(*p.Type.Elem, "item")
 		defaultValue := "<" + elem + ">::default()"
 		if temporalVariant(p.Type.Elem.Kind) != "" {
 			defaultValue = "std::time::SystemTime::UNIX_EPOCH"
 		}
-		typeValue := strings.ReplaceAll(value, "item", defaultValue)
+		typeValue := bindValue(*p.Type.Elem, defaultValue)
 		if structList(p.Type) {
 			typeValue = structTypeFunction(q, p) + "()"
 		}
@@ -268,7 +268,7 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 	callPrefix := "            ." + method + "("
 	if strings.Contains(sql, "\n") || len(callPrefix)+len(sql)+1 > rustfmtMaxWidth {
 		b.WriteString("\n            ." + method + "(\n")
-		writeQuerySQL(b, sql, "                ")
+		b.WriteString("                " + sql)
 		b.WriteString(",\n            )")
 	} else {
 		b.WriteString("\n" + callPrefix + sql + ")")
@@ -300,8 +300,10 @@ func renderRow(b *strings.Builder, q model.AnalyzedQuery, indent string) {
 }
 
 func bindExpression(p model.Parameter) string {
-	name := snakeName(p.Name)
-	t := p.Type
+	return bindValue(p.Type, snakeName(p.Name))
+}
+
+func bindValue(t model.Type, name string) string {
 	optional := t.IsOptional() && t.Elem != nil
 	if optional {
 		t = *t.Elem
@@ -449,7 +451,6 @@ func rustType(t model.Type) (string, error) {
 func querySQL(q model.AnalyzedQuery) string {
 	sql := q.SQL
 	sql = model.WithoutQueryAnnotation(sql)
-	sql = strings.Trim(sql, "\r\n")
 	if sql == "" {
 		return `""`
 	}
@@ -457,26 +458,6 @@ func querySQL(q model.AnalyzedQuery) string {
 		return rustString(sql)
 	}
 	return rawString(sql)
-}
-
-func writeQuerySQL(b *strings.Builder, sql, literalIndent string) {
-	if !strings.Contains(sql, "\n") {
-		b.WriteString(literalIndent + sql)
-		return
-	}
-	quote := strings.IndexByte(sql, '"')
-	if quote < 0 || !strings.HasPrefix(sql, "r") {
-		b.WriteString(sql)
-		return
-	}
-	close := "\"" + sql[1:quote]
-	body := sql[quote+1 : len(sql)-len(close)]
-	b.WriteString(literalIndent + sql[:quote+1])
-	for _, line := range strings.Split(body, "\n") {
-		b.WriteByte('\n')
-		b.WriteString(literalIndent + " " + line)
-	}
-	b.WriteString(close)
 }
 
 func rustString(s string) string {

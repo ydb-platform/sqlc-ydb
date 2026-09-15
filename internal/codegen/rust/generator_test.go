@@ -136,7 +136,7 @@ func TestGetPrefixAndMultilineSQLMatchApprovedRustStyle(t *testing.T) {
 	queries := generatedFile(t, files, "queries.rs")
 	for _, want := range []string{
 		"// -- name: GetAuthor :one\n    #[builder(on(String, into))]\n    pub async fn author(",
-		".query_row(\n                r\"\n                 INSERT INTO authors (id, name)\n                 VALUES ($id, $name)\n                 RETURNING id, name;\",\n            )",
+		".query_row(\n                r\"INSERT INTO authors (id, name)\nVALUES ($id, $name)\nRETURNING id, name;\",\n            )",
 	} {
 		if !strings.Contains(queries, want) {
 			t.Fatalf("approved Rust style missing %q:\n%s", want, queries)
@@ -214,43 +214,50 @@ func TestTemporalInputsUseExactConstructibleYDBValues(t *testing.T) {
 }
 
 func TestGeneratedRawSQLRoundTripsThroughRustCompiler(t *testing.T) {
-	sql := "-- Привет\r\nSELECT r###\"quoted\"###, '# hashes', '\x00', '\\n';\r\n"
-	files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "SpecialSQL", Command: model.Exec, SQL: sql}}}, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	queries := generatedFile(t, files, "queries.rs")
-	start := strings.Index(queries, ".exec(")
-	if start < 0 || strings.Contains(queries, "pub const ") {
-		t.Fatalf("expected inline SQL: %s", queries)
-	}
-	start += len(".exec(")
-	end := strings.Index(queries[start:], ",\n            )")
-	if end < 0 {
-		t.Fatalf("missing inline SQL closing delimiter: %s", queries)
-	}
-	literal := queries[start : start+end]
-	var expected strings.Builder
-	expected.WriteString("&[")
-	for i, value := range []byte(strings.Trim(sql, "\r\n")) {
-		if i != 0 {
-			expected.WriteString(",")
-		}
-		fmt.Fprintf(&expected, "%d", value)
-	}
-	expected.WriteString("]")
-	source := fmt.Sprintf("fn main() { assert_eq!((%s).as_bytes(), %s); }\n", literal, expected.String())
-	dir := t.TempDir()
-	path := filepath.Join(dir, "main.rs")
-	if err := os.WriteFile(path, []byte(source), 0600); err != nil {
-		t.Fatal(err)
-	}
-	bin := filepath.Join(dir, "roundtrip")
-	if out, err := exec.Command("rustc", path, "-o", bin).CombinedOutput(); err != nil {
-		t.Fatalf("rustc: %v\n%s\n%s", err, out, source)
-	}
-	if out, err := exec.Command(bin).CombinedOutput(); err != nil {
-		t.Fatalf("round trip: %v\n%s", err, out)
+	for _, sql := range []string{
+		"-- Привет\r\nSELECT r###\"quoted\"###, '# hashes', '\x00', '\\n';\r\n",
+		"-- name: SpecialSQL :exec\n\n-- preserve comment\nDECLARE $books AS List<Struct<\n    book_id: Uint64, \n\tdata: Json\n>>;\n\nINSERT INTO books (book_id, data)\nSELECT\n    book_id,\n    data\nFROM AS_TABLE($books);  \n",
+		"-- name: SpecialSQL :exec\nSELECT @@first line\n    value indentation\n\nlast line@@ AS value;\n",
+	} {
+		t.Run(fmt.Sprint(len(sql)), func(t *testing.T) {
+			files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "SpecialSQL", Command: model.Exec, SQL: sql}}}, Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			queries := generatedFile(t, files, "queries.rs")
+			start := strings.Index(queries, ".exec(")
+			if start < 0 {
+				t.Fatal("inline SQL missing")
+			}
+			start += len(".exec(")
+			end := strings.Index(queries[start:], ",\n            )")
+			if end < 0 {
+				t.Fatal("inline SQL delimiter missing")
+			}
+			literal := queries[start : start+end]
+			var expected strings.Builder
+			expected.WriteString("&[")
+			for i, value := range []byte(model.WithoutQueryAnnotation(sql)) {
+				if i != 0 {
+					expected.WriteString(",")
+				}
+				fmt.Fprintf(&expected, "%d", value)
+			}
+			expected.WriteString("]")
+			source := fmt.Sprintf("fn main() { assert_eq!((%s).as_bytes(), %s); }\n", literal, expected.String())
+			dir := t.TempDir()
+			path := filepath.Join(dir, "main.rs")
+			if err := os.WriteFile(path, []byte(source), 0600); err != nil {
+				t.Fatal(err)
+			}
+			bin := filepath.Join(dir, "roundtrip")
+			if out, err := exec.Command("rustc", path, "-o", bin).CombinedOutput(); err != nil {
+				t.Fatalf("rustc: %v\n%s", err, out)
+			}
+			if out, err := exec.Command(bin).CombinedOutput(); err != nil {
+				t.Fatalf("round trip: %v\n%s", err, out)
+			}
+		})
 	}
 }
 

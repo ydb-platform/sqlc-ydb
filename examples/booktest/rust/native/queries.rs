@@ -27,10 +27,9 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
         let mut row = self
             .client
             .query_row(
-                r"
-                 SELECT author_id, name
-                 FROM authors
-                 WHERE author_id = $author_id;",
+                r"SELECT author_id, name
+FROM authors
+WHERE author_id = $author_id;",
             )
             .param("$author_id", author_id)
             .await?;
@@ -46,10 +45,9 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
         let mut row = self
             .client
             .query_row(
-                r"
-                 SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
-                 FROM books
-                 WHERE book_id = $book_id;",
+                r"SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
+FROM books
+WHERE book_id = $book_id;",
             )
             .param("$book_id", book_id)
             .await?;
@@ -70,9 +68,8 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     pub async fn delete_book(&mut self, book_id: u64) -> ydb::YdbResult<()> {
         self.client
             .exec(
-                r"
-                 DELETE FROM books
-                 WHERE book_id = $book_id;",
+                r"DELETE FROM books
+WHERE book_id = $book_id;",
             )
             .param("$book_id", book_id)
             .await
@@ -87,10 +84,9 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     ) -> ydb::YdbResult<Vec<BooksByTitleYearRow>> {
         self.client
             .query_result_set(
-                r"
-                 SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
-                 FROM books
-                 WHERE title = $title AND publication_year = $publication_year;",
+                r"SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
+FROM books
+WHERE title = $title AND publication_year = $publication_year;",
             )
             .param("$title", title)
             .param("$publication_year", publication_year)
@@ -116,20 +112,19 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     pub async fn books_by_tags(&mut self, tags: String) -> ydb::YdbResult<Vec<BooksByTagsRow>> {
         self.client
             .query_result_set(
-                r"
-                 DECLARE $tags AS Json;
-                 SELECT
-                     b.book_id,
-                     b.title,
-                     a.name,
-                     b.isbn,
-                     b.tags
-                 FROM books AS b
-                 LEFT JOIN authors AS a ON b.author_id = a.author_id
-                 WHERE NOT SetIsDisjoint(
-                     ToSet(Yson::ConvertToStringList(b.tags)),
-                     Yson::ConvertToStringList($tags)
-                 );",
+                r"DECLARE $tags AS Json;
+SELECT
+    b.book_id,
+    b.title,
+    a.name,
+    b.isbn,
+    b.tags
+FROM books AS b
+LEFT JOIN authors AS a ON b.author_id = a.author_id
+WHERE NOT SetIsDisjoint(
+    ToSet(Yson::ConvertToStringList(b.tags)),
+    Yson::ConvertToStringList($tags)
+);",
             )
             .param("$tags", JsonParam(tags))
             .await?
@@ -156,10 +151,9 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
         let mut row = self
             .client
             .query_row(
-                r"
-                 INSERT INTO authors (author_id, name)
-                 VALUES ($author_id, $name)
-                 RETURNING author_id, name;",
+                r"INSERT INTO authors (author_id, name)
+VALUES ($author_id, $name)
+RETURNING author_id, name;",
             )
             .param("$author_id", author_id)
             .param("$name", name)
@@ -186,27 +180,26 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
         let mut row = self
             .client
             .query_row(
-                r"
-                 INSERT INTO books (
-                     book_id,
-                     author_id,
-                     isbn,
-                     book_type,
-                     title,
-                     publication_year,
-                     available,
-                     tags
-                 ) VALUES (
-                     $book_id,
-                     $author_id,
-                     $isbn,
-                     $book_type,
-                     $title,
-                     $publication_year,
-                     $available,
-                     $tags
-                 )
-                 RETURNING book_id, author_id, isbn, book_type, title, publication_year, available, tags;",
+                r"INSERT INTO books (
+    book_id,
+    author_id,
+    isbn,
+    book_type,
+    title,
+    publication_year,
+    available,
+    tags
+) VALUES (
+    $book_id,
+    $author_id,
+    $isbn,
+    $book_type,
+    $title,
+    $publication_year,
+    $available,
+    $tags
+)
+RETURNING book_id, author_id, isbn, book_type, title, publication_year, available, tags;",
             )
             .param("$book_id", book_id)
             .param("$author_id", author_id)
@@ -239,10 +232,9 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     ) -> ydb::YdbResult<()> {
         self.client
             .exec(
-                r"
-                 UPDATE books
-                 SET title = $title, tags = $tags
-                 WHERE book_id = $book_id;",
+                r"UPDATE books
+SET title = $title, tags = $tags
+WHERE book_id = $book_id;",
             )
             .param("$title", title)
             .param("$tags", JsonParam(tags))
@@ -261,10 +253,9 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     ) -> ydb::YdbResult<()> {
         self.client
             .exec(
-                r"
-                 UPDATE books
-                 SET title = $title, tags = $tags, isbn = $isbn
-                 WHERE book_id = $book_id;",
+                r"UPDATE books
+SET title = $title, tags = $tags, isbn = $isbn
+WHERE book_id = $book_id;",
             )
             .param("$title", title)
             .param("$tags", JsonParam(tags))
@@ -282,9 +273,8 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
     ) -> ydb::YdbResult<()> {
         self.client
             .exec(
-                r"
-                 DELETE FROM books
-                 WHERE publication_year < $publication_year AND author_id = $author_id;",
+                r"DELETE FROM books
+WHERE publication_year < $publication_year AND author_id = $author_id;",
             )
             .param("$publication_year", publication_year)
             .param("$author_id", author_id)

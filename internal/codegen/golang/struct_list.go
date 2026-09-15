@@ -140,7 +140,11 @@ func writeStructDecimalValidations(b *bytes.Buffer, q model.AnalyzedQuery, p mod
 
 func structParameterName(p model.Parameter) string {
 	name := p.Name
-	if !ident(name) || name == "ctx" || name == "opts" || name == "q" || name == "parameters" || name == "callOptions" || name == "err" || name == "item" || name == "row" || name == "rows" || name == "result" || name == "items" || name == "resultSet" || name == "ydb" || name == "query" || name == "sql" || name == "types" || name == "xerrors" || name == "errors" || name == "io" {
+	if !ident(name) {
+		return "arg"
+	}
+	switch name {
+	case "ctx", "opts", "q", "parameters", "callOptions", "err", "item", "row", "rows", "result", "items", "resultSet", "ydb", "query", "sql", "types", "xerrors", "errors", "io":
 		return "arg"
 	}
 	return name

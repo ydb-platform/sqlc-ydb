@@ -99,7 +99,7 @@ export class Queries {
   // -- name: GetAuthor :one
   async getAuthor(authorId: bigint, configure?: ConfigureQuery): Promise<GetAuthorRow | null> {
     const stmt = this.#sql<[GetAuthorRow]>`SELECT author_id, name, biography FROM authors
-      WHERE author_id = $author_id;`
+WHERE author_id = $author_id;`
       .parameter("author_id", new Uint64(authorId));
     configure?.(stmt);
     const [rows] = await stmt;
@@ -110,7 +110,7 @@ export class Queries {
   // -- name: DeleteBookExecResult :exec
   async deleteBookExecResult(bookId: bigint, configure?: ConfigureQuery): Promise<void> {
     const stmt = this.#sql`DELETE FROM books
-      WHERE book_id = $book_id;`
+WHERE book_id = $book_id;`
       .parameter("book_id", new Uint64(bookId));
     configure?.(stmt);
     await stmt;
@@ -119,7 +119,7 @@ export class Queries {
   // -- name: DeleteBook :exec
   async deleteBook(bookId: bigint, configure?: ConfigureQuery): Promise<void> {
     const stmt = this.#sql`DELETE FROM books
-      WHERE book_id = $book_id;`
+WHERE book_id = $book_id;`
       .parameter("book_id", new Uint64(bookId));
     configure?.(stmt);
     await stmt;
@@ -128,7 +128,7 @@ export class Queries {
   // -- name: DeleteBookNamedFunc :exec
   async deleteBookNamedFunc(bookId: bigint, configure?: ConfigureQuery): Promise<void> {
     const stmt = this.#sql`DELETE FROM books
-      WHERE book_id = $book_id;`
+WHERE book_id = $book_id;`
       .parameter("book_id", new Uint64(bookId));
     configure?.(stmt);
     await stmt;
@@ -137,7 +137,7 @@ export class Queries {
   // -- name: DeleteBookNamedSign :exec
   async deleteBookNamedSign(bookId: bigint, configure?: ConfigureQuery): Promise<void> {
     const stmt = this.#sql`DELETE FROM books
-      WHERE book_id = $book_id;`
+WHERE book_id = $book_id;`
       .parameter("book_id", new Uint64(bookId));
     configure?.(stmt);
     await stmt;
@@ -146,8 +146,8 @@ export class Queries {
   // -- name: BooksByYear :many
   async booksByYear(year: number, configure?: ConfigureQuery): Promise<BooksByYearRow[]> {
     const stmt = this.#sql<[BooksByYearRow]>`SELECT book_id, author_id, isbn, book_type, title, year, available, tags
-      FROM books
-      WHERE year = $year;`
+FROM books
+WHERE year = $year;`
       .parameter("year", new Int32(year));
     configure?.(stmt);
     const [rows] = await stmt;
@@ -158,8 +158,8 @@ export class Queries {
   // -- name: CreateAuthor :one
   async createAuthor(args: CreateAuthorParams, configure?: ConfigureQuery): Promise<CreateAuthorRow | null> {
     const stmt = this.#sql<[CreateAuthorRow]>`INSERT INTO authors (author_id, name, biography)
-      VALUES ($author_id, $name, $biography)
-      RETURNING author_id, name, biography;`
+VALUES ($author_id, $name, $biography)
+RETURNING author_id, name, biography;`
       .parameter("author_id", new Uint64(args.authorId))
       .parameter("name", new Utf8(args.name))
       .parameter("biography", new Optional(args.biography === null ? null : new Json(args.biography), new JsonType()));
@@ -172,8 +172,8 @@ export class Queries {
   // -- name: CreateBook :one
   async createBook(args: CreateBookParams, configure?: ConfigureQuery): Promise<CreateBookRow | null> {
     const stmt = this.#sql<[CreateBookRow]>`INSERT INTO books (book_id, author_id, isbn, book_type, title, year, available, tags)
-      VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)
-      RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;`
+VALUES ($book_id, $author_id, $isbn, $book_type, $title, $year, $available, $tags)
+RETURNING book_id, author_id, isbn, book_type, title, year, available, tags;`
       .parameter("book_id", new Uint64(args.bookId))
       .parameter("author_id", new Uint64(args.authorId))
       .parameter("isbn", new Utf8(args.isbn))
@@ -191,8 +191,8 @@ export class Queries {
   // -- name: UpdateBook :exec
   async updateBook(args: UpdateBookParams, configure?: ConfigureQuery): Promise<void> {
     const stmt = this.#sql`UPDATE books
-      SET title = $title, tags = $tags
-      WHERE book_id = $book_id;`
+SET title = $title, tags = $tags
+WHERE book_id = $book_id;`
       .parameter("title", new Utf8(args.title))
       .parameter("tags", new Json(args.tags))
       .parameter("book_id", new Uint64(args.bookId));
@@ -203,7 +203,7 @@ export class Queries {
   // -- name: GetBiography :one
   async getBiography(authorId: bigint, configure?: ConfigureQuery): Promise<GetBiographyRow | null> {
     const stmt = this.#sql<[GetBiographyRow]>`SELECT biography FROM authors
-      WHERE author_id = $author_id;`
+WHERE author_id = $author_id;`
       .parameter("author_id", new Uint64(authorId));
     configure?.(stmt);
     const [rows] = await stmt;
@@ -214,21 +214,21 @@ export class Queries {
   // -- name: CreateBooks :exec
   async createBooks(books: ReadonlyArray<CreateBooksBooksItem>, configure?: ConfigureQuery): Promise<void> {
     const stmt = this.#sql`DECLARE $books AS List<Struct<
-          book_id: Uint64,
-          author_id: Uint64,
-          isbn: Utf8,
-          book_type: Utf8,
-          title: Utf8,
-          year: Int32,
-          available: Timestamp,
-          tags: Json
-      >>;
-      INSERT INTO books (
-          book_id, author_id, isbn, book_type, title, year, available, tags
-      )
-      SELECT
-          book_id, author_id, isbn, book_type, title, year, available, tags
-      FROM AS_TABLE($books);`;
+    book_id: Uint64,
+    author_id: Uint64,
+    isbn: Utf8,
+    book_type: Utf8,
+    title: Utf8,
+    year: Int32,
+    available: Timestamp,
+    tags: Json
+>>;
+INSERT INTO books (
+    book_id, author_id, isbn, book_type, title, year, available, tags
+)
+SELECT
+    book_id, author_id, isbn, book_type, title, year, available, tags
+FROM AS_TABLE($books);`;
     // Keep explicit DECLARE statements; the SDK otherwise prepends duplicates.
     Object.defineProperty(stmt, "text", { value: stmt.text, writable: false });
     stmt

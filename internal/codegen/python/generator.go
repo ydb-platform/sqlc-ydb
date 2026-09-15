@@ -523,14 +523,21 @@ func queryMatchesTable(a *model.AnalysisResult, q model.AnalyzedQuery, table str
 	return false
 }
 func pyType(t model.Type) (string, error) {
+	return pythonType(t, false)
+}
+
+func pythonType(t model.Type, nativeJSON bool) (string, error) {
 	if t.IsOptional() {
 		if t.Elem == nil {
 			return "", fmt.Errorf("malformed Optional type")
 		}
-		x, e := pyType(*t.Elem)
+		x, e := pythonType(*t.Elem, nativeJSON)
 		return "Optional[" + x + "]", e
 	}
 	kind := strings.ToLower(t.Kind)
+	if nativeJSON && (kind == "json" || kind == "jsondocument") {
+		return "JSONValue", nil
+	}
 	if primitive, ok := pythonPrimitiveTypes[kind]; ok {
 		return primitive.python, nil
 	}
@@ -539,23 +546,23 @@ func pyType(t model.Type) (string, error) {
 		if t.Elem == nil {
 			return "", fmt.Errorf("List without element type")
 		}
-		x, e := pyType(*t.Elem)
+		x, e := pythonType(*t.Elem, nativeJSON)
 		return "list[" + x + "]", e
 	case "set":
 		if t.Elem == nil {
 			return "", fmt.Errorf("Set without element type")
 		}
-		x, e := pyType(*t.Elem)
+		x, e := pythonType(*t.Elem, nativeJSON)
 		return "set[" + x + "]", e
 	case "dict":
 		if t.Key == nil || t.Elem == nil {
 			return "", fmt.Errorf("Dict without key/value type")
 		}
-		k, e := pyType(*t.Key)
+		k, e := pythonType(*t.Key, nativeJSON)
 		if e != nil {
 			return "", e
 		}
-		v, e := pyType(*t.Elem)
+		v, e := pythonType(*t.Elem, nativeJSON)
 		return "dict[" + k + ", " + v + "]", e
 	default:
 		return "", fmt.Errorf("unsupported YQL type %q", t.Kind)

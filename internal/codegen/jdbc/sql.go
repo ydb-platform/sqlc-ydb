@@ -1,4 +1,4 @@
-// Package jdbc renders positional SQL for the Java and Kotlin JDBC generators.
+// Package jdbc renders SQL and bindings for the Java and Kotlin JDBC generators.
 package jdbc
 
 import (
@@ -9,8 +9,9 @@ import (
 	yql "github.com/ydb-platform/yql-parsers/go"
 )
 
-// SQL replaces only parameter tokens, preserving quoted text and local variables.
-// Bindings follow occurrences, including repeated uses of the same parameter.
+// SQL preserves explicit declarations and adds declarations for inferred parameters.
+// Without declarations, it replaces parameter tokens with positional bindings,
+// preserving quoted text, local variables, and repeated parameter occurrences.
 func SQL(q model.AnalyzedQuery) (string, []int) {
 	text := q.SQL
 	text = model.WithoutQueryAnnotation(text)

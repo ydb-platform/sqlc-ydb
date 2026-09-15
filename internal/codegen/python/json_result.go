@@ -9,35 +9,7 @@ import (
 // QuerySessionPool decodes Json and JsonDocument to Python values by default.
 // Inputs and the DB-API based adapters continue to use serialized JSON strings.
 func resultPyType(t model.Type, o Options) (string, error) {
-	if o.Runtime != "ydb" {
-		return pyType(t)
-	}
-	switch strings.ToLower(t.Kind) {
-	case "json", "jsondocument":
-		return "JSONValue", nil
-	case "optional", "list", "set":
-		if t.Elem == nil {
-			return pyType(t)
-		}
-		elem, err := resultPyType(*t.Elem, o)
-		constructor := strings.ToLower(t.Kind)
-		if t.IsOptional() {
-			constructor = "Optional"
-		}
-		return constructor + "[" + elem + "]", err
-	case "dict":
-		if t.Key == nil || t.Elem == nil {
-			return pyType(t)
-		}
-		key, err := resultPyType(*t.Key, o)
-		if err != nil {
-			return "", err
-		}
-		elem, err := resultPyType(*t.Elem, o)
-		return "dict[" + key + ", " + elem + "]", err
-	default:
-		return pyType(t)
-	}
+	return pythonType(t, o.Runtime == "ydb")
 }
 
 func nativeJSONResults(a *model.AnalysisResult, o Options) bool {

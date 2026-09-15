@@ -266,3 +266,25 @@ func TestStructListNamesCollideAfterNormalization(t *testing.T) {
 		t.Fatalf("class namespace collision: %v", err)
 	}
 }
+
+func TestStructListFieldDiagnostics(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		fields []model.StructField
+		want   string
+	}{
+		{"empty", nil, "requires at least one field"},
+		{"invalid name", []model.StructField{{Name: "123id", Type: model.Type{Kind: "Uint64"}}}, "invalid or colliding field"},
+		{"unsupported scalar", []model.StructField{{Name: "amount", Type: model.Type{Kind: "Decimal", Precision: 22, Scale: 9}}}, "must be a supported scalar"},
+		{"nested optional", []model.StructField{{Name: "id", Type: model.Optional(model.Optional(model.Type{Kind: "Uint64"}))}}, "must be a supported scalar"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := structInput()
+			in.Queries[0].Parameters[0].Type.Elem.Fields = tc.fields
+			_, err := Generate(in, Options{})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v, want %s", err, tc.want)
+			}
+		})
+	}
+}

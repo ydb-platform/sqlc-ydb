@@ -74,34 +74,15 @@ func Generate(a *model.AnalysisResult, options Options) ([]model.File, error) {
 
 func validate(a *model.AnalysisResult) error {
 	methods := map[string]string{}
-	names := map[string]bool{"Queries": true, "ConfigureQuery": true, "Value": true, "List": true, "ListType": true, "Struct": true, "StructType": true, "Optional": true, "OptionalType": true, "Query": true, "SQL": true, "JSValue": true}
-	for _, info := range typescriptTypes {
-		names[info.valueClass] = true
-		names[info.typeClass] = true
-	}
-	addName := func(name string) error {
-		if names[name] {
-			return fmt.Errorf("typescript generator: generated type name collision %q", name)
-		}
-		names[name] = true
-		return nil
-	}
+	itemTypes := map[string]bool{}
 	for _, query := range a.Queries {
-		if len(query.Parameters) > 1 {
-			if err := addName(exportedName(query.Name) + "Params"); err != nil {
-				return err
-			}
-		}
-		if query.Command == model.One || query.Command == model.Many {
-			if err := addName(exportedName(query.Name) + "Row"); err != nil {
-				return err
-			}
-		}
 		for _, p := range query.Parameters {
 			if isStructList(p.Type) {
-				if err := addName(exportedName(query.Name) + exportedName(p.Name) + "Item"); err != nil {
-					return err
+				name := exportedName(query.Name) + exportedName(p.Name) + "Item"
+				if itemTypes[name] {
+					return fmt.Errorf("typescript generator: generated item type name collision %q", name)
 				}
+				itemTypes[name] = true
 			}
 		}
 		switch query.Command {
@@ -324,7 +305,7 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 	b.WriteString("  async " + method + "(" + params + "configure?: ConfigureQuery): Promise<" + ret + "> {\n")
 
 	sql := model.WithoutQueryAnnotation(q.SQL)
-	b.WriteString("    const stmt = this.#sql" + generic + sqlLiteral(strings.TrimSpace(sql)))
+	b.WriteString("    const stmt = this.#sql" + generic + sqlLiteral(sql))
 	declared := len(q.DeclaredParameters) > 0
 	for _, p := range q.Parameters {
 		if q.IsDeclaredParameter(p.Name) {
@@ -430,7 +411,7 @@ func sqlLiteral(value string) string {
 		case '\r':
 			b.WriteString(`\r`)
 		case '\n':
-			b.WriteString("\n      ")
+			b.WriteByte('\n')
 		default:
 			if r < 0x20 && r != '\n' && r != '\t' {
 				fmt.Fprintf(&b, "\\x%02x", r)

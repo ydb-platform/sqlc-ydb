@@ -29,7 +29,9 @@ func TestStructListPublishedSDK(t *testing.T) {
 	}
 	dir := t.TempDir()
 	for _, runtime := range []string{"adonet", "dapper"} {
-		files, err := Generate(batchAnalysis(), Options{Namespace: runtime, Runtime: runtime})
+		in := batchAnalysis()
+		in.Queries[0].Parameters = append(in.Queries[0].Parameters, model.Parameter{Name: "limit", Type: model.Type{Kind: "Uint64"}})
+		files, err := Generate(in, Options{Namespace: runtime, Runtime: runtime})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -80,6 +82,64 @@ func TestStructListRejectsSDKTypeNameCollision(t *testing.T) {
 		_, err := Generate(analysis, Options{Runtime: runtime})
 		if err == nil || !strings.Contains(err.Error(), "model name collision") {
 			t.Fatalf("%s: expected SDK type name collision, got %v", runtime, err)
+		}
+	}
+}
+
+func TestStructListRejectsUnsupportedFieldShapes(t *testing.T) {
+	for _, runtime := range []string{"adonet", "dapper"} {
+		for _, tc := range []struct {
+			name   string
+			fields []model.StructField
+			want   string
+		}{
+			{"empty", nil, "at least one field"},
+			{"nested struct", []model.StructField{{Name: "nested", Type: model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "id", Type: model.Type{Kind: "Uint64"}}}}}}, `column "nested": unsupported YQL type "Struct"`},
+			{"nested list", []model.StructField{{Name: "items", Type: model.Type{Kind: "List", Elem: &model.Type{Kind: "Utf8"}}}}, `column "items": unsupported YQL type "List"`},
+		} {
+			t.Run(runtime+"/"+tc.name, func(t *testing.T) {
+				in := batchAnalysis()
+				in.Queries[0].Parameters[0].Type.Elem.Fields = tc.fields
+				_, err := Generate(in, Options{Runtime: runtime})
+				if err == nil || !strings.Contains(err.Error(), tc.want) {
+					t.Fatalf("got %v, want diagnostic %q", err, tc.want)
+				}
+			})
+		}
+	}
+}
+
+func TestStructListItemNamesAreValidated(t *testing.T) {
+	for _, runtime := range []string{"adonet", "dapper"} {
+		t.Run(runtime+"/table collision", func(t *testing.T) {
+			in := batchAnalysis()
+			in.Catalog.Tables = []model.Table{{Name: "create_books_books_item"}}
+			if _, err := Generate(in, Options{Runtime: runtime}); err == nil || !strings.Contains(err.Error(), "model name collision") {
+				t.Fatalf("got %v", err)
+			}
+		})
+		t.Run(runtime+"/field collision", func(t *testing.T) {
+			in := batchAnalysis()
+			in.Queries[0].Parameters[0].Type.Elem.Fields = []model.StructField{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, {Name: "book_ID", Type: model.Type{Kind: "Uint64"}}}
+			if _, err := Generate(in, Options{Runtime: runtime}); err == nil || !strings.Contains(err.Error(), "column name collision") {
+				t.Fatalf("got %v", err)
+			}
+		})
+	}
+}
+
+func TestStructListAndScalarParameters(t *testing.T) {
+	for _, runtime := range []string{"adonet", "dapper"} {
+		in := batchAnalysis()
+		in.Queries[0].Parameters = append(in.Queries[0].Parameters, model.Parameter{Name: "limit", Type: model.Type{Kind: "Uint64"}})
+		models, queries := generatedRuntime(t, in, runtime)
+		for _, want := range []string{"record CreateBooksParams", "IReadOnlyList<CreateBooksBooksItem> Books", "ulong Limit"} {
+			if !strings.Contains(models, want) {
+				t.Fatalf("missing %q in %s", want, models)
+			}
+		}
+		if !strings.Contains(queries, "BindCreateBooksBooksItem(args.Books)") {
+			t.Fatal(queries)
 		}
 	}
 }

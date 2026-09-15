@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/antlr4-go/antlr/v4"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 	parser "github.com/ydb-platform/yql-parsers/go"
 )
@@ -33,21 +32,12 @@ func jooqBatchSQL(q model.AnalyzedQuery, sql string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	lexer := parser.NewYQLLexer(antlr.NewInputStream(sql))
-	lexer.RemoveErrorListeners()
-	afterInto := false
-	for token := lexer.NextToken(); token.GetTokenType() != antlr.TokenEOF; token = lexer.NextToken() {
-		if token.GetChannel() != antlr.TokenDefaultChannel {
-			continue
-		}
-		if afterInto {
-			if token.GetText() != target {
-				return "", fmt.Errorf("%s: jOOQ batch insert cannot render target %s", q.Name, target)
-			}
-			runes := []rune(sql)
-			return sqlLiteral(string(runes[:token.GetStart()])) + " + dsl.render(" + constant + ") + " + sqlLiteral(string(runes[token.GetStop()+1:])), nil
-		}
-		afterInto = strings.EqualFold(token.GetText(), "INTO")
+	span := ref.Simple_table_ref().Simple_table_ref_core()
+	shift := len([]rune(sql)) - len([]rune(q.SQL))
+	start, end := span.GetStart().GetStart()+shift, span.GetStop().GetStop()+1+shift
+	runes := []rune(sql)
+	if start < 0 || end > len(runes) || start > end {
+		return "", fmt.Errorf("%s: invalid resolved batch target span", q.Name)
 	}
-	return "", fmt.Errorf("%s: jOOQ batch insert target was not found", q.Name)
+	return sqlLiteral(string(runes[:start])) + " + dsl.render(" + constant + ") + " + sqlLiteral(string(runes[end:])), nil
 }

@@ -32,8 +32,8 @@ export class Queries {
   // -- name: CreateBooks :exec
   async createBooks(books: ReadonlyArray<CreateBooksBooksItem>, configure?: ConfigureQuery): Promise<void> {
     const stmt = this.#sql`DECLARE $books AS List<Struct<book_id: Uint64, title: Optional<Utf8>, tags: Json>>;
-      INSERT INTO books (book_id, title, tags)
-      SELECT book_id, title, tags FROM AS_TABLE($books);`;
+INSERT INTO books (book_id, title, tags)
+SELECT book_id, title, tags FROM AS_TABLE($books);`;
     // Keep explicit DECLARE statements; the SDK otherwise prepends duplicates.
     Object.defineProperty(stmt, "text", { value: stmt.text, writable: false });
     stmt

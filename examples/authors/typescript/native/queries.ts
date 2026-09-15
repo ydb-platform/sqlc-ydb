@@ -79,8 +79,8 @@ export class Queries {
   // -- name: CreateAuthor :one
   async createAuthor(args: CreateAuthorParams, configure?: ConfigureQuery): Promise<CreateAuthorRow | null> {
     const stmt = this.#sql<[CreateAuthorRow]>`INSERT INTO \`authors\` (\`id\`, \`name\`, \`bio\`)
-      VALUES ($author_id, $author_name, $biography)
-      RETURNING \`id\`, \`name\`, \`bio\`;`
+VALUES ($author_id, $author_name, $biography)
+RETURNING \`id\`, \`name\`, \`bio\`;`
       .parameter("author_id", new Uint64(args.authorId))
       .parameter("author_name", new Utf8(args.authorName))
       .parameter("biography", new Optional(args.biography === null ? null : new Utf8(args.biography), new Utf8Type()));
@@ -93,7 +93,7 @@ export class Queries {
   // -- name: UpsertAuthor :exec
   async upsertAuthor(args: UpsertAuthorParams, configure?: ConfigureQuery): Promise<void> {
     const stmt = this.#sql`UPSERT INTO authors (id, name, bio)
-      VALUES ($author_id, $author_name, $biography);`
+VALUES ($author_id, $author_name, $biography);`
       .parameter("author_id", new Uint64(args.authorId))
       .parameter("author_name", new Utf8(args.authorName))
       .parameter("biography", new Optional(args.biography === null ? null : new Utf8(args.biography), new Utf8Type()));

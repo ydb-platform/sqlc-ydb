@@ -170,11 +170,12 @@ func validate(in *model.AnalysisResult) error {
 				if err := validateFields("struct "+name, structColumns(typ)); err != nil {
 					return err
 				}
-				typ = model.Type{Kind: "Utf8"}
+			} else if _, err := phpType(typ); err != nil {
+				return fmt.Errorf("php generator: query %q parameter %q: %w", query.Name, parameter.Name, err)
 			}
 			parameterColumns[i] = model.Column{Name: parameter.Name, Type: typ}
 		}
-		if err := validateFields("query "+query.Name+" parameters", parameterColumns); err != nil {
+		if err := validateFieldNames("query "+query.Name+" parameters", parameterColumns); err != nil {
 			return err
 		}
 		if len(query.Parameters) > 1 {
@@ -194,7 +195,7 @@ func validate(in *model.AnalysisResult) error {
 	return nil
 }
 
-func validateFields(where string, columns []model.Column) error {
+func validateFieldNames(where string, columns []model.Column) error {
 	seen := map[string]string{}
 	for _, column := range columns {
 		name := camelName(column.Name)
@@ -206,6 +207,15 @@ func validateFields(where string, columns []model.Column) error {
 			return fmt.Errorf("php generator: %s property name collision %q between %q and %q", where, name, previous, column.Name)
 		}
 		seen[key] = column.Name
+	}
+	return nil
+}
+
+func validateFields(where string, columns []model.Column) error {
+	if err := validateFieldNames(where, columns); err != nil {
+		return err
+	}
+	for _, column := range columns {
 		if _, err := phpType(column.Type); err != nil {
 			return fmt.Errorf("php generator: %s column %q: %w", where, column.Name, err)
 		}
@@ -237,10 +247,12 @@ func renderDTO(namespace, name string, columns []model.Column) string {
 	b.WriteString("declare(strict_types=1);\n\nnamespace " + namespace + ";\n\n")
 	b.WriteString("final class " + name + "\n{\n    public function __construct(\n")
 	for i, column := range columns {
-		typeName, _ := phpType(column.Type)
+		var typeName string
 		if isStructList(column.Type) {
 			typeName = "array"
 			fmt.Fprintf(&b, "        /** @var list<%s> */\n", strings.TrimSuffix(name, "Params")+pascalName(column.Name)+"Item")
+		} else {
+			typeName, _ = phpType(column.Type)
 		}
 		comma := ","
 		if i == len(columns)-1 {
@@ -1049,7 +1061,13 @@ func phpSQLString(value, indent string) string {
 		} else if strings.HasSuffix(value, "\n") {
 			ending = ` . "\n"`
 		}
-		return "<<<'" + delimiter + "'\n" + indent + strings.ReplaceAll(strings.TrimSuffix(value, "\n"), "\n", "\n"+indent) + "\n" + indent + delimiter + ending
+		lines := strings.Split(strings.TrimSuffix(value, "\n"), "\n")
+		for i, line := range lines {
+			if line != "" && line != "\r" {
+				lines[i] = indent + line
+			}
+		}
+		return "<<<'" + delimiter + "'\n" + strings.Join(lines, "\n") + "\n" + indent + delimiter + ending
 	}
 	return escapedPHPString(value, indent)
 }
@@ -1057,6 +1075,12 @@ func phpSQLString(value, indent string) string {
 func phpString(value, indent string) string { return escapedPHPString(value, indent) }
 
 func canUseNowdoc(value string) bool {
+	for _, line := range strings.Split(value, "\n") {
+		line = strings.TrimSuffix(line, "\r")
+		if strings.HasSuffix(line, " ") || strings.HasSuffix(line, "\t") {
+			return false
+		}
+	}
 	for i, r := range value {
 		if r == '\r' {
 			if i+1 >= len(value) || value[i+1] != '\n' {

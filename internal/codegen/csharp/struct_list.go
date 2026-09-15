@@ -26,11 +26,6 @@ func parameterType(q model.AnalyzedQuery, p model.Parameter) (string, error) {
 		if len(p.Type.Elem.Fields) == 0 {
 			return "", fmt.Errorf("Struct parameters require at least one field")
 		}
-		for _, f := range p.Type.Elem.Fields {
-			if _, err := csType(f.Type); err != nil {
-				return "", fmt.Errorf("Struct field %q: %w", f.Name, err)
-			}
-		}
 		return "IReadOnlyList<" + structItemName(q, p) + ">", nil
 	}
 	return csType(p.Type)

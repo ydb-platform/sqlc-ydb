@@ -60,3 +60,11 @@ func TestStructTypeIdentityIgnoresDeclarationOrder(t *testing.T) {
 		t.Fatal("type comparison reordered declarations")
 	}
 }
+
+func TestStructIdentityIncludesAllFields(t *testing.T) {
+	short := Type{Kind: "Struct", Fields: []StructField{{Name: "id", Type: Type{Kind: "Uint64"}}}}
+	long := Type{Kind: "Struct", Fields: append(append([]StructField{}, short.Fields...), StructField{Name: "data", Type: Type{Kind: "Json"}})}
+	if short.Equal(long) || long.Equal(short) {
+		t.Fatal("different field counts must not compare equal")
+	}
+}

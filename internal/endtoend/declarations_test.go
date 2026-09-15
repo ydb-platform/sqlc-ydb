@@ -12,7 +12,7 @@ import (
 )
 
 func TestExplicitBatchDeclarationsSurviveGeneration(t *testing.T) {
-	const declaration = "DECLARE $books AS List<Struct<book_id:Uint64,data:Json>>;"
+	const declaration = "DECLARE $books AS List<Struct<\n    book_id: Uint64,\n    data: Json\n>>;"
 	for _, profile := range []struct{ language, runtime, key string }{
 		{"go", "ydb", "sql_package"}, {"go", "database/sql", "sql_package"},
 		{"python", "ydb", "runtime"}, {"python", "dbapi", "runtime"}, {"python", "sqlalchemy", "runtime"},
@@ -53,7 +53,17 @@ func TestExplicitBatchDeclarationsSurviveGeneration(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				preserved = preserved || strings.Contains(string(content), wantDeclaration)
+				remaining := string(content)
+				complete := true
+				for _, line := range strings.Split(wantDeclaration, "\n") {
+					_, rest, found := strings.Cut(remaining, line)
+					if !found {
+						complete = false
+						break
+					}
+					remaining = rest
+				}
+				preserved = preserved || complete
 			}
 			if !preserved {
 				t.Fatalf("%s/%s removed or changed the explicit batch DECLARE", profile.language, profile.runtime)

@@ -66,3 +66,40 @@ func declaredBatchQuery() model.AnalyzedQuery {
 func declaredMixedQuery() model.AnalyzedQuery {
 	return model.AnalyzedQuery{Name: "DeclaredMixed", Command: model.Exec, SQL: "DECLARE $z AS Uint64;\nSELECT $z, $a, $z;", DeclaredParameters: []string{"z"}, Parameters: []model.Parameter{{Name: "a", Type: model.Type{Kind: "Utf8"}}, {Name: "z", Type: model.Type{Kind: "Uint64"}}}}
 }
+
+func TestBatchOptionalSchemaAndRangeChecks(t *testing.T) {
+	files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{optionalBatchQuery()}}, Options{Runtime: "jdbc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var code string
+	for _, f := range files {
+		code += string(f.Content)
+	}
+	for _, want := range []string{"OptionalType.of(tech.ydb.table.values.PrimitiveType.Uint8)", "OptionalType.of(tech.ydb.table.values.PrimitiveType.Json)", `parameter \$books.rank is outside Uint8 range`, "_batchItem"} {
+		if !strings.Contains(code, want) {
+			t.Fatalf("missing %q in %s", want, code)
+		}
+	}
+}
+
+func TestBatchRejectsUnsupportedFieldsAndNames(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		fields []model.StructField
+		want   string
+	}{
+		{"nested list", []model.StructField{{Name: "children", Type: model.Type{Kind: "List", Elem: &model.Type{Kind: "Uint64"}}}}, "CreateBooksBooksItem.children"},
+		{"nested struct", []model.StructField{{Name: "child", Type: model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "id", Type: model.Type{Kind: "Uint64"}}}}}}, "CreateBooksBooksItem.child"},
+		{"field collision", []model.StructField{{Name: "user_id", Type: model.Type{Kind: "Uint64"}}, {Name: "userId", Type: model.Type{Kind: "Uint64"}}}, "field name collision"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			q := batchQuery()
+			q.Parameters[0].Type.Elem.Fields = tc.fields
+			files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{q}}, Options{Runtime: "jdbc"})
+			if err == nil || files != nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected %q, got files=%v err=%v", tc.want, files, err)
+			}
+		})
+	}
+}

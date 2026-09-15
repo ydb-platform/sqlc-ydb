@@ -81,7 +81,22 @@ mod struct_tests {
         assert!(fields["title"].is_optional());
         assert_eq!(fields["title"].clone().to_option(), None);
         ydb::Value::list_from(create_books_books_item_type(), vec![value]).unwrap();
-        ydb::Value::list_from(create_books_books_item_type(), vec![]).unwrap();
+        let expected = ydb::Value::struct_from_fields(vec![
+            ("book_id".to_string(), ydb::Value::Uint64(0)),
+            ("tags".to_string(), ydb::Value::Json(String::new())),
+            ("available".to_string(), ydb::Value::Timestamp(std::time::SystemTime::UNIX_EPOCH)),
+            ("title".to_string(), ydb::Value::from(None::<String>)),
+        ]);
+        assert_eq!(create_books_books_item_type(), expected);
+        let empty = ydb::Value::list_from(create_books_books_item_type(), vec![]).unwrap();
+        assert_eq!(empty, ydb::Value::list_from(expected, vec![]).unwrap());
+        let wrong = ydb::Value::struct_from_fields(vec![
+            ("book_id".to_string(), ydb::Value::Uint64(0)),
+            ("tags".to_string(), ydb::Value::Json(String::new())),
+            ("available".to_string(), ydb::Value::Timestamp(std::time::SystemTime::UNIX_EPOCH)),
+            ("title".to_string(), ydb::Value::from(None::<u64>)),
+        ]);
+        assert_ne!(empty, ydb::Value::list_from(wrong, vec![]).unwrap());
     }
 }
 `
@@ -125,5 +140,40 @@ func TestStructListRustfmt(t *testing.T) {
 	args := append([]string{"--edition", "2024", "--check"}, paths...)
 	if out, err := exec.Command("rustfmt", args...).CombinedOutput(); err != nil {
 		t.Fatalf("rustfmt: %v\n%s", err, out)
+	}
+}
+
+func TestStructListFieldDiagnostics(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		fields []model.StructField
+		want   string
+	}{
+		{"empty", nil, "requires at least one field"},
+		{"keyword", []model.StructField{{Name: "type", Type: model.Type{Kind: "Uint64"}}}, "invalid or colliding field"},
+		{"collision", []model.StructField{{Name: "bookID", Type: model.Type{Kind: "Uint64"}}, {Name: "book_id", Type: model.Type{Kind: "Uint64"}}}, "invalid or colliding field"},
+		{"unsupported scalar", []model.StructField{{Name: "amount", Type: model.Type{Kind: "Decimal", Precision: 22, Scale: 9}}}, "unsupported YQL type"},
+		{"nested optional", []model.StructField{{Name: "id", Type: model.Optional(model.Optional(model.Type{Kind: "Uint64"}))}}, "must be scalar or Optional<scalar>"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := structInput()
+			in.Queries[0].Parameters[0].Type.Elem.Fields = tc.fields
+			_, err := Generate(in, Options{})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v, want %s", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestStructListItemNameCollisionAcrossQueries(t *testing.T) {
+	in := structInput()
+	other := structInput().Queries[0]
+	other.Name = "Create"
+	other.Parameters[0].Name = "books_books"
+	in.Queries = append(in.Queries, other)
+	_, err := Generate(in, Options{})
+	if err == nil || !strings.Contains(err.Error(), "model name collision") {
+		t.Fatalf("err=%v", err)
 	}
 }

@@ -1,6 +1,7 @@
 package golang
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -125,5 +126,47 @@ func TestMetadata(t *testing.T) {
 }
 `)
 		})
+	}
+}
+
+func TestStructListParameterNamesDoNotShadowRuntime(t *testing.T) {
+	in := &model.AnalysisResult{}
+	for i, name := range []string{"ctx", "opts", "q", "parameters", "callOptions", "err", "item", "row", "rows", "result", "items", "resultSet", "ydb", "query", "sql", "types", "xerrors", "errors", "io", "type", "books"} {
+		q := batchInput(model.StructField{Name: "id", Type: model.Type{Kind: "Uint64"}}).Queries[0]
+		q.Name = fmt.Sprintf("Insert%d", i)
+		q.Parameters[0].Name = name
+		in.Queries = append(in.Queries, q)
+	}
+	for _, runtime := range []string{"ydb", "database/sql"} {
+		t.Run(runtime, func(t *testing.T) { compileInput(t, in, Options{Package: "db", Runtime: runtime}) })
+	}
+}
+
+func TestStructListUnsupportedScalarDiagnostics(t *testing.T) {
+	for _, tc := range []struct {
+		typ  model.Type
+		want string
+	}{
+		{model.Type{Kind: "Unknown"}, "field value:"},
+		{model.Type{Kind: "Date32"}, "extended temporal type Date32 is unsupported"},
+		{model.Type{Kind: "Decimal", Precision: 3, Scale: 4}, "Decimal"},
+	} {
+		for _, runtime := range []string{"ydb", "database/sql"} {
+			_, err := Generate(batchInput(model.StructField{Name: "value", Type: tc.typ}), Options{Package: "db", Runtime: runtime})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("%s %s: %v", runtime, tc.typ.String(), err)
+			}
+		}
+	}
+}
+
+func TestStructItemNameCanMatchUnusedCatalogTable(t *testing.T) {
+	in := batchInput(model.StructField{Name: "book_id", Type: model.Type{Kind: "Uint64"}})
+	in.Catalog.Tables = []model.Table{{Name: "create_books_books_item", Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}}}}}
+	for _, runtime := range []string{"ydb", "database/sql"} {
+		runGeneratedRuntimeTest(t, in, Options{Package: "db", Runtime: runtime}, `package db
+import "testing"
+func TestItem(t *testing.T) { item:=CreateBooksBooksItem{BookID:42};if item.BookID!=42 {t.Fatal(item)} }
+`)
 	}
 }

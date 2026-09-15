@@ -25,6 +25,7 @@ func TestSQLLiteralRoundTripsThroughJava17(t *testing.T) {
 		sql  string
 	}{
 		{"empty", ""},
+		{"declare_indent", "DECLARE $books AS List<Struct<\n    id: Uint64,\n    data: Json\n>>;\n\nINSERT INTO books\nSELECT\n    id,\n    data\nFROM AS_TABLE($books);"},
 		{"ordinary", "SELECT 1;"},
 		{"leading_lf", "\nSELECT 1;"},
 		{"trailing_lf", "SELECT 1;\n"},
@@ -329,6 +330,19 @@ public final class Main {
         tech.ydb.table.values.StructValue book = (tech.ydb.table.values.StructValue) filledBatch.get(0);
         check(book.getMemberValue(itemType.getMemberIndex("book_id")).equals(PrimitiveValue.newUint64(-1L)), "batch Uint64 lost unsigned bits");
         check(book.getMemberValue(itemType.getMemberIndex("tags")).equals(PrimitiveValue.newJson("{\"ok\":true}")), "batch Json lost bytes");
+        java.util.Map<String, tech.ydb.table.values.Value<?>> expectedBook = java.util.Map.ofEntries(
+            java.util.Map.entry("book_id", PrimitiveValue.newUint64(-1L)), java.util.Map.entry("author_id", PrimitiveValue.newUint64(42L)),
+            java.util.Map.entry("isbn", PrimitiveValue.newText("isbn")), java.util.Map.entry("book_type", PrimitiveValue.newText("paper")),
+            java.util.Map.entry("title", PrimitiveValue.newText("Book")), java.util.Map.entry("year", PrimitiveValue.newInt32(2026)),
+            java.util.Map.entry("available", PrimitiveValue.newTimestamp(java.time.Instant.EPOCH)), java.util.Map.entry("tags", PrimitiveValue.newJson("{\"ok\":true}")));
+        String previousName = "";
+        for (int i = 0; i < itemType.getMembersCount(); i++) {
+            String field = itemType.getMemberName(i);
+            check(previousName.compareTo(field) < 0, "SDK struct type is not canonical by name");
+            check(itemType.toPb().getStructType().getMembers(i).getName().equals(field), "wire type changed field order");
+            check(book.toPb().getItems(i).equals(expectedBook.get(field).toPb()), "wire value mismatched field " + field);
+            previousName = field;
+        }
         expectRange(() -> guarded.optionalBooks(java.util.List.of(new OptionalBooksBooksItem(-1, null))));
         YdbQuery optionalBatch = YdbQuery.parseQuery(new QueryKey("SELECT * FROM AS_TABLE(?);"), new YdbQueryProperties(new Properties()), types);
         tech.ydb.jdbc.query.params.InMemoryQuery optionalBound = new tech.ydb.jdbc.query.params.InMemoryQuery(optionalBatch, false);

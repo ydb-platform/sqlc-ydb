@@ -249,7 +249,7 @@ func TestSQLLiteralRoundTripsThroughNode(t *testing.T) {
 	if err != nil {
 		t.Skip("node is unavailable")
 	}
-	want := "-- a readable query\nSELECT `tick`, '${value}', \\\\path, \"雪\"u, '\t';\r\n-- trailing space \n \t \nSELECT 1;\t"
+	want := "  DECLARE $id AS Uint64; -- source comment\n\n    -- a readable query\n  SELECT `tick`, '${value}', \\\\path, \"雪\"u, '\t';\r\n-- trailing space \n \t \nSELECT 1;\t"
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Exact", Command: model.Exec, SQL: want}}}
 	files, err := Generate(a, Options{})
 	if err != nil {
@@ -264,7 +264,7 @@ func TestSQLLiteralRoundTripsThroughNode(t *testing.T) {
 	dir := t.TempDir()
 	module := filepath.Join(dir, "queries.mjs")
 	transpileModule(t, node, generated, module)
-	expected, _ := json.Marshal(strings.ReplaceAll(strings.TrimSpace(want), "\n", "\n      "))
+	expected, _ := json.Marshal(want)
 	script := `import { Queries } from ` + string(mustJSON(module)) + `; let actual; await new Queries((parts) => { actual = parts.join(""); return Promise.resolve([]); }).exact(); if (actual !== ` + string(expected) + `) { throw new Error(JSON.stringify(actual)); }`
 	if out, err := exec.Command(node, "--input-type=module", "--eval", script).CombinedOutput(); err != nil {
 		t.Fatalf("generated literal did not round-trip: %v\n%s", err, out)
@@ -582,8 +582,8 @@ func TestDeclaredSQLReachesPinnedSDKWithoutDuplicateDeclarations(t *testing.T) {
 	}
 	module := filepath.Join(dir, "queries.mjs")
 	transpileModule(t, node, string(files[0].Content), module)
-	expected := strings.ReplaceAll(sql, "\n", "\n      ")
-	expectedMixed := "DECLARE $minimum AS Uint64;\n" + strings.ReplaceAll(mixed, "\n", "\n      ")
+	expected := sql
+	expectedMixed := "DECLARE $minimum AS Uint64;\n" + mixed
 	script := `import assert from 'node:assert/strict';
 import { query } from '@ydbjs/query';
 import { StatusIds_StatusCode as Status } from '@ydbjs/api/operation';
@@ -599,9 +599,21 @@ const rpc={
  async commitTransaction(){commits++;return {status:Status.SUCCESS}},
 };
 const client=query({identity:'declared-sql-probe',async ready(){},createClient(){return rpc}},{poolOptions:{minSize:0,maxSize:1}});
+const probe=client(['SELECT 1;']);
+assert.equal(Object.hasOwn(probe,'text'),false);
+let prototype=Object.getPrototypeOf(probe), descriptor;
+while(prototype && !descriptor){descriptor=Object.getOwnPropertyDescriptor(prototype,'text');prototype=Object.getPrototypeOf(prototype)}
+assert.equal(typeof descriptor.get,'function');
+assert.equal(descriptor.set,undefined);
+assert.equal(descriptor.configurable,true);
+assert.equal(Object.isExtensible(probe),true);
 const configure = stmt => {
  configurations++;
- assert.equal(Object.getOwnPropertyDescriptor(stmt,'text').writable,false);
+ const own=Object.getOwnPropertyDescriptor(stmt,'text');
+ assert.equal(own.writable,false);
+ assert.equal(own.configurable,false);
+ assert.equal(own.enumerable,false);
+ assert.equal(typeof own.value,'string');
  stmt.idempotent(true).timeout(5000);
 };
 const inputs=[[],[{bookId:18446744073709551615n,tags:null},{bookId:1n,tags:'{"present":true}'}]];
@@ -640,5 +652,27 @@ try {
 	}
 	if out, err := exec.Command(node, program).CombinedOutput(); err != nil {
 		t.Fatalf("SDK declaration transport: %v\n%s", err, out)
+	}
+}
+
+func TestStructListRejectsInvalidFieldsAndAmbiguousTypeNames(t *testing.T) {
+	makeQuery := func(name, parameter string, fields []model.StructField) model.AnalyzedQuery {
+		return model.AnalyzedQuery{Name: name, Command: model.Exec, SQL: "SELECT 1;", Parameters: []model.Parameter{{Name: parameter, Type: model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: fields}}}}}
+	}
+	valid := []model.StructField{{Name: "id", Type: model.Type{Kind: "Uint64"}}}
+	for _, tc := range []struct {
+		name    string
+		queries []model.AnalyzedQuery
+		want    string
+	}{
+		{"empty struct", []model.AnalyzedQuery{makeQuery("CreateBooks", "books", nil)}, "at least one scalar field"},
+		{"invalid identifier", []model.AnalyzedQuery{makeQuery("CreateBooks", "books", []model.StructField{{Name: "💣", Type: model.Type{Kind: "Utf8"}}})}, "cannot represent"},
+		{"ambiguous item type", []model.AnalyzedQuery{makeQuery("CreateBooks", "values", valid), makeQuery("Create", "books_values", valid)}, "item type name collision"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := Generate(&model.AnalysisResult{Queries: tc.queries}, Options{}); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v, want %s", err, tc.want)
+			}
+		})
 	}
 }
