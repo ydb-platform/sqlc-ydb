@@ -112,6 +112,7 @@ build_archive() {
     go build -trimpath -ldflags "-s -w -X ${module_path}/internal/cli.Version=${version} -X ${module_path}/internal/cli.Commit=${commit}" \
     -o "$temporary/$base/$binary" ./cmd/sqlc-ydb
   cp LICENSE "$temporary/$base/LICENSE"
+  cp THIRD_PARTY_NOTICES "$temporary/$base/THIRD_PARTY_NOTICES"
   archive="$dist/$(archive_name "$version" "$goos" "$goarch")"
   if [[ $goos == windows ]]; then
     archive=$(cd "$(dirname "$archive")" && pwd)/$(basename "$archive")
@@ -139,7 +140,7 @@ verify_archive() {
   else
     tar -tzf "$archive" | sed '/\/$/d' | LC_ALL=C sort >"$listing"
   fi
-  printf '%s\n%s\n' "$base/LICENSE" "$base/$binary" | LC_ALL=C sort >"$temporary/expected"
+  printf '%s\n%s\n%s\n' "$base/LICENSE" "$base/THIRD_PARTY_NOTICES" "$base/$binary" | LC_ALL=C sort >"$temporary/expected"
   cmp -s "$temporary/expected" "$listing" || fail "unexpected archive contents: $archive"
   local inspect="$temporary/inspect-$goos-$goarch"
   mkdir -p "$inspect"

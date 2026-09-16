@@ -102,5 +102,6 @@ Input and output paths are relative to the configuration file. `generate` comple
 - [Targets](docs/targets.md): generated APIs, types and runtime contracts.
 - [History](docs/history.md): upstream proposals and the standalone project's origins.
 - [Source provenance](docs/provenance.md): adapted sources and attribution.
+- [Third-party notices](THIRD_PARTY_NOTICES): retained upstream copyright and license notices.
 
 For repository work, start with [AGENTS.md](AGENTS.md).

@@ -2,6 +2,8 @@
 
 The standalone CLI, model, analyzer and generator renderers are maintained independently. They do not load sqlc's intermediate AST, compiler or plugin protocol. Selected YDB algorithms and fixtures have been adapted as described below; adapted tests live in their owning current suites.
 
+Copyright and license notices for the upstream sources listed here are retained in [THIRD_PARTY_NOTICES](../THIRD_PARTY_NOTICES).
+
 Behavior and API references:
 
 - [sqlc configuration and command documentation](https://docs.sqlc.dev/);

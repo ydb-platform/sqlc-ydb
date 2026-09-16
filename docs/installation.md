@@ -53,7 +53,7 @@ The packaging format covers these targets:
 | macOS (`darwin` in filenames) | `amd64`, `arm64` | `.tar.gz` |
 | Windows | `amd64`, `arm64` | `.zip` |
 
-Download the archive for your operating system and architecture together with `SHA256SUMS` from the same release. Archive names follow `sqlc-ydb_VERSION_OS_ARCH.tar.gz` (or `.zip` for Windows), with no leading `v` in `VERSION`. Each archive contains a matching directory with the executable and `LICENSE`; the Windows executable is `sqlc-ydb.exe`.
+Download the archive for your operating system and architecture together with `SHA256SUMS` from the same release. Archive names follow `sqlc-ydb_VERSION_OS_ARCH.tar.gz` (or `.zip` for Windows), with no leading `v` in `VERSION`. Each archive contains a matching directory with the executable, `LICENSE`, and `THIRD_PARTY_NOTICES`; the Windows executable is `sqlc-ydb.exe`.
 
 Compare the archive's SHA256 digest with its entry in `SHA256SUMS` before extracting. For example, replacing `ARCHIVE` with the downloaded filename:
 
