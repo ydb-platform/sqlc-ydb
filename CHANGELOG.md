@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.1.7
+
 ### Changed
 
 - Include retained MIT license notices for adapted sqlc and sqlc-gen-python material in source and release archives.
