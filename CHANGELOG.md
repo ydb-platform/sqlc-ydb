@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.1.8
+
 ### Added
 
 - Add public contribution, conduct, security, and pull request guidance.
