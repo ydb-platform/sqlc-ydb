@@ -36,6 +36,22 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+Contributor Covenant
+====================
+
+Source: https://github.com/EthicalSource/contributor_covenant
+Source revision:
+
+- https://github.com/EthicalSource/contributor_covenant/tree/8a3be1350b07f38b53bbc7073f765a48c4c53ce1
+
+Contributor Covenant was originally authored by Coraline Ada Ehmke and is
+maintained by the Organization for Ethical Source community. CODE_OF_CONDUCT.md
+adapts version 2.1 by changing the enforcement contact and reporting guidance.
+
+Creative Commons Attribution 4.0 International
+
+https://creativecommons.org/licenses/by/4.0/legalcode
+
 sqlc-gen-python
 ================
 

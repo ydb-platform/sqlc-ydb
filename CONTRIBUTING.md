@@ -12,7 +12,7 @@ For non-trivial features or changes to generated APIs, open an issue before impl
 
 ## Development Setup
 
-The generator requires Go 1.26. Python 3.9 or newer is also required by the standard test suite. Additional SDKs and compilers are needed only when changing the corresponding generated target; the commands and prerequisites are documented in [the development guide](.agents/development.md).
+Exact toolchain and test prerequisites are maintained in [the development guide](.agents/development.md). A normal generator build requires Go. Install the compiler and SDK dependencies documented there for every generated target you change because the standard Go suite does not run every target-specific check.
 
 Clone your fork, create a focused branch from the current `main`, and download the Go dependencies:
 
@@ -47,10 +47,10 @@ make check
 
 `make check` verifies release tooling, regenerates examples, runs linters and Go tests, checks generated output drift, builds the Go examples, and validates Python syntax. Some runtime-specific and live YDB checks are opt-in; run the checks named in [the development guide](.agents/development.md) for every affected target.
 
-For documentation-only changes, at minimum run:
+For documentation-only changes, stage each changed file explicitly with `git add -- <path>`, review the staged diff, and at minimum run:
 
 ```sh
-git diff --check
+git diff --cached --check
 ```
 
 ## Pull Requests

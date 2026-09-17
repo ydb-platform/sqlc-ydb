@@ -4,6 +4,8 @@ The standalone CLI, model, analyzer and generator renderers are maintained indep
 
 Copyright and license notices for the upstream sources listed here are retained in [THIRD_PARTY_NOTICES](../THIRD_PARTY_NOTICES).
 
+[CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) adapts Contributor Covenant 2.1 from [`EthicalSource/contributor_covenant@8a3be1350b07f38b53bbc7073f765a48c4c53ce1`](https://github.com/EthicalSource/contributor_covenant/blob/8a3be1350b07f38b53bbc7073f765a48c4c53ce1/content/version/2/1/code_of_conduct.md). The adaptation replaces the enforcement contact, explicitly directs incident reports away from public issues, and follows this repository's Markdown formatting. Contributor Covenant 2.1 is licensed under the [Creative Commons Attribution 4.0 International license](https://github.com/EthicalSource/contributor_covenant/blob/8a3be1350b07f38b53bbc7073f765a48c4c53ce1/LICENSE.md).
+
 Behavior and API references:
 
 - [sqlc configuration and command documentation](https://docs.sqlc.dev/);
