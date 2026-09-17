@@ -32,11 +32,11 @@ Community leaders have the right and responsibility to remove, edit, or reject c
 
 ## Scope
 
-This Code of Conduct applies within all community spaces, and also applies when an individual is officially representing the community in public spaces. Examples of representing our community include using an official email address, posting via an official social media account, or acting as an appointed representative at an online or offline event.
+This Code of Conduct applies within all community spaces, and also applies when an individual is officially representing the community in public spaces. Examples of representing our community include using an official e-mail address, posting via an official social media account, or acting as an appointed representative at an online or offline event.
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported privately to the project maintainers at [info@ydb.tech](mailto:info@ydb.tech) with the subject `[sqlc-ydb conduct]`. Do not open a public issue to report an incident. All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported privately to the YDB community team at [info@ydb.tech](mailto:info@ydb.tech) with the subject `[sqlc-ydb conduct]`. Do not open a public issue to report an incident. Reports will be handled promptly and fairly by community leaders authorized to investigate and enforce this Code of Conduct.
 
 All community leaders are obligated to respect the privacy and security of the reporter of any incident.
 
@@ -74,7 +74,7 @@ This Code of Conduct is adapted from the [Contributor Covenant][homepage], versi
 
 Community Impact Guidelines were inspired by [Mozilla's code of conduct enforcement ladder][Mozilla CoC].
 
-For answers to common questions about this code of conduct, see the [Contributor Covenant FAQ][FAQ]. [Translations][translations] are also available.
+For answers to common questions about this code of conduct, see the FAQ at [https://www.contributor-covenant.org/faq][FAQ]. Translations are available at [https://www.contributor-covenant.org/translations][translations].
 
 [homepage]: https://www.contributor-covenant.org
 [v2.1]: https://www.contributor-covenant.org/version/2/1/code_of_conduct.html
