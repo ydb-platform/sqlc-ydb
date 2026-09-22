@@ -20,6 +20,6 @@ Reference: [upstream sqlc macros](https://docs.sqlc.dev/en/latest/reference/macr
 
 ## Database-assisted analysis
 
-Deferred until a concrete query or feature needs server metadata. First establish which YDB APIs expose schema, parameter and result types without executing user queries. Then define explicit opt-in configuration, schema-drift handling, timeouts, cache invalidation and reconciliation with local analysis.
+Live table discovery, local-schema drift checks and non-executing server compilation are implemented; see [database-assisted analysis](../docs/database-analysis.md). The local semantic analyzer still owns query result inference. Connected analysis must not execute user queries or apply migrations.
 
-Offline generation remains the default. Compilation must not apply migrations to an application database. All generators consume the same enriched result; unavailable requested metadata produces an error. Validate with sequential live-YDB tests as described in [development](development.md).
+Typed result metadata for arbitrary expressions remains future work. Public EXPLAIN responses do not expose result column types. A live SELECT with LIMIT 0 can return them, but it is query execution and requires parameter values even when declarations are present. Any future probing mode needs an explicit read-only execution and parameter-value contract, query rewriting that preserves column order, and validation across supported server versions. Do not parse the private optimizer AST or fabricate parameter values as a fallback.

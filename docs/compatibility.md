@@ -19,6 +19,7 @@ Compatibility is tracked by individual CLI, configuration and generated API cont
 - `version --upgrade` replaces the running executable with the verified latest stable release, resolving symlinks and preserving their paths. Download and verification failures preserve the installed binary. See [installation](installation.md#update-the-installed-executable). Automatic in-place upgrades are supported on Linux and macOS. On Windows, `version --upgrade` prints manual upgrade instructions.
 - `sqlc.yaml`, `sqlc.yml`, and `sqlc.json`; configuration version 2. Paths resolve relative to the configuration.
 - Concrete offline function signatures can be declared per query set under `sql[].analyzer.functions`; see [function signatures](functions.md). They are scoped to that `sql` entry and shared by every selected generator.
+- Optional [database-assisted analysis](database-analysis.md) discovers referenced table schemas, checks supplied schemas for drift and compiles queries on YDB without executing them. `--no-database` forces offline analysis; local schema inputs are then required.
 - File paths, lists, nonrecursive directories, and ordinary glob patterns. Explicit list order is retained; directory entries and glob matches use lexical order. Hidden files and `*.down.sql` are excluded.
 - Schema rollback sections for goose, sql-migrate, tern and dbmate are excluded. Migration markers inside string literals are preserved.
 - Schema migrations update an in-memory catalog in input order. Supported DDL: `CREATE TABLE [IF NOT EXISTS]`, `DROP TABLE [IF EXISTS]`, and `ALTER TABLE` with `ADD [COLUMN]`, `DROP [COLUMN]`, or table `RENAME TO`.
@@ -30,9 +31,9 @@ Compatibility is tracked by individual CLI, configuration and generated API cont
 
 Only the commands and options above are implemented. In particular:
 
-- No `analyze`, `parse`, `fmt`, `completion`, `createdb`, `push`, `verify` or `vet` commands, database-assisted analysis, or cloud/remote workflow.
+- No `analyze`, `parse`, `fmt`, `completion`, `createdb`, `push`, `verify` or `vet` commands or cloud/remote workflow.
 - No `sqlc.arg`, `sqlc.narg`, `sqlc.embed` or `sqlc.slice` macros, type/name overrides, driver batch APIs, COPY helpers or command-tag results.
-- `--no-remote` skips the optional release check for `version`; analysis and generation always run locally. It conflicts with `version --upgrade`. `--remote` and upstream's `--no-database` are unsupported. `init` creates a version 2 configuration (`--v2` is also accepted); `version --verbose` and `version --upgrade` are sqlc-ydb extensions.
+- `--no-remote` skips the optional release check for `version`; analysis and generation run locally and may use the explicitly configured YDB connection. It conflicts with `version --upgrade`. `--remote` is unsupported; `--no-database` disables database-assisted analysis. `init` creates a version 2 configuration (`--v2` is also accepted); `version --verbose` and `version --upgrade` are sqlc-ydb extensions.
 - SQL parameters use YQL `$name` syntax. Driver-specific placeholder rewriting happens during generation; `$1`, `?` and `@name` are not accepted as an alternative input dialect.
 
 These are explicit errors, not successful no-ops. The comparison uses upstream's [CLI](https://docs.sqlc.dev/en/latest/reference/cli.html), [configuration](https://docs.sqlc.dev/en/latest/reference/config.html), [query annotations](https://docs.sqlc.dev/en/latest/reference/query-annotations.html) and [macros](https://docs.sqlc.dev/en/latest/reference/macros.html).
@@ -89,7 +90,7 @@ An ALTER with several supported column actions is applied atomically to the in-m
 
 `ALTER COLUMN` changes to types/nullability/defaults and other ALTER actions such as indexes, changefeeds or table settings are currently rejected. External tables, views, table stores and CREATE TABLE AS are also outside this catalog's scope. Physical CREATE options that do not affect modeled columns are not represented in the catalog; this is not a full server DDL validator.
 
-References: YDB [columns](https://ydb.tech/docs/en/yql/reference/syntax/alter_table/columns), [table rename](https://ydb.tech/docs/en/yql/reference/syntax/alter_table/rename), and [DROP TABLE](https://ydb.tech/docs/en/yql/reference/syntax/drop_table). Shared macros and database-assisted analysis remain planned; the supported workflow above does not include them. Implementation planning is maintained in [the contributor roadmap](../.agents/roadmap.md).
+References: YDB [columns](https://ydb.tech/docs/en/yql/reference/syntax/alter_table/columns), [table rename](https://ydb.tech/docs/en/yql/reference/syntax/alter_table/rename), and [DROP TABLE](https://ydb.tech/docs/en/yql/reference/syntax/drop_table). Shared macros remain planned; database-assisted analysis is described in [its contract](database-analysis.md). Implementation planning is maintained in [the contributor roadmap](../.agents/roadmap.md).
 
 ### Structured batch parameters
 

@@ -120,6 +120,7 @@ type Function struct {
 
 type Analyzer struct {
 	Functions []Function `yaml:"functions"`
+	Database  *bool      `yaml:"database"`
 }
 
 type SQL struct {
@@ -127,6 +128,7 @@ type SQL struct {
 	Engine   string    `yaml:"engine"`
 	Schema   Paths     `yaml:"schema"`
 	Queries  Paths     `yaml:"queries"`
+	Database *Database `yaml:"database"`
 	Analyzer Analyzer  `yaml:"analyzer"`
 	Gen      Gen       `yaml:"gen"`
 	Codegen  yaml.Node `yaml:"codegen"`
@@ -205,8 +207,16 @@ func Parse(data []byte) (*Config, error) {
 		if s.Engine != "ydb" {
 			return nil, fmt.Errorf("sql[%d]: engine must be ydb; other engines are not supported", i)
 		}
-		if len(s.Schema) == 0 || len(s.Queries) == 0 {
+		if len(s.Queries) == 0 || (len(s.Schema) == 0 && !s.DatabaseEnabled()) {
 			return nil, fmt.Errorf("sql[%d]: schema and queries paths are required", i)
+		}
+		if s.DatabaseEnabled() && s.Database == nil {
+			return nil, fmt.Errorf("sql[%d].analyzer.database requires database.uri", i)
+		}
+		if s.Database != nil {
+			if err := s.Database.validate(); err != nil {
+				return nil, fmt.Errorf("sql[%d].%w", i, err)
+			}
 		}
 		if err := validateFunctions(i, s.Analyzer.Functions); err != nil {
 			return nil, err

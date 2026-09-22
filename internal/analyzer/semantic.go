@@ -54,7 +54,13 @@ func collectQueryTree(tree antlr.Tree) queryTree {
 }
 
 func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery, []model.Diagnostic) {
-	parsed, diagnostics := parseYQL(block.file, block.text, block.line-1)
+	var parsed parsedYQL
+	var diagnostics []model.Diagnostic
+	if block.parsed == nil {
+		parsed, diagnostics = parseYQL(block.file, block.text, block.line-1)
+	} else {
+		parsed = *block.parsed
+	}
 	query := model.AnalyzedQuery{
 		Name: block.name, Command: block.command, SQL: block.text,
 		Source: model.Position{File: block.file, Line: block.line, Column: 1},

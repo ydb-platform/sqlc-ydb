@@ -170,7 +170,7 @@ func compileTypedDMLPackage(t *testing.T, root, packagePath, source string, comp
 	if err := os.WriteFile(filepath.Join(pkgDir, "typed_dml_live_test.go"), []byte(source), 0600); err != nil {
 		t.Fatal(err)
 	}
-	args := []string{"test", "-mod=mod", "-count=1"}
+	args := []string{"test", "-p", "1", "-mod=mod", "-count=1"}
 	if compileOnly {
 		args = append(args, "-run", "^$")
 	}

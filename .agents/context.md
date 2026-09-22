@@ -9,6 +9,7 @@ Read [decisions](decisions.md) before changing the analysis/generation boundary 
 | Area | Responsibility |
 | --- | --- |
 | `cmd/sqlc-ydb`, `internal/cli` | Commands, pipeline orchestration, output validation and file IO |
+| `internal/database` | Direct public YDB gRPC metadata reads and non-executing query compilation |
 | `internal/update` | Stable-release checks, SHA256-verified downloads and replacement of the real executable |
 | `internal/config` | Strict version 2 config parsing and the shared option catalog for defaults, init, help and generated documentation |
 | `internal/source` | Input ordering and migration Up sections |
@@ -25,6 +26,7 @@ Read [decisions](decisions.md) before changing the analysis/generation boundary 
 
 - [README](../README.md): build and first generation.
 - [Compatibility](../docs/compatibility.md): supported config, queries, schema migrations, intentional exclusions and output ownership.
+- [Database-assisted analysis](../docs/database-analysis.md): live schema discovery, drift checks and connection settings.
 - [Targets](../docs/targets.md), [C++](../docs/cpp.md), [C#](../docs/csharp.md), [Java](../docs/java.md), [Kotlin](../docs/kotlin.md), [TypeScript](../docs/typescript.md), [Rust](../docs/rust.md), [PHP](../docs/php.md): generated API and runtime contracts.
 - [Installation](../docs/installation.md): release artifacts, checksum and version checks.
 - [Changelog](../CHANGELOG.md): pending Unreleased entries and published stable versions.
@@ -35,7 +37,7 @@ Read [decisions](decisions.md) before changing the analysis/generation boundary 
 
 - [Architecture](architecture.md): current stages and responsibilities.
 - [Development](development.md): contributor commands, CI and runtime validation.
-- [Roadmap](roadmap.md): shared macros and deferred database-assisted analysis.
+- [Roadmap](roadmap.md): shared macros and future result-type probing.
 - [Release plan](release-plan.md): publication checks, ydb.tech documentation, production-corpus validation and consumer pilots.
 - [Release operations](releasing.md): packaging, dry runs, publication and recovery.
 - [SDK evidence](sdk-evidence.md), [YQL evidence](yql-evidence.md), [C++ development](cpp-development.md) and [C# SDK evidence](csharp-sdk-evidence.md): source-level implementation evidence and build constraints.

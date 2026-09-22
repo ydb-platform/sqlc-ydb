@@ -24,6 +24,7 @@ import (
 	"github.com/ydb-platform/sqlc-ydb/internal/codegen/rust"
 	"github.com/ydb-platform/sqlc-ydb/internal/codegen/typescript"
 	"github.com/ydb-platform/sqlc-ydb/internal/config"
+	"github.com/ydb-platform/sqlc-ydb/internal/database"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 	"github.com/ydb-platform/sqlc-ydb/internal/source"
 	"github.com/ydb-platform/sqlc-ydb/internal/update"
@@ -48,7 +49,8 @@ Commands:
 Options:
   --upgrade         Install the latest stable release in place (version only)
   -f, --file <path>  Use an alternate configuration file; use --file=-name or ./-name for leading dashes
-  --no-remote       Skip the version update check (generation is always local)
+  --no-remote       Skip the version update check
+  --no-database     Disable database-assisted analysis
   -h, --help        Print help
 `
 
@@ -57,6 +59,7 @@ type arguments struct {
 	help          bool
 	verbose       bool
 	noRemote      bool
+	noDatabase    bool
 	upgrade       bool
 	language      string
 	runtime       string
@@ -83,6 +86,8 @@ func parseArgs(args []string) (arguments, error) {
 			if a.file == "" {
 				return a, errors.New("--file requires a non-empty path")
 			}
+		case arg == "--no-database":
+			a.noDatabase = true
 		case arg == "--no-remote":
 			a.noRemote = true
 		case arg == "--remote":
@@ -140,6 +145,9 @@ func parseArgs(args []string) (arguments, error) {
 		if err != nil {
 			return a, err
 		}
+	}
+	if a.noDatabase && a.command != "generate" && a.command != "compile" && a.command != "diff" && !a.help {
+		return a, errors.New("--no-database is only valid for generate, compile, or diff")
 	}
 	if a.verbose && a.command != "version" {
 		return a, errors.New("--verbose is only valid for version")
@@ -236,7 +244,7 @@ func run(args []string, stdout, stderr io.Writer, updater *update.Client) int {
 	if err != nil {
 		return fail(err)
 	}
-	files, err := prepare(c, a.command != "compile")
+	files, err := prepare(c, a.command != "compile", a.noDatabase)
 	if err != nil {
 		return fail(err)
 	}
@@ -270,7 +278,7 @@ type output struct {
 }
 
 // Complete all analyses and generation before modifying any output files.
-func prepare(c *config.Config, generate bool) ([]output, error) {
+func prepare(c *config.Config, generate, noDatabase bool) ([]output, error) {
 	var outputs []output
 	seen := map[string]bool{}
 	configPath, err := canonicalPath(c.Path)
@@ -279,9 +287,15 @@ func prepare(c *config.Config, generate bool) ([]output, error) {
 	}
 	inputs := map[string]bool{configPath: true}
 	for _, s := range c.SQL {
-		schemas, err := source.Read(c.Dir, s.Schema, true)
-		if err != nil {
-			return nil, err
+		if len(s.Schema) == 0 && (noDatabase || !s.DatabaseEnabled()) {
+			return nil, errors.New("schema is required when database-assisted analysis is disabled")
+		}
+		var schemas []model.Source
+		if len(s.Schema) != 0 {
+			schemas, err = source.Read(c.Dir, s.Schema, true)
+			if err != nil {
+				return nil, err
+			}
 		}
 		queries, err := source.Read(c.Dir, s.Queries, false)
 		if err != nil {
@@ -296,11 +310,7 @@ func prepare(c *config.Config, generate bool) ([]output, error) {
 				inputs[path] = true
 			}
 		}
-		analysisOptions, err := functionOptions(s.Analyzer)
-		if err != nil {
-			return nil, err
-		}
-		result, err := analyzer.AnalyzeWithOptions(schemas, queries, analysisOptions)
+		result, err := analyzeSources(c.Dir, s, schemas, queries, noDatabase)
 		if err != nil {
 			return nil, err
 		}
@@ -430,6 +440,31 @@ func prepare(c *config.Config, generate bool) ([]output, error) {
 	}
 	sort.Slice(outputs, func(i, j int) bool { return outputs[i].path < outputs[j].path })
 	return outputs, nil
+}
+
+// Keep a connection scoped to one query set, independently of the number of generators.
+func analyzeSources(dir string, s config.SQL, schemas, queries []model.Source, noDatabase bool) (*model.AnalysisResult, error) {
+	options, err := functionOptions(s.Analyzer)
+	if err != nil {
+		return nil, err
+	}
+	if noDatabase || !s.DatabaseEnabled() {
+		return analyzer.AnalyzeWithOptions(schemas, queries, options)
+	}
+	settings, err := s.Database.Resolve(dir)
+	if err != nil {
+		return nil, err
+	}
+	client, err := database.New(settings)
+	if err != nil {
+		return nil, fmt.Errorf("connect for database-assisted analysis: %w", err)
+	}
+	result, analysisErr := analyzer.AnalyzeWithDatabase(context.Background(), schemas, queries, options, client)
+	closeErr := client.Close()
+	if err := errors.Join(analysisErr, closeErr); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 // Resolve existing symlinked parents even when a generated file/directory does

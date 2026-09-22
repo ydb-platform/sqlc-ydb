@@ -26,8 +26,14 @@ The language packages in `internal/codegen` produce files from that resolved mod
 
 ## Compilation boundary
 
-`analyzer.Analyze(schema, queries)` is the default compilation entry point; `AnalyzeWithOptions(schema, queries, Options)` accepts an explicit function contract with a fixed arity. The CLI invokes the latter once per `sql` configuration entry and gives the resolved result to every selected generator. `compile` stops after analysis. Planned macro processing belongs inside this boundary; see [the roadmap](roadmap.md). A separate compiler package is unnecessary while the analyzer owns these stages.
+`analyzer.Analyze(schema, queries)` is the default compilation entry point; `AnalyzeWithOptions(schema, queries, Options)` accepts an explicit function contract with a fixed arity. The CLI invokes `AnalyzeWithOptions` for offline analysis or `AnalyzeWithDatabase` for connected analysis once per `sql` configuration entry, then gives the shared resolved result to every selected generator. `compile` stops after analysis. Planned macro processing belongs inside this boundary; see [the roadmap](roadmap.md). A separate compiler package is unnecessary while the analyzer owns these stages.
 
 `model.Type` owns structural equality and YQL type formatting. The analyzer, built-in function resolver and Python model reuse checks share those operations. Go's native and database/sql generators bind root Struct parameters and list-of-Struct batches through generated named types; both bind scalar List parameters, while nested Struct/List fields remain unsupported. SDK-specific type mapping stays in each generator.
 
 The parser is pinned in `go.mod` to an official `ydb-platform/yql-parsers` release. See [provenance](../docs/provenance.md) for parser revisions and upstream references, and [decisions](decisions.md) for lasting architectural choices.
+
+## Database-assisted analysis
+
+The CLI scopes one `internal/database` connection to each opted-in SQL entry, before any generator runs. The transport uses official public YDB protobuf services and gRPC directly; application runtime SDK dependencies remain in examples and tests. It reads table metadata and compiles queries using EXPLAIN without executing application SQL. The internal analyzer database interface is an I/O seam for this one implementation and its tests, not an external engine protocol.
+
+Without local schema inputs, the analyzer discovers direct physical table references from the original ANTLR contexts and obtains their resolved column/primary-key metadata. With local schema inputs, it checks the local catalog against live metadata before query analysis. The same semantic resolver handles both modes. It supplies temporary inferred parameter declarations only to server compilation and preserves original executable SQL in the resolved model. Every selected generator receives one shared result. See [the public contract](../docs/database-analysis.md) for ordering, supported syntax, authentication and offline overrides.

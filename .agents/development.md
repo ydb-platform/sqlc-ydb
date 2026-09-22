@@ -97,6 +97,16 @@ composer --working-dir=tests/examples/php check
 
 Optional live generator tests use `YDB_CONNECTION_STRING` to select an isolated YDB database. Use a disposable development database: tests create and drop uniquely named tables. No live tests run when the variable is absent.
 
+The database-analysis acceptance test creates a unique table, discovers its metadata without local DDL, checks non-executing query validation and schema drift, and executes generated Go/Python helpers against the pinned SDKs. Install the Python requirements in an activated virtual environment first:
+
+```sh
+python3 -m pip install -r examples/authors/python/requirements.txt
+YDB_CONNECTION_STRING=grpc://localhost:2136/local \
+  go test -p 1 -count=1 -timeout=240s ./internal/endtoend -run '^TestLiveYDBDatabaseAnalysis$' -v
+```
+
+For a manually prepared development schema, see the [local-ydb initialization recipe](../docs/database-analysis.md#prepare-a-disposable-local-database). Automated acceptance uses uniquely named objects and cleans them up instead of sharing a fixed application schema.
+
 The semantic metadata suite compares analyzer result types, nullability and column order directly with YDB, independently of generated code. Run it sequentially with the runtime suites after installing the pinned Python dependencies:
 
 ```sh
