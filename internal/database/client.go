@@ -147,6 +147,9 @@ func (c *Client) ValidateQuery(ctx context.Context, sql string) error {
 		}
 		received = true
 		if err := statusError(part.GetStatus(), part.GetIssues()); err != nil {
+			if hasUndeclaredParameter(part.GetIssues()) {
+				err = fmt.Errorf("%w\nhint: declare query parameter types explicitly with DECLARE $var AS <YQL type>;", err)
+			}
 			return fmt.Errorf("explain query: %w", err)
 		}
 		if part.GetResultSet() != nil || part.GetTxMeta() != nil {
@@ -178,4 +181,15 @@ func statusError(status Ydb.StatusIds_StatusCode, issues []*Ydb_Issue.IssueMessa
 		return fmt.Errorf("YDB %s", status)
 	}
 	return fmt.Errorf("YDB %s: %s", status, strings.Join(messages, "; "))
+}
+
+func hasUndeclaredParameter(issues []*Ydb_Issue.IssueMessage) bool {
+	for _, issue := range issues {
+		// YDB reports undeclared parameters as unknown names, including in
+		// nested type-annotation issues. Do not reinterpret other errors.
+		if strings.HasPrefix(issue.GetMessage(), "Unknown name: $") || hasUndeclaredParameter(issue.GetIssues()) {
+			return true
+		}
+	}
+	return false
 }

@@ -4,7 +4,7 @@
 
 ### Added
 
-- Opt in to database-assisted analysis for compile, generate and diff: discover table types directly from YDB without local schema files, or check a supplied local schema for drift, then compile queries on the server without executing them. Connection settings support TLS, environment-provided tokens and per-request timeouts; `--no-database` keeps generation offline.
+- Opt in to database-assisted analysis for compile, generate and diff: discover table types directly from YDB without local schema files, or check a supplied local schema for drift, and compile original queries on the server before local query analysis without executing them. Connected queries declare parameter types explicitly with `DECLARE`; server parameter errors include an actionable hint. Connection settings support TLS, environment-provided tokens and per-request timeouts; `--no-database` keeps generation offline.
 
 ## v0.1.8
 

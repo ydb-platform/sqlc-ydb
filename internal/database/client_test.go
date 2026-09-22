@@ -245,3 +245,29 @@ func TestInvalidCA(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestValidateQuerySuggestsExplicitParameterDeclarations(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		issue    *Ydb_Issue.IssueMessage
+		wantHint bool
+	}{
+		{"unknown parameter", &Ydb_Issue.IssueMessage{Message: "Unknown name: $id"}, true},
+		{"nested parameter", &Ydb_Issue.IssueMessage{Message: "Type annotation", Issues: []*Ydb_Issue.IssueMessage{{Message: "Unknown name: $имя"}}}, true},
+		{"unknown column", &Ydb_Issue.IssueMessage{Message: "Unknown name: title"}, false},
+		{"unrelated syntax error", &Ydb_Issue.IssueMessage{Message: "Unexpected token: Unknown name: $id"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := testClient(t, tableServer{}, queryServer{explain: func(_ *Ydb_Query.ExecuteQueryRequest, stream queryservice.QueryService_ExecuteQueryServer) error {
+				return stream.Send(&Ydb_Query.ExecuteQueryResponsePart{Status: Ydb.StatusIds_GENERIC_ERROR, Issues: []*Ydb_Issue.IssueMessage{tc.issue}})
+			}})
+			err := client.ValidateQuery(context.Background(), "SELECT $id;")
+			if err == nil || !strings.Contains(err.Error(), "YDB GENERIC_ERROR") || !strings.Contains(err.Error(), tc.issue.GetMessage()) {
+				t.Fatalf("server diagnostic was lost: %v", err)
+			}
+			if strings.Contains(err.Error(), "DECLARE $var AS <YQL type>;") != tc.wantHint {
+				t.Fatalf("declaration hint mismatch: %v", err)
+			}
+		})
+	}
+}

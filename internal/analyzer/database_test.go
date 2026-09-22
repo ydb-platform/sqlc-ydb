@@ -45,6 +45,57 @@ func databaseTestTable(textColumn string) model.Table {
 	}, PrimaryKey: []string{"id"}}
 }
 
+func TestDatabaseAnalysisSendsOriginalSQLBeforeLocalResolution(t *testing.T) {
+	for _, sql := range []string{
+		"-- name: Read :one\r\nSELECT id + $id AS next FROM records;",
+		"-- name: Read :one\nWITH r AS (SELECT id FROM records) SELECT id FROM r WHERE id = $id;",
+		"-- name: Read :one\nSELECT Custom::Unknown($id) AS value FROM records;",
+		"-- name: Read :one\nSELECT id FROM records WHERE id = $id;",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			database := &fakeAnalysisDatabase{validateError: errors.New("Unknown name: $id; add DECLARE with the parameter type")}
+			_, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: sql}}, Options{}, database)
+			if err == nil || !strings.Contains(err.Error(), "database query validation failed: Unknown name:") || !strings.Contains(err.Error(), "add DECLARE") {
+				t.Fatalf("server diagnostic was replaced by local analysis: %v", err)
+			}
+			if !reflect.DeepEqual(database.validated, []string{sql}) {
+				t.Fatalf("server SQL = %q, want original SQL once %q", database.validated, sql)
+			}
+			if len(database.described) != 0 {
+				t.Fatalf("server rejection did not precede discovery: %v", database.described)
+			}
+		})
+	}
+}
+
+func TestDatabaseAnalysisKeepsAnnotationChecksBeforeServerCalls(t *testing.T) {
+	for _, sql := range []string{
+		"-- name: Duplicate :one\nSELECT id FROM records;\n-- name: Duplicate :one\nSELECT id FROM records;",
+		"-- name: Bad :unknown\nSELECT id FROM records;",
+		"SELECT id FROM records;",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			database := &fakeAnalysisDatabase{}
+			_, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: sql}}, Options{}, database)
+			if err == nil || len(database.described) != 0 || len(database.validated) != 0 {
+				t.Fatalf("invalid annotation reached database: error=%v describes=%v validations=%v", err, database.described, database.validated)
+			}
+		})
+	}
+}
+
+func TestOfflineAnalysisStillInfersUndeclaredParameters(t *testing.T) {
+	sql := "-- name: Read :one\nSELECT id FROM records WHERE id = $id;"
+	result, err := Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "query.sql", Text: sql}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	query := result.Queries[0]
+	if !reflect.DeepEqual(query.Parameters, []model.Parameter{{Name: "id", Type: model.Type{Kind: "Uint64"}}}) || len(query.DeclaredParameters) != 0 || query.SQL != sql {
+		t.Fatalf("offline inferred parameter contract changed: %#v", query)
+	}
+}
+
 func TestDatabaseAnalysisDiscoversReferencedTables(t *testing.T) {
 	database := &fakeAnalysisDatabase{tables: map[string]model.Table{
 		"authors": databaseTestTable("name"), "books": databaseTestTable("title"), "archive/writers": databaseTestTable("name"),
@@ -57,10 +108,14 @@ FROM authors AS a JOIN books AS b ON a.id = b.id;
 -- name: Copy :exec
 UPSERT INTO books (id, title) SELECT id, name FROM authors;
 -- name: Rename :exec
+DECLARE $name AS Utf8;
+DECLARE $id AS Uint64;
 UPDATE authors SET name = $name WHERE id = $id;
 -- name: Delete :exec
+DECLARE $id AS Uint64;
 DELETE FROM books WHERE id = $id;
 -- name: Archive :one
+DECLARE $id AS Uint64;
 SELECT id, name FROM ` + "`archive/writers`" + ` WHERE id = $id;
 -- name: Batch :exec
 DECLARE $rows AS List<Struct<id:Uint64,name:Utf8>>;
@@ -76,7 +131,7 @@ UPSERT INTO authors (id, name) SELECT id, name FROM AS_TABLE($rows);`}}
 		t.Fatalf("queries=%d validation calls=%d", len(result.Queries), len(database.validated))
 	}
 	if got := result.Queries[2].Parameters; !reflect.DeepEqual(got, []model.Parameter{{Name: "name", Type: model.Type{Kind: "Utf8"}}, {Name: "id", Type: model.Type{Kind: "Uint64"}}}) {
-		t.Fatalf("inferred UPDATE parameters: %#v", got)
+		t.Fatalf("declared UPDATE parameters: %#v", got)
 	}
 	for _, table := range result.Catalog.Tables {
 		for _, column := range table.Columns {
@@ -88,20 +143,20 @@ UPSERT INTO authors (id, name) SELECT id, name FROM AS_TABLE($rows);`}}
 }
 
 func TestDatabaseAnalysisPreservesSQLAndDeclarations(t *testing.T) {
-	sql := "-- name: Read :one\r\n-- DECLARE $fake AS Utf8;\r\nDECLARE $id AS Uint64;\r\n$local = $id;\r\nSELECT name FROM authors WHERE id = $local AND name = $`имя`;"
+	sql := "-- name: Read :one\r\n-- DECLARE $fake AS Utf8;\r\nDECLARE $id AS Uint64;\r\nDECLARE $`имя` AS Utf8;\r\n$local = $id;\r\nSELECT name FROM authors WHERE id = $local AND name = $`имя`;"
 	database := &fakeAnalysisDatabase{tables: map[string]model.Table{"authors": databaseTestTable("name")}}
 	result, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: sql}}, Options{}, database)
 	if err != nil {
 		t.Fatal(err)
 	}
 	query := result.Queries[0]
-	if query.SQL != sql || !reflect.DeepEqual(query.DeclaredParameters, []string{"id"}) {
+	if query.SQL != sql || !reflect.DeepEqual(query.DeclaredParameters, []string{"id", "имя"}) {
 		t.Fatalf("source changed: %#v", query)
 	}
 	if len(query.Parameters) != 2 || query.Parameters[1].Name != "имя" {
 		t.Fatalf("parameters include locals or lose names: %#v", query.Parameters)
 	}
-	if want := "DECLARE $`имя` AS Utf8;\n" + sql; len(database.validated) != 1 || database.validated[0] != want {
+	if want := sql; len(database.validated) != 1 || database.validated[0] != want {
 		t.Fatalf("validation SQL = %q, want %q", database.validated, want)
 	}
 }
@@ -169,8 +224,8 @@ func TestDatabaseAnalysisRejectsSchemaDrift(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), test.want) || !strings.Contains(err.Error(), "query.sql:2:") {
 				t.Fatalf("drift diagnostic = %v, want %q", err, test.want)
 			}
-			if len(database.validated) != 0 || len(result.Queries) != 0 {
-				t.Fatal("schema drift reached query validation")
+			if !reflect.DeepEqual(database.validated, []string{queries[0].Text}) || len(result.Queries) != 0 {
+				t.Fatal("schema drift did not stop analysis after server query validation")
 			}
 		})
 	}
@@ -185,8 +240,8 @@ func TestDatabaseAnalysisChecksPrimaryKeyOrder(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "local primary key [id name] differs from database primary key [name id]") {
 		t.Fatalf("primary key order diagnostic = %v", err)
 	}
-	if len(database.validated) != 0 {
-		t.Fatal("primary key drift reached query validation")
+	if len(database.validated) != 1 {
+		t.Fatal("query did not reach server validation before primary key drift check")
 	}
 }
 
@@ -199,13 +254,12 @@ func TestDatabaseAnalysisRejectsUnsupportedSourcesBeforeDiscovery(t *testing.T) 
 		"-- name: Bad :exec\nCREATE TABLE records (id Uint64, PRIMARY KEY(id));",
 		"-- name: Bad :one\nSELECT id FROM records; SELECT id FROM records;",
 		"-- name: Bad :one\nSELECT sqlc.arg(id) FROM records;",
-		"-- name: Duplicate :one\nSELECT id FROM records;\n-- name: Duplicate :one\nSELECT id FROM records;",
 		"-- name: Bad :one\nDECLARE $id AS Mystery; SELECT id FROM records;",
 	} {
 		t.Run(sql, func(t *testing.T) {
 			database := &fakeAnalysisDatabase{}
 			_, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: sql}}, Options{}, database)
-			if err == nil || len(database.described) != 0 || len(database.validated) != 0 {
+			if err == nil || len(database.described) != 0 || !reflect.DeepEqual(database.validated, []string{sql}) {
 				t.Fatalf("err=%v describes=%v validations=%v", err, database.described, database.validated)
 			}
 		})
@@ -235,7 +289,7 @@ func TestDatabaseAnalysisPropagatesErrors(t *testing.T) {
 	cancel()
 	database := &fakeAnalysisDatabase{}
 	_, err := AnalyzeWithDatabase(ctx, nil, queries, Options{}, database)
-	if err == nil || !strings.Contains(err.Error(), "context canceled") || len(database.described) != 0 {
+	if err == nil || !strings.Contains(err.Error(), "context canceled") || len(database.described) != 0 || len(database.validated) != 0 {
 		t.Fatalf("canceled analysis: %v, calls %v", err, database.described)
 	}
 }
@@ -243,7 +297,7 @@ func TestDatabaseAnalysisPropagatesErrors(t *testing.T) {
 func TestDatabaseAnalysisKeepsOfflineExpressionLimits(t *testing.T) {
 	database := &fakeAnalysisDatabase{tables: map[string]model.Table{"records": databaseTestTable("name")}}
 	_, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nSELECT id + 1 AS next FROM records;"}}, Options{}, database)
-	if err == nil || !strings.Contains(err.Error(), "is not supported") || len(database.validated) != 0 {
+	if err == nil || !strings.Contains(err.Error(), "is not supported") || len(database.validated) != 1 {
 		t.Fatalf("unresolved expression bypassed semantic analysis: %v, calls %v", err, database.validated)
 	}
 }

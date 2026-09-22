@@ -199,6 +199,8 @@ jobs:
       # exhaust the memory budget even when they use only one YDB service.
       - name: Verify analyzer types, database analysis and generated typed DML with YDB
         run: go test -p 1 -count=1 -timeout=300s -covermode=atomic -coverpkg=./... -coverprofile=coverage-semantic.out ./internal/endtoend -run '^(TestLiveYDBSemanticTypes|TestLiveYDBTypedDML|TestLiveYDBDatabaseAnalysis)$' -v
+      - name: Verify public query metadata and EXPLAIN contracts
+        run: go test -p 1 -count=1 -timeout=120s ./internal/database -run '^TestLiveYDBQueryMetadata$' -v
       - name: Run Go generator runtime tests
         run: go test -p 1 -count=1 -timeout=180s -covermode=atomic -coverpkg=./... -coverprofile=coverage-go-live.out ./internal/codegen/golang -run TestLiveYDB -v
       - name: Run Python generator runtime tests
@@ -257,6 +259,43 @@ jobs:
           disable_search: true
           fail_ci_if_error: true
           name: generator-integration
+
+  database-nightly:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    services:
+      ydb:
+        image: ydbplatform/local-ydb:nightly
+        ports:
+          - 2136:2136
+        env:
+          GRPC_PORT: 2136
+          YDB_USE_IN_MEMORY_PDISKS: "true"
+          YDB_DEFAULT_LOG_LEVEL: ERROR
+        options: >-
+          --hostname localhost
+          --health-cmd="/health_check"
+          --health-interval=5s
+          --health-timeout=10s
+          --health-retries=30
+    env:
+      YDB_CONNECTION_STRING: grpc://localhost:2136/local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Record the tested nightly image
+        run: docker image inspect ydbplatform/local-ydb:nightly --format '{{json .RepoDigests}}'
+      - name: Install tested Python runtime
+        run: python3 -m pip install -r examples/authors/python/requirements.txt
+      - name: Verify public query metadata and EXPLAIN contracts
+        run: go test -p 1 -count=1 -timeout=120s ./internal/database -run '^TestLiveYDBQueryMetadata$' -v
+      - name: Verify database-assisted generation
+        run: go test -p 1 -count=1 -timeout=240s ./internal/endtoend -run '^TestLiveYDBDatabaseAnalysis$' -v
 
   cpp-acceptance:
     runs-on: ubuntu-24.04

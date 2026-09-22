@@ -48,7 +48,17 @@ In connected mode, catalog columns use YDB's lexicographic wildcard order, even 
 
 ## Server query validation
 
-After local analysis, the compiler sends each query once to QueryService with execution mode `EXPLAIN`. This compiles SELECT and DML without executing either. The compiler temporarily supplies DECLARE statements for parameters inferred locally, so validation requires no parameter values. Explicit declarations and the original SQL bytes in generated code are preserved.
+Before table discovery and local query semantics, the compiler sends each named query unchanged to QueryService with execution mode `EXPLAIN`. It follows the same path for all queries without classifying their complexity. EXPLAIN compiles SELECT and DML without executing either or requiring parameter values. The query text sent to the server is also retained in generated code; the compiler does not rewrite declarations or expressions.
+
+Declare external query parameters explicitly in each named query:
+
+```sql
+-- name: ReadRecord :one
+DECLARE $id AS Uint64;
+SELECT id, title FROM records WHERE id = $id;
+```
+
+The compiler does not infer and prepend declarations for connected analysis. If YDB reports an unknown `$parameter` name, the command writes the server diagnostic to stderr together with a suggestion to add `DECLARE $var AS <YQL type>;`. Server errors are reported before local query-shape or type-inference limitations. Successful EXPLAIN is followed by the existing catalog and semantic checks needed to generate typed code; it does not extend the supported result-expression set. Offline parameter inference remains unchanged.
 
 A server error fails the command; it never silently falls back to offline analysis. All selected generators consume the same analysis. Connection, metadata and validation errors occur before generated files are written. No persistent metadata cache is used: every invocation checks the current schema again.
 

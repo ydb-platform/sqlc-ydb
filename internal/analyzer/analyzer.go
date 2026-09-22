@@ -56,6 +56,18 @@ func analyze(ctx context.Context, schema, queries []model.Source, options Option
 			}
 		}
 		if database != nil && len(result.Diagnostics) == 0 {
+			for _, block := range allBlocks {
+				position := model.Position{File: block.file, Line: block.line, Column: 1}
+				if err := ctx.Err(); err != nil {
+					result.Diagnostics = append(result.Diagnostics, model.Diagnostic{Position: position, Message: fmt.Sprintf("database analysis canceled: %v", err)})
+					break
+				}
+				if err := database.ValidateQuery(ctx, block.text); err != nil {
+					result.Diagnostics = append(result.Diagnostics, model.Diagnostic{Position: position, Message: fmt.Sprintf("database query validation failed: %v", err)})
+				}
+			}
+		}
+		if database != nil && len(result.Diagnostics) == 0 {
 			catalog, diagnostics = databaseCatalog(ctx, database, schema, catalog, allBlocks)
 			result.Catalog = catalog
 			result.Diagnostics = append(result.Diagnostics, diagnostics...)
@@ -66,17 +78,6 @@ func analyze(ctx context.Context, schema, queries []model.Source, options Option
 				result.Diagnostics = append(result.Diagnostics, queryDiagnostics...)
 				if len(queryDiagnostics) == 0 {
 					result.Queries = append(result.Queries, query)
-				}
-			}
-		}
-		if database != nil && len(result.Diagnostics) == 0 {
-			for _, query := range result.Queries {
-				if err := ctx.Err(); err != nil {
-					result.Diagnostics = append(result.Diagnostics, model.Diagnostic{Position: query.Source, Message: fmt.Sprintf("database analysis canceled: %v", err)})
-					break
-				}
-				if err := database.ValidateQuery(ctx, databaseQuerySQL(query)); err != nil {
-					result.Diagnostics = append(result.Diagnostics, model.Diagnostic{Position: query.Source, Message: fmt.Sprintf("database query validation failed: %v", err)})
 				}
 			}
 		}

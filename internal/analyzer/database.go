@@ -18,9 +18,9 @@ type Database interface {
 	ValidateQuery(context.Context, string) error
 }
 
-// AnalyzeWithDatabase discovers referenced tables when schema is omitted, or
-// checks the supplied schema against the database, before normal semantic analysis.
-// Every successfully analyzed query is then validated without execution.
+// AnalyzeWithDatabase validates each named query's original SQL without execution,
+// then discovers referenced tables or checks the supplied schema against the
+// database before normal semantic analysis. Parameters need source DECLAREs.
 func AnalyzeWithDatabase(ctx context.Context, schema, queries []model.Source, options Options, database Database) (*model.AnalysisResult, error) {
 	if database == nil {
 		return &model.AnalysisResult{}, fmt.Errorf("database analysis requires a database connection")
@@ -184,15 +184,4 @@ func compareDatabaseTable(local, remote model.Table) error {
 		return fmt.Errorf("local primary key %v differs from database primary key %v", local.PrimaryKey, remote.PrimaryKey)
 	}
 	return nil
-}
-
-func databaseQuerySQL(query model.AnalyzedQuery) string {
-	var sql strings.Builder
-	for _, parameter := range query.Parameters {
-		if !query.IsDeclaredParameter(parameter.Name) {
-			fmt.Fprintf(&sql, "DECLARE $`%s` AS %s;\n", strings.ReplaceAll(parameter.Name, "`", "``"), parameter.Type.String())
-		}
-	}
-	sql.WriteString(query.SQL)
-	return sql.String()
 }

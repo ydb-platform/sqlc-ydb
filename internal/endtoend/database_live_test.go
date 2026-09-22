@@ -33,12 +33,18 @@ func TestLiveYDBDatabaseAnalysis(t *testing.T) {
 		}
 	}
 	write("queries.sql", strings.ReplaceAll(`-- name: ReadRecord :one
+DECLARE $id AS Uint64;
 SELECT * FROM records WHERE id = $id;
 
 -- name: InsertRecord :exec
+DECLARE $id AS Uint64;
+DECLARE $ztext AS Optional<Utf8>;
+DECLARE $amount AS Optional<Int32>;
 INSERT INTO records (id, ztext, amount) VALUES ($id, $ztext, $amount);
 
 -- name: UpdateRecord :exec
+DECLARE $id AS Uint64;
+DECLARE $ztext AS Optional<Utf8>;
 UPDATE records SET ztext = $ztext WHERE id = $id;
 `, "records", table))
 	const set = `- engine: ydb
@@ -67,6 +73,34 @@ UPDATE records SET ztext = $ztext WHERE id = $id;
 		code := cli.Run(args, &stdout, &stderr)
 		return code, stderr.String()
 	}
+	// The last query set fails after earlier sets are ready to generate. No
+	// outputs may be written until server validation succeeds for every set.
+	rejectedConfig := cfg + strings.Replace(set, "queries.sql", "rejected.sql", 1) + `    go:
+      package: db
+      out: rejected
+`
+	write("sqlc.yaml", rejectedConfig)
+	for _, tc := range []struct{ name, sql string }{
+		{"undeclared_parameter", "SELECT * FROM " + table + " WHERE id = $id;"},
+		{"server_before_local_semantics", "SELECT id + 1ul AS incremented FROM " + table + " WHERE id = $id;"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			write("rejected.sql", "-- name: MissingDeclaration :one\n"+tc.sql)
+			code, stderr := invoke("generate")
+			if code == 0 || !strings.Contains(stderr, "YDB ") || !strings.Contains(stderr, "Unknown name: $id") || !strings.Contains(stderr, "DECLARE") {
+				t.Fatalf("undeclared parameter must return a YDB error with a DECLARE suggestion: %d %s", code, stderr)
+			}
+			if strings.Contains(stderr, "computed result expression") || strings.Contains(stderr, "unsupported result expression") {
+				t.Fatalf("local expression rejection preceded server validation: %s", stderr)
+			}
+			for _, output := range []string{"stdlib", "native", "pydb", "rejected"} {
+				if _, err := os.Stat(filepath.Join(dir, output)); !os.IsNotExist(err) {
+					t.Fatalf("failed generation left output %s: %v", output, err)
+				}
+			}
+		})
+	}
+	write("sqlc.yaml", cfg)
 	for _, command := range []string{"compile", "generate", "diff"} {
 		if code, stderr := invoke(command); code != 0 {
 			t.Fatalf("%s: %s", command, stderr)
