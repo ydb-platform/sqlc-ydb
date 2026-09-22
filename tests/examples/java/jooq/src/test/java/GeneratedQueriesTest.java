@@ -35,6 +35,8 @@ class GeneratedQueriesTest {
                         else if (parameter == String.class) args[i] = "value";
                         else if (parameter == Integer.class) args[i] = 2026;
                         else if (parameter == Instant.class) args[i] = Instant.parse("2026-01-01T00:00:00.123456Z");
+                        else if (parameter == List.class && method.getName().equals("createAuthors")) args[i] = List.of(new batch.jooq.CreateAuthorsAuthorsItem("Author", -1L));
+                        else if (parameter == List.class && method.getName().equals("upsertAuthors")) args[i] = List.of(new batch.jooq.UpsertAuthorsAuthorsItem("Author", -1L));
                         else if (parameter == List.class) args[i] = List.of(new batch.jooq.CreateBooksBooksItem(-1L, 42L, "isbn", "paper", "Batch", 2026, Instant.EPOCH, "[]"));
                         else if (parameter == JSON.class) args[i] = JSON.valueOf("[\"tag\"]");
                         else fail("uncovered parameter type " + parameter);
@@ -48,7 +50,7 @@ class GeneratedQueriesTest {
                     assertEquals(before + 1, statements.size(), family + "." + method.getName());
                     String sql = statements.get(before);
                     assertFalse(sql.contains("-- name:"), sql);
-                    if ((method.getName().startsWith("create") && !method.getName().equals("createBooks")) || method.getName().equals("updateVenueName")) {
+                    if ((method.getName().startsWith("create") && method.getReturnType() != void.class) || method.getName().equals("updateVenueName")) {
                         assertTrue(sql.toLowerCase().contains("returning"), sql);
                     }
                     if (method.getName().equals("booksByTags")) {
@@ -58,7 +60,7 @@ class GeneratedQueriesTest {
                 }
             }
         }
-        assertEquals(41, statements.size());
+        assertEquals(43, statements.size());
     }
     @Test
     void declaredQueryReadsDialectCarriers() throws Exception {

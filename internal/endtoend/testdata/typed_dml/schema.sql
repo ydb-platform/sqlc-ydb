@@ -7,5 +7,6 @@ CREATE TABLE records (
     attributes Json NOT NULL,
     created_at Timestamp NOT NULL,
     updated_at Timestamp NOT NULL,
+    note Utf8,
     PRIMARY KEY (owner_hash, record_id)
 );

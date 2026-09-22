@@ -1,0 +1,13 @@
+version: "2"
+sql:
+  - engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    database:
+      uri: ${YDB_CONNECTION_STRING}
+      timeout: 10s
+    gen:
+      go:
+        package: counters
+        out: go/native
+        sql_package: ydb

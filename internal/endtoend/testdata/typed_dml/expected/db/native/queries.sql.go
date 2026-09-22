@@ -122,7 +122,7 @@ func (q *Queries) ListRecords(ctx context.Context, arg uint64, opts ...query.Exe
 
 	result, err := q.db.Query(ctx, ""+
 		"DECLARE $owner_id AS Uint64;\n"+
-		"SELECT owner_hash, owner_id, record_id, group_id, payload, attributes, created_at, updated_at\n"+
+		"SELECT owner_hash, owner_id, record_id, group_id, payload, attributes, created_at, updated_at, note\n"+
 		"FROM records\n"+
 		"WHERE owner_hash = Digest::CityHash(CAST($owner_id AS String))\n"+
 		"ORDER BY record_id;",
@@ -156,6 +156,7 @@ func (q *Queries) ListRecords(ctx context.Context, arg uint64, opts ...query.Exe
 			query.Named("attributes", &row.Attributes),
 			query.Named("created_at", &row.CreatedAt),
 			query.Named("updated_at", &row.UpdatedAt),
+			query.Named("note", &row.Note),
 		); err != nil {
 			return nil, xerrors.WithStackTrace(err)
 		}
@@ -321,4 +322,222 @@ func bindGetRecordKey(item GetRecordKey) types.Value {
 		types.StructFieldValue("owner_hash", types.Uint64Value(item.OwnerHash)),
 		types.StructFieldValue("record_id", types.TextValue(item.RecordID)),
 	)
+}
+
+// -- name: InsertNamedRecords :exec
+func (q *Queries) InsertNamedRecords(ctx context.Context, arg InsertNamedRecordsParams, opts ...query.ExecuteOption) error {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$owner_id").Uint64(arg.OwnerID)
+	parameters = parameters.Param("$rows").Any(bindInsertNamedRecordsRowsItem(arg.Rows))
+	parameters = parameters.Param("$created_at").Timestamp(arg.CreatedAt)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	err := q.db.Exec(ctx, ""+
+		"DECLARE $owner_id AS Uint64;\n"+
+		"DECLARE $rows AS List<Struct<payload: Bytes, attributes: Json, group_id: Utf8, record_id: Utf8, note: Utf8,>>;\n"+
+		"DECLARE $created_at AS Timestamp;\n"+
+		"INSERT INTO records\n"+
+		"SELECT\n"+
+		"    $created_at AS updated_at,\n"+
+		"    r.`payload` AS `payload`, `r`.`attributes` AS `attributes`, `r`.`group_id` AS `group_id`, `r`.`record_id` AS `record_id`, `r`.`note` AS `note`,\n"+
+		"    Digest::CityHash(CAST($owner_id AS String)) AS owner_hash,\n"+
+		"    $owner_id AS owner_id,\n"+
+		"    $created_at AS created_at\n"+
+		"FROM AS_TABLE($rows) AS r;",
+		callOptions...,
+	)
+
+	return xerrors.WithStackTrace(err)
+}
+
+func bindInsertNamedRecordsRowsItem(values []InsertNamedRecordsRowsItem) types.Value {
+	if len(values) == 0 {
+		return types.ZeroValue(types.List(types.Struct(
+			types.StructField("payload", types.TypeBytes),
+			types.StructField("attributes", types.TypeJSON),
+			types.StructField("group_id", types.TypeText),
+			types.StructField("record_id", types.TypeText),
+			types.StructField("note", types.TypeText),
+		)))
+	}
+	items := make([]types.Value, len(values))
+	for i, item := range values {
+		items[i] = types.StructValue(
+			types.StructFieldValue("payload", types.BytesValue(item.Payload)),
+			types.StructFieldValue("attributes", types.JSONValue(item.Attributes)),
+			types.StructFieldValue("group_id", types.TextValue(item.GroupID)),
+			types.StructFieldValue("record_id", types.TextValue(item.RecordID)),
+			types.StructFieldValue("note", types.TextValue(item.Note)),
+		)
+	}
+	return types.ListValue(items...)
+}
+
+// -- name: UpsertNamedRecords :exec
+func (q *Queries) UpsertNamedRecords(ctx context.Context, arg UpsertNamedRecordsParams, opts ...query.ExecuteOption) error {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$owner_hash").Uint64(arg.OwnerHash)
+	parameters = parameters.Param("$owner_id").Uint64(arg.OwnerID)
+	parameters = parameters.Param("$created_at").Timestamp(arg.CreatedAt)
+	parameters = parameters.Param("$rows").Any(bindUpsertNamedRecordsRowsItem(arg.Rows))
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	err := q.db.Exec(ctx, ""+
+		"DECLARE $owner_hash AS Uint64;\n"+
+		"DECLARE $owner_id AS Uint64;\n"+
+		"DECLARE $created_at AS Timestamp;\n"+
+		"DECLARE $rows AS List<Struct<body: Bytes, key: Utf8, group_id: Utf8, attributes: Json,>>;\n"+
+		"UPSERT INTO records\n"+
+		"SELECT r.body AS payload, r.key AS record_id, $owner_hash AS owner_hash,\n"+
+		"    $owner_id AS owner_id, r.group_id, r.attributes,\n"+
+		"    $created_at AS created_at, $created_at AS updated_at\n"+
+		"FROM AS_TABLE($rows) AS r;",
+		callOptions...,
+	)
+
+	return xerrors.WithStackTrace(err)
+}
+
+func bindUpsertNamedRecordsRowsItem(values []UpsertNamedRecordsRowsItem) types.Value {
+	if len(values) == 0 {
+		return types.ZeroValue(types.List(types.Struct(
+			types.StructField("body", types.TypeBytes),
+			types.StructField("key", types.TypeText),
+			types.StructField("group_id", types.TypeText),
+			types.StructField("attributes", types.TypeJSON),
+		)))
+	}
+	items := make([]types.Value, len(values))
+	for i, item := range values {
+		items[i] = types.StructValue(
+			types.StructFieldValue("body", types.BytesValue(item.Body)),
+			types.StructFieldValue("key", types.TextValue(item.Key)),
+			types.StructFieldValue("group_id", types.TextValue(item.GroupID)),
+			types.StructFieldValue("attributes", types.JSONValue(item.Attributes)),
+		)
+	}
+	return types.ListValue(items...)
+}
+
+// -- name: UpsertWildcardRecords :exec
+func (q *Queries) UpsertWildcardRecords(ctx context.Context, arg []UpsertWildcardRecordsRowsItem, opts ...query.ExecuteOption) error {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$rows").Any(bindUpsertWildcardRecordsRowsItem(arg))
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	err := q.db.Exec(ctx, ""+
+		"DECLARE $rows AS List<Struct<payload: Bytes, record_id: Utf8, owner_hash: Uint64, group_id: Utf8, owner_id: Uint64, attributes: Json, created_at: Timestamp, updated_at: Timestamp,>>;\n"+
+		"UPSERT INTO records\n"+
+		"SELECT `payload`, `record_id`, `owner_hash`, `group_id`, `owner_id`, `attributes`, `created_at`, `updated_at` FROM AS_TABLE($rows);",
+		callOptions...,
+	)
+
+	return xerrors.WithStackTrace(err)
+}
+
+func bindUpsertWildcardRecordsRowsItem(values []UpsertWildcardRecordsRowsItem) types.Value {
+	if len(values) == 0 {
+		return types.ZeroValue(types.List(types.Struct(
+			types.StructField("payload", types.TypeBytes),
+			types.StructField("record_id", types.TypeText),
+			types.StructField("owner_hash", types.TypeUint64),
+			types.StructField("group_id", types.TypeText),
+			types.StructField("owner_id", types.TypeUint64),
+			types.StructField("attributes", types.TypeJSON),
+			types.StructField("created_at", types.TypeTimestamp),
+			types.StructField("updated_at", types.TypeTimestamp),
+		)))
+	}
+	items := make([]types.Value, len(values))
+	for i, item := range values {
+		items[i] = types.StructValue(
+			types.StructFieldValue("payload", types.BytesValue(item.Payload)),
+			types.StructFieldValue("record_id", types.TextValue(item.RecordID)),
+			types.StructFieldValue("owner_hash", types.Uint64Value(item.OwnerHash)),
+			types.StructFieldValue("group_id", types.TextValue(item.GroupID)),
+			types.StructFieldValue("owner_id", types.Uint64Value(item.OwnerID)),
+			types.StructFieldValue("attributes", types.JSONValue(item.Attributes)),
+			types.StructFieldValue("created_at", types.TimestampValueFromTime(item.CreatedAt)),
+			types.StructFieldValue("updated_at", types.TimestampValueFromTime(item.UpdatedAt)),
+		)
+	}
+	return types.ListValue(items...)
+}
+
+// -- name: ClearNamedRecordNote :one
+func (q *Queries) ClearNamedRecordNote(ctx context.Context, arg ClearNamedRecordNoteParams, opts ...query.ExecuteOption) (ClearNamedRecordNoteRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$owner_hash").Uint64(arg.OwnerHash)
+	parameters = parameters.Param("$record_id").Text(arg.RecordID)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	result, err := q.db.QueryRow(ctx, ""+
+		"DECLARE $owner_hash AS Uint64;\n"+
+		"DECLARE $record_id AS Utf8;\n"+
+		"UPSERT INTO records\n"+
+		"SELECT record_id, owner_hash, owner_id, group_id, payload, attributes, created_at, updated_at, NULL AS note\n"+
+		"FROM records\n"+
+		"WHERE owner_hash = $owner_hash AND record_id = $record_id\n"+
+		"RETURNING record_id, note;",
+		callOptions...,
+	)
+	if err != nil {
+		return ClearNamedRecordNoteRow{}, xerrors.WithStackTrace(err)
+	}
+
+	var row ClearNamedRecordNoteRow
+	if err := result.ScanNamed(
+		query.Named("record_id", &row.RecordID),
+		query.Named("note", &row.Note),
+	); err != nil {
+		return ClearNamedRecordNoteRow{}, xerrors.WithStackTrace(err)
+	}
+
+	return row, nil
+}
+
+// -- name: UpsertPositionalRecord :one
+func (q *Queries) UpsertPositionalRecord(ctx context.Context, arg UpsertPositionalRecordParams, opts ...query.ExecuteOption) (UpsertPositionalRecordRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$owner_hash").Uint64(arg.OwnerHash)
+	parameters = parameters.Param("$record_id").Text(arg.RecordID)
+	parameters = parameters.Param("$payload").Bytes(arg.Payload)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	result, err := q.db.QueryRow(ctx, ""+
+		"DECLARE $owner_hash AS Uint64;\n"+
+		"DECLARE $record_id AS Utf8;\n"+
+		"DECLARE $payload AS Bytes;\n"+
+		"UPSERT INTO records (payload, record_id, owner_hash, owner_id, group_id, attributes, created_at, updated_at)\n"+
+		"SELECT $payload AS record_id, record_id AS owner_hash, owner_hash AS payload,\n"+
+		"    owner_id, group_id, attributes, created_at, updated_at\n"+
+		"FROM records\n"+
+		"WHERE owner_hash = $owner_hash AND record_id = $record_id\n"+
+		"RETURNING record_id, payload, note;",
+		callOptions...,
+	)
+	if err != nil {
+		return UpsertPositionalRecordRow{}, xerrors.WithStackTrace(err)
+	}
+
+	var row UpsertPositionalRecordRow
+	if err := result.ScanNamed(
+		query.Named("record_id", &row.RecordID),
+		query.Named("payload", &row.Payload),
+		query.Named("note", &row.Note),
+	); err != nil {
+		return UpsertPositionalRecordRow{}, xerrors.WithStackTrace(err)
+	}
+
+	return row, nil
 }

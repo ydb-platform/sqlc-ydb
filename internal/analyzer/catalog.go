@@ -380,6 +380,9 @@ func (r *typeReader) readType() (model.Type, error) {
 				if !r.consume(',') {
 					return model.Type{}, fmt.Errorf("unsupported YQL type %q", r.text)
 				}
+				if r.consume('>') {
+					break
+				}
 			}
 		case "tuple":
 			var items []model.Type

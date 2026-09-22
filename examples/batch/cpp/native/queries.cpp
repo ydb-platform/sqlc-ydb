@@ -464,4 +464,93 @@ void Queries::CreateBooks(const std::vector<CreateBooksBooksItem>& books) const 
     NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
 }
 
+namespace {
+NYdb::TValue sqlc_bind_CreateAuthorsAuthorsItem(const std::vector<CreateAuthorsAuthorsItem>& sqlc_items) {
+    const auto sqlc_type = NYdb::TTypeBuilder().BeginList().BeginStruct()
+        .AddMember("name").Primitive(NYdb::EPrimitiveType::Utf8)
+        .AddMember("author_id").Primitive(NYdb::EPrimitiveType::Uint64)
+        .EndStruct().EndList().Build();
+    NYdb::TValueBuilder sqlc_builder(sqlc_type);
+    sqlc_builder.BeginList();
+    for (const auto& sqlc_item : sqlc_items) {
+        sqlc_builder.AddListItem().BeginStruct()
+            .AddMember("name").Utf8(sqlc_item.name)
+            .AddMember("author_id").Uint64(sqlc_item.author_id)
+            .EndStruct();
+    }
+    return sqlc_builder.EndList().Build();
+}
+}  // namespace
+
+// -- name: CreateAuthors :exec
+void Queries::CreateAuthors(const std::vector<CreateAuthorsAuthorsItem>& authors) const {
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_params = NYdb::TParamsBuilder()
+            .AddParam("$authors", sqlc_bind_CreateAuthorsAuthorsItem(authors))
+            .Build();
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            "DECLARE $authors AS List<Struct<name: Utf8, author_id: Uint64,>>;\n"
+            "INSERT INTO authors SELECT a.`name` AS `name`, `a`.`author_id` AS `author_id`, NULL AS biography\n"
+            "FROM AS_TABLE($authors) AS a;",
+            sqlc_tx,
+            sqlc_params,
+            this->execute_settings_
+        ).GetValueSync();
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+}
+
+namespace {
+NYdb::TValue sqlc_bind_UpsertAuthorsAuthorsItem(const std::vector<UpsertAuthorsAuthorsItem>& sqlc_items) {
+    const auto sqlc_type = NYdb::TTypeBuilder().BeginList().BeginStruct()
+        .AddMember("name").Primitive(NYdb::EPrimitiveType::Utf8)
+        .AddMember("author_id").Primitive(NYdb::EPrimitiveType::Uint64)
+        .EndStruct().EndList().Build();
+    NYdb::TValueBuilder sqlc_builder(sqlc_type);
+    sqlc_builder.BeginList();
+    for (const auto& sqlc_item : sqlc_items) {
+        sqlc_builder.AddListItem().BeginStruct()
+            .AddMember("name").Utf8(sqlc_item.name)
+            .AddMember("author_id").Uint64(sqlc_item.author_id)
+            .EndStruct();
+    }
+    return sqlc_builder.EndList().Build();
+}
+}  // namespace
+
+// -- name: UpsertAuthors :exec
+void Queries::UpsertAuthors(const std::vector<UpsertAuthorsAuthorsItem>& authors) const {
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_params = NYdb::TParamsBuilder()
+            .AddParam("$authors", sqlc_bind_UpsertAuthorsAuthorsItem(authors))
+            .Build();
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            "DECLARE $authors AS List<Struct<name: Utf8, author_id: Uint64,>>;\n"
+            "UPSERT INTO authors SELECT `name`, `author_id` FROM AS_TABLE($authors);",
+            sqlc_tx,
+            sqlc_params,
+            this->execute_settings_
+        ).GetValueSync();
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+}
+
 }  // namespace batch::native

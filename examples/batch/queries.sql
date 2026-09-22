@@ -59,3 +59,12 @@ INSERT INTO books (
 SELECT
     book_id, author_id, isbn, book_type, title, year, available, tags
 FROM AS_TABLE($books);
+
+-- name: CreateAuthors :exec
+DECLARE $authors AS List<Struct<name: Utf8, author_id: Uint64,>>;
+INSERT INTO authors SELECT a.*, NULL AS biography
+FROM AS_TABLE($authors) AS a;
+
+-- name: UpsertAuthors :exec
+DECLARE $authors AS List<Struct<name: Utf8, author_id: Uint64,>>;
+UPSERT INTO authors SELECT * FROM AS_TABLE($authors);

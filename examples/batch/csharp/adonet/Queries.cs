@@ -133,6 +133,94 @@ public sealed class Queries
         return result;
     }
 
+    private static YdbValue BindCreateAuthorsAuthorsItem(IReadOnlyList<CreateAuthorsAuthorsItem> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        // The SDK has no complex empty-list factory. GetProto exposes the mutable wire type.
+        var result = YdbValue.MakeEmptyList(YdbTypeId.Uint64);
+        var proto = result.GetProto();
+        proto.Type.ListType.Item = new global::Ydb.Type
+        {
+            StructType = new global::Ydb.StructType
+            {
+                Members =
+                {
+                    new global::Ydb.StructMember
+                    {
+                        Name = "name",
+                        Type = new global::Ydb.Type
+                        {
+                            TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Utf8
+                        }
+                    },
+                    new global::Ydb.StructMember
+                    {
+                        Name = "author_id",
+                        Type = new global::Ydb.Type
+                        {
+                            TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Uint64
+                        }
+                    },
+                }
+            }
+        };
+        foreach (var item in items)
+        {
+            ArgumentNullException.ThrowIfNull(item);
+            var row = YdbValue.MakeStruct(new global::System.Collections.Generic.Dictionary<string, YdbValue>
+            {
+                ["name"] = YdbValue.MakeUtf8(item.Name),
+                ["author_id"] = YdbValue.MakeUint64(item.AuthorID),
+            });
+            proto.Value.Items.Add(row.GetProto().Value);
+        }
+        return result;
+    }
+
+    private static YdbValue BindUpsertAuthorsAuthorsItem(IReadOnlyList<UpsertAuthorsAuthorsItem> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        // The SDK has no complex empty-list factory. GetProto exposes the mutable wire type.
+        var result = YdbValue.MakeEmptyList(YdbTypeId.Uint64);
+        var proto = result.GetProto();
+        proto.Type.ListType.Item = new global::Ydb.Type
+        {
+            StructType = new global::Ydb.StructType
+            {
+                Members =
+                {
+                    new global::Ydb.StructMember
+                    {
+                        Name = "name",
+                        Type = new global::Ydb.Type
+                        {
+                            TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Utf8
+                        }
+                    },
+                    new global::Ydb.StructMember
+                    {
+                        Name = "author_id",
+                        Type = new global::Ydb.Type
+                        {
+                            TypeId = global::Ydb.Type.Types.PrimitiveTypeId.Uint64
+                        }
+                    },
+                }
+            }
+        };
+        foreach (var item in items)
+        {
+            ArgumentNullException.ThrowIfNull(item);
+            var row = YdbValue.MakeStruct(new global::System.Collections.Generic.Dictionary<string, YdbValue>
+            {
+                ["name"] = YdbValue.MakeUtf8(item.Name),
+                ["author_id"] = YdbValue.MakeUint64(item.AuthorID),
+            });
+            proto.Value.Items.Add(row.GetProto().Value);
+        }
+        return result;
+    }
+
     // -- name: GetAuthor :one
     public async Task<GetAuthorRow> GetAuthorAsync(ulong authorId, CancellationToken cancellationToken = default)
     {
@@ -333,6 +421,27 @@ public sealed class Queries
             "    book_id, author_id, isbn, book_type, title, year, available, tags\n" +
             "FROM AS_TABLE($books);", _connection) { Transaction = _transaction };
         command.Parameters.Add(new YdbParameter("$books", BindCreateBooksBooksItem(books)));
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    // -- name: CreateAuthors :exec
+    public async Task CreateAuthorsAsync(IReadOnlyList<CreateAuthorsAuthorsItem> authors, CancellationToken cancellationToken = default)
+    {
+        await using var command = new YdbCommand(
+            "DECLARE $authors AS List<Struct<name: Utf8, author_id: Uint64,>>;\n" +
+            "INSERT INTO authors SELECT a.`name` AS `name`, `a`.`author_id` AS `author_id`, NULL AS biography\n" +
+            "FROM AS_TABLE($authors) AS a;", _connection) { Transaction = _transaction };
+        command.Parameters.Add(new YdbParameter("$authors", BindCreateAuthorsAuthorsItem(authors)));
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    // -- name: UpsertAuthors :exec
+    public async Task UpsertAuthorsAsync(IReadOnlyList<UpsertAuthorsAuthorsItem> authors, CancellationToken cancellationToken = default)
+    {
+        await using var command = new YdbCommand(
+            "DECLARE $authors AS List<Struct<name: Utf8, author_id: Uint64,>>;\n" +
+            "UPSERT INTO authors SELECT `name`, `author_id` FROM AS_TABLE($authors);", _connection) { Transaction = _transaction };
+        command.Parameters.Add(new YdbParameter("$authors", BindUpsertAuthorsAuthorsItem(authors)));
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 }

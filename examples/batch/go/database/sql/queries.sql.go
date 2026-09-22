@@ -236,3 +236,60 @@ func bindCreateBooksBooksItem(values []CreateBooksBooksItem) types.Value {
 	}
 	return types.ListValue(items...)
 }
+
+// -- name: CreateAuthors :exec
+func (q *Queries) CreateAuthors(ctx context.Context, arg []CreateAuthorsAuthorsItem) error {
+	_, err := q.db.ExecContext(ctx, ""+
+		"DECLARE $authors AS List<Struct<name: Utf8, author_id: Uint64,>>;\n"+
+		"INSERT INTO authors SELECT a.`name` AS `name`, `a`.`author_id` AS `author_id`, NULL AS biography\n"+
+		"FROM AS_TABLE($authors) AS a;",
+		sql.Named("authors", bindCreateAuthorsAuthorsItem(arg)),
+	)
+
+	return err
+}
+
+func bindCreateAuthorsAuthorsItem(values []CreateAuthorsAuthorsItem) types.Value {
+	if len(values) == 0 {
+		return types.ZeroValue(types.List(types.Struct(
+			types.StructField("name", types.TypeText),
+			types.StructField("author_id", types.TypeUint64),
+		)))
+	}
+	items := make([]types.Value, len(values))
+	for i, item := range values {
+		items[i] = types.StructValue(
+			types.StructFieldValue("name", types.TextValue(item.Name)),
+			types.StructFieldValue("author_id", types.Uint64Value(item.AuthorID)),
+		)
+	}
+	return types.ListValue(items...)
+}
+
+// -- name: UpsertAuthors :exec
+func (q *Queries) UpsertAuthors(ctx context.Context, arg []UpsertAuthorsAuthorsItem) error {
+	_, err := q.db.ExecContext(ctx, ""+
+		"DECLARE $authors AS List<Struct<name: Utf8, author_id: Uint64,>>;\n"+
+		"UPSERT INTO authors SELECT `name`, `author_id` FROM AS_TABLE($authors);",
+		sql.Named("authors", bindUpsertAuthorsAuthorsItem(arg)),
+	)
+
+	return err
+}
+
+func bindUpsertAuthorsAuthorsItem(values []UpsertAuthorsAuthorsItem) types.Value {
+	if len(values) == 0 {
+		return types.ZeroValue(types.List(types.Struct(
+			types.StructField("name", types.TypeText),
+			types.StructField("author_id", types.TypeUint64),
+		)))
+	}
+	items := make([]types.Value, len(values))
+	for i, item := range values {
+		items[i] = types.StructValue(
+			types.StructFieldValue("name", types.TextValue(item.Name)),
+			types.StructFieldValue("author_id", types.Uint64Value(item.AuthorID)),
+		)
+	}
+	return types.ListValue(items...)
+}

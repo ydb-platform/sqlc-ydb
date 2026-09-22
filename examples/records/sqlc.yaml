@@ -1,0 +1,32 @@
+version: "2"
+sql:
+  - name: native
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    analyzer:
+      functions:
+        - name: Unicode::Reverse
+          args:
+            - {type: Utf8, auto_map: true}
+          returns: Utf8
+    gen:
+      go:
+        package: records
+        out: go/native
+        sql_package: ydb
+  - name: database-sql
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    analyzer:
+      functions:
+        - name: Unicode::Reverse
+          args:
+            - {type: Utf8, auto_map: true}
+          returns: Utf8
+    gen:
+      go:
+        package: records
+        out: go/database/sql
+        sql_package: database/sql

@@ -240,4 +240,35 @@ void Queries::CreateBooks(const std::vector<CreateBooksBooksItem>& books) const 
     );
 }
 
+// -- name: CreateAuthors :exec
+void Queries::CreateAuthors(const std::vector<CreateAuthorsAuthorsItem>& authors) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "DECLARE $authors AS List<Struct<name: Utf8, author_id: Uint64,>>;\n"
+        "INSERT INTO authors SELECT a.`name` AS `name`, `a`.`author_id` AS `author_id`, NULL AS biography\n"
+        "FROM AS_TABLE($authors) AS a;",
+        ::userver::ydb::Query::Name{"CreateAuthors"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    static_cast<void>(
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$authors", authors)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$authors", authors)
+    );
+}
+
+// -- name: UpsertAuthors :exec
+void Queries::UpsertAuthors(const std::vector<UpsertAuthorsAuthorsItem>& authors) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "DECLARE $authors AS List<Struct<name: Utf8, author_id: Uint64,>>;\n"
+        "UPSERT INTO authors SELECT `name`, `author_id` FROM AS_TABLE($authors);",
+        ::userver::ydb::Query::Name{"UpsertAuthors"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    static_cast<void>(
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$authors", authors)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$authors", authors)
+    );
+}
+
 }  // namespace batch::userver
