@@ -109,6 +109,8 @@ YDB_CONNECTION_STRING=grpc://localhost:2136/local \
 
 `TestLiveYDBComputedDML` runs the generated counter fixture through both Go adapters and Python, including connected/offline output equality, constants, arithmetic, RETURNING, rollback and concurrent increments. Run `go test -p 1 -count=1 -timeout=240s ./internal/endtoend -run '^TestLiveYDBComputedDML$' -v` with the same DSN and Python requirements. CI runs this fixture on stable and nightly YDB; `TestComputedDMLGeneratedGoCompiles` compiles both generated Go profiles without a database.
 
+`TestLiveYDBIntegerLimits` generates both Go adapters and verifies integer aliases, every supported required/optional pagination width, signed and NULL argument behavior, comma-form LIMIT ordering, and boundary values. It separately checks that YDB rejects unsupported count types and overflowing literals. Run `go test -p 1 -count=1 -timeout=240s ./internal/endtoend -run '^TestLiveYDBIntegerLimits$' -v` with the same disposable DSN. Stable and nightly acceptance run this suite sequentially; `TestAuthorsPagination` additionally executes the checked-in authors pagination example through both Go adapters.
+
 For a manually prepared development schema, see the [local-ydb initialization recipe](../docs/database-analysis.md#prepare-a-disposable-local-database). Automated acceptance uses uniquely named objects and cleans them up instead of sharing a fixed application schema.
 
 The semantic metadata suite compares analyzer result types, nullability and column order directly with YDB, independently of generated code. Run it sequentially with the runtime suites after installing the pinned Python dependencies:

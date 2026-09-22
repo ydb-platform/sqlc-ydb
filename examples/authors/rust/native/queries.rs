@@ -44,6 +44,33 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
             .collect()
     }
 
+    // -- name: ListAuthorsPage :many
+    #[builder(on(String, into))]
+    pub async fn list_authors_page(
+        &mut self,
+        page_size: i32,
+        offset: u32,
+    ) -> ydb::YdbResult<Vec<ListAuthorsPageRow>> {
+        self.client
+            .query_result_set(concat!(
+                "DECLARE $page_size AS Int;\n",
+                "DECLARE $offset AS Uint32;\n",
+                "SELECT id, name, bio FROM authors ORDER BY id LIMIT $page_size OFFSET $offset;",
+            ))
+            .param("$page_size", page_size)
+            .param("$offset", offset)
+            .await?
+            .rows()
+            .map(|mut row| {
+                Ok(ListAuthorsPageRow {
+                    id: row.remove_field(0)?.try_into()?,
+                    name: row.remove_field(1)?.try_into()?,
+                    bio: row.remove_field(2)?.try_into()?,
+                })
+            })
+            .collect()
+    }
+
     // -- name: GetAuthorName :one
     #[builder(on(String, into))]
     pub async fn author_name(&mut self, author_id: u64) -> ydb::YdbResult<GetAuthorNameRow> {

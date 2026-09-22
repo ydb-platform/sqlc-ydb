@@ -149,6 +149,57 @@ final class Queries
         return $rows;
     }
 
+    /** @return list<ListAuthorsPageRow> */
+    // -- name: ListAuthorsPage :many
+    public function listAuthorsPage(ListAuthorsPageParams $params): array
+    {
+        $parameters = [
+            '$page_size' => YdbValueCodec::typedInt32($params->pageSize, 'page_size'),
+            '$offset' => YdbValueCodec::typedUint32($params->offset, 'offset'),
+        ];
+
+        $result = $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                DECLARE $page_size AS Int;
+                DECLARE $offset AS Uint32;
+                SELECT id, name, bio FROM authors ORDER BY id LIMIT $page_size OFFSET $offset;
+                SQLC_YDB_YQL)
+                ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0);
+            if ($this->txId !== null) {
+                $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
+            } else {
+                $query->beginTx('serializable_read_write');
+            }
+            if ($this->configure !== null) {
+                ($this->configure)($query);
+            }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
+
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
+        });
+
+        $rows = $this->decodeRows(
+            $result,
+            'ListAuthorsPage',
+            [
+                ['id', PrimitiveTypeId::UINT64, false],
+                ['name', PrimitiveTypeId::UTF8, false],
+                ['bio', PrimitiveTypeId::UTF8, true],
+            ],
+            static fn($items): ListAuthorsPageRow => new ListAuthorsPageRow(
+                YdbValueCodec::uint64($items->offsetGet(0), 'ListAuthorsPage.id'),
+                YdbValueCodec::utf8($items->offsetGet(1), 'ListAuthorsPage.name'),
+                YdbValueCodec::optionalUtf8($items->offsetGet(2), 'ListAuthorsPage.bio'),
+            ),
+        );
+
+        return $rows;
+    }
+
     // -- name: GetAuthorName :one
     public function getAuthorName(string $authorId): ?GetAuthorNameRow
     {

@@ -288,15 +288,59 @@ func isAggregateFunction(name string) bool {
 	}
 }
 
-func inferLimitOffset(partial parser.ISelect_kind_partialContext, inferred map[string]model.Type) {
+func inferLimitOffset(partial parser.ISelect_kind_partialContext, bindings, inferred map[string]model.Type) {
 	if partial == nil || partial.LIMIT() == nil {
 		return
 	}
 	for _, expr := range partial.AllExpr() {
 		if bind := directBind(expr); bind != nil {
-			inferParameter(inferred, bindName(bind), model.Type{Kind: "Uint64"})
+			name := bindName(bind)
+			_, bound := bindings[name]
+			_, constrained := inferred[name]
+			if !bound && !constrained {
+				inferParameter(inferred, name, model.Type{Kind: "Uint64"})
+			}
 		}
 	}
+}
+
+func validateLimitOffset(block queryBlock, partial parser.ISelect_kind_partialContext, bindings map[string]model.Type) []model.Diagnostic {
+	if partial == nil || partial.LIMIT() == nil {
+		return nil
+	}
+	var diagnostics []model.Diagnostic
+	for i, expr := range partial.AllExpr() {
+		clause := "LIMIT"
+		if (i == 1 && partial.OFFSET() != nil) || (i == 0 && partial.COMMA() != nil) {
+			clause = "OFFSET"
+		}
+		if containsAggregate(expr) {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, expr, clause+" expressions cannot contain aggregate functions"))
+			continue
+		}
+		typ, err := resolveExpression(expr, expressionScope{bindings: bindings, functions: block.functions})
+		if err != nil {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, expr, fmt.Sprintf("cannot resolve %s expression: %v", clause, err)))
+			continue
+		}
+		// YQL permits a nonnegative Int64 literal here, but not an Int64
+		// parameter or computed value. Preserve that distinction without casts.
+		if typ.Kind == "Int64" {
+			literalExpr := expr
+			for inner := parenthesizedExpression(literalExpr); inner != nil; inner = parenthesizedExpression(literalExpr) {
+				literalExpr = inner
+			}
+			if _, literal, err := literalType(literalExpr); literal && err == nil {
+				continue
+			}
+		}
+		switch typ.UnwrapOptional().Kind {
+		case "Int8", "Int16", "Int32", "Uint8", "Uint16", "Uint32", "Uint64", "Null":
+		default:
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, expr, fmt.Sprintf("%s expression has unsupported type %s; use Int8, Int16, Int32, Uint8, Uint16, Uint32, or Uint64, optionally nullable", clause, typ.String())))
+		}
+	}
+	return diagnostics
 }
 
 func inferFromInLists(conditions []*parser.Cond_exprContext, relations []relation, inferred map[string]model.Type) {

@@ -466,6 +466,7 @@ func canonicalConstructor(name string) string {
 
 var simpleTypes = map[string]string{
 	"bool": "Bool", "int8": "Int8", "int16": "Int16", "int32": "Int32", "int64": "Int64",
+	"tinyint": "Int8", "smallint": "Int16", "int": "Int32", "integer": "Int32", "bigint": "Int64",
 	"uint8": "Uint8", "uint16": "Uint16", "uint32": "Uint32", "uint64": "Uint64",
 	"float": "Float", "double": "Double", "string": "String", "bytes": "String", "utf8": "Utf8", "text": "Utf8",
 	"yson": "Yson", "json": "Json", "jsondocument": "JsonDocument", "uuid": "Uuid", "dynumber": "DyNumber",

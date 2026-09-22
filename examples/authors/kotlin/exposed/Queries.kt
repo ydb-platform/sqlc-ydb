@@ -42,6 +42,29 @@ class Queries(private val client: org.jetbrains.exposed.v1.jdbc.JdbcTransaction)
         }
     }
 
+    // -- name: ListAuthorsPage :many
+    fun listAuthorsPage(pageSize: Int, offset: Long): List<ListAuthorsPageRow> {
+        kotlin.require(offset >= 0 && offset <= 4294967295L) { "parameter \$offset is outside Uint32 range" }
+        val _connection = client.connection.connection as java.sql.Connection
+        _connection.unwrap(tech.ydb.jdbc.YdbConnection::class.java).prepareStatement(
+            "DECLARE \$page_size AS Int;\n" +
+            "DECLARE \$offset AS Uint32;\n" +
+            "SELECT id, name, bio FROM authors ORDER BY id LIMIT \$page_size OFFSET \$offset;", tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY).use { _prepared ->
+            _prepared.setInt("page_size", pageSize)
+            _prepared.setLong("offset", offset)
+            _prepared.executeQuery().use { _rows ->
+                val _items = ArrayList<ListAuthorsPageRow>()
+                while (_rows.next()) {
+                    val _value0: Long = _rows.getLong(1)
+                    val _value1: String = _rows.getString(2)
+                    val _value2: String? = _rows.getString(3)
+                    _items.add(ListAuthorsPageRow(_value0, _value1, _value2))
+                }
+                return _items
+            }
+        }
+    }
+
     // -- name: GetAuthorName :one
     fun getAuthorName(authorId: Long): GetAuthorNameRow? {
         val _connection = client.connection.connection as java.sql.Connection

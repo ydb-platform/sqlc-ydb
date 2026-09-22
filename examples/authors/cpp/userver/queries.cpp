@@ -50,6 +50,32 @@ std::vector<ListAuthorsRow> Queries::ListAuthors() const {
     return sqlc_rows;
 }
 
+// -- name: ListAuthorsPage :many
+std::vector<ListAuthorsPageRow> Queries::ListAuthorsPage(std::int32_t page_size, std::uint32_t offset) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "DECLARE $page_size AS Int;\n"
+        "DECLARE $offset AS Uint32;\n"
+        "SELECT id, name, bio FROM authors ORDER BY id LIMIT $page_size OFFSET $offset;",
+        ::userver::ydb::Query::Name{"ListAuthorsPage"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    auto sqlc_response =
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$page_size", page_size, "$offset", offset)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$page_size", page_size, "$offset", offset);
+    auto sqlc_cursor = sqlc_response.GetSingleCursor();
+    std::vector<ListAuthorsPageRow> sqlc_rows;
+    sqlc_rows.reserve(sqlc_cursor.size());
+    for (auto sqlc_row : sqlc_cursor) {
+        sqlc_rows.push_back(ListAuthorsPageRow{
+            sqlc_row.Get<std::uint64_t>("id"),
+            sqlc_row.Get<::userver::ydb::Utf8>("name"),
+            sqlc_row.Get<std::optional<::userver::ydb::Utf8>>("bio"),
+        });
+    }
+    return sqlc_rows;
+}
+
 // -- name: GetAuthorName :one
 std::optional<GetAuthorNameRow> Queries::GetAuthorName(std::uint64_t author_id) const {
     const auto sqlc_query = ::userver::ydb::Query{

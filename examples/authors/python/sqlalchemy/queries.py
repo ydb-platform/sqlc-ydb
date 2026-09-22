@@ -54,6 +54,30 @@ class Querier:
             bio=row._mapping["bio"],
         ) for row in rows]
 
+    # -- name: ListAuthorsPage :many
+    def list_authors_page(self, page_size: int, offset: int) -> list[_models.Authors]:
+        parameters = {
+            "page_size": (page_size, _ydb.PrimitiveType.Int32),
+            "offset": (offset, _ydb.PrimitiveType.Uint32),
+        }
+        result = self._connection.execute(
+            _text(
+                ("DECLARE $page_size AS Int;\n"
+                 "DECLARE $offset AS Uint32;\n"
+                 "SELECT id, name, bio FROM authors ORDER BY id LIMIT :page_size OFFSET :offset;")
+            ),
+            parameters,
+        )
+        try:
+            rows = result.fetchall()
+        finally:
+            result.close()
+        return [_models.Authors(
+            id=row._mapping["id"],
+            name=row._mapping["name"],
+            bio=row._mapping["bio"],
+        ) for row in rows]
+
     # -- name: GetAuthorName :one
     def get_author_name(self, author_id: int) -> Optional[_models.GetAuthorNameRow]:
         parameters = {

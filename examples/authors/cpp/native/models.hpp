@@ -19,6 +19,12 @@ struct ListAuthorsRow final {
     std::optional<std::string> bio;
 };
 
+struct ListAuthorsPageRow final {
+    std::uint64_t id;
+    std::string name;
+    std::optional<std::string> bio;
+};
+
 struct GetAuthorNameRow final {
     std::string name;
 };

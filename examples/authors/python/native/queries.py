@@ -57,6 +57,27 @@ class Querier:
             bio=row["bio"],
         ) for row in rows]
 
+    # -- name: ListAuthorsPage :many
+    def list_authors_page(self, page_size: int, offset: int) -> list[_models.Authors]:
+        parameters = {
+            "$page_size": _ydb.TypedValue(page_size, _ydb.PrimitiveType.Int32),
+            "$offset": _ydb.TypedValue(offset, _ydb.PrimitiveType.Uint32),
+        }
+        result_sets = self._execute(
+            ("DECLARE $page_size AS Int;\n"
+             "DECLARE $offset AS Uint32;\n"
+             "SELECT id, name, bio FROM authors ORDER BY id LIMIT $page_size OFFSET $offset;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.Authors(
+            id=row["id"],
+            name=row["name"],
+            bio=row["bio"],
+        ) for row in rows]
+
     # -- name: GetAuthorName :one
     def get_author_name(self, author_id: int) -> Optional[_models.GetAuthorNameRow]:
         parameters = {

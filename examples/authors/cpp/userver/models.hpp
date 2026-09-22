@@ -20,6 +20,12 @@ struct ListAuthorsRow final {
     std::optional<::userver::ydb::Utf8> bio;
 };
 
+struct ListAuthorsPageRow final {
+    std::uint64_t id;
+    ::userver::ydb::Utf8 name;
+    std::optional<::userver::ydb::Utf8> bio;
+};
+
 struct GetAuthorNameRow final {
     ::userver::ydb::Utf8 name;
 };

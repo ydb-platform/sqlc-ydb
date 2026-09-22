@@ -8,6 +8,7 @@ import org.jooq.JSON;
 import org.jooq.impl.DSL;
 import org.jooq.tools.jdbc.MockConnection;
 import org.jooq.tools.jdbc.MockResult;
+import org.jooq.types.UInteger;
 import org.jooq.types.ULong;
 import org.junit.jupiter.api.Test;
 import tech.ydb.jooq.YDB;
@@ -32,6 +33,7 @@ class GeneratedQueriesTest {
                     for (int i = 0; i < args.length; i++) {
                         Class<?> parameter = method.getParameterTypes()[i];
                         if (parameter == ULong.class) args[i] = ULong.MAX;
+                        else if (parameter == UInteger.class) args[i] = UInteger.MAX;
                         else if (parameter == String.class) args[i] = "value";
                         else if (parameter == Integer.class) args[i] = 2026;
                         else if (parameter == Instant.class) args[i] = Instant.parse("2026-01-01T00:00:00.123456Z");
@@ -60,7 +62,7 @@ class GeneratedQueriesTest {
                 }
             }
         }
-        assertEquals(43, statements.size());
+        assertEquals(44, statements.size());
     }
     @Test
     void declaredQueryReadsDialectCarriers() throws Exception {

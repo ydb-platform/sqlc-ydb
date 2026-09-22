@@ -18,6 +18,17 @@ type ListAuthorsRow struct {
 	Bio  *string `json:"bio"`
 }
 
+type ListAuthorsPageRow struct {
+	ID   uint64  `json:"id"`
+	Name string  `json:"name"`
+	Bio  *string `json:"bio"`
+}
+
+type ListAuthorsPageParams struct {
+	PageSize int32  `json:"page_size"`
+	Offset   uint32 `json:"offset"`
+}
+
 type GetAuthorNameRow struct {
 	Name string `json:"name"`
 }
@@ -43,6 +54,7 @@ type UpsertAuthorParams struct {
 type Querier interface {
 	GetAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorRow, error)
 	ListAuthors(ctx context.Context, opts ...query.ExecuteOption) ([]ListAuthorsRow, error)
+	ListAuthorsPage(ctx context.Context, arg ListAuthorsPageParams, opts ...query.ExecuteOption) ([]ListAuthorsPageRow, error)
 	GetAuthorName(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorNameRow, error)
 	CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts ...query.ExecuteOption) (CreateAuthorRow, error)
 	UpsertAuthor(ctx context.Context, arg UpsertAuthorParams, opts ...query.ExecuteOption) error

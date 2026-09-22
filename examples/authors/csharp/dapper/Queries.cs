@@ -64,6 +64,28 @@ public sealed class Queries
         return (await _connection.QueryAsync<ListAuthorsRow>(command).ConfigureAwait(false)).AsList();
     }
 
+    // -- name: ListAuthorsPage :many
+    public async Task<IReadOnlyList<ListAuthorsPageRow>> ListAuthorsPageAsync(ListAuthorsPageParams args, CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var parameters = new YdbParameters(
+            new YdbParameter("$page_size", DbType.Int32, args.PageSize),
+            new YdbParameter("$offset", DbType.UInt32, args.Offset)
+        );
+
+        var command = new CommandDefinition(
+            commandText: """
+            DECLARE $page_size AS Int;
+            DECLARE $offset AS Uint32;
+            SELECT id, name, bio FROM authors ORDER BY id LIMIT $page_size OFFSET $offset;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        return (await _connection.QueryAsync<ListAuthorsPageRow>(command).ConfigureAwait(false)).AsList();
+    }
+
     // -- name: GetAuthorName :one
     public async Task<GetAuthorNameRow> GetAuthorNameAsync(ulong authorId, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {

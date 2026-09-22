@@ -69,6 +69,30 @@ public sealed class Queries
         reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)
     );
 
+    // -- name: ListAuthorsPage :many
+    public async Task<IReadOnlyList<ListAuthorsPageRow>> ListAuthorsPageAsync(ListAuthorsPageParams args, CancellationToken cancellationToken = default)
+    {
+        await using var command = new YdbCommand(
+            "DECLARE $page_size AS Int;\n" +
+            "DECLARE $offset AS Uint32;\n" +
+            "SELECT id, name, bio FROM authors ORDER BY id LIMIT $page_size OFFSET $offset;", _connection) { Transaction = _transaction };
+        command.Parameters.Add(new YdbParameter("$page_size", DbType.Int32, args.PageSize));
+        command.Parameters.Add(new YdbParameter("$offset", DbType.UInt32, args.Offset));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        var rows = new List<ListAuthorsPageRow>();
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            rows.Add(ListAuthorsPageRowFrom(reader));
+        }
+        return rows;
+    }
+
+    private static ListAuthorsPageRow ListAuthorsPageRowFrom(DbDataReader reader) => new(
+        reader.GetFieldValue<ulong>(0),
+        reader.GetFieldValue<string>(1),
+        reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)
+    );
+
     // -- name: GetAuthorName :one
     public async Task<GetAuthorNameRow> GetAuthorNameAsync(ulong authorId, CancellationToken cancellationToken = default)
     {
