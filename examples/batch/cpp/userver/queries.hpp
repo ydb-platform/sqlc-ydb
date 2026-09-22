@@ -32,6 +32,8 @@ public:
     void UpdateBook(const ::userver::ydb::Utf8& title, const ::userver::formats::json::Value& tags, std::uint64_t book_id) const;
     std::optional<GetBiographyRow> GetBiography(std::uint64_t author_id) const;
     void CreateBooks(const std::vector<CreateBooksBooksItem>& books) const;
+    void CreateAuthors(const std::vector<CreateAuthorsAuthorsItem>& authors) const;
+    void UpsertAuthors(const std::vector<UpsertAuthorsAuthorsItem>& authors) const;
 
 private:
     ::userver::ydb::TableClient* client_;

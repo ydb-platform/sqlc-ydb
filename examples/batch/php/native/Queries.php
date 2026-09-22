@@ -564,6 +564,119 @@ final class Queries
         });
     }
 
+    /** @param list<CreateAuthorsAuthorsItem> $authors */
+    // -- name: CreateAuthors :exec
+    public function createAuthors(array $authors): void
+    {
+        $parameters = [
+            '$authors' => new \Ydb\TypedValue([
+                'type' => new \Ydb\Type([
+                    'list_type' => new \Ydb\ListType([
+                        'item' => new \Ydb\Type([
+                            'struct_type' => new \Ydb\StructType([
+                                'members' => [
+                                    new \Ydb\StructMember(['name' => 'name', 'type' => new \Ydb\Type(['type_id' => PrimitiveTypeId::UTF8])]),
+                                    new \Ydb\StructMember(['name' => 'author_id', 'type' => new \Ydb\Type(['type_id' => PrimitiveTypeId::UINT64])]),
+                                ],
+                            ]),
+                        ]),
+                    ]),
+                ]),
+                'value' => new \Ydb\Value([
+                    'items' => array_map(
+                        static fn(CreateAuthorsAuthorsItem $item): \Ydb\Value => new \Ydb\Value([
+                            'items' => [
+                                YdbValueCodec::typedUtf8($item->name, 'authors.name')->getValue(),
+                                YdbValueCodec::typedUint64($item->authorId, 'authors.author_id')->getValue(),
+                            ],
+                        ]),
+                        array_values($authors),
+                    ),
+                ]),
+            ]),
+        ];
+
+        $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                DECLARE $authors AS List<Struct<name: Utf8, author_id: Uint64,>>;
+                INSERT INTO authors SELECT a.`name` AS `name`, `a`.`author_id` AS `author_id`, NULL AS biography
+                FROM AS_TABLE($authors) AS a;
+                SQLC_YDB_YQL)
+                ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0);
+            if ($this->txId !== null) {
+                $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
+            } else {
+                $query->beginTx('serializable_read_write');
+            }
+            if ($this->configure !== null) {
+                ($this->configure)($query);
+            }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
+
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
+        });
+    }
+
+    /** @param list<UpsertAuthorsAuthorsItem> $authors */
+    // -- name: UpsertAuthors :exec
+    public function upsertAuthors(array $authors): void
+    {
+        $parameters = [
+            '$authors' => new \Ydb\TypedValue([
+                'type' => new \Ydb\Type([
+                    'list_type' => new \Ydb\ListType([
+                        'item' => new \Ydb\Type([
+                            'struct_type' => new \Ydb\StructType([
+                                'members' => [
+                                    new \Ydb\StructMember(['name' => 'name', 'type' => new \Ydb\Type(['type_id' => PrimitiveTypeId::UTF8])]),
+                                    new \Ydb\StructMember(['name' => 'author_id', 'type' => new \Ydb\Type(['type_id' => PrimitiveTypeId::UINT64])]),
+                                ],
+                            ]),
+                        ]),
+                    ]),
+                ]),
+                'value' => new \Ydb\Value([
+                    'items' => array_map(
+                        static fn(UpsertAuthorsAuthorsItem $item): \Ydb\Value => new \Ydb\Value([
+                            'items' => [
+                                YdbValueCodec::typedUtf8($item->name, 'authors.name')->getValue(),
+                                YdbValueCodec::typedUint64($item->authorId, 'authors.author_id')->getValue(),
+                            ],
+                        ]),
+                        array_values($authors),
+                    ),
+                ]),
+            ]),
+        ];
+
+        $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                DECLARE $authors AS List<Struct<name: Utf8, author_id: Uint64,>>;
+                UPSERT INTO authors SELECT `name`, `author_id` FROM AS_TABLE($authors);
+                SQLC_YDB_YQL)
+                ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0);
+            if ($this->txId !== null) {
+                $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
+            } else {
+                $query->beginTx('serializable_read_write');
+            }
+            if ($this->configure !== null) {
+                ($this->configure)($query);
+            }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
+
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
+        });
+    }
+
     /**
      * @param array<int, array{0: string, 1: int, 2: bool}> $expectedColumns
      * @return list<object>

@@ -57,4 +57,14 @@ struct CreateBooksBooksItem final {
     std::string tags;
 };
 
+struct CreateAuthorsAuthorsItem final {
+    std::string name;
+    std::uint64_t author_id;
+};
+
+struct UpsertAuthorsAuthorsItem final {
+    std::string name;
+    std::uint64_t author_id;
+};
+
 }  // namespace batch::native

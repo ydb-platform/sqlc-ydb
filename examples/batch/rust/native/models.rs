@@ -54,3 +54,15 @@ pub struct CreateBooksBooksItem {
     pub available: std::time::SystemTime,
     pub tags: String,
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CreateAuthorsAuthorsItem {
+    pub name: String,
+    pub author_id: u64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct UpsertAuthorsAuthorsItem {
+    pub name: String,
+    pub author_id: u64,
+}

@@ -328,4 +328,64 @@ class Queries {
             }.join().getStatus().expectSuccess()
         }
     }
+
+    // -- name: CreateAuthors :exec
+    fun createAuthors(authors: List<CreateAuthorsAuthorsItem>): Unit {
+        val _params = Params.create()
+        _params.put("\$authors", tech.ydb.table.values.ListType.of(
+            tech.ydb.table.values.StructType.of(mapOf(
+                "name" to tech.ydb.table.values.PrimitiveType.Text,
+                "author_id" to tech.ydb.table.values.PrimitiveType.Uint64
+            ))
+        ).newValue(
+            authors.map { _batchItem ->
+                tech.ydb.table.values.StructValue.of(mapOf(
+                    "name" to PrimitiveValue.newText(_batchItem.name),
+                    "author_id" to PrimitiveValue.newUint64(_batchItem.authorId)
+                ))
+            }
+        ))
+        if (transaction != null) {
+            transaction.createQuery(
+                "DECLARE \$authors AS List<Struct<name: Utf8, author_id: Uint64,>>;\n" +
+                "INSERT INTO authors SELECT a.`name` AS `name`, `a`.`author_id` AS `author_id`, NULL AS biography\n" +
+                "FROM AS_TABLE(\$authors) AS a;", _params).execute().join().getStatus().expectSuccess()
+        } else {
+            client!!.supplyResult { _session ->
+                _session.createQuery(
+                    "DECLARE \$authors AS List<Struct<name: Utf8, author_id: Uint64,>>;\n" +
+                    "INSERT INTO authors SELECT a.`name` AS `name`, `a`.`author_id` AS `author_id`, NULL AS biography\n" +
+                    "FROM AS_TABLE(\$authors) AS a;", TxMode.SERIALIZABLE_RW, _params).execute()
+            }.join().getStatus().expectSuccess()
+        }
+    }
+
+    // -- name: UpsertAuthors :exec
+    fun upsertAuthors(authors: List<UpsertAuthorsAuthorsItem>): Unit {
+        val _params = Params.create()
+        _params.put("\$authors", tech.ydb.table.values.ListType.of(
+            tech.ydb.table.values.StructType.of(mapOf(
+                "name" to tech.ydb.table.values.PrimitiveType.Text,
+                "author_id" to tech.ydb.table.values.PrimitiveType.Uint64
+            ))
+        ).newValue(
+            authors.map { _batchItem ->
+                tech.ydb.table.values.StructValue.of(mapOf(
+                    "name" to PrimitiveValue.newText(_batchItem.name),
+                    "author_id" to PrimitiveValue.newUint64(_batchItem.authorId)
+                ))
+            }
+        ))
+        if (transaction != null) {
+            transaction.createQuery(
+                "DECLARE \$authors AS List<Struct<name: Utf8, author_id: Uint64,>>;\n" +
+                "UPSERT INTO authors SELECT `name`, `author_id` FROM AS_TABLE(\$authors);", _params).execute().join().getStatus().expectSuccess()
+        } else {
+            client!!.supplyResult { _session ->
+                _session.createQuery(
+                    "DECLARE \$authors AS List<Struct<name: Utf8, author_id: Uint64,>>;\n" +
+                    "UPSERT INTO authors SELECT `name`, `author_id` FROM AS_TABLE(\$authors);", TxMode.SERIALIZABLE_RW, _params).execute()
+            }.join().getStatus().expectSuccess()
+        }
+    }
 }
