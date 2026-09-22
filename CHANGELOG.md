@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.2.0
+
 ### Fixed
 
 - Expand supported SELECT and RETURNING wildcard projections into explicit column lists in generated SQL for both offline schema analysis and connected database discovery. Adding unrelated database columns after generation no longer changes the result width seen by positional decoders; local schema/model order is preserved when database validation is enabled.
