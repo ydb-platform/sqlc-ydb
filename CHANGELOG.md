@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Support typed expressions in INSERT/UPSERT VALUES and UPDATE SET: constants, contextual NULL, target-row column references in UPDATE, scalar calls and binary numeric addition, subtraction and multiplication with parentheses. Assignments validate destination types and preserve existing direct-parameter inference and RETURNING APIs. The shared expression resolver also supports this arithmetic in SELECT expressions and predicates.
+
 ## v0.2.0
 
 ### Fixed

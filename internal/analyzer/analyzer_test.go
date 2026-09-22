@@ -646,7 +646,7 @@ func TestAnalyzeRejectsDMLLiteralWithoutGuessingAssignmentType(t *testing.T) {
 		[]model.Source{{Name: "schema.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, name Utf8 NOT NULL, PRIMARY KEY (id));`}},
 		[]model.Source{{Name: "query.sql", Text: "-- name: Broken :exec\nUPSERT INTO authors (id, name) VALUES ('wrong', 123);"}},
 	)
-	if err == nil || !strings.Contains(err.Error(), "DML values must be direct external parameters") {
+	if err == nil || !strings.Contains(err.Error(), "cannot assign String to column \"id\" of type Uint64") {
 		t.Fatalf("error = %v", err)
 	}
 }

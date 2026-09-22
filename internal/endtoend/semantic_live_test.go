@@ -29,6 +29,8 @@ func TestLiveYDBSemanticTypes(t *testing.T) {
 		{"qualified_wildcard", "SELECT r.* FROM $TABLE AS r;"},
 		{"joined_wildcard", "SELECT b.* FROM $TABLE AS a LEFT JOIN $TABLE AS b ON a.id=b.id;"},
 		{"union_wildcard", "SELECT * FROM $TABLE UNION ALL SELECT * FROM $TABLE;"},
+		{"arithmetic", "SELECT (n + 2) * 3 - 4 AS precedence, maybe + 1 AS nullable, n + id AS mixed, f * n AS floating FROM $TABLE;"},
+		{"arithmetic_widths", "SELECT 1t + 2t AS i8, 1s * 2s AS i16, 1 - 2 AS i32, 1l + 2 AS i64, 1ut + 2ut AS u8, 1us * 2us AS u16, 1u - 2u AS u32, 1ul + 2ul AS u64, 1u + 2 AS mixed32, 1ul + 2l AS mixed64, 1l + 2.0f AS float_value, 1.0f + 2.0 AS double_value;"},
 		{"casts", "SELECT CAST(n AS Int64) AS wide, CAST(n AS Uint8) AS narrow, CAST(f AS Int32) AS integer_value FROM $TABLE;"},
 		{"case", "SELECT CASE WHEN flag THEN n ELSE maybe END AS choice, CASE n WHEN 1 THEN 1u ELSE 2 END AS mixed FROM $TABLE;"},
 		{"coalesce_explicit_numeric", "SELECT COALESCE(CAST(n AS Int64), 1l) AS required, COALESCE(CAST(maybe AS Int64), 1l) AS fallback FROM $TABLE;"},

@@ -7,6 +7,8 @@ The public package API is:
 - `Resolve(name string, args []model.Type) (model.Type, error)` for functions;
 - `NewRegistry(signatures []Signature)` and `Registry.ResolveCall` for validated concrete custom signatures and named arguments;
 - `CommonType(types ...model.Type) (model.Type, error)` for branches and homogeneous values;
+- `Arithmetic(operator string, left, right model.Type) (model.Type, error)` for primitive numeric `+`, `-`, and `*`, preserving operand optionality;
+- `CanWidenInteger(source, target model.Type) bool` for lossless integer assignment conversions;
 - `Cast(source, target model.Type) (model.Type, error)` for the supported primitive `CAST` matrix.
 
 `model.Type{Kind: "Null"}` is accepted only as a contextual input. A successful result is always concrete, optionally wrapped once in `Optional`. Nested `Optional` values are rejected because the current generator model does not have enough context to preserve their YQL semantics.

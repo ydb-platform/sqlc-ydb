@@ -1,0 +1,21 @@
+version: "2"
+sql:
+  - engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      go:
+        package: counters
+        out: db
+        sql_package: database/sql
+      python:
+        out: py
+        runtime: ydb
+  - engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      go:
+        package: counters
+        out: db/native
+        sql_package: ydb

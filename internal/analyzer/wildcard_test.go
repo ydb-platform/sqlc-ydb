@@ -198,9 +198,13 @@ func TestAnalyzeLeavesNonProjectionAsterisksUnchanged(t *testing.T) {
 	if result.Queries[0].SQL != sql {
 		t.Fatalf("COUNT(*) changed: %q", result.Queries[0].SQL)
 	}
-	_, err = Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Multiply :many\nSELECT id * id AS product FROM records;"}})
-	if err == nil || !strings.Contains(err.Error(), `computed result expression "id*id" is not supported`) {
-		t.Fatalf("multiplication must retain its existing unsupported diagnostic: %v", err)
+	sql = "-- name: Multiply :many\nSELECT id * id AS product FROM records;"
+	result, err = Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Queries[0].SQL != sql || result.Queries[0].ResultSets[0].Columns[0].Type.Kind != "Uint64" {
+		t.Fatalf("multiplication changed: %#v", result.Queries[0])
 	}
 }
 

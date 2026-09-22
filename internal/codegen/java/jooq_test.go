@@ -59,6 +59,8 @@ func TestJooqRejectsUnsupportedSyntax(t *testing.T) {
 		"SELECT id FROM items WHERE id IN ($id);",
 		"SELECT id FROM items LIMIT 2 OFFSET 1;",
 		"SELECT CAST(id AS Int64) AS id FROM items;",
+		"SELECT id + 1ul AS next FROM items;",
+		"UPDATE items SET id = id + 1ul RETURNING id;",
 	} {
 		t.Run(sql, func(t *testing.T) {
 			a, e := analyzer.Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Unsupported :many\n" + sql}})
@@ -190,6 +192,7 @@ func TestJooqDeclaredSQLBytesThroughJava(t *testing.T) {
 		{"SELECT b./* wildcard */*\n    FROM books AS b\n    WHERE b.id = $id;", "SELECT b./* wildcard */`id` AS `id`, `b`.`title` AS `title`\n    FROM `mapped_books` AS b\n    WHERE b.id = $id;"},
 		{"DELETE FROM books WHERE books.id = $id RETURNING *;", "DELETE FROM `mapped_books` WHERE `mapped_books`.id = $id RETURNING `id`, `title`;"},
 		{"DECLARE $rows AS List<Struct<id: Uint64, title: Utf8>>;\n\nINSERT INTO books (id, title)\nSELECT\n    id, title\nFROM AS_TABLE($rows);", "DECLARE $rows AS List<Struct<id: Uint64, title: Utf8>>;\n\nINSERT INTO `mapped_books` (id, title)\nSELECT\n    id, title\nFROM AS_TABLE($rows);"},
+		{"UPDATE books SET id = (books.id + 2ul) * 3ul - 4ul WHERE books.id = $id;", "UPDATE `mapped_books` SET id = (`mapped_books`.id + 2ul) * 3ul - 4ul WHERE `mapped_books`.id = $id;"},
 	}
 	var program strings.Builder
 	program.WriteString("public class Main { static final String BOOKS = \"`mapped_books`\"; static final Main dsl = new Main(); String render(String table) { return table; } public static void main(String[] args) {\n")

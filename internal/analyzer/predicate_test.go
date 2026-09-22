@@ -55,7 +55,7 @@ func TestPredicateOperatorsRejectIncompatibleOperands(t *testing.T) {
 	} {
 		query := "-- name: Read :many\nSELECT id FROM records WHERE " + predicate + ";"
 		_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
-		if err == nil || (!strings.Contains(err.Error(), "incompatible types") && !strings.Contains(err.Error(), "NOT operand has type") && !strings.Contains(err.Error(), "unsupported scalar expression")) {
+		if err == nil || (!strings.Contains(err.Error(), "incompatible types") && !strings.Contains(err.Error(), "NOT operand has type") && !strings.Contains(err.Error(), "unsupported scalar expression") && !strings.Contains(err.Error(), "requires primitive numeric operands")) {
 			t.Fatalf("%s: %v", predicate, err)
 		}
 	}
