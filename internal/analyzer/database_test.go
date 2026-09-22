@@ -173,7 +173,7 @@ func TestDatabaseAnalysisPreservesFunctionContracts(t *testing.T) {
 	}
 }
 
-func TestDatabaseAnalysisSortsWildcardColumnsByWireOrder(t *testing.T) {
+func TestDatabaseAnalysisFixesWildcardWireOrderInSQL(t *testing.T) {
 	for _, localSchema := range []bool{false, true} {
 		t.Run(map[bool]string{false: "discovered", true: "local"}[localSchema], func(t *testing.T) {
 			var schema []model.Source
@@ -191,8 +191,11 @@ func TestDatabaseAnalysisSortsWildcardColumnsByWireOrder(t *testing.T) {
 			for _, column := range result.Queries[0].ResultSets[0].Columns {
 				names = append(names, column.Name)
 			}
-			if !reflect.DeepEqual(names, []string{"a", "id", "z"}) {
+			if !reflect.DeepEqual(names, []string{"z", "a", "id"}) {
 				t.Fatalf("wildcard column order = %v", names)
+			}
+			if sql := result.Queries[0].SQL; sql != "-- name: Read :many\nSELECT `z`, `a`, `id` FROM records;" {
+				t.Fatalf("wildcard SQL does not fix the wire order: %q", sql)
 			}
 		})
 	}

@@ -73,11 +73,6 @@ func databaseCatalog(ctx context.Context, database Database, schema []model.Sour
 			diagnostics = append(diagnostics, model.Diagnostic{Position: reference.position, Message: fmt.Sprintf("database schema drift for table %q: %v", reference.name, err)})
 		}
 	}
-	// YDB expands table wildcards in column-name order, independently of the
-	// creation order returned by DescribeTable and retained by local DDL parsing.
-	for i := range catalog.Tables {
-		slices.SortFunc(catalog.Tables[i].Columns, func(a, b model.Column) int { return strings.Compare(a.Name, b.Name) })
-	}
 	return catalog, diagnostics
 }
 

@@ -44,11 +44,11 @@ sql:
 
 Every table in the local catalog must already exist with the same columns, types, nullability, primary-key order and sequence-generation contract. Extra columns are also reported as schema drift. Unrelated server tables are ignored. Apply migrations separately to a disposable development or CI database; the analyzer never applies them itself.
 
-In connected mode, catalog columns use YDB's lexicographic wildcard order, even when the CREATE TABLE source or DescribeTable response lists them differently. Explicit SELECT projections retain their query order. Switching a query using `SELECT *` from offline mode can therefore change generated field order; review the generated diff or list the columns explicitly.
+Before generation, the shared analyzer expands supported `SELECT *`, `SELECT alias.*` and `RETURNING *` projections into explicit quoted column lists. With local schema inputs, both offline and connected analysis retain local catalog order; without them, discovery uses the column order returned by DescribeTable. Explicit projections keep their query order. The generated SQL fixes the selected columns and their order, so adding an unrelated column after generation does not add unexpected values to positional decoders. Dropping, renaming or changing the type of a selected column still requires updating the query and regenerating code.
 
 ## Server query validation
 
-Before table discovery and local query semantics, the compiler sends each named query unchanged to QueryService with execution mode `EXPLAIN`. It follows the same path for all queries without classifying their complexity. EXPLAIN compiles SELECT and DML without executing either or requiring parameter values. The query text sent to the server is also retained in generated code; the compiler does not rewrite declarations or expressions.
+Before table discovery and local query semantics, the compiler sends each named query unchanged to QueryService with execution mode `EXPLAIN`. It follows the same path for all queries without classifying their complexity. EXPLAIN compiles SELECT and DML without executing either or requiring parameter values. After successful validation and catalog analysis, generated SQL contains explicit columns in place of wildcard projections. Declarations, expressions and source text outside the replaced wildcard spans are preserved.
 
 Declare external query parameters explicitly in each named query:
 

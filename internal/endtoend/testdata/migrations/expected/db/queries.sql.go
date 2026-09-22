@@ -20,7 +20,7 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 
 	result, err := q.db.QueryRow(ctx, ""+
 		"DECLARE $id AS Uint64;\n"+
-		"SELECT * FROM authors WHERE id = $id;",
+		"SELECT `id`, `name` FROM authors WHERE id = $id;",
 		callOptions...,
 	)
 	if err != nil {

@@ -74,7 +74,7 @@ func analyze(ctx context.Context, schema, queries []model.Source, options Option
 		}
 		if database == nil || len(result.Diagnostics) == 0 {
 			for _, block := range allBlocks {
-				query, queryDiagnostics := analyzeQuery(catalog, block)
+				query, queryDiagnostics := analyzeExecutableQuery(catalog, block)
 				result.Diagnostics = append(result.Diagnostics, queryDiagnostics...)
 				if len(queryDiagnostics) == 0 {
 					result.Queries = append(result.Queries, query)
@@ -156,6 +156,7 @@ type queryBlock struct {
 	text      string
 	functions *builtins.Registry
 	parsed    *parsedYQL
+	wildcards *wildcardRewrites
 }
 
 func queryBlocks(source model.Source) ([]queryBlock, []model.Diagnostic) {

@@ -19,7 +19,7 @@ class Querier:
         result = self._connection.execute(
             _text(
                 ("DECLARE $id AS Uint64;\n"
-                 "SELECT * FROM authors WHERE id = :id;")
+                 "SELECT `id`, `name` FROM authors WHERE id = :id;")
             ),
             parameters,
         )

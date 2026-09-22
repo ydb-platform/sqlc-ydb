@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/cli"
+	"github.com/ydb-platform/sqlc-ydb/internal/config"
+	"github.com/ydb-platform/sqlc-ydb/internal/database"
 )
 
 // This test deliberately runs sequentially: all runtimes share one disposable table.
@@ -25,6 +27,32 @@ func TestLiveYDBDatabaseAnalysis(t *testing.T) {
 	t.Cleanup(func() { runDatabasePython(t, dir, databaseFixturePython, "drop", table) })
 	runDatabasePython(t, dir, databaseFixturePython, "create", table)
 	before := runDatabasePython(t, dir, databaseFixturePython, "snapshot", table)
+	// Discovery follows the descriptor order, which need not equal raw SELECT * order.
+	settings, err := (config.Database{URI: os.Getenv("YDB_CONNECTION_STRING"), Timeout: "30s"}).Resolve(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadataClient, err := database.New(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	described, describeErr := metadataClient.DescribeTable(context.Background(), table)
+	if err := metadataClient.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if describeErr != nil {
+		t.Fatal(describeErr)
+	}
+	var columnNames, goFields []string
+	fieldNames := map[string]string{"amount": "Amount", "id": "ID", "ztext": "Ztext"}
+	for _, column := range described.Columns {
+		columnNames = append(columnNames, column.Name)
+		name, ok := fieldNames[column.Name]
+		if !ok {
+			t.Fatalf("unexpected described column %q", column.Name)
+		}
+		goFields = append(goFields, name)
+	}
 
 	write := func(name, contents string) {
 		t.Helper()
@@ -128,10 +156,10 @@ UPDATE records SET ztext = $ztext WHERE id = $id;
 		{"stdlib", 100}, {"native", 101},
 	} {
 		t.Run(runtime.name, func(t *testing.T) {
-			compileTypedDMLPackage(t, dir, "./"+runtime.name, databaseGeneratedGo(runtime.name == "stdlib", runtime.id), false)
+			compileTypedDMLPackage(t, dir, "./"+runtime.name, databaseGeneratedGo(runtime.name == "stdlib", runtime.id, goFields), false)
 		})
 	}
-	runDatabasePython(t, dir, databaseGeneratedPython)
+	runDatabasePython(t, dir, databaseGeneratedPython, columnNames...)
 }
 
 func runDatabasePython(t *testing.T, dir, script string, args ...string) string {
@@ -171,7 +199,7 @@ with ydb.Driver(config) as driver:
             print(json.dumps(rows, sort_keys=True))
 `
 
-func databaseGeneratedGo(databaseSQL bool, insertedID uint64) string {
+func databaseGeneratedGo(databaseSQL bool, insertedID uint64, fieldNames []string) string {
 	extraImport, setup := "", "q := New(driver.Query())"
 	if databaseSQL {
 		extraImport = `"database/sql"`
@@ -204,7 +232,7 @@ func TestDatabaseGeneratedRuntime(t *testing.T) {
 	}
 	typ := reflect.TypeOf(row)
 	names := []string{typ.Field(0).Name, typ.Field(1).Name, typ.Field(2).Name}
-	if !reflect.DeepEqual(names, []string{"Amount", "ID", "Ztext"}) { t.Fatalf("wildcard order: %v", names) }
+	if !reflect.DeepEqual(names, ` + fmt.Sprintf("%#v", fieldNames) + `) { t.Fatalf("wildcard order: %v", names) }
 	row, err = q.ReadRecord(ctx, 42)
 	if err != nil || row.ID != 42 || row.Amount != nil || row.Ztext != nil { t.Fatalf("nullable row: %+v %v", row, err) }
 	const id uint64 = ` + strconv.FormatUint(insertedID, 10) + `
@@ -219,7 +247,7 @@ func TestDatabaseGeneratedRuntime(t *testing.T) {
 `
 }
 
-const databaseGeneratedPython = databasePythonConnection + `import dataclasses
+const databaseGeneratedPython = databasePythonConnection + `import dataclasses, sys
 from pydb.queries import Querier
 with ydb.Driver(config) as driver:
     driver.wait(20)
@@ -227,7 +255,7 @@ with ydb.Driver(config) as driver:
         q = Querier(pool)
         row = q.read_record(18446744073709551615)
         assert row.id == 18446744073709551615 and row.amount == -7 and row.ztext == "original", row
-        assert [field.name for field in dataclasses.fields(row)] == ["amount", "id", "ztext"]
+        assert [field.name for field in dataclasses.fields(row)] == sys.argv[1:]
         row = q.read_record(42)
         assert row.id == 42 and row.amount is None and row.ztext is None, row
         q.insert_record(id=102, ztext="inserted", amount=9)
