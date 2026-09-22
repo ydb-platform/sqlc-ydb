@@ -13,7 +13,7 @@ func (q *Queries) CreateCounter(ctx context.Context, arg string) (CreateCounterR
 	err := q.db.QueryRowContext(ctx, ""+
 		"DECLARE $id AS Utf8;\n"+
 		"INSERT INTO counters (id, value, optional_value, label, enabled)\n"+
-		"VALUES ($id, 0, NULL, 'pending'u, true)\n"+
+		"VALUES ($id, 0, NULL, 'pending'u, (2 > 1))\n"+
 		"RETURNING value, optional_value, label, enabled;",
 		sql.Named("id", arg),
 	).Scan(
@@ -50,7 +50,7 @@ func (q *Queries) TransformCounter(ctx context.Context, arg string) (TransformCo
 		"DECLARE $id AS Utf8;\n"+
 		"UPDATE counters SET value = (value + 2) * 3 - 4,\n"+
 		"    optional_value = COALESCE(optional_value, 0l) + 1,\n"+
-		"    label = 'done'u, enabled = false\n"+
+		"    label = 'done'u, enabled = (value > 10l)\n"+
 		"WHERE id = $id\n"+
 		"RETURNING value, optional_value, label, enabled;",
 		sql.Named("id", arg),
@@ -111,4 +111,16 @@ func (q *Queries) ReadCounter(ctx context.Context, arg string) (ReadCounterRow, 
 	)
 
 	return row, err
+}
+
+// -- name: WidenCounterFromSelect :exec
+func (q *Queries) WidenCounterFromSelect(ctx context.Context, arg string) error {
+	_, err := q.db.ExecContext(ctx, ""+
+		"DECLARE $id AS Utf8;\n"+
+		"UPSERT INTO counters (id, value, optional_value, label, enabled)\n"+
+		"SELECT $id, 7u, CAST(NULL AS Uint32?), 'wide'u, true;",
+		sql.Named("id", arg),
+	)
+
+	return err
 }

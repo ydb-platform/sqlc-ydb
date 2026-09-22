@@ -35,7 +35,7 @@ func resolveExpression(expr parser.IExprContext, scope expressionScope) (model.T
 		name := bindName(bind)
 		typeValue, ok := scope.bindings[name]
 		if !ok {
-			return model.Type{}, fmt.Errorf("cannot resolve type of parameter $%s in expression", name)
+			return model.Type{}, fmt.Errorf("cannot resolve type of parameter $%s; add DECLARE", name)
 		}
 		return typeValue, nil
 	}

@@ -135,7 +135,7 @@ func analyzeInsertSelect(catalog model.Catalog, block queryBlock, statement *par
 			continue
 		}
 		from, to := columns[i].Type, column.Type
-		if !compatibleDMLSelectTypes(from, to) {
+		if !compatibleDMLAssignmentTypes(from, to) {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, id, fmt.Sprintf("SELECT column %q has type %s but target column %q requires %s", columns[i].Name, from.String(), name, to.String())))
 		}
 	}
@@ -164,7 +164,7 @@ func analyzeNamedDMLSelect(catalog model.Catalog, block queryBlock, stmt parser.
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, context, message))
 			continue
 		}
-		if !compatibleDMLSelectTypes(source.Type, destination.Type) {
+		if !compatibleDMLAssignmentTypes(source.Type, destination.Type) {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, context, fmt.Sprintf("source column %q has type %s but target column requires %s", name, source.Type.String(), destination.Type.String())))
 		}
 	}
@@ -174,11 +174,4 @@ func analyzeNamedDMLSelect(catalog model.Catalog, block queryBlock, stmt parser.
 		}
 	}
 	return diagnostics
-}
-
-func compatibleDMLSelectTypes(source, target model.Type) bool {
-	if source.Kind == "Null" {
-		return target.IsOptional()
-	}
-	return source.Equal(target) || target.IsOptional() && source.Equal(target.UnwrapOptional())
 }

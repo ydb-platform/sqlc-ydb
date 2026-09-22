@@ -27,7 +27,7 @@ class Querier:
         result_sets = self._execute(
             ("DECLARE $id AS Utf8;\n"
              "INSERT INTO counters (id, value, optional_value, label, enabled)\n"
-             "VALUES ($id, 0, NULL, 'pending'u, true)\n"
+             "VALUES ($id, 0, NULL, 'pending'u, (2 > 1))\n"
              "RETURNING value, optional_value, label, enabled;"),
             parameters,
         )
@@ -76,7 +76,7 @@ class Querier:
             ("DECLARE $id AS Utf8;\n"
              "UPDATE counters SET value = (value + 2) * 3 - 4,\n"
              "    optional_value = COALESCE(optional_value, 0l) + 1,\n"
-             "    label = 'done'u, enabled = false\n"
+             "    label = 'done'u, enabled = (value > 10l)\n"
              "WHERE id = $id\n"
              "RETURNING value, optional_value, label, enabled;"),
             parameters,
@@ -155,3 +155,16 @@ class Querier:
             label=row["label"],
             enabled=row["enabled"],
         )
+
+    # -- name: WidenCounterFromSelect :exec
+    def widen_counter_from_select(self, id: str) -> None:
+        parameters = {
+            "$id": _ydb.TypedValue(id, _ydb.PrimitiveType.Utf8),
+        }
+        result_sets = self._execute(
+            ("DECLARE $id AS Utf8;\n"
+             "UPSERT INTO counters (id, value, optional_value, label, enabled)\n"
+             "SELECT $id, 7u, CAST(NULL AS Uint32?), 'wide'u, true;"),
+            parameters,
+        )
+        return None

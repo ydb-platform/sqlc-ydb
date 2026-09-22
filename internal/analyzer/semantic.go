@@ -833,11 +833,17 @@ func inferUpdate(block queryBlock, statement *parser.Update_stmtContext, table *
 			clauses = append(clauses, ctx)
 		}
 	})
+	seen := map[string]bool{}
 	for _, clause := range clauses {
 		if clause.Set_target() == nil || clause.Set_target().Column_name() == nil || clause.Expr() == nil {
 			continue
 		}
 		name := identifier(clause.Set_target().Column_name().An_id().GetText())
+		if seen[name] {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, clause.Set_target(), fmt.Sprintf("duplicate UPDATE SET column %q; combine the expressions into one assignment", name)))
+			continue
+		}
+		seen[name] = true
 		column := tableColumn(table, name)
 		if column == nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, clause, fmt.Sprintf("unknown column %q", name)))

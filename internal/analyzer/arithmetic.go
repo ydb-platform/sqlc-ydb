@@ -15,18 +15,10 @@ func resolveArithmetic(root antlr.ParserRuleContext, scope expressionScope) (mod
 		return typ, true, err
 	}
 	var operation antlr.ParserRuleContext
-	descendants(root, func(node antlr.Tree) {
-		switch ctx := node.(type) {
-		case *parser.Bit_subexprContext:
-			if sameSpan(root, ctx) && len(ctx.AllAdd_subexpr()) > 1 {
-				operation = ctx
-			}
-		case *parser.Add_subexprContext:
-			if sameSpan(root, ctx) && len(ctx.AllMul_subexpr()) > 1 {
-				operation = ctx
-			}
-		}
-	})
+	switch ctx := coveringExpressionContext(root).(type) {
+	case *parser.Bit_subexprContext, *parser.Add_subexprContext:
+		operation = ctx
+	}
 	if operation == nil {
 		return model.Type{}, false, nil
 	}
@@ -37,10 +29,8 @@ func resolveArithmetic(root antlr.ParserRuleContext, scope expressionScope) (mod
 			operator = token.GetText()
 			continue
 		}
-		operand, ok := child.(antlr.ParserRuleContext)
-		if !ok {
-			continue
-		}
+		// Operator rules contain alternating rule operands and terminal operators.
+		operand := child.(antlr.ParserRuleContext)
 		typ, err := resolveScalarNode(operand, scope)
 		if err != nil {
 			return model.Type{}, true, fmt.Errorf("cannot resolve arithmetic operand: %w", err)
@@ -60,12 +50,7 @@ func resolveArithmetic(root antlr.ParserRuleContext, scope expressionScope) (mod
 // Unwrap only a single scalar expression. Tuples, lambdas and subqueries must
 // retain their own semantics rather than being treated as parentheses.
 func parenthesizedExpression(root antlr.ParserRuleContext) parser.IExprContext {
-	var paren *parser.Smart_parenthesisContext
-	descendants(root, func(node antlr.Tree) {
-		if ctx, ok := node.(*parser.Smart_parenthesisContext); ok && sameSpan(root, ctx) {
-			paren = ctx
-		}
-	})
+	paren, _ := coveringExpressionContext(root).(*parser.Smart_parenthesisContext)
 	if paren == nil || paren.COMMA() != nil || paren.Select_subexpr() == nil {
 		return nil
 	}
@@ -86,4 +71,22 @@ func parenthesizedExpression(root antlr.ParserRuleContext) parser.IExprContext {
 		return nil
 	}
 	return tuple.Expr()
+}
+
+// Follow only grammar wrappers spanning the whole expression. Empty optional
+// rules may be siblings, but operands and parenthesized bodies have smaller spans.
+func coveringExpressionContext(root antlr.ParserRuleContext) antlr.ParserRuleContext {
+	for {
+		var covering antlr.ParserRuleContext
+		for _, child := range root.GetChildren() {
+			if rule, ok := child.(antlr.ParserRuleContext); ok && sameSpan(root, rule) {
+				covering = rule
+				break
+			}
+		}
+		if covering == nil {
+			return root
+		}
+		root = covering
+	}
 }

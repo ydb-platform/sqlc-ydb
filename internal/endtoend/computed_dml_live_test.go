@@ -126,6 +126,9 @@ func TestComputedDMLRuntime(t *testing.T) {
  if err != nil || transformed.Value != 17 || transformed.OptionalValue == nil || *transformed.OptionalValue != 1 || transformed.Label == nil || *transformed.Label != "done" || transformed.Enabled { t.Fatalf("transform: %+v %v",transformed,err) }
  cleared, err := q.ClearOptional(ctx,id)
  if err != nil || cleared.Value != 17 || cleared.OptionalValue != nil || cleared.Label != nil { t.Fatalf("clear: %+v %v",cleared,err) }
+ if err := q.WidenCounterFromSelect(ctx,id); err != nil { t.Fatal(err) }
+ widened, err := q.ReadCounter(ctx,id)
+ if err != nil || widened.Value != 7 || widened.OptionalValue != nil || widened.Label == nil || *widened.Label != "wide" || !widened.Enabled { t.Fatalf("widen SELECT: %+v %v",widened,err) }
  if err := q.UpsertCounter(ctx, UpsertCounterParams{ID:id,Seed:2}); err != nil { t.Fatal(err) }
  reset, err := q.ReadCounter(ctx,id)
  if err != nil || reset.Value != 12 || reset.OptionalValue == nil || *reset.OptionalValue != 5 || reset.Label == nil || *reset.Label != "reset" || !reset.Enabled { t.Fatalf("upsert: %+v %v",reset,err) }
@@ -180,6 +183,9 @@ with ydb.Driver(config) as driver:
         assert (row.value, row.optional_value, row.label, row.enabled) == (17, 1, "done", False), row
         row = q.clear_optional("python")
         assert (row.value, row.optional_value, row.label) == (17, None, None), row
+        q.widen_counter_from_select("python")
+        row = q.read_counter("python")
+        assert (row.value, row.optional_value, row.label, row.enabled) == (7, None, "wide", True), row
         q.upsert_counter("python", 2)
         row = q.read_counter("python")
         assert (row.value, row.optional_value, row.label, row.enabled) == (12, 5, "reset", True), row
