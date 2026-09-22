@@ -158,7 +158,7 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		if stmt := insertSelect(tree.insert[0]); stmt != nil {
 			diagnostics = append(diagnostics, analyzeInsertSelect(catalog, block, tree.insert[0], target, bindings, inferred, query.Syntax)...)
 		} else {
-			diagnostics = append(diagnostics, inferInsert(block, tree.insert[0], target, inferred)...)
+			diagnostics = append(diagnostics, inferInsert(block, tree.insert[0], target, bindings, inferred)...)
 		}
 	}
 	if target != nil && len(tree.updates) == 1 {
@@ -171,7 +171,7 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		} else if tree.updates[0].ON() != nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, tree.updates[0], "UPDATE ON currently requires a SELECT source"))
 		} else {
-			diagnostics = append(diagnostics, inferUpdate(block, tree.updates[0], target, inferred)...)
+			diagnostics = append(diagnostics, inferUpdate(block, tree.updates[0], target, bindings, inferred)...)
 		}
 	}
 	if target != nil && len(tree.deletes) == 1 {
@@ -791,7 +791,7 @@ func comparisonContexts(tree queryTree) []antlr.Tree {
 	return out
 }
 
-func inferInsert(block queryBlock, statement *parser.Into_table_stmtContext, table *model.Table, inferred map[string]model.Type) []model.Diagnostic {
+func inferInsert(block queryBlock, statement *parser.Into_table_stmtContext, table *model.Table, bindings, inferred map[string]model.Type) []model.Diagnostic {
 	source := statement.Into_values_source()
 	if source == nil || source.Values_source() == nil || source.Values_source().Values_stmt() == nil || source.Pure_column_list() == nil {
 		return []model.Diagnostic{diagnosticAt(block.file, block.line-1, statement, "INSERT/UPSERT currently requires an explicit column list and VALUES rows")}
@@ -814,15 +814,15 @@ func inferInsert(block queryBlock, statement *parser.Into_table_stmtContext, tab
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, id, fmt.Sprintf("unknown column %q", id.GetText())))
 				continue
 			}
-			if !inferDirectDMLBind(expressions[i], column.Type, inferred) {
-				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, expressions[i], "DML values must be direct external parameters; use DECLARE and a $parameter"))
+			if err := validateDMLValue(expressions[i], *column, expressionScope{bindings: bindings, functions: block.functions}, inferred); err != nil {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, expressions[i], err.Error()))
 			}
 		}
 	}
 	return diagnostics
 }
 
-func inferUpdate(block queryBlock, statement *parser.Update_stmtContext, table *model.Table, inferred map[string]model.Type) []model.Diagnostic {
+func inferUpdate(block queryBlock, statement *parser.Update_stmtContext, table *model.Table, bindings, inferred map[string]model.Type) []model.Diagnostic {
 	var diagnostics []model.Diagnostic
 	if statement.Set_clause_choice() == nil || statement.Set_clause_choice().Set_clause_list() == nil {
 		return []model.Diagnostic{diagnosticAt(block.file, block.line-1, statement, "only individual UPDATE SET assignments are supported")}
@@ -833,18 +833,24 @@ func inferUpdate(block queryBlock, statement *parser.Update_stmtContext, table *
 			clauses = append(clauses, ctx)
 		}
 	})
+	seen := map[string]bool{}
 	for _, clause := range clauses {
 		if clause.Set_target() == nil || clause.Set_target().Column_name() == nil || clause.Expr() == nil {
 			continue
 		}
 		name := identifier(clause.Set_target().Column_name().An_id().GetText())
+		if seen[name] {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, clause.Set_target(), fmt.Sprintf("duplicate UPDATE SET column %q; combine the expressions into one assignment", name)))
+			continue
+		}
+		seen[name] = true
 		column := tableColumn(table, name)
 		if column == nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, clause, fmt.Sprintf("unknown column %q", name)))
 			continue
 		}
-		if !inferDirectDMLBind(clause.Expr(), column.Type, inferred) {
-			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, clause.Expr(), "DML values must be direct external parameters; use DECLARE and a $parameter"))
+		if err := validateDMLValue(clause.Expr(), *column, expressionScope{relations: []relation{{table: table, alias: table.Name}}, bindings: bindings, functions: block.functions}, inferred); err != nil {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, clause.Expr(), err.Error()))
 		}
 	}
 	return diagnostics

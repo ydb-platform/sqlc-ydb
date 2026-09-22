@@ -329,8 +329,8 @@ func TestDatabaseAnalysisPropagatesErrors(t *testing.T) {
 
 func TestDatabaseAnalysisKeepsOfflineExpressionLimits(t *testing.T) {
 	database := &fakeAnalysisDatabase{tables: map[string]model.Table{"records": databaseTestTable("name")}}
-	_, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nSELECT id + 1 AS next FROM records;"}}, Options{}, database)
-	if err == nil || !strings.Contains(err.Error(), "is not supported") || len(database.validated) != 1 {
+	_, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nSELECT id / 1 AS next FROM records;"}}, Options{}, database)
+	if err == nil || !strings.Contains(err.Error(), "unsupported arithmetic operator") || len(database.validated) != 1 {
 		t.Fatalf("unresolved expression bypassed semantic analysis: %v, calls %v", err, database.validated)
 	}
 }

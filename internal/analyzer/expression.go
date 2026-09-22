@@ -25,6 +25,9 @@ func resolveExpression(expr parser.IExprContext, scope expressionScope) (model.T
 	if literal, ok, err := literalType(expr); ok || err != nil {
 		return literal, err
 	}
+	if typ, ok, err := resolveArithmetic(expr, scope); ok {
+		return typ, err
+	}
 	if typ, ok, err := resolveMemberAccess(expr, scope); ok {
 		return typ, err
 	}
@@ -32,7 +35,7 @@ func resolveExpression(expr parser.IExprContext, scope expressionScope) (model.T
 		name := bindName(bind)
 		typeValue, ok := scope.bindings[name]
 		if !ok {
-			return model.Type{}, fmt.Errorf("cannot resolve type of parameter $%s in expression", name)
+			return model.Type{}, fmt.Errorf("cannot resolve type of parameter $%s; add DECLARE", name)
 		}
 		return typeValue, nil
 	}
@@ -130,6 +133,9 @@ func comparisonBoolType(operands []antlr.ParserRuleContext, scope expressionScop
 }
 
 func resolveScalarNode(root antlr.ParserRuleContext, scope expressionScope) (model.Type, error) {
+	if typ, ok, err := resolveArithmetic(root, scope); ok {
+		return typ, err
+	}
 	if typ, ok, err := resolveMemberAccess(root, scope); ok {
 		return typ, err
 	}
@@ -164,7 +170,7 @@ func resolveScalarNode(root antlr.ParserRuleContext, scope expressionScope) (mod
 		name := bindName(bind)
 		typeValue, ok := scope.bindings[name]
 		if !ok {
-			return model.Type{}, fmt.Errorf("cannot resolve type of parameter $%s", name)
+			return model.Type{}, fmt.Errorf("cannot resolve type of parameter $%s; add DECLARE", name)
 		}
 		return typeValue, nil
 	}

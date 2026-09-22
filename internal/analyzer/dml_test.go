@@ -58,7 +58,6 @@ func TestAnalyzeRejectsUnsupportedQueryForms(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, label Utf8, PRIMARY KEY (id));`}}
 	for _, tt := range []struct{ name, command, sql, want string }{
 		{"tuple update", ":exec", "UPDATE records SET (id, label) = ($id, $label);", "only individual UPDATE SET assignments are supported"},
-		{"computed update", ":exec", "DECLARE $label AS Utf8; UPDATE records SET label = COALESCE($label, label);", "DML values must be direct external parameters"},
 		{"exec select", ":exec", "SELECT id FROM records;", "command :exec cannot be used with a row-returning statement"},
 		{"two data statements", ":exec", "DELETE FROM records; DELETE FROM records;", "exactly one supported SELECT, INSERT/UPSERT, UPDATE, or DELETE statement; found 2"},
 		{"query ddl", ":exec", "CREATE TABLE other (id Uint64, PRIMARY KEY (id));", "exactly one supported SELECT, INSERT/UPSERT, UPDATE, or DELETE statement; found 0"},
