@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.2.2
+
 ### Added
 
 - Support INSERT/UPSERT SELECT without an explicit target column list, matching source columns to destinations by name. Named writes accept wildcard projections and computed columns with aliases, validate destination types, primary keys and required NOT NULL columns, and preserve omitted nullable columns on UPSERT. Explicit target lists retain positional matching and require explicit source projections.
