@@ -190,3 +190,68 @@ func TestCreateBooksFromStructList(t *testing.T) {
 		t.Fatal("database/sql cancelled INSERT succeeded")
 	}
 }
+
+func TestAuthorsFromNamedStructLists(t *testing.T) {
+	db := testdb.Open(t)
+	db.Apply(t, "../../../../examples/batch/schema.sql", "DROP TABLE books;", "DROP TABLE authors;")
+	nq, sqlq := native.New(db.Native), sq.New(db.SQL)
+	for _, authors := range [][]native.CreateAuthorsAuthorsItem{nil, {}} {
+		if err := nq.CreateAuthors(db.Context, authors); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, authors := range [][]sq.CreateAuthorsAuthorsItem{nil, {}} {
+		if err := sqlq.CreateAuthors(db.Context, authors); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, authors := range [][]native.UpsertAuthorsAuthorsItem{nil, {}} {
+		if err := nq.UpsertAuthors(db.Context, authors); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, authors := range [][]sq.UpsertAuthorsAuthorsItem{nil, {}} {
+		if err := sqlq.UpsertAuthors(db.Context, authors); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := nq.CreateAuthors(db.Context, []native.CreateAuthorsAuthorsItem{{AuthorID: 1, Name: "Native ☀"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := sqlq.CreateAuthors(db.Context, []sq.CreateAuthorsAuthorsItem{{AuthorID: 2, Name: "SQL"}}); err != nil {
+		t.Fatal(err)
+	}
+	for id, name := range map[uint64]string{1: "Native ☀", 2: "SQL"} {
+		row, err := nq.GetAuthor(db.Context, id)
+		if err != nil || row.AuthorID != id || row.Name != name || row.Biography != nil {
+			t.Fatalf("named insert: %#v, err=%v", row, err)
+		}
+	}
+	biography := `{"preserve":true}`
+	if _, err := nq.CreateAuthor(db.Context, native.CreateAuthorParams{AuthorID: 3, Name: "Original", Biography: &biography}); err != nil {
+		t.Fatal(err)
+	}
+	if err := nq.UpsertAuthors(db.Context, []native.UpsertAuthorsAuthorsItem{
+		{AuthorID: 1, Name: "Updated native"}, {AuthorID: 3, Name: "Preserved native"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := sqlq.UpsertAuthors(db.Context, []sq.UpsertAuthorsAuthorsItem{
+		{AuthorID: 2, Name: "Updated SQL"}, {AuthorID: 3, Name: "Preserved SQL"}, {AuthorID: 4, Name: "New SQL"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for id, name := range map[uint64]string{1: "Updated native", 2: "Updated SQL", 3: "Preserved SQL", 4: "New SQL"} {
+		row, err := sqlq.GetAuthor(db.Context, id)
+		if err != nil || row.AuthorID != id || row.Name != name {
+			t.Fatalf("named upsert: %#v, err=%v", row, err)
+		}
+		if id == 3 {
+			if row.Biography == nil || !jsonEqual(*row.Biography, biography) {
+				t.Fatalf("omitted biography was changed: %#v", row)
+			}
+		} else if row.Biography != nil {
+			t.Fatalf("expected NULL biography: %#v", row)
+		}
+	}
+}

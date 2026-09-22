@@ -62,4 +62,18 @@ struct CreateBooksBooksItem final {
     ::userver::formats::json::Value tags;
 };
 
+struct CreateAuthorsAuthorsItem final {
+    static constexpr ::userver::ydb::StructMemberNames kYdbMemberNames{};
+
+    ::userver::ydb::Utf8 name;
+    std::uint64_t author_id;
+};
+
+struct UpsertAuthorsAuthorsItem final {
+    static constexpr ::userver::ydb::StructMemberNames kYdbMemberNames{};
+
+    ::userver::ydb::Utf8 name;
+    std::uint64_t author_id;
+};
+
 }  // namespace batch::userver

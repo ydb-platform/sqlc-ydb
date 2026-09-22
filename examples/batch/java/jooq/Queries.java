@@ -215,4 +215,59 @@ public final class Queries {
             }
         });
     }
+
+    // -- name: CreateAuthors :exec
+    public void createAuthors(java.util.List<CreateAuthorsAuthorsItem> authors) {
+        dsl.connection(_connection -> {
+            try (var _prepared = _connection.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+                DECLARE $authors AS List<Struct<name: Utf8, author_id: Uint64,>>;
+                INSERT INTO\s\
+                """ + dsl.render(AUTHORS) + """
+                 SELECT a.`name` AS `name`, `a`.`author_id` AS `author_id`, NULL AS biography
+                FROM AS_TABLE($authors) AS a;\
+                """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+                _prepared.setObject("authors", tech.ydb.table.values.ListType.of(
+                    tech.ydb.table.values.StructType.of(java.util.Map.ofEntries(
+                        java.util.Map.entry("name", tech.ydb.table.values.PrimitiveType.Text),
+                        java.util.Map.entry("author_id", tech.ydb.table.values.PrimitiveType.Uint64)
+                    ))
+                ).newValue(
+                    authors.stream()
+                        .map(_batchItem -> tech.ydb.table.values.StructValue.of(java.util.Map.ofEntries(
+                            java.util.Map.entry("name", PrimitiveValue.newText(_batchItem.name())),
+                            java.util.Map.entry("author_id", PrimitiveValue.newUint64(_batchItem.authorId()))
+                        )))
+                        .toList()
+                ));
+                _prepared.execute();
+            }
+        });
+    }
+
+    // -- name: UpsertAuthors :exec
+    public void upsertAuthors(java.util.List<UpsertAuthorsAuthorsItem> authors) {
+        dsl.connection(_connection -> {
+            try (var _prepared = _connection.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+                DECLARE $authors AS List<Struct<name: Utf8, author_id: Uint64,>>;
+                UPSERT INTO\s\
+                """ + dsl.render(AUTHORS) + """
+                 SELECT `name`, `author_id` FROM AS_TABLE($authors);\
+                """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+                _prepared.setObject("authors", tech.ydb.table.values.ListType.of(
+                    tech.ydb.table.values.StructType.of(java.util.Map.ofEntries(
+                        java.util.Map.entry("name", tech.ydb.table.values.PrimitiveType.Text),
+                        java.util.Map.entry("author_id", tech.ydb.table.values.PrimitiveType.Uint64)
+                    ))
+                ).newValue(
+                    authors.stream()
+                        .map(_batchItem -> tech.ydb.table.values.StructValue.of(java.util.Map.ofEntries(
+                            java.util.Map.entry("name", PrimitiveValue.newText(_batchItem.name())),
+                            java.util.Map.entry("author_id", PrimitiveValue.newUint64(_batchItem.authorId()))
+                        )))
+                        .toList()
+                ));
+                _prepared.execute();
+            }
+        });
+    }
 }

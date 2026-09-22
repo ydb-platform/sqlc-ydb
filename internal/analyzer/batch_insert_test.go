@@ -86,7 +86,6 @@ func TestBatchStructRejectsDynamicFieldName(t *testing.T) {
 func TestBatchInsertSourceDiagnostics(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, label Json, PRIMARY KEY(id));`}}
 	for _, tc := range []struct{ name, statement, want string }{
-		{"missing target list", "INSERT INTO records SELECT id,label FROM AS_TABLE($books)", "explicit target column list"},
 		{"union", "INSERT INTO records (id,label) SELECT id,label FROM AS_TABLE($books) UNION ALL SELECT id,label FROM AS_TABLE($books)", "UNION is not yet supported"},
 		{"unknown source", "INSERT INTO records (id,label) SELECT id,label FROM missing_table", "unknown table"},
 		{"other function", "INSERT INTO records (id,label) SELECT id,label FROM OtherTable($books)", "dynamic table references"},
@@ -117,5 +116,51 @@ func TestBatchInsertSourceInfersFilterParameters(t *testing.T) {
 	}
 	if params["books"] != "List" || params["minimum"] != "Uint64" || params["count"] != "Uint64" {
 		t.Fatalf("parameters: %v", params)
+	}
+}
+
+func TestPositionalInsertSelectRequiredColumns(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (
+    id Serial,
+    tenant Uint64 NOT NULL,
+    label Utf8 NOT NULL,
+    note Utf8,
+    PRIMARY KEY(tenant, id)
+);`}}
+	for _, verb := range []string{"INSERT", "UPSERT"} {
+		for _, tt := range []struct{ name, statement, want string }{
+			{"missing primary key", "(label) SELECT 'hello'u", `missing primary key column "tenant"`},
+			{"missing required column", "(tenant) SELECT 1ul", `missing required column "label"`},
+			{"omit generated key and optional column", "(label, tenant) SELECT 'hello'u AS tenant, 1ul AS label", ""},
+			{"explicit generated key", "(label, id, tenant) SELECT 'hello'u AS tenant, 7 AS label, 1ul AS id", ""},
+			{"explicit null optional column", "(tenant, label, note) SELECT 1ul, 'hello'u, NULL", ""},
+		} {
+			t.Run(verb+"/"+tt.name, func(t *testing.T) {
+				sql := "-- name: Write :exec\n" + verb + " INTO records " + tt.statement + ";"
+				got, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
+				if tt.want != "" {
+					if err == nil || !strings.Contains(err.Error(), tt.want) {
+						t.Fatalf("error = %v, want %q", err, tt.want)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got.Queries[0].SQL != sql {
+					t.Fatalf("positional mapping changed: %s", got.Queries[0].SQL)
+				}
+			})
+		}
+	}
+}
+
+func TestPositionalInsertSelectRequiresNullablePrimaryKey(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64, label Utf8 NOT NULL, PRIMARY KEY(id));"}}
+	for _, verb := range []string{"INSERT", "UPSERT"} {
+		_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Write :exec\n" + verb + " INTO records (label) SELECT 'hello'u;"}})
+		if err == nil || !strings.Contains(err.Error(), `missing primary key column "id"`) {
+			t.Fatalf("%s error = %v, want missing nullable primary key diagnostic", verb, err)
+		}
 	}
 }

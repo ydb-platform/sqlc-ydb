@@ -35,3 +35,13 @@ class CreateBooksBooksItem:
     year: int
     available: datetime
     tags: str
+
+@dataclass
+class CreateAuthorsAuthorsItem:
+    name: str
+    author_id: int
+
+@dataclass
+class UpsertAuthorsAuthorsItem:
+    name: str
+    author_id: int

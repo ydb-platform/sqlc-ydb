@@ -281,3 +281,60 @@ class Querier:
         )
         result.close()
         return None
+
+    # -- name: CreateAuthors :exec
+    def create_authors(self, authors: list[_models.CreateAuthorsAuthorsItem]) -> None:
+        parameters = {
+            "authors": (
+                [
+                    {
+                        "name": item.name,
+                        "author_id": item.author_id,
+                    }
+                    for item in authors
+                ],
+                _ydb.ListType(
+                    _ydb.StructType()
+                    .add_member("name", _ydb.PrimitiveType.Utf8)
+                    .add_member("author_id", _ydb.PrimitiveType.Uint64)
+                ),
+            ),
+        }
+        result = self._connection.execute(
+            _text(
+                ("DECLARE $authors AS List<Struct<name\\: Utf8, author_id\\: Uint64,>>;\n"
+                 "INSERT INTO authors SELECT a.`name` AS `name`, `a`.`author_id` AS `author_id`, NULL AS biography\n"
+                 "FROM AS_TABLE(:authors) AS a;")
+            ),
+            parameters,
+        )
+        result.close()
+        return None
+
+    # -- name: UpsertAuthors :exec
+    def upsert_authors(self, authors: list[_models.UpsertAuthorsAuthorsItem]) -> None:
+        parameters = {
+            "authors": (
+                [
+                    {
+                        "name": item.name,
+                        "author_id": item.author_id,
+                    }
+                    for item in authors
+                ],
+                _ydb.ListType(
+                    _ydb.StructType()
+                    .add_member("name", _ydb.PrimitiveType.Utf8)
+                    .add_member("author_id", _ydb.PrimitiveType.Uint64)
+                ),
+            ),
+        }
+        result = self._connection.execute(
+            _text(
+                ("DECLARE $authors AS List<Struct<name\\: Utf8, author_id\\: Uint64,>>;\n"
+                 "UPSERT INTO authors SELECT `name`, `author_id` FROM AS_TABLE(:authors);")
+            ),
+            parameters,
+        )
+        result.close()
+        return None

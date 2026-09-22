@@ -92,3 +92,13 @@ public sealed record CreateBooksBooksItem(
     DateTime Available,
     string Tags
 );
+
+public sealed record CreateAuthorsAuthorsItem(
+    string Name,
+    ulong AuthorID
+);
+
+public sealed record UpsertAuthorsAuthorsItem(
+    string Name,
+    ulong AuthorID
+);

@@ -41,6 +41,7 @@ type ListRecordsRow struct {
 	Attributes string
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+	Note       *string
 }
 
 type FilterRecordsRow struct {
@@ -82,6 +83,67 @@ type GetRecordRow struct {
 	UpdatedAt  time.Time
 }
 
+type InsertNamedRecordsRowsItem struct {
+	Payload    []byte
+	Attributes string
+	GroupID    string
+	RecordID   string
+	Note       string
+}
+
+type InsertNamedRecordsParams struct {
+	OwnerID   uint64
+	Rows      []InsertNamedRecordsRowsItem
+	CreatedAt time.Time
+}
+
+type UpsertNamedRecordsRowsItem struct {
+	Body       []byte
+	Key        string
+	GroupID    string
+	Attributes string
+}
+
+type UpsertNamedRecordsParams struct {
+	OwnerHash uint64
+	OwnerID   uint64
+	CreatedAt time.Time
+	Rows      []UpsertNamedRecordsRowsItem
+}
+
+type UpsertWildcardRecordsRowsItem struct {
+	Payload    []byte
+	RecordID   string
+	OwnerHash  uint64
+	GroupID    string
+	OwnerID    uint64
+	Attributes string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+type ClearNamedRecordNoteRow struct {
+	RecordID string
+	Note     *string
+}
+
+type ClearNamedRecordNoteParams struct {
+	OwnerHash uint64
+	RecordID  string
+}
+
+type UpsertPositionalRecordRow struct {
+	RecordID string
+	Payload  []byte
+	Note     *string
+}
+
+type UpsertPositionalRecordParams struct {
+	OwnerHash uint64
+	RecordID  string
+	Payload   []byte
+}
+
 type Querier interface {
 	InsertRecords(ctx context.Context, arg InsertRecordsParams) error
 	UpdateRecords(ctx context.Context, arg UpdateRecordsParams) error
@@ -89,4 +151,9 @@ type Querier interface {
 	FilterRecords(ctx context.Context, arg FilterRecordsParams) ([]FilterRecordsRow, error)
 	DeleteRecords(ctx context.Context, arg DeleteRecordsParams) error
 	GetRecord(ctx context.Context, arg GetRecordKey) (GetRecordRow, error)
+	InsertNamedRecords(ctx context.Context, arg InsertNamedRecordsParams) error
+	UpsertNamedRecords(ctx context.Context, arg UpsertNamedRecordsParams) error
+	UpsertWildcardRecords(ctx context.Context, arg []UpsertWildcardRecordsRowsItem) error
+	ClearNamedRecordNote(ctx context.Context, arg ClearNamedRecordNoteParams) (ClearNamedRecordNoteRow, error)
+	UpsertPositionalRecord(ctx context.Context, arg UpsertPositionalRecordParams) (UpsertPositionalRecordRow, error)
 }

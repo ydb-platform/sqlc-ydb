@@ -35,6 +35,8 @@ public:
     void UpdateBook(const std::string& title, const std::string& tags, std::uint64_t book_id) const;
     std::optional<GetBiographyRow> GetBiography(std::uint64_t author_id) const;
     void CreateBooks(const std::vector<CreateBooksBooksItem>& books) const;
+    void CreateAuthors(const std::vector<CreateAuthorsAuthorsItem>& authors) const;
+    void UpsertAuthors(const std::vector<UpsertAuthorsAuthorsItem>& authors) const;
 
 private:
     NYdb::NQuery::TQueryClient* client_;

@@ -74,3 +74,13 @@ type CreateBooksBooksItem struct {
 	Available time.Time
 	Tags      string
 }
+
+type CreateAuthorsAuthorsItem struct {
+	Name     string
+	AuthorID uint64
+}
+
+type UpsertAuthorsAuthorsItem struct {
+	Name     string
+	AuthorID uint64
+}

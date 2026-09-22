@@ -45,6 +45,38 @@ fn create_books_books_item_type() -> ydb::Value {
     ])
 }
 
+impl From<CreateAuthorsAuthorsItem> for ydb::Value {
+    fn from(item: CreateAuthorsAuthorsItem) -> Self {
+        ydb::Value::struct_from_fields(vec![
+            ("name".to_string(), item.name.into()),
+            ("author_id".to_string(), item.author_id.into()),
+        ])
+    }
+}
+
+fn create_authors_authors_item_type() -> ydb::Value {
+    ydb::Value::struct_from_fields(vec![
+        ("name".to_string(), <String>::default().into()),
+        ("author_id".to_string(), <u64>::default().into()),
+    ])
+}
+
+impl From<UpsertAuthorsAuthorsItem> for ydb::Value {
+    fn from(item: UpsertAuthorsAuthorsItem) -> Self {
+        ydb::Value::struct_from_fields(vec![
+            ("name".to_string(), item.name.into()),
+            ("author_id".to_string(), item.author_id.into()),
+        ])
+    }
+}
+
+fn upsert_authors_authors_item_type() -> ydb::Value {
+    ydb::Value::struct_from_fields(vec![
+        ("name".to_string(), <String>::default().into()),
+        ("author_id".to_string(), <u64>::default().into()),
+    ])
+}
+
 pub struct Queries<'a, E: ydb::QueryExecutor> {
     client: &'a mut E,
 }
@@ -287,6 +319,57 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
                 "FROM AS_TABLE($books);",
             ))
             .param("$books", books)
+            .await
+    }
+
+    // -- name: CreateAuthors :exec
+    #[builder(on(String, into))]
+    pub async fn create_authors(
+        &mut self,
+        authors: impl IntoIterator<Item = impl std::borrow::Borrow<CreateAuthorsAuthorsItem>>,
+    ) -> ydb::YdbResult<()> {
+        let authors = {
+            let items = authors.into_iter();
+            let mut values = Vec::new();
+            for item in items {
+                let item = std::borrow::Borrow::<CreateAuthorsAuthorsItem>::borrow(&item).clone();
+                values.push(item.into());
+            }
+            let item_type = create_authors_authors_item_type().into();
+            ydb::Value::list_from(item_type, values)?
+        };
+        self.client
+            .exec(concat!(
+                "DECLARE $authors AS List<Struct<name: Utf8, author_id: Uint64,>>;\n",
+                "INSERT INTO authors SELECT a.`name` AS `name`, `a`.`author_id` AS `author_id`, NULL AS biography\n",
+                "FROM AS_TABLE($authors) AS a;",
+            ))
+            .param("$authors", authors)
+            .await
+    }
+
+    // -- name: UpsertAuthors :exec
+    #[builder(on(String, into))]
+    pub async fn upsert_authors(
+        &mut self,
+        authors: impl IntoIterator<Item = impl std::borrow::Borrow<UpsertAuthorsAuthorsItem>>,
+    ) -> ydb::YdbResult<()> {
+        let authors = {
+            let items = authors.into_iter();
+            let mut values = Vec::new();
+            for item in items {
+                let item = std::borrow::Borrow::<UpsertAuthorsAuthorsItem>::borrow(&item).clone();
+                values.push(item.into());
+            }
+            let item_type = upsert_authors_authors_item_type().into();
+            ydb::Value::list_from(item_type, values)?
+        };
+        self.client
+            .exec(concat!(
+                "DECLARE $authors AS List<Struct<name: Utf8, author_id: Uint64,>>;\n",
+                "UPSERT INTO authors SELECT `name`, `author_id` FROM AS_TABLE($authors);",
+            ))
+            .param("$authors", authors)
             .await
     }
 }

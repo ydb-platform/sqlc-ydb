@@ -22,9 +22,9 @@ var typedDMLSchema = []model.Source{{Name: "schema.sql", Text: `CREATE TABLE rec
 func TestInsertSelectAcceptsUnaliasedComputedColumns(t *testing.T) {
 	query := `-- name: InsertRecords :exec
 DECLARE $owner_id AS Uint64;
-DECLARE $rows AS List<Struct<record_id:Utf8,payload:String>>;
-INSERT INTO records (owner_hash, record_id, owner_id, payload)
-SELECT CAST($owner_id AS Uint64), r.record_id, $owner_id, r.payload
+DECLARE $rows AS List<Struct<record_id:Utf8,payload:String,group_id:Utf8,attributes:Json,created_at:Timestamp,updated_at:Timestamp>>;
+INSERT INTO records (owner_hash, record_id, owner_id, payload, group_id, attributes, created_at, updated_at)
+SELECT CAST($owner_id AS Uint64), r.record_id, $owner_id, r.payload, r.group_id, r.attributes, r.created_at, r.updated_at
 FROM AS_TABLE($rows) AS r;`
 	if _, err := Analyze(typedDMLSchema, []model.Source{{Name: "query.sql", Text: query}}); err != nil {
 		t.Fatal(err)
@@ -42,13 +42,14 @@ FROM records WHERE owner_hash = $owner_hash;`
 }
 
 func TestInsertAndUpsertExplicitTargetsArePositional(t *testing.T) {
+	remaining := ", owner_id, group_id, payload, attributes, created_at, updated_at"
 	for _, target := range []string{"owner_hash, record_id", "record_id, owner_hash"} {
 		for _, verb := range []string{"INSERT", "UPSERT"} {
 			projection := "owner_hash AS record_id, record_id AS owner_hash"
 			if strings.HasPrefix(target, "record_id") {
 				projection = "record_id AS owner_hash, owner_hash AS record_id"
 			}
-			query := "-- name: Write :exec\n" + verb + " INTO records (" + target + ") SELECT " + projection + " FROM records;"
+			query := "-- name: Write :exec\n" + verb + " INTO records (" + target + remaining + ") SELECT " + projection + remaining + " FROM records;"
 			if _, err := Analyze(typedDMLSchema, []model.Source{{Name: "query.sql", Text: query}}); err != nil {
 				t.Fatalf("%s (%s): %v", verb, target, err)
 			}

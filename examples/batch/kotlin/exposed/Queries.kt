@@ -222,4 +222,51 @@ class Queries(private val client: org.jetbrains.exposed.v1.jdbc.JdbcTransaction)
             _prepared.execute()
         }
     }
+
+    // -- name: CreateAuthors :exec
+    fun createAuthors(authors: List<CreateAuthorsAuthorsItem>): Unit {
+        val _connection = client.connection.connection as java.sql.Connection
+        _connection.unwrap(tech.ydb.jdbc.YdbConnection::class.java).prepareStatement(
+            "DECLARE \$authors AS List<Struct<name: Utf8, author_id: Uint64,>>;\n" +
+            "INSERT INTO authors SELECT a.`name` AS `name`, `a`.`author_id` AS `author_id`, NULL AS biography\n" +
+            "FROM AS_TABLE(\$authors) AS a;", tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY).use { _prepared ->
+            _prepared.setObject("authors", tech.ydb.table.values.ListType.of(
+                tech.ydb.table.values.StructType.of(mapOf(
+                    "name" to tech.ydb.table.values.PrimitiveType.Text,
+                    "author_id" to tech.ydb.table.values.PrimitiveType.Uint64
+                ))
+            ).newValue(
+                authors.map { _batchItem ->
+                    tech.ydb.table.values.StructValue.of(mapOf(
+                        "name" to PrimitiveValue.newText(_batchItem.name),
+                        "author_id" to PrimitiveValue.newUint64(_batchItem.authorId)
+                    ))
+                }
+            ))
+            _prepared.execute()
+        }
+    }
+
+    // -- name: UpsertAuthors :exec
+    fun upsertAuthors(authors: List<UpsertAuthorsAuthorsItem>): Unit {
+        val _connection = client.connection.connection as java.sql.Connection
+        _connection.unwrap(tech.ydb.jdbc.YdbConnection::class.java).prepareStatement(
+            "DECLARE \$authors AS List<Struct<name: Utf8, author_id: Uint64,>>;\n" +
+            "UPSERT INTO authors SELECT `name`, `author_id` FROM AS_TABLE(\$authors);", tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY).use { _prepared ->
+            _prepared.setObject("authors", tech.ydb.table.values.ListType.of(
+                tech.ydb.table.values.StructType.of(mapOf(
+                    "name" to tech.ydb.table.values.PrimitiveType.Text,
+                    "author_id" to tech.ydb.table.values.PrimitiveType.Uint64
+                ))
+            ).newValue(
+                authors.map { _batchItem ->
+                    tech.ydb.table.values.StructValue.of(mapOf(
+                        "name" to PrimitiveValue.newText(_batchItem.name),
+                        "author_id" to PrimitiveValue.newUint64(_batchItem.authorId)
+                    ))
+                }
+            ))
+            _prepared.execute()
+        }
+    }
 }

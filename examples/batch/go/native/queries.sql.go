@@ -348,3 +348,72 @@ func bindCreateBooksBooksItem(values []CreateBooksBooksItem) types.Value {
 	}
 	return types.ListValue(items...)
 }
+
+// -- name: CreateAuthors :exec
+func (q *Queries) CreateAuthors(ctx context.Context, arg []CreateAuthorsAuthorsItem, opts ...query.ExecuteOption) error {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$authors").Any(bindCreateAuthorsAuthorsItem(arg))
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	err := q.db.Exec(ctx, ""+
+		"DECLARE $authors AS List<Struct<name: Utf8, author_id: Uint64,>>;\n"+
+		"INSERT INTO authors SELECT a.`name` AS `name`, `a`.`author_id` AS `author_id`, NULL AS biography\n"+
+		"FROM AS_TABLE($authors) AS a;",
+		callOptions...,
+	)
+
+	return xerrors.WithStackTrace(err)
+}
+
+func bindCreateAuthorsAuthorsItem(values []CreateAuthorsAuthorsItem) types.Value {
+	if len(values) == 0 {
+		return types.ZeroValue(types.List(types.Struct(
+			types.StructField("name", types.TypeText),
+			types.StructField("author_id", types.TypeUint64),
+		)))
+	}
+	items := make([]types.Value, len(values))
+	for i, item := range values {
+		items[i] = types.StructValue(
+			types.StructFieldValue("name", types.TextValue(item.Name)),
+			types.StructFieldValue("author_id", types.Uint64Value(item.AuthorID)),
+		)
+	}
+	return types.ListValue(items...)
+}
+
+// -- name: UpsertAuthors :exec
+func (q *Queries) UpsertAuthors(ctx context.Context, arg []UpsertAuthorsAuthorsItem, opts ...query.ExecuteOption) error {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$authors").Any(bindUpsertAuthorsAuthorsItem(arg))
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	err := q.db.Exec(ctx, ""+
+		"DECLARE $authors AS List<Struct<name: Utf8, author_id: Uint64,>>;\n"+
+		"UPSERT INTO authors SELECT `name`, `author_id` FROM AS_TABLE($authors);",
+		callOptions...,
+	)
+
+	return xerrors.WithStackTrace(err)
+}
+
+func bindUpsertAuthorsAuthorsItem(values []UpsertAuthorsAuthorsItem) types.Value {
+	if len(values) == 0 {
+		return types.ZeroValue(types.List(types.Struct(
+			types.StructField("name", types.TypeText),
+			types.StructField("author_id", types.TypeUint64),
+		)))
+	}
+	items := make([]types.Value, len(values))
+	for i, item := range values {
+		items[i] = types.StructValue(
+			types.StructFieldValue("name", types.TextValue(item.Name)),
+			types.StructFieldValue("author_id", types.Uint64Value(item.AuthorID)),
+		)
+	}
+	return types.ListValue(items...)
+}

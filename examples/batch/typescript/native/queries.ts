@@ -88,6 +88,16 @@ export type CreateBooksBooksItem = {
   readonly tags: string;
 };
 
+export type CreateAuthorsAuthorsItem = {
+  readonly name: string;
+  readonly authorId: bigint;
+};
+
+export type UpsertAuthorsAuthorsItem = {
+  readonly name: string;
+  readonly authorId: bigint;
+};
+
 export class Queries {
   readonly #sql: SQL;
 
@@ -285,6 +295,65 @@ export class Queries {
             new Int32Type(),
             new TimestampType(),
             new JsonType(),
+          ],
+        ),
+      ));
+    configure?.(stmt);
+    await stmt;
+  }
+
+  // -- name: CreateAuthors :exec
+  async createAuthors(authors: ReadonlyArray<CreateAuthorsAuthorsItem>, configure?: ConfigureQuery): Promise<void> {
+    const stmt = this.#sql(
+      "DECLARE $authors AS List<Struct<name: Utf8, author_id: Uint64,>>;\n" +
+      "INSERT INTO authors SELECT a.`name` AS `name`, `a`.`author_id` AS `author_id`, NULL AS biography\n" +
+      "FROM AS_TABLE($authors) AS a;"
+    );
+    // Keep explicit DECLARE statements; the SDK otherwise prepends duplicates.
+    Object.defineProperty(stmt, "text", { value: stmt.text, writable: false });
+    stmt
+      .parameter("authors", structList(
+        authors.map(item => new Struct({
+          ["name"]: new Utf8(item.name),
+          ["author_id"]: new Uint64(item.authorId),
+        })),
+        new StructType(
+          [
+            "name",
+            "author_id",
+          ],
+          [
+            new Utf8Type(),
+            new Uint64Type(),
+          ],
+        ),
+      ));
+    configure?.(stmt);
+    await stmt;
+  }
+
+  // -- name: UpsertAuthors :exec
+  async upsertAuthors(authors: ReadonlyArray<UpsertAuthorsAuthorsItem>, configure?: ConfigureQuery): Promise<void> {
+    const stmt = this.#sql(
+      "DECLARE $authors AS List<Struct<name: Utf8, author_id: Uint64,>>;\n" +
+      "UPSERT INTO authors SELECT `name`, `author_id` FROM AS_TABLE($authors);"
+    );
+    // Keep explicit DECLARE statements; the SDK otherwise prepends duplicates.
+    Object.defineProperty(stmt, "text", { value: stmt.text, writable: false });
+    stmt
+      .parameter("authors", structList(
+        authors.map(item => new Struct({
+          ["name"]: new Utf8(item.name),
+          ["author_id"]: new Uint64(item.authorId),
+        })),
+        new StructType(
+          [
+            "name",
+            "author_id",
+          ],
+          [
+            new Utf8Type(),
+            new Uint64Type(),
           ],
         ),
       ));
