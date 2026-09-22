@@ -150,6 +150,7 @@ type Command string
 const (
 	One      Command = ":one"
 	Many     Command = ":many"
+	Each     Command = ":each"
 	Exec     Command = ":exec"
 	ExecRows Command = ":execrows"
 )

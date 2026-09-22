@@ -1,0 +1,22 @@
+version: "2"
+sql:
+  - engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      go:
+        package: devices
+        out: db
+        sql_package: database/sql
+        emit_interface: true
+        emit_json_tags: true
+  - engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      go:
+        package: devices
+        out: db/native
+        sql_package: ydb
+        emit_interface: true
+        emit_json_tags: true

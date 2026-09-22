@@ -1,0 +1,227 @@
+package db
+
+import (
+	"context"
+	"errors"
+	"io"
+	"runtime"
+	"strings"
+	"testing"
+
+	"github.com/ydb-platform/ydb-go-sdk/v3/query"
+)
+
+type failure struct{}
+
+func (*failure) Error() string { return "test failure" }
+
+type stream struct {
+	query.Result
+	query.ResultSet
+	count, read, sets, closed                                   int
+	executeErr, firstErr, nextErr, scanErr, finishErr, closeErr error
+	extra, canceledOnClose                                      bool
+}
+
+func (s *stream) Query(context.Context, string, ...query.ExecuteOption) (query.Result, error) {
+	return s, s.executeErr
+}
+func (s *stream) Exec(context.Context, string, ...query.ExecuteOption) error {
+	panic("unexpected Exec")
+}
+func (s *stream) QueryRow(context.Context, string, ...query.ExecuteOption) (query.Row, error) {
+	panic("unexpected QueryRow")
+}
+func (s *stream) NextResultSet(ctx context.Context) (query.ResultSet, error) {
+	s.sets++
+	if s.sets == 1 {
+		if s.firstErr != nil {
+			return nil, s.firstErr
+		}
+		return s, nil
+	}
+	if s.finishErr != nil {
+		return nil, s.finishErr
+	}
+	if s.extra {
+		return s, nil
+	}
+	return nil, io.EOF
+}
+func (s *stream) NextRow(context.Context) (query.Row, error) {
+	if s.read == s.count {
+		if s.nextErr != nil {
+			return nil, s.nextErr
+		}
+		return nil, io.EOF
+	}
+	s.read++
+	return testRow{s: s}, nil
+}
+func (s *stream) Close(ctx context.Context) error {
+	s.closed++
+	s.canceledOnClose = ctx.Err() != nil
+	return s.closeErr
+}
+
+type testRow struct {
+	query.Row
+	s *stream
+}
+
+func (r testRow) ScanNamed(dst ...query.NamedDestination) error {
+	if r.s.scanErr != nil {
+		return r.s.scanErr
+	}
+	*dst[0].Ref().(*uint64) = uint64(r.s.read)
+	if r.s.read%2 == 1 {
+		name := strings.Repeat("x", 64<<10)
+		*dst[1].Ref().(**string) = &name
+	}
+	return nil
+}
+func TestSequentialBoundedConsumption(t *testing.T) {
+	s := &stream{count: 4096}
+	q := New(s)
+	runtime.GC()
+	var before runtime.MemStats
+	runtime.ReadMemStats(&before)
+	calls := 0
+	err := q.Visit(context.Background(), func(row VisitRow) error {
+		calls++
+		if s.read != calls || row.ID != uint64(calls) || (row.Name == nil) != (calls%2 == 0) {
+			t.Fatalf("read ahead or incorrect row: %d %+v", s.read, row)
+		}
+		if calls%512 == 0 {
+			runtime.GC()
+			var now runtime.MemStats
+			runtime.ReadMemStats(&now)
+			if now.HeapAlloc > before.HeapAlloc+16<<20 {
+				t.Fatalf("retained result rows: %d bytes", now.HeapAlloc-before.HeapAlloc)
+			}
+		}
+		return nil
+	})
+	if err != nil || calls != 4096 || s.closed != 1 || s.canceledOnClose {
+		t.Fatalf("calls=%d close=%d canceled=%v err=%v", calls, s.closed, s.canceledOnClose, err)
+	}
+}
+func TestFailuresAndCleanup(t *testing.T) {
+	original := &failure{}
+	cleanup := errors.New("cleanup")
+	for _, tc := range []struct {
+		name   string
+		setup  func(*stream)
+		want   error
+		calls  int
+		closed int
+	}{
+		{"empty", func(s *stream) { s.count = 0 }, nil, 0, 1},
+		{"execute", func(s *stream) { s.executeErr = original }, original, 0, 0},
+		{"no sets", func(s *stream) { s.firstErr = io.EOF }, query.ErrNoResultSets, 0, 1},
+		{"first", func(s *stream) { s.firstErr = original }, original, 0, 1},
+		{"iteration", func(s *stream) { s.nextErr = original }, original, 2, 1},
+		{"decode", func(s *stream) { s.scanErr = original }, original, 0, 1},
+		{"finish", func(s *stream) { s.finishErr = original }, original, 2, 1},
+		{"extra", func(s *stream) { s.extra = true }, query.ErrMoreThanOneResultSet, 2, 1},
+		{"close", func(s *stream) { s.closeErr = original }, original, 2, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &stream{count: 2}
+			tc.setup(s)
+			calls := 0
+			err := New(s).Visit(context.Background(), func(VisitRow) error { calls++; return nil })
+			if !errors.Is(err, tc.want) || calls != tc.calls || s.closed != tc.closed {
+				t.Fatalf("calls=%d closed=%d err=%v", calls, s.closed, err)
+			}
+			if err != nil && !strings.Contains(err.Error(), "(*Queries).Visit") {
+				t.Fatalf("missing method stack: %v", err)
+			}
+		})
+	}
+	s := &stream{count: 2, closeErr: cleanup}
+	err := New(s).Visit(context.Background(), func(VisitRow) error { return original })
+	var typed *failure
+	if !errors.Is(err, original) || !errors.Is(err, cleanup) || !errors.As(err, &typed) || s.read != 1 || s.closed != 1 || !s.canceledOnClose {
+		t.Fatalf("callback failure: %v %+v", err, s)
+	}
+}
+func TestCancellationNilAndPanic(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	s := &stream{count: 2}
+	err := New(s).Visit(ctx, func(VisitRow) error { cancel(); return nil })
+	if !errors.Is(err, context.Canceled) || s.read != 1 || s.closed != 1 {
+		t.Fatalf("cancel: %v %+v", err, s)
+	}
+	if err := New(nil).Visit(ctx, func(VisitRow) error { return nil }); !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+	if err := New(nil).Visit(context.Background(), nil); err == nil {
+		t.Fatal("nil callback accepted")
+	}
+	s = &stream{count: 2}
+	sentinel := &failure{}
+	func() {
+		defer func() {
+			if recover() != sentinel {
+				t.Fatal("panic changed")
+			}
+		}()
+		_ = New(s).Visit(context.Background(), func(VisitRow) error { panic(sentinel) })
+	}()
+	if s.read != 1 || s.closed != 1 || !s.canceledOnClose {
+		t.Fatalf("panic leaked result: %+v", s)
+	}
+}
+
+// The generated method must use exactly the executor supplied to New, leaving
+// materialization, session acquisition and transaction boundaries with callers.
+type client struct {
+	query.Client
+	s *stream
+}
+
+func (c client) Query(ctx context.Context, sql string, opts ...query.ExecuteOption) (query.Result, error) {
+	return c.s.Query(ctx, sql, opts...)
+}
+func (c client) Do(context.Context, query.Operation, ...query.DoOption) error {
+	panic("unexpected session acquisition")
+}
+
+type session struct {
+	query.Session
+	s *stream
+}
+
+func (s session) Query(ctx context.Context, sql string, opts ...query.ExecuteOption) (query.Result, error) {
+	return s.s.Query(ctx, sql, opts...)
+}
+
+type transaction struct {
+	query.TxActor
+	s *stream
+}
+
+func (tx transaction) Query(ctx context.Context, sql string, opts ...query.ExecuteOption) (query.Result, error) {
+	return tx.s.Query(ctx, sql, opts...)
+}
+func TestUsesSuppliedExecutor(t *testing.T) {
+	for _, constructor := range []func(*stream) DBTX{
+		func(s *stream) DBTX { return client{s: s} },
+		func(s *stream) DBTX { return session{s: s} },
+		func(s *stream) DBTX { return transaction{s: s} },
+	} {
+		for _, callbackErr := range []error{nil, &failure{}} {
+			s := &stream{count: 3}
+			calls := 0
+			err := New(constructor(s)).Visit(context.Background(), func(VisitRow) error { calls++; return callbackErr })
+			wantCalls := 3
+			if callbackErr != nil {
+				wantCalls = 1
+			}
+			if !errors.Is(err, callbackErr) || calls != wantCalls || s.closed != 1 {
+				t.Fatalf("err=%v calls=%d closed=%d", err, calls, s.closed)
+			}
+		}
+	}
+}

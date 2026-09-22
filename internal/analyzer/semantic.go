@@ -83,6 +83,10 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		return query, []model.Diagnostic{diagnosticAt(block.file, block.line-1, parsed.tree, fmt.Sprintf("query must contain exactly one supported SELECT, INSERT/UPSERT, UPDATE, or DELETE statement; found %d", dataStatements))}
 	}
 
+	if block.command == model.Each && selectStatement == nil {
+		return query, []model.Diagnostic{{Position: query.Source, Message: ":each requires a SELECT; use :one or :many for DML RETURNING"}}
+	}
+
 	declared, declarationPositions, declarationDiagnostics := declarations(block, tree)
 	for _, declaration := range tree.declares {
 		name := bindName(declaration.Bind_parameter())
@@ -226,7 +230,7 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	}
 	returnsRows := len(resultColumns) != 0
 	if len(diagnostics) == 0 {
-		if (block.command == model.One || block.command == model.Many) && !returnsRows {
+		if (block.command == model.One || block.command == model.Many || block.command == model.Each) && !returnsRows {
 			diagnostics = append(diagnostics, model.Diagnostic{Position: query.Source, Message: fmt.Sprintf("command %s requires a result set", block.command)})
 		}
 		if (block.command == model.Exec || block.command == model.ExecRows) && returnsRows {

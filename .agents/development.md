@@ -165,3 +165,5 @@ YDB_CONNECTION_STRING=grpc://localhost:2136/local composer --working-dir=tests/e
 ```
 
 The [TypeScript](../docs/typescript.md), [Rust](../docs/rust.md) and [PHP](../docs/php.md) pages define their value representations, dependencies and runtime ownership.
+
+`TestLiveYDBEach` generates the callback fixture and runs both Go profiles sequentially using unique disposable tables. It checks full and empty results, a 16 MiB streaming result, cancellation, early termination, no replay of retryable callback errors, connection reuse, sessions and transactions. Run `YDB_CONNECTION_STRING=grpc://localhost:2136/local go test -p 1 -count=1 -timeout=240s ./internal/endtoend -run '^TestLiveYDBEach$' -v`. `TestEachGeneratedGoCompiles` checks the same harness offline; `TestEachRuntime` in the Go generator package covers deterministic error/cleanup paths and retained-memory bounds.
