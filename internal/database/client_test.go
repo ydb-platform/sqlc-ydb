@@ -96,6 +96,64 @@ func TestDescribeTableSessionlessMetadata(t *testing.T) {
 	}
 }
 
+func TestDescribeTablePathResolution(t *testing.T) {
+	for _, tc := range []struct {
+		name, path string
+		wantError  bool
+	}{
+		{"../outside", "", true},
+		{"folder/../../outside", "", true},
+		{"folder/../items", "", true},
+		{"items/..", "", true},
+		{"..", "", true},
+		{"folder/items", "/local/folder/items", false},
+		{"./folder/items", "/local/folder/items", false},
+		{"folder/..backup/items", "/local/folder/..backup/items", false},
+		{"/other/items", "/other/items", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			requests := make(chan string, 1)
+			client := testClient(t, tableServer{describe: func(_ context.Context, request *Ydb_Table.DescribeTableRequest) (*Ydb_Table.DescribeTableResponse, error) {
+				requests <- request.GetPath()
+				result, err := anypb.New(&Ydb_Table.DescribeTableResult{
+					Columns:    []*Ydb_Table.ColumnMeta{{Name: "id", Type: primitive(Ydb.Type_UINT64)}},
+					PrimaryKey: []string{"id"},
+				})
+				if err != nil {
+					return nil, err
+				}
+				return &Ydb_Table.DescribeTableResponse{Operation: &Ydb_Operations.Operation{Ready: true, Status: Ydb.StatusIds_SUCCESS, Result: result}}, nil
+			}}, queryServer{})
+			table, err := client.DescribeTable(context.Background(), tc.name)
+			if tc.wantError {
+				if err == nil || !strings.Contains(err.Error(), "relative table paths must not contain '..' segments") {
+					t.Errorf("got %v; expected an actionable parent traversal error", err)
+				}
+				select {
+				case sent := <-requests:
+					t.Errorf("rejected relative path reached YDB as %q", sent)
+				default:
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case sent := <-requests:
+				if sent != tc.path {
+					t.Fatalf("path = %q, want %q", sent, tc.path)
+				}
+			default:
+				t.Fatal("table was not described")
+			}
+			if table.Name != tc.name || table.Columns[0].Table != tc.name {
+				t.Fatalf("logical source name was changed: %+v", table)
+			}
+		})
+	}
+}
+
 func TestDescribeTableAbsolutePathAndErrors(t *testing.T) {
 	cases := []struct {
 		name string
@@ -254,6 +312,12 @@ func TestValidateQuerySuggestsExplicitParameterDeclarations(t *testing.T) {
 	}{
 		{"unknown parameter", &Ydb_Issue.IssueMessage{Message: "Unknown name: $id"}, true},
 		{"nested parameter", &Ydb_Issue.IssueMessage{Message: "Type annotation", Issues: []*Ydb_Issue.IssueMessage{{Message: "Unknown name: $имя"}}}, true},
+		{"lowercase parameter", &Ydb_Issue.IssueMessage{Message: "unknown name: $id"}, true},
+		{"uppercase nested parameter", &Ydb_Issue.IssueMessage{Message: "Type annotation", Issues: []*Ydb_Issue.IssueMessage{{Message: "UNKNOWN NAME: $Id"}}}, true},
+		{"surrounding whitespace", &Ydb_Issue.IssueMessage{Message: " \n  Unknown name: $id \t"}, true},
+		{"lowercase unknown column", &Ydb_Issue.IssueMessage{Message: "unknown name: title"}, false},
+		{"lowercase nested unrelated syntax error", &Ydb_Issue.IssueMessage{Message: "Type annotation", Issues: []*Ydb_Issue.IssueMessage{{Message: "unexpected token: unknown name: $id"}}}, false},
+		{"different diagnostic wording", &Ydb_Issue.IssueMessage{Message: "Unresolved identifier: $id"}, false},
 		{"unknown column", &Ydb_Issue.IssueMessage{Message: "Unknown name: title"}, false},
 		{"unrelated syntax error", &Ydb_Issue.IssueMessage{Message: "Unexpected token: Unknown name: $id"}, false},
 	} {
@@ -264,6 +328,11 @@ func TestValidateQuerySuggestsExplicitParameterDeclarations(t *testing.T) {
 			err := client.ValidateQuery(context.Background(), "SELECT $id;")
 			if err == nil || !strings.Contains(err.Error(), "YDB GENERIC_ERROR") || !strings.Contains(err.Error(), tc.issue.GetMessage()) {
 				t.Fatalf("server diagnostic was lost: %v", err)
+			}
+			for _, nested := range tc.issue.GetIssues() {
+				if !strings.Contains(err.Error(), nested.GetMessage()) {
+					t.Fatalf("nested diagnostic was changed: %v", err)
+				}
 			}
 			if strings.Contains(err.Error(), "DECLARE $var AS <YQL type>;") != tc.wantHint {
 				t.Fatalf("declaration hint mismatch: %v", err)

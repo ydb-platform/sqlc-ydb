@@ -90,6 +90,11 @@ func (c *Client) DescribeTable(ctx context.Context, name string) (model.Table, e
 	defer cancel()
 	tablePath := name
 	if !path.IsAbs(tablePath) {
+		for _, segment := range strings.Split(tablePath, "/") {
+			if segment == ".." {
+				return model.Table{}, fmt.Errorf("describe table %q: relative table paths must not contain '..' segments; use a direct relative path or an explicit absolute path", name)
+			}
+		}
 		tablePath = path.Join(c.database, tablePath)
 	}
 	response, err := c.tables.DescribeTable(ctx, &Ydb_Table.DescribeTableRequest{
@@ -187,7 +192,8 @@ func hasUndeclaredParameter(issues []*Ydb_Issue.IssueMessage) bool {
 	for _, issue := range issues {
 		// YDB reports undeclared parameters as unknown names, including in
 		// nested type-annotation issues. Do not reinterpret other errors.
-		if strings.HasPrefix(issue.GetMessage(), "Unknown name: $") || hasUndeclaredParameter(issue.GetIssues()) {
+		message := strings.ToLower(strings.TrimSpace(issue.GetMessage()))
+		if strings.HasPrefix(message, "unknown name: $") || hasUndeclaredParameter(issue.GetIssues()) {
 			return true
 		}
 	}

@@ -19,7 +19,7 @@ sql:
         sql_package: ydb
 ```
 
-Set `YDB_CONNECTION_STRING` to a URI such as `grpc://localhost:2136/local`, then run `sqlc-ydb generate`. Table columns, nullability, primary keys and sequence-generated columns come from `TableService.DescribeTable`. Names in queries may be relative to the configured database or absolute YDB paths. Unrelated tables are not enumerated. Discovery supports ordinary tables, not topics, views or external data sources. Unsupported column types and literal column defaults produce errors; they are not replaced with guessed values.
+Set `YDB_CONNECTION_STRING` to a URI such as `grpc://localhost:2136/local`, then run `sqlc-ydb generate`. Table columns, nullability, primary keys and sequence-generated columns come from `TableService.DescribeTable`. Names in queries may be relative to the configured database or absolute YDB paths. Relative names must not contain parent (`..`) path segments; use an explicit absolute path when referring outside the configured database. Unrelated tables are not enumerated. Discovery supports ordinary tables, not topics, views or external data sources. Unsupported column types and literal column defaults produce errors; they are not replaced with guessed values.
 
 The existing semantic analyzer resolves parameters and query projections against this catalog. Database discovery does not add support for expressions, functions, CTEs or other syntax outside the [current analyzer coverage](compatibility.md#current-analyzer-coverage). In particular, connecting to YDB does not make a computed projection supported automatically.
 
@@ -58,7 +58,7 @@ DECLARE $id AS Uint64;
 SELECT id, title FROM records WHERE id = $id;
 ```
 
-The compiler does not infer and prepend declarations for connected analysis. If YDB reports an unknown `$parameter` name, the command writes the server diagnostic to stderr together with a suggestion to add `DECLARE $var AS <YQL type>;`. Server errors are reported before local query-shape or type-inference limitations. Successful EXPLAIN is followed by the existing catalog and semantic checks needed to generate typed code; it does not extend the supported result-expression set. Offline parameter inference remains unchanged.
+The compiler does not infer and prepend declarations for connected analysis. For the known `Unknown name: $parameter` diagnostic, matched case-insensitively, the command adds a suggestion to write `DECLARE $var AS <YQL type>;`. This hint is best-effort because server diagnostic wording can change; the original server error is always preserved. Server errors are reported before local query-shape or type-inference limitations. Successful EXPLAIN is followed by the existing catalog and semantic checks needed to generate typed code; it does not extend the supported result-expression set. Offline parameter inference remains unchanged.
 
 A server error fails the command; it never silently falls back to offline analysis. All selected generators consume the same analysis. Connection, metadata and validation errors occur before generated files are written. No persistent metadata cache is used: every invocation checks the current schema again.
 

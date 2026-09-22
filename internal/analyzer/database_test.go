@@ -234,6 +234,36 @@ func TestDatabaseAnalysisRejectsSchemaDrift(t *testing.T) {
 	}
 }
 
+func TestDatabaseAnalysisSchemaDriftUsesFirstTableReference(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, name Utf8 NOT NULL, PRIMARY KEY(id));"}}
+	queries := []model.Source{
+		{Name: "z-first.sql", Text: `-- name: Prelude :one
+SELECT 1 AS value;
+
+-- name: FirstReference :many
+SELECT r.id AS id
+FROM records AS r
+JOIN records AS again ON r.id = again.id;
+-- name: LaterSameFile :many
+SELECT id FROM records;`},
+		{Name: "a-later.sql", Text: "-- name: LaterFile :many\nSELECT id FROM records;"},
+	}
+	table := databaseTestTable("name")
+	table.Columns[1].Type = model.Type{Kind: "String"}
+	database := &fakeAnalysisDatabase{tables: map[string]model.Table{"records": table}}
+	result, err := AnalyzeWithDatabase(context.Background(), schema, queries, Options{}, database)
+	if err == nil || len(result.Diagnostics) != 1 {
+		t.Fatalf("schema drift diagnostics = %v, error = %v", result.Diagnostics, err)
+	}
+	diagnostic := result.Diagnostics[0]
+	if want := (model.Position{File: "z-first.sql", Line: 6, Column: 6}); diagnostic.Position != want {
+		t.Fatalf("schema drift position = %#v, want first table reference %#v", diagnostic.Position, want)
+	}
+	if !strings.Contains(diagnostic.Message, `database schema drift for table "records"`) || !strings.Contains(diagnostic.Message, "local type Utf8 and database type String") {
+		t.Fatalf("unexpected diagnostic at first table reference: %s", diagnostic.Message)
+	}
+}
+
 func TestDatabaseAnalysisChecksPrimaryKeyOrder(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, name Utf8 NOT NULL, PRIMARY KEY(id, name));"}}
 	table := databaseTestTable("name")

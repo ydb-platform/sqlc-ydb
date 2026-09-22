@@ -37,7 +37,7 @@ SELECT * FROM records WHERE id = $id;
 
 -- name: ReadQualifiedWildcard :one
 DECLARE $id AS Uint64;
-SELECT r.* FROM records AS r WHERE r.id = $id;
+SELECT `+"`строка` /* qualifier */ . * FROM records AS `строка` WHERE `строка`.id = $id;"+`
 
 -- name: InsertReturningWildcard :one
 DECLARE $id AS Uint64;
