@@ -1,0 +1,20 @@
+version: "2"
+sql:
+  - name: native
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      go:
+        package: counters
+        out: go/native
+        sql_package: ydb
+  - name: database-sql
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      go:
+        package: counters
+        out: go/database/sql
+        sql_package: database/sql
