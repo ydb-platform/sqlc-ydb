@@ -137,7 +137,7 @@ type Table struct {
 	Name       string
 	Columns    []Column
 	PrimaryKey []string
-	Indexes    []Index `json:",omitempty"`
+	Indexes    []Index
 }
 type Index struct {
 	Name        string

@@ -195,6 +195,8 @@ func TestJooqDeclaredSQLBytesThroughJava(t *testing.T) {
 		{"DECLARE $rows AS List<Struct<id: Uint64, title: Utf8>>;\n\nINSERT INTO books (id, title)\nSELECT\n    id, title\nFROM AS_TABLE($rows);", "DECLARE $rows AS List<Struct<id: Uint64, title: Utf8>>;\n\nINSERT INTO `mapped_books` (id, title)\nSELECT\n    id, title\nFROM AS_TABLE($rows);"},
 		{"SELECT b.id FROM books VIEW by_title AS b WHERE b.id = $id;", "SELECT b.id FROM `mapped_books` VIEW by_title AS b WHERE b.id = $id;"},
 		{"SELECT books.id FROM books /* index */ VIEW `by_title` WHERE books.id = $id;", "SELECT books.id FROM `mapped_books` /* index */ VIEW `by_title` AS `books` WHERE books.id = $id;"},
+		{"SELECT books.id, \"Привет 🪄\"u AS label FROM books /* таблица 🐘 */ VIEW /* индекс 🚀 */ by_title WHERE books.id = $id;", "SELECT books.id, \"Привет 🪄\"u AS label FROM `mapped_books` /* таблица 🐘 */ VIEW /* индекс 🚀 */ by_title AS `books` WHERE books.id = $id;"},
+		{"SELECT `a``b`.id FROM books VIEW by_title AS `a``b` WHERE `a``b`.id = $id;", "SELECT `a``b`.id FROM `mapped_books` VIEW by_title AS `a``b` WHERE `a``b`.id = $id;"},
 		{"INSERT INTO books SELECT b.* FROM books VIEW by_title AS b WHERE b.id = $id;", "INSERT INTO `mapped_books` SELECT b.`id` AS `id`, `b`.`title` AS `title` FROM `mapped_books` VIEW by_title AS b WHERE b.id = $id;"},
 		{"UPDATE books SET id = (books.id + 2ul) * 3ul - 4ul WHERE books.id = $id;", "UPDATE `mapped_books` SET id = (`mapped_books`.id + 2ul) * 3ul - 4ul WHERE `mapped_books`.id = $id;"},
 	}
@@ -310,6 +312,29 @@ func TestJooqIndexViewDSL(t *testing.T) {
 			if file.Name == "Queries.java" && !strings.Contains(string(file.Content), want) {
 				t.Fatalf("VIEW was lost: %s", file.Content)
 			}
+		}
+	}
+}
+
+// Table names must also name a generated Java class. Reject names outside that
+// contract before attempting declared SQL mapping, including explicit aliases.
+func TestJooqRejectsBackticksInTableNames(t *testing.T) {
+	for _, table := range []string{"a`b", "a`", "`b", "path/a`b"} {
+		quotedTable := "`" + strings.ReplaceAll(table, "`", "``") + "`"
+		schema := "CREATE TABLE " + quotedTable + " (id Uint64 NOT NULL, INDEX by_id GLOBAL SYNC ON(id), PRIMARY KEY(id));"
+		for _, suffix := range []string{"", " VIEW by_id", " VIEW by_id AS b"} {
+			t.Run(table+suffix, func(t *testing.T) {
+				sql := "-- name: Declared :many\nDECLARE $id AS Uint64; SELECT id FROM " + quotedTable + suffix + " WHERE id = $id;"
+				analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: schema}}, []model.Source{{Name: "query.sql", Text: sql}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				files, err := Generate(analysis, Options{Runtime: "jooq"})
+				want := fmt.Sprintf("cannot represent %q as a Java identifier", table)
+				if err == nil || err.Error() != want || files != nil {
+					t.Fatalf("generated unsupported table name: files=%v err=%v, want %q", files, err, want)
+				}
+			})
 		}
 	}
 }
