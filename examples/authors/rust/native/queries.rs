@@ -110,4 +110,52 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
             .param("$author_id", author_id)
             .await
     }
+
+    // -- name: FindAuthorsByName :many
+    #[builder(on(String, into))]
+    pub async fn find_authors_by_name(
+        &mut self,
+        name: String,
+    ) -> ydb::YdbResult<Vec<FindAuthorsByNameRow>> {
+        self.client
+            .query_result_set(concat!(
+                "SELECT a.`id` AS `id`, `a`.`name` AS `name`, `a`.`bio` AS `bio` FROM authors VIEW by_name AS a\n",
+                "WHERE a.name = $name ORDER BY a.id;",
+            ))
+            .param("$name", name)
+            .await?
+            .rows()
+            .map(|mut row| {
+                Ok(FindAuthorsByNameRow {
+                    id: row.remove_field(0)?.try_into()?,
+                    name: row.remove_field(1)?.try_into()?,
+                    bio: row.remove_field(2)?.try_into()?,
+                })
+            })
+            .collect()
+    }
+
+    // -- name: FindAuthorsByNameCovering :many
+    #[builder(on(String, into))]
+    pub async fn find_authors_by_name_covering(
+        &mut self,
+        name: String,
+    ) -> ydb::YdbResult<Vec<FindAuthorsByNameCoveringRow>> {
+        self.client
+            .query_result_set(concat!(
+                "DECLARE $name AS Utf8;\n",
+                "SELECT `id`, `name`, `bio` FROM authors VIEW by_name_covering WHERE name = $name ORDER BY id;",
+            ))
+            .param("$name", name)
+            .await?
+            .rows()
+            .map(|mut row| {
+                Ok(FindAuthorsByNameCoveringRow {
+                    id: row.remove_field(0)?.try_into()?,
+                    name: row.remove_field(1)?.try_into()?,
+                    bio: row.remove_field(2)?.try_into()?,
+                })
+            })
+            .collect()
+    }
 }

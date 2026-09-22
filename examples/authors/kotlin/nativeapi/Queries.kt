@@ -152,4 +152,58 @@ class Queries {
             }.join().getStatus().expectSuccess()
         }
     }
+
+    // -- name: FindAuthorsByName :many
+    fun findAuthorsByName(name: String): List<FindAuthorsByNameRow> {
+        val _params = Params.create()
+        _params.put("\$name", PrimitiveValue.newText(name))
+        val _query = if (transaction != null) {
+            QueryReader.readFrom(transaction.createQuery(
+                "SELECT a.`id` AS `id`, `a`.`name` AS `name`, `a`.`bio` AS `bio` FROM authors VIEW by_name AS a\n" +
+                "WHERE a.name = \$name ORDER BY a.id;", _params)).join().getValue()
+        } else {
+            client!!.supplyResult { _session ->
+                QueryReader.readFrom(_session.createQuery(
+                    "SELECT a.`id` AS `id`, `a`.`name` AS `name`, `a`.`bio` AS `bio` FROM authors VIEW by_name AS a\n" +
+                    "WHERE a.name = \$name ORDER BY a.id;", TxMode.SERIALIZABLE_RW, _params))
+            }.join().getValue()
+        }
+        kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
+        val _rows = _query.getResultSet(0)
+        val _items = ArrayList<FindAuthorsByNameRow>()
+        while (_rows.next()) {
+            val _value0: Long = _rows.getColumn(0).getUint64()
+            val _value1: String = _rows.getColumn(1).getText()
+            val _value2: String? = _rows.getColumn(2).getText()
+            _items.add(FindAuthorsByNameRow(_value0, _value1, _value2))
+        }
+        return _items
+    }
+
+    // -- name: FindAuthorsByNameCovering :many
+    fun findAuthorsByNameCovering(name: String): List<FindAuthorsByNameCoveringRow> {
+        val _params = Params.create()
+        _params.put("\$name", PrimitiveValue.newText(name))
+        val _query = if (transaction != null) {
+            QueryReader.readFrom(transaction.createQuery(
+                "DECLARE \$name AS Utf8;\n" +
+                "SELECT `id`, `name`, `bio` FROM authors VIEW by_name_covering WHERE name = \$name ORDER BY id;", _params)).join().getValue()
+        } else {
+            client!!.supplyResult { _session ->
+                QueryReader.readFrom(_session.createQuery(
+                    "DECLARE \$name AS Utf8;\n" +
+                    "SELECT `id`, `name`, `bio` FROM authors VIEW by_name_covering WHERE name = \$name ORDER BY id;", TxMode.SERIALIZABLE_RW, _params))
+            }.join().getValue()
+        }
+        kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
+        val _rows = _query.getResultSet(0)
+        val _items = ArrayList<FindAuthorsByNameCoveringRow>()
+        while (_rows.next()) {
+            val _value0: Long = _rows.getColumn(0).getUint64()
+            val _value1: String = _rows.getColumn(1).getText()
+            val _value2: String? = _rows.getColumn(2).getText()
+            _items.add(FindAuthorsByNameCoveringRow(_value0, _value1, _value2))
+        }
+        return _items
+    }
 }

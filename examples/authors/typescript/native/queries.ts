@@ -39,6 +39,18 @@ export type UpsertAuthorParams = {
   readonly biography: string | null;
 };
 
+export type FindAuthorsByNameRow = {
+  readonly id: bigint;
+  readonly name: string;
+  readonly bio: string | null;
+};
+
+export type FindAuthorsByNameCoveringRow = {
+  readonly id: bigint;
+  readonly name: string;
+  readonly bio: string | null;
+};
+
 export class Queries {
   readonly #sql: SQL;
 
@@ -119,5 +131,34 @@ export class Queries {
       .parameter("author_id", new Uint64(authorId));
     configure?.(stmt);
     await stmt;
+  }
+
+  // -- name: FindAuthorsByName :many
+  async findAuthorsByName(name: string, configure?: ConfigureQuery): Promise<FindAuthorsByNameRow[]> {
+    const stmt = this.#sql<[FindAuthorsByNameRow]>(
+      "SELECT a.`id` AS `id`, `a`.`name` AS `name`, `a`.`bio` AS `bio` FROM authors VIEW by_name AS a\n" +
+      "WHERE a.name = $name ORDER BY a.id;"
+    )
+      .parameter("name", new Utf8(name));
+    configure?.(stmt);
+    const [rows] = await stmt;
+
+    return rows;
+  }
+
+  // -- name: FindAuthorsByNameCovering :many
+  async findAuthorsByNameCovering(name: string, configure?: ConfigureQuery): Promise<FindAuthorsByNameCoveringRow[]> {
+    const stmt = this.#sql<[FindAuthorsByNameCoveringRow]>(
+      "DECLARE $name AS Utf8;\n" +
+      "SELECT `id`, `name`, `bio` FROM authors VIEW by_name_covering WHERE name = $name ORDER BY id;"
+    );
+    // Keep explicit DECLARE statements; the SDK otherwise prepends duplicates.
+    Object.defineProperty(stmt, "text", { value: stmt.text, writable: false });
+    stmt
+      .parameter("name", new Utf8(name));
+    configure?.(stmt);
+    const [rows] = await stmt;
+
+    return rows;
   }
 }

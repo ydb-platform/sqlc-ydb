@@ -40,6 +40,18 @@ type UpsertAuthorParams struct {
 	Biography  *string `json:"biography"`
 }
 
+type FindAuthorsByNameRow struct {
+	ID   uint64  `json:"id"`
+	Name string  `json:"name"`
+	Bio  *string `json:"bio"`
+}
+
+type FindAuthorsByNameCoveringRow struct {
+	ID   uint64  `json:"id"`
+	Name string  `json:"name"`
+	Bio  *string `json:"bio"`
+}
+
 type Querier interface {
 	GetAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorRow, error)
 	ListAuthors(ctx context.Context, opts ...query.ExecuteOption) ([]ListAuthorsRow, error)
@@ -47,4 +59,6 @@ type Querier interface {
 	CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts ...query.ExecuteOption) (CreateAuthorRow, error)
 	UpsertAuthor(ctx context.Context, arg UpsertAuthorParams, opts ...query.ExecuteOption) error
 	DeleteAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error
+	FindAuthorsByName(ctx context.Context, arg string, opts ...query.ExecuteOption) ([]FindAuthorsByNameRow, error)
+	FindAuthorsByNameCovering(ctx context.Context, arg string, opts ...query.ExecuteOption) ([]FindAuthorsByNameCoveringRow, error)
 }

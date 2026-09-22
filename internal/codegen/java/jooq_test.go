@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -181,7 +182,7 @@ func TestJooqDeclaredDMLMapsQualifiedTargetColumns(t *testing.T) {
 // Evaluate mapped fragments together: text-block indentation is computed for
 // each fragment, so a literal-only round trip does not exercise this boundary.
 func TestJooqDeclaredSQLBytesThroughJava(t *testing.T) {
-	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE books (id Uint64 NOT NULL, title Utf8 NOT NULL, PRIMARY KEY(id));"}}
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE books (id Uint64 NOT NULL, title Utf8 NOT NULL, INDEX by_title GLOBAL SYNC ON (title), PRIMARY KEY(id));"}}
 	header := "-- name: Declared :exec\nDECLARE $id AS Uint64;\n\n-- Автор 🚀\n"
 	cases := []struct{ sql, want string }{
 		{"UPDATE books\n    SET title = $title\n\n    WHERE (books.id = $id);", "UPDATE `mapped_books`\n    SET title = $title\n\n    WHERE (`mapped_books`.id = $id);"},
@@ -192,6 +193,9 @@ func TestJooqDeclaredSQLBytesThroughJava(t *testing.T) {
 		{"SELECT b./* wildcard */*\n    FROM books AS b\n    WHERE b.id = $id;", "SELECT b./* wildcard */`id` AS `id`, `b`.`title` AS `title`\n    FROM `mapped_books` AS b\n    WHERE b.id = $id;"},
 		{"DELETE FROM books WHERE books.id = $id RETURNING *;", "DELETE FROM `mapped_books` WHERE `mapped_books`.id = $id RETURNING `id`, `title`;"},
 		{"DECLARE $rows AS List<Struct<id: Uint64, title: Utf8>>;\n\nINSERT INTO books (id, title)\nSELECT\n    id, title\nFROM AS_TABLE($rows);", "DECLARE $rows AS List<Struct<id: Uint64, title: Utf8>>;\n\nINSERT INTO `mapped_books` (id, title)\nSELECT\n    id, title\nFROM AS_TABLE($rows);"},
+		{"SELECT b.id FROM books VIEW by_title AS b WHERE b.id = $id;", "SELECT b.id FROM `mapped_books` VIEW by_title AS b WHERE b.id = $id;"},
+		{"SELECT books.id FROM books /* index */ VIEW `by_title` WHERE books.id = $id;", "SELECT books.id FROM `mapped_books` /* index */ VIEW `by_title` AS `books` WHERE books.id = $id;"},
+		{"INSERT INTO books SELECT b.* FROM books VIEW by_title AS b WHERE b.id = $id;", "INSERT INTO `mapped_books` SELECT b.`id` AS `id`, `b`.`title` AS `title` FROM `mapped_books` VIEW by_title AS b WHERE b.id = $id;"},
 		{"UPDATE books SET id = (books.id + 2ul) * 3ul - 4ul WHERE books.id = $id;", "UPDATE `mapped_books` SET id = (`mapped_books`.id + 2ul) * 3ul - 4ul WHERE `mapped_books`.id = $id;"},
 	}
 	var program strings.Builder
@@ -281,6 +285,31 @@ func TestJooqDeclaredCarrierValuesWithSDK(t *testing.T) {
 		cmd.Dir = dir
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("%s: %v\n%s", args[0], err, out)
+		}
+	}
+}
+
+func TestJooqIndexViewDSL(t *testing.T) {
+	for _, tc := range []struct{ view, alias, name string }{
+		{"by_title", "", "by_title"},
+		{"by_title", " AS b", "by_title"},
+		{"`by``title`", "", "by`title"},
+		{"`by```", "", "by`"},
+		{"```title`", "", "`title"},
+	} {
+		analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE books (id Uint64 NOT NULL, title Utf8 NOT NULL, INDEX " + tc.view + " GLOBAL SYNC ON (title), PRIMARY KEY(id));"}}, []model.Source{{Name: "queries.sql", Text: "-- name: Indexed :many\nSELECT * FROM books VIEW " + tc.view + tc.alias + " WHERE title = $title;"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		files, err := Generate(analysis, Options{Runtime: "jooq"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := `table("{0} VIEW {1}", BOOKS, name(` + strconv.Quote(tc.name) + `))`
+		for _, file := range files {
+			if file.Name == "Queries.java" && !strings.Contains(string(file.Content), want) {
+				t.Fatalf("VIEW was lost: %s", file.Content)
+			}
 		}
 	}
 }

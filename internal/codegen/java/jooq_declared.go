@@ -45,9 +45,16 @@ func jooqDeclaredSQL(q model.AnalyzedQuery, sql string) (string, error) {
 			continue
 		}
 		ref := hinted.Single_source().Table_ref()
-		if ref.Table_key() != nil {
-			if err := add(ref.Table_key(), named.An_id() == nil && named.An_id_as_compat() == nil); err != nil {
+		if key := ref.Table_key(); key != nil {
+			unaliased := named.An_id() == nil && named.An_id_as_compat() == nil
+			if err := add(key.Id_table_or_type(), unaliased && key.View_name() == nil); err != nil {
 				return "", err
+			}
+			if unaliased && key.View_name() != nil {
+				// VIEW belongs between the mapped table and its preserved qualifier.
+				end := key.GetStop().GetStop() + 1 + shift
+				original := jooqID(key.Id_table_or_type().GetText())
+				replacements = append(replacements, replacement{end, end, quoted(" AS `" + strings.ReplaceAll(original, "`", "``") + "`")})
 			}
 		}
 	}

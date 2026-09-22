@@ -98,4 +98,44 @@ class Queries(private val client: org.jetbrains.exposed.v1.jdbc.JdbcTransaction)
             _prepared.execute()
         }
     }
+
+    // -- name: FindAuthorsByName :many
+    fun findAuthorsByName(name: String): List<FindAuthorsByNameRow> {
+        val _connection = client.connection.connection as java.sql.Connection
+        _connection.prepareStatement(
+            "SELECT a.`id` AS `id`, `a`.`name` AS `name`, `a`.`bio` AS `bio` FROM authors VIEW by_name AS a\n" +
+            "WHERE a.name = ? ORDER BY a.id;").use { _prepared ->
+            _prepared.setString(1, name)
+            _prepared.executeQuery().use { _rows ->
+                val _items = ArrayList<FindAuthorsByNameRow>()
+                while (_rows.next()) {
+                    val _value0: Long = _rows.getLong(1)
+                    val _value1: String = _rows.getString(2)
+                    val _value2: String? = _rows.getString(3)
+                    _items.add(FindAuthorsByNameRow(_value0, _value1, _value2))
+                }
+                return _items
+            }
+        }
+    }
+
+    // -- name: FindAuthorsByNameCovering :many
+    fun findAuthorsByNameCovering(name: String): List<FindAuthorsByNameCoveringRow> {
+        val _connection = client.connection.connection as java.sql.Connection
+        _connection.unwrap(tech.ydb.jdbc.YdbConnection::class.java).prepareStatement(
+            "DECLARE \$name AS Utf8;\n" +
+            "SELECT `id`, `name`, `bio` FROM authors VIEW by_name_covering WHERE name = \$name ORDER BY id;", tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY).use { _prepared ->
+            _prepared.setString("name", name)
+            _prepared.executeQuery().use { _rows ->
+                val _items = ArrayList<FindAuthorsByNameCoveringRow>()
+                while (_rows.next()) {
+                    val _value0: Long = _rows.getLong(1)
+                    val _value1: String = _rows.getString(2)
+                    val _value2: String? = _rows.getString(3)
+                    _items.add(FindAuthorsByNameCoveringRow(_value0, _value1, _value2))
+                }
+                return _items
+            }
+        }
+    }
 }

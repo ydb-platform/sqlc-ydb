@@ -254,7 +254,6 @@ func TestCatalogRejectsUnsupportedSchemaOperations(t *testing.T) {
 		want string
 	}{
 		{name: "alter nullability", sql: `CREATE TABLE t (id Uint64 NOT NULL, value Utf8, PRIMARY KEY (id)); ALTER TABLE t ALTER COLUMN value SET NOT NULL;`, want: "unsupported ALTER TABLE action"},
-		{name: "index", sql: `CREATE TABLE t (id Uint64 NOT NULL, PRIMARY KEY (id)); ALTER TABLE t ADD INDEX by_id GLOBAL ON (id);`, want: "unsupported ALTER TABLE action"},
 		{name: "view", sql: `CREATE VIEW records AS SELECT 1 AS id;`, want: "unsupported schema statement"},
 		{name: "drop nullability", sql: `CREATE TABLE t (id Uint64 NOT NULL, value Utf8 NOT NULL, PRIMARY KEY (id)); ALTER TABLE t ALTER COLUMN value DROP NOT NULL;`, want: "unsupported ALTER TABLE action"},
 		{name: "data statement", sql: `CREATE TABLE t (id Uint64 NOT NULL, PRIMARY KEY (id)); UPSERT INTO t (id) VALUES (1);`, want: "unsupported schema statement"},

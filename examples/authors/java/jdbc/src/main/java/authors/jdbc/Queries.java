@@ -101,4 +101,44 @@ public final class Queries {
             _prepared.execute();
         }
     }
+
+    // -- name: FindAuthorsByName :many
+    public java.util.List<FindAuthorsByNameRow> findAuthorsByName(String name) throws java.sql.SQLException {
+        try (var _prepared = client.prepareStatement("""
+            SELECT a.`id` AS `id`, `a`.`name` AS `name`, `a`.`bio` AS `bio` FROM authors VIEW by_name AS a
+            WHERE a.name = ? ORDER BY a.id;\
+            """)) {
+            _prepared.setString(1, name);
+            try (var _rows = _prepared.executeQuery()) {
+                var _items = new java.util.ArrayList<FindAuthorsByNameRow>();
+                while (_rows.next()) {
+                    long _value0 = _rows.getLong(1);
+                    String _value1 = _rows.getString(2);
+                    String _value2 = _rows.getString(3);
+                    _items.add(new FindAuthorsByNameRow(_value0, _value1, _value2));
+                }
+                return _items;
+            }
+        }
+    }
+
+    // -- name: FindAuthorsByNameCovering :many
+    public java.util.List<FindAuthorsByNameCoveringRow> findAuthorsByNameCovering(String name) throws java.sql.SQLException {
+        try (var _prepared = client.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+            DECLARE $name AS Utf8;
+            SELECT `id`, `name`, `bio` FROM authors VIEW by_name_covering WHERE name = $name ORDER BY id;\
+            """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+            _prepared.setString("name", name);
+            try (var _rows = _prepared.executeQuery()) {
+                var _items = new java.util.ArrayList<FindAuthorsByNameCoveringRow>();
+                while (_rows.next()) {
+                    long _value0 = _rows.getLong(1);
+                    String _value1 = _rows.getString(2);
+                    String _value2 = _rows.getString(3);
+                    _items.add(new FindAuthorsByNameCoveringRow(_value0, _value1, _value2));
+                }
+                return _items;
+            }
+        }
+    }
 }

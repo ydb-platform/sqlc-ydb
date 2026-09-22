@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Support ordinary and covering GLOBAL SYNC/ASYNC secondary indexes in CREATE TABLE and ADD/DROP INDEX migrations. Resolve `FROM table VIEW index` against the base table, retain index selection in generated SQL, and include index definitions in database discovery and schema-drift checks.
+
 ## v0.2.3
 
 ### Added
