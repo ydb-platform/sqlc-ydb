@@ -54,7 +54,13 @@ func collectQueryTree(tree antlr.Tree) queryTree {
 }
 
 func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery, []model.Diagnostic) {
-	parsed, diagnostics := parseYQL(block.file, block.text, block.line-1)
+	var parsed parsedYQL
+	var diagnostics []model.Diagnostic
+	if block.parsed == nil {
+		parsed, diagnostics = parseYQL(block.file, block.text, block.line-1)
+	} else {
+		parsed = *block.parsed
+	}
 	query := model.AnalyzedQuery{
 		Name: block.name, Command: block.command, SQL: block.text,
 		Source: model.Position{File: block.file, Line: block.line, Column: 1},
@@ -456,6 +462,10 @@ func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser
 			if named.An_id_as_compat() != nil {
 				alias = identifier(named.An_id_as_compat().GetText())
 			}
+			if tableRef.Table_key() == nil && named.An_id() == nil && named.An_id_as_compat() == nil && (len(join.AllFlatten_source()) > 1 || len(selectCore.AllJoin_source()) > 1) {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, "AS_TABLE in a join requires an explicit alias; use AS_TABLE($parameter) AS rows"))
+				continue
+			}
 			relations = append(relations, relation{table: table, alias: alias})
 			if i > 0 {
 				op := strings.ToUpper(join.Join_op(i - 1).GetText())
@@ -501,8 +511,9 @@ func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContex
 	}
 	for _, result := range selectCore.AllResult_column() {
 		if result.ASTERISK() != nil {
-			prefix := strings.TrimSuffix(result.Opt_id_prefix().GetText(), ".")
+			prefix := identifier(strings.TrimSuffix(result.Opt_id_prefix().GetText(), "."))
 			matched := false
+			var expressions []string
 			for _, rel := range relations {
 				if prefix != "" && prefix != rel.alias && prefix != rel.table.Name {
 					continue
@@ -510,10 +521,23 @@ func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContex
 				matched = true
 				for _, column := range rel.table.Columns {
 					columns = append(columns, joinedColumn(column, rel.optional))
+					expression := quotedYQLIdentifier(column.Name)
+					if prefix != "" || len(relations) > 1 {
+						// The original qualifier before the first '*' is retained,
+						// including its whitespace and comments. Aliases preserve
+						// the unqualified result keys produced by table wildcards.
+						if prefix == "" || len(expressions) != 0 {
+							expression = quotedYQLIdentifier(rel.alias) + "." + expression
+						}
+						expression += " AS " + quotedYQLIdentifier(column.Name)
+					}
+					expressions = append(expressions, expression)
 				}
 			}
 			if !matched {
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, result, fmt.Sprintf("unknown table or alias %q", prefix)))
+			} else if block.wildcards != nil {
+				block.wildcards.add(result.ASTERISK().GetSymbol(), expressions)
 			}
 			continue
 		}
@@ -902,6 +926,13 @@ func externalParameters(block queryBlock, binds []parser.IBind_parameterContext,
 
 func returningProjection(block queryBlock, returning parser.IReturning_columns_listContext, table *model.Table) ([]model.Column, []model.Diagnostic) {
 	if returning.ASTERISK() != nil {
+		if block.wildcards != nil {
+			columns := make([]string, len(table.Columns))
+			for i, column := range table.Columns {
+				columns[i] = quotedYQLIdentifier(column.Name)
+			}
+			block.wildcards.add(returning.ASTERISK().GetSymbol(), columns)
+		}
 		return append([]model.Column(nil), table.Columns...), nil
 	}
 	var columns []model.Column

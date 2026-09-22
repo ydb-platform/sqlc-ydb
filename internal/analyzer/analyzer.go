@@ -2,6 +2,7 @@
 package analyzer
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -22,6 +23,10 @@ func Analyze(schema, queries []model.Source) (*model.AnalysisResult, error) {
 // AnalyzeWithOptions analyzes queries using one explicit compilation contract.
 // The zero value of Options selects the shipped function catalog.
 func AnalyzeWithOptions(schema, queries []model.Source, options Options) (*model.AnalysisResult, error) {
+	return analyze(context.Background(), schema, queries, options, nil)
+}
+
+func analyze(ctx context.Context, schema, queries []model.Source, options Options, database Database) (*model.AnalysisResult, error) {
 	result := &model.AnalysisResult{}
 	functions, err := builtins.NewRegistry(options.Functions)
 	if err != nil {
@@ -31,6 +36,7 @@ func AnalyzeWithOptions(schema, queries []model.Source, options Options) (*model
 	result.Catalog = catalog
 	result.Diagnostics = append(result.Diagnostics, diagnostics...)
 	if len(diagnostics) == 0 {
+		var allBlocks []queryBlock
 		queryNames := map[string]model.Position{}
 		for _, source := range queries {
 			blocks, blockDiagnostics := queryBlocks(source)
@@ -46,7 +52,29 @@ func AnalyzeWithOptions(schema, queries []model.Source, options Options) (*model
 					continue
 				}
 				queryNames[key] = model.Position{File: block.file, Line: block.line, Column: 1}
-				query, queryDiagnostics := analyzeQuery(catalog, block)
+				allBlocks = append(allBlocks, block)
+			}
+		}
+		if database != nil && len(result.Diagnostics) == 0 {
+			for _, block := range allBlocks {
+				position := model.Position{File: block.file, Line: block.line, Column: 1}
+				if err := ctx.Err(); err != nil {
+					result.Diagnostics = append(result.Diagnostics, model.Diagnostic{Position: position, Message: fmt.Sprintf("database analysis canceled: %v", err)})
+					break
+				}
+				if err := database.ValidateQuery(ctx, block.text); err != nil {
+					result.Diagnostics = append(result.Diagnostics, model.Diagnostic{Position: position, Message: fmt.Sprintf("database query validation failed: %v", err)})
+				}
+			}
+		}
+		if database != nil && len(result.Diagnostics) == 0 {
+			catalog, diagnostics = databaseCatalog(ctx, database, schema, catalog, allBlocks)
+			result.Catalog = catalog
+			result.Diagnostics = append(result.Diagnostics, diagnostics...)
+		}
+		if database == nil || len(result.Diagnostics) == 0 {
+			for _, block := range allBlocks {
+				query, queryDiagnostics := analyzeExecutableQuery(catalog, block)
 				result.Diagnostics = append(result.Diagnostics, queryDiagnostics...)
 				if len(queryDiagnostics) == 0 {
 					result.Queries = append(result.Queries, query)
@@ -127,6 +155,8 @@ type queryBlock struct {
 	line      int
 	text      string
 	functions *builtins.Registry
+	parsed    *parsedYQL
+	wildcards *wildcardRewrites
 }
 
 func queryBlocks(source model.Source) ([]queryBlock, []model.Diagnostic) {

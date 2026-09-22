@@ -82,7 +82,7 @@ func (q *Queries) UpdateRecords(ctx context.Context, arg UpdateRecordsParams, op
 		"UPDATE records ON\n"+
 		"SELECT\n"+
 		"    Digest::CityHash(CAST($owner_id AS String)) AS owner_hash,\n"+
-		"    r.*,\n"+
+		"    r.`record_id` AS `record_id`, `r`.`group_id` AS `group_id`, `r`.`payload` AS `payload`, `r`.`attributes` AS `attributes`,\n"+
 		"    $updated_at AS updated_at\n"+
 		"FROM AS_TABLE($rows) AS r;",
 		callOptions...,

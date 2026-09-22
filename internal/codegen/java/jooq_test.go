@@ -186,13 +186,16 @@ func TestJooqDeclaredSQLBytesThroughJava(t *testing.T) {
 		{"DELETE FROM books\n    WHERE books.id = $id;", "DELETE FROM `mapped_books`\n    WHERE `mapped_books`.id = $id;"},
 		{"SELECT b.id\n\n    FROM books AS b\n    WHERE b.id = $id;", "SELECT b.id\n\n    FROM `mapped_books` AS b\n    WHERE b.id = $id;"},
 		{"SELECT books.id\n    FROM books\n    WHERE books.id = $id;", "SELECT books.id\n    FROM `mapped_books` AS `books`\n    WHERE books.id = $id;"},
+		{"SELECT *\n    FROM books\n    WHERE id = $id;", "SELECT `id`, `title`\n    FROM `mapped_books` AS `books`\n    WHERE id = $id;"},
+		{"SELECT b./* wildcard */*\n    FROM books AS b\n    WHERE b.id = $id;", "SELECT b./* wildcard */`id` AS `id`, `b`.`title` AS `title`\n    FROM `mapped_books` AS b\n    WHERE b.id = $id;"},
+		{"DELETE FROM books WHERE books.id = $id RETURNING *;", "DELETE FROM `mapped_books` WHERE `mapped_books`.id = $id RETURNING `id`, `title`;"},
 		{"DECLARE $rows AS List<Struct<id: Uint64, title: Utf8>>;\n\nINSERT INTO books (id, title)\nSELECT\n    id, title\nFROM AS_TABLE($rows);", "DECLARE $rows AS List<Struct<id: Uint64, title: Utf8>>;\n\nINSERT INTO `mapped_books` (id, title)\nSELECT\n    id, title\nFROM AS_TABLE($rows);"},
 	}
 	var program strings.Builder
 	program.WriteString("public class Main { static final String BOOKS = \"`mapped_books`\"; static final Main dsl = new Main(); String render(String table) { return table; } public static void main(String[] args) {\n")
 	for i, tc := range cases {
 		annotation := header
-		if strings.HasPrefix(tc.sql, "SELECT") {
+		if strings.HasPrefix(tc.sql, "SELECT") || strings.Contains(tc.sql, "RETURNING") {
 			annotation = strings.Replace(header, ":exec", ":many", 1)
 		}
 		a, err := analyzer.Analyze(schema, []model.Source{{Name: "q.sql", Text: annotation + tc.sql}})

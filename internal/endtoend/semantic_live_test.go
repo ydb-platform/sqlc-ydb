@@ -25,6 +25,10 @@ func TestLiveYDBSemanticTypes(t *testing.T) {
 	table := fmt.Sprintf("sqlc_semantic_%d", time.Now().UnixNano())
 	schema := "CREATE TABLE " + table + " (id Uint64 NOT NULL, flag Bool NOT NULL, n Int32 NOT NULL, f Float NOT NULL, maybe Int32, label Utf8, stamp Timestamp NOT NULL, amount Decimal(22,9), PRIMARY KEY(id));"
 	queries := []struct{ Name, SQL string }{
+		{"wildcard", "SELECT * FROM $TABLE;"},
+		{"qualified_wildcard", "SELECT r.* FROM $TABLE AS r;"},
+		{"joined_wildcard", "SELECT b.* FROM $TABLE AS a LEFT JOIN $TABLE AS b ON a.id=b.id;"},
+		{"union_wildcard", "SELECT * FROM $TABLE UNION ALL SELECT * FROM $TABLE;"},
 		{"casts", "SELECT CAST(n AS Int64) AS wide, CAST(n AS Uint8) AS narrow, CAST(f AS Int32) AS integer_value FROM $TABLE;"},
 		{"case", "SELECT CASE WHEN flag THEN n ELSE maybe END AS choice, CASE n WHEN 1 THEN 1u ELSE 2 END AS mixed FROM $TABLE;"},
 		{"coalesce_explicit_numeric", "SELECT COALESCE(CAST(n AS Int64), 1l) AS required, COALESCE(CAST(maybe AS Int64), 1l) AS fallback FROM $TABLE;"},
@@ -69,7 +73,7 @@ func TestLiveYDBSemanticTypes(t *testing.T) {
 			t.Errorf("%s: %v", q.Name, err)
 			continue
 		}
-		c := liveCase{Name: q.Name, SQL: sql}
+		c := liveCase{Name: q.Name, SQL: a.Queries[0].SQL}
 		for _, col := range a.Queries[0].ResultSets[0].Columns {
 			c.Columns = append(c.Columns, column{col.ResultName(), semanticTypeName(col.Type)})
 		}
