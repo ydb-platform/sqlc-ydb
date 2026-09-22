@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.2.2
+
 ### Added
 
 - Add `:each` SELECT queries for both Go profiles: typed sequential callbacks, cancellation and cleanup on early exit, and no generated retry loop. Methods use the supplied executor directly: native clients retain SDK materialization, while sessions and transactions stream without a generated result collection. Other language targets reject the annotation.
