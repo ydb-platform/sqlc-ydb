@@ -109,7 +109,7 @@ Use `sqlc-ydb init --help` to list languages and their runtimes. For the options
 
 `Utf8` and its `Text` alias are text (`string` / `str`); `String` and its `Bytes` alias are binary (`[]byte` / `bytes`). Optional values preserve nullability. Go integers retain their widths and signedness; Python integers bind using the resolved YQL type. Query results reflect actual selected columns, including aliases. Unsupported type/runtime combinations are errors; no generic `Any` fallback is generated.
 
-For `:one`, Go returns a row and error; Python returns a row or `None` when no row exists. `:many` returns a Go slice or Python list. `:exec` returns only execution status. The selected YDB SDK/driver APIs do not expose a portable affected-row count, so all generators reject `:execrows`.
+For `:one`, Go returns a row and error; Python returns a row or `None` when no row exists. `:many` returns a Go slice or Python list. Go-only [`:each`](streaming.md) consumes SELECT rows through a synchronous typed callback. `:exec` returns only execution status. The selected YDB SDK/driver APIs do not expose a portable affected-row count, so all generators reject `:execrows`.
 
 C++ and Java `:one` results are optional; C# throws `InvalidOperationException` when no row exists. C++, Java native/JDBC and C# return the first row when present. Rust and jOOQ reject multiple rows for `:one`; Rust reports `YdbError::NoRows` for an empty result. `:many` returns a typed collection. Java native/JDBC represent `Uint64` as the full 64-bit `long` bit pattern; use `Long.toUnsignedString` for unsigned decimal formatting. C++ uses `uint64_t` and C# uses `ulong`; jOOQ uses `ULong`. Binary YQL `String` stays binary in every target.
 

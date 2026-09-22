@@ -197,7 +197,7 @@ func validateStructDeclarations(in *model.AnalysisResult) error {
 		if len(q.Parameters) > 1 {
 			names[q.Name+"Params"] = true
 		}
-		if q.Command == model.One || q.Command == model.Many {
+		if q.Command == model.One || q.Command == model.Many || q.Command == model.Each {
 			names[q.Name+"Row"] = true
 		}
 	}

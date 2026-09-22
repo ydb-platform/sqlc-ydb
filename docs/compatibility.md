@@ -23,7 +23,7 @@ Compatibility is tracked by individual CLI, configuration and generated API cont
 - File paths, lists, nonrecursive directories, and ordinary glob patterns. Explicit list order is retained; directory entries and glob matches use lexical order. Hidden files and `*.down.sql` are excluded.
 - Schema rollback sections for goose, sql-migrate, tern and dbmate are excluded. Migration markers inside string literals are preserved.
 - Schema migrations update an in-memory catalog in input order. Supported DDL: `CREATE TABLE [IF NOT EXISTS]`, `DROP TABLE [IF EXISTS]`, and `ALTER TABLE` with `ADD [COLUMN]`, `DROP [COLUMN]`, or table `RENAME TO`.
-- Query annotations `-- name: QueryName :one|:many|:exec`. `:execrows` is parsed but generation rejects it: the selected YDB APIs cannot provide its required affected-row count.
+- Query annotations `-- name: QueryName :one|:many|:exec`, plus Go-only [`:each` streaming callbacks](streaming.md) for SELECT. `:execrows` is parsed but generation rejects it: the selected YDB APIs cannot provide its required affected-row count.
 - The Python package directory is selected by `out`; `gen.python.package` is unsupported. Go's default `sql_package` is `database/sql`, matching upstream sqlc.
 - Unknown configuration options produce errors. Generation never silently discards an option that has not been implemented.
 

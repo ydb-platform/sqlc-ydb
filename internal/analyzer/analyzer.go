@@ -238,11 +238,11 @@ func parseAnnotation(line string) (string, model.Command, bool, string) {
 	}
 	fields := strings.Fields(strings.TrimSpace(text[len("name:"):]))
 	if len(fields) != 2 || fields[0] == "" {
-		return "", "", false, "invalid query annotation; expected -- name: QueryName :one|:many|:exec|:execrows"
+		return "", "", false, "invalid query annotation; expected -- name: QueryName :one|:many|:each|:exec|:execrows"
 	}
 	command := model.Command(fields[1])
 	switch command {
-	case model.One, model.Many, model.Exec, model.ExecRows:
+	case model.One, model.Many, model.Each, model.Exec, model.ExecRows:
 		return fields[0], command, true, ""
 	default:
 		return "", "", false, fmt.Sprintf("unsupported query command %q", fields[1])
