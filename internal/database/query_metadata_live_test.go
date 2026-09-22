@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"reflect"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb_Query"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/config"
 )
@@ -75,17 +77,16 @@ func TestLiveYDBQueryMetadata(t *testing.T) {
 		}
 		return parts
 	}
-	checkColumns := func(t *testing.T, parts []*Ydb_Query.ExecuteQueryResponsePart, want []string) {
+	checkColumns := func(t *testing.T, parts []*Ydb_Query.ExecuteQueryResponsePart, want []string, wantRows int) {
 		t.Helper()
 		var columns []string
+		rows := 0
 		for _, part := range parts {
 			if err := statusError(part.GetStatus(), part.GetIssues()); err != nil {
 				t.Fatal(err)
 			}
 			if result := part.GetResultSet(); result != nil {
-				if len(result.GetRows()) != 0 {
-					t.Fatalf("LIMIT 0 returned %d rows", len(result.GetRows()))
-				}
+				rows += len(result.GetRows())
 				for _, column := range result.GetColumns() {
 					typ, err := decodeType(column.GetType())
 					if err != nil {
@@ -94,6 +95,9 @@ func TestLiveYDBQueryMetadata(t *testing.T) {
 					columns = append(columns, column.GetName()+":"+typ.String())
 				}
 			}
+		}
+		if rows != wantRows {
+			t.Fatalf("result row count: got %d, want %d", rows, wantRows)
 		}
 		if !reflect.DeepEqual(columns, want) {
 			t.Fatalf("result columns: got %v, want %v", columns, want)
@@ -122,7 +126,7 @@ SELECT $id + 1ul AS incremented, CAST(NULL AS Utf8?) AS label,
 
 	t.Run("complex_limit_zero_metadata", func(t *testing.T) {
 		parts := run(t, complexSQL, Ydb_Query.ExecMode_EXEC_MODE_EXECUTE, nil)
-		checkColumns(t, parts, []string{"next_id:Uint64", "label:Optional<Utf8>", "numbers:List<Int32>", "amount:Optional<Decimal(22,9)>", "total:Uint64"})
+		checkColumns(t, parts, []string{"next_id:Uint64", "label:Optional<Utf8>", "numbers:List<Int32>", "amount:Optional<Decimal(22,9)>", "total:Uint64"}, 0)
 	})
 	t.Run("declared_explain_without_values", func(t *testing.T) {
 		for _, part := range run(t, declaredSQL, Ydb_Query.ExecMode_EXEC_MODE_EXPLAIN, nil) {
@@ -147,6 +151,57 @@ SELECT $id + 1ul AS incremented, CAST(NULL AS Utf8?) AS label,
 			Type:  &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_UINT64}},
 			Value: &Ydb.Value{Value: &Ydb.Value_Uint64Value{Uint64Value: 42}},
 		}}
-		checkColumns(t, run(t, limitSQL, Ydb_Query.ExecMode_EXEC_MODE_EXECUTE, parameters), []string{"incremented:Uint64", "label:Optional<Utf8>", "total:Uint64"})
+		checkColumns(t, run(t, limitSQL, Ydb_Query.ExecMode_EXEC_MODE_EXECUTE, parameters), []string{"incremented:Uint64", "label:Optional<Utf8>", "total:Uint64"}, 0)
 	})
+	t.Run("queryservice_structured_parameters_limit_zero_and_one", func(t *testing.T) {
+		const sql = `DECLARE $id AS Uint64;
+DECLARE $text AS Utf8;
+DECLARE $maybe AS Int32?;
+DECLARE $rows AS List<Struct<key:Uint64,label:Utf8?>>;
+SELECT $id + 1ul AS incremented, $text AS label, $maybe AS maybe,
+    r.key AS row_key, r.label AS row_label, COUNT(*) OVER () AS total
+FROM AS_TABLE($rows) AS r ORDER BY row_key`
+		for _, part := range run(t, sql+" LIMIT 1;", Ydb_Query.ExecMode_EXEC_MODE_EXPLAIN, nil) {
+			if err := statusError(part.GetStatus(), part.GetIssues()); err != nil {
+				t.Fatal(err)
+			}
+		}
+		types := map[string]*Ydb.Type{
+			"$id":    primitive(Ydb.Type_UINT64),
+			"$text":  primitive(Ydb.Type_UTF8),
+			"$maybe": optional(primitive(Ydb.Type_INT32)),
+			"$rows": {Type: &Ydb.Type_ListType{ListType: &Ydb.ListType{Item: &Ydb.Type{Type: &Ydb.Type_StructType{StructType: &Ydb.StructType{Members: []*Ydb.StructMember{
+				{Name: "key", Type: primitive(Ydb.Type_UINT64)},
+				{Name: "label", Type: optional(primitive(Ydb.Type_UTF8))},
+			}}}}}}},
+		}
+		values := map[string]*Ydb.Value{
+			"$id":    {Value: &Ydb.Value_Uint64Value{Uint64Value: 42}},
+			"$text":  {Value: &Ydb.Value_TextValue{TextValue: "example"}},
+			"$maybe": {Value: &Ydb.Value_NullFlagValue{NullFlagValue: structpb.NullValue_NULL_VALUE}},
+			"$rows": {Items: []*Ydb.Value{{Items: []*Ydb.Value{
+				{Value: &Ydb.Value_Uint64Value{Uint64Value: 9}},
+				{Value: &Ydb.Value_NullFlagValue{NullFlagValue: structpb.NullValue_NULL_VALUE}},
+			}}}},
+		}
+		parameters := make(map[string]*Ydb.TypedValue, len(types))
+		for name, typ := range types {
+			parameters[name] = &Ydb.TypedValue{Type: typ, Value: values[name]}
+		}
+		want := []string{"incremented:Uint64", "label:Utf8", "maybe:Optional<Int32>", "row_key:Uint64", "row_label:Optional<Utf8>", "total:Uint64"}
+		for _, limit := range []int{0, 1} {
+			parts := run(t, sql+fmt.Sprintf(" LIMIT %d;", limit), Ydb_Query.ExecMode_EXEC_MODE_EXECUTE, parameters)
+			checkColumns(t, parts, want, limit)
+		}
+	})
+
+	t.Run("limit_zero_omits_value_dependent_runtime_check", func(t *testing.T) {
+		const sql = "DECLARE $id AS Uint64; SELECT Ensure($id, $id > 0ul, 'id must be positive') AS id"
+		parameters := map[string]*Ydb.TypedValue{"$id": {
+			Type: primitive(Ydb.Type_UINT64), Value: &Ydb.Value{Value: &Ydb.Value_Uint64Value{Uint64Value: 0}},
+		}}
+		checkColumns(t, run(t, sql+" LIMIT 0;", Ydb_Query.ExecMode_EXEC_MODE_EXECUTE, parameters), []string{"id:Uint64"}, 0)
+		checkError(t, run(t, sql+" LIMIT 1;", Ydb_Query.ExecMode_EXEC_MODE_EXECUTE, parameters), Ydb.StatusIds_PRECONDITION_FAILED, "id must be positive")
+	})
+
 }
