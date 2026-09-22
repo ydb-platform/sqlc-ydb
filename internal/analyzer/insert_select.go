@@ -144,7 +144,7 @@ func analyzeInsertSelect(catalog model.Catalog, block queryBlock, statement *par
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, id, fmt.Sprintf("SELECT column %q has type %s but target column %q requires %s", columns[i].Name, from.String(), name, to.String())))
 		}
 	}
-	return diagnostics
+	return append(diagnostics, validateRequiredDMLColumns(block, statement, target, seen, true)...)
 }
 
 func analyzeNamedDMLSelect(catalog model.Catalog, block queryBlock, stmt parser.ISelect_stmtContext, context antlr.ParserRuleContext, target *model.Table, bindings, inferred map[string]model.Type, syntax *model.QuerySyntax) []model.Diagnostic {
@@ -178,8 +178,13 @@ func validateNamedDMLColumns(block queryBlock, context antlr.ParserRuleContext, 
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, context, fmt.Sprintf("source column %q has type %s but target column requires %s", name, source.Type.String(), destination.Type.String())))
 		}
 	}
+	return append(diagnostics, validateRequiredDMLColumns(block, context, target, seen, insert)...)
+}
+
+func validateRequiredDMLColumns(block queryBlock, context antlr.ParserRuleContext, target *model.Table, seen map[string]bool, insert bool) []model.Diagnostic {
+	var diagnostics []model.Diagnostic
 	for _, column := range target.Columns {
-		if seen[column.Name] || insert && column.SequenceGenerated {
+		if seen[column.Name] || (insert && column.SequenceGenerated) {
 			continue
 		}
 		if slices.Contains(target.PrimaryKey, column.Name) {

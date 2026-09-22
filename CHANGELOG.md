@@ -8,6 +8,7 @@
 
 ### Fixed
 
+- Reject positional INSERT/UPSERT SELECT queries that omit primary-key or required NOT NULL columns before generation, using the same missing-column checks as named writes. Generated serial keys and nullable non-key columns may still be omitted.
 - Accept a trailing comma in Struct type declarations, including structured batch parameters and nested Struct types, while continuing to reject empty or duplicate fields.
 
 ## v0.2.1

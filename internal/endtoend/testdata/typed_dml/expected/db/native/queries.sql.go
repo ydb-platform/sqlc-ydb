@@ -503,3 +503,41 @@ func (q *Queries) ClearNamedRecordNote(ctx context.Context, arg ClearNamedRecord
 
 	return row, nil
 }
+
+// -- name: UpsertPositionalRecord :one
+func (q *Queries) UpsertPositionalRecord(ctx context.Context, arg UpsertPositionalRecordParams, opts ...query.ExecuteOption) (UpsertPositionalRecordRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$owner_hash").Uint64(arg.OwnerHash)
+	parameters = parameters.Param("$record_id").Text(arg.RecordID)
+	parameters = parameters.Param("$payload").Bytes(arg.Payload)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	result, err := q.db.QueryRow(ctx, ""+
+		"DECLARE $owner_hash AS Uint64;\n"+
+		"DECLARE $record_id AS Utf8;\n"+
+		"DECLARE $payload AS Bytes;\n"+
+		"UPSERT INTO records (payload, record_id, owner_hash, owner_id, group_id, attributes, created_at, updated_at)\n"+
+		"SELECT $payload AS record_id, record_id AS owner_hash, owner_hash AS payload,\n"+
+		"    owner_id, group_id, attributes, created_at, updated_at\n"+
+		"FROM records\n"+
+		"WHERE owner_hash = $owner_hash AND record_id = $record_id\n"+
+		"RETURNING record_id, payload, note;",
+		callOptions...,
+	)
+	if err != nil {
+		return UpsertPositionalRecordRow{}, xerrors.WithStackTrace(err)
+	}
+
+	var row UpsertPositionalRecordRow
+	if err := result.ScanNamed(
+		query.Named("record_id", &row.RecordID),
+		query.Named("payload", &row.Payload),
+		query.Named("note", &row.Note),
+	); err != nil {
+		return UpsertPositionalRecordRow{}, xerrors.WithStackTrace(err)
+	}
+
+	return row, nil
+}

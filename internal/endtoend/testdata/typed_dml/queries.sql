@@ -97,3 +97,14 @@ SELECT record_id, owner_hash, owner_id, group_id, payload, attributes, created_a
 FROM records
 WHERE owner_hash = $owner_hash AND record_id = $record_id
 RETURNING record_id, note;
+
+-- name: UpsertPositionalRecord :one
+DECLARE $owner_hash AS Uint64;
+DECLARE $record_id AS Utf8;
+DECLARE $payload AS Bytes;
+UPSERT INTO records (payload, record_id, owner_hash, owner_id, group_id, attributes, created_at, updated_at)
+SELECT $payload AS record_id, record_id AS owner_hash, owner_hash AS payload,
+    owner_id, group_id, attributes, created_at, updated_at
+FROM records
+WHERE owner_hash = $owner_hash AND record_id = $record_id
+RETURNING record_id, payload, note;

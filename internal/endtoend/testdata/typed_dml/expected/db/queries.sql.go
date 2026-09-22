@@ -403,3 +403,28 @@ func (q *Queries) ClearNamedRecordNote(ctx context.Context, arg ClearNamedRecord
 
 	return row, err
 }
+
+// -- name: UpsertPositionalRecord :one
+func (q *Queries) UpsertPositionalRecord(ctx context.Context, arg UpsertPositionalRecordParams) (UpsertPositionalRecordRow, error) {
+	var row UpsertPositionalRecordRow
+	err := q.db.QueryRowContext(ctx, ""+
+		"DECLARE $owner_hash AS Uint64;\n"+
+		"DECLARE $record_id AS Utf8;\n"+
+		"DECLARE $payload AS Bytes;\n"+
+		"UPSERT INTO records (payload, record_id, owner_hash, owner_id, group_id, attributes, created_at, updated_at)\n"+
+		"SELECT $payload AS record_id, record_id AS owner_hash, owner_hash AS payload,\n"+
+		"    owner_id, group_id, attributes, created_at, updated_at\n"+
+		"FROM records\n"+
+		"WHERE owner_hash = $owner_hash AND record_id = $record_id\n"+
+		"RETURNING record_id, payload, note;",
+		sql.Named("owner_hash", arg.OwnerHash),
+		sql.Named("record_id", arg.RecordID),
+		sql.Named("payload", arg.Payload),
+	).Scan(
+		&row.RecordID,
+		&row.Payload,
+		&row.Note,
+	)
+
+	return row, err
+}

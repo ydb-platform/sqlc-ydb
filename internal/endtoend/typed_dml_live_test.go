@@ -202,7 +202,8 @@ func typedDMLRuntimeSource(dsn, table, schema, setup, cleanup string, databaseSQ
 import (
 	"bytes"
 	"context"
-	` + sqlImport + `"testing"
+	` + sqlImport + `"strings"
+	"testing"
 	"time"
 	ydb "github.com/ydb-platform/ydb-go-sdk/v3"
 )
@@ -262,6 +263,35 @@ func TestTypedDML(t *testing.T) {
 	namedRows, err = q.ListRecords(ctx, 123)
 	if err != nil || len(namedRows) != 2 || namedRows[0].Note != nil || namedRows[1].Note == nil || *namedRows[1].Note != "keep-2" {
 		t.Fatalf("named UPSERT nullable write: %#v err=%v", namedRows, err)
+	}
+
+	positional, err := q.UpsertPositionalRecord(ctx, UpsertPositionalRecordParams{OwnerHash: hash, RecordID: "named-2", Payload: []byte("positional")})
+	if err != nil || positional.RecordID != "named-2" || string(positional.Payload) != "positional" || positional.Note == nil || *positional.Note != "keep-2" {
+		t.Fatalf("positional UPSERT aliases and omitted nullable column: %#v err=%v", positional, err)
+	}
+
+	for _, verb := range []string{"INSERT", "UPSERT"} {
+		for _, missing := range []string{"attributes", "owner_hash"} {
+			var columns []string
+			for _, name := range []string{"owner_hash", "owner_id", "record_id", "group_id", "payload", "attributes", "created_at", "updated_at"} {
+				if name != missing {
+					columns = append(columns, name)
+				}
+			}
+			projection := strings.Join(columns, ", ")
+			for _, filter := range []string{"", " WHERE false"} {
+				statement := verb + " INTO " + table + " (" + projection + ") SELECT " + projection + " FROM " + table + filter
+				err := driver.Query().Exec(ctx, statement)
+				if err == nil || !strings.Contains(err.Error(), "Missing") || !strings.Contains(err.Error(), missing) {
+					t.Fatalf("%s missing %s, empty source=%t: expected missing-column rejection, got %v", verb, missing, filter != "", err)
+				}
+			}
+		}
+	}
+	namedRows, err = q.ListRecords(ctx, 123)
+	if err != nil || len(namedRows) != 2 || string(namedRows[0].Payload) != "changed-1" || string(namedRows[1].Payload) != "positional" ||
+		namedRows[0].Note != nil || namedRows[1].Note == nil || *namedRows[1].Note != "keep-2" {
+		t.Fatalf("positional write or rejected-write preservation: %#v err=%v", namedRows, err)
 	}
 
 	owner := uint64(^uint64(0))

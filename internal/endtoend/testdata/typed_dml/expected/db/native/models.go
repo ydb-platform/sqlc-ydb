@@ -133,6 +133,18 @@ type ClearNamedRecordNoteParams struct {
 	RecordID  string
 }
 
+type UpsertPositionalRecordRow struct {
+	RecordID string
+	Payload  []byte
+	Note     *string
+}
+
+type UpsertPositionalRecordParams struct {
+	OwnerHash uint64
+	RecordID  string
+	Payload   []byte
+}
+
 type Querier interface {
 	InsertRecords(ctx context.Context, arg InsertRecordsParams, opts ...query.ExecuteOption) error
 	UpdateRecords(ctx context.Context, arg UpdateRecordsParams, opts ...query.ExecuteOption) error
@@ -144,4 +156,5 @@ type Querier interface {
 	UpsertNamedRecords(ctx context.Context, arg UpsertNamedRecordsParams, opts ...query.ExecuteOption) error
 	UpsertWildcardRecords(ctx context.Context, arg []UpsertWildcardRecordsRowsItem, opts ...query.ExecuteOption) error
 	ClearNamedRecordNote(ctx context.Context, arg ClearNamedRecordNoteParams, opts ...query.ExecuteOption) (ClearNamedRecordNoteRow, error)
+	UpsertPositionalRecord(ctx context.Context, arg UpsertPositionalRecordParams, opts ...query.ExecuteOption) (UpsertPositionalRecordRow, error)
 }
