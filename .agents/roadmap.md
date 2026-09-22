@@ -2,6 +2,24 @@
 
 Current behavior is in [compatibility](../docs/compatibility.md), stage ownership in [architecture](architecture.md), and release gates in [the release plan](release-plan.md).
 
+## Query compatibility priorities
+
+The following issues track planned work; their examples and acceptance criteria define the scope. Name-mapped INSERT/UPSERT SELECT and trailing Struct commas are covered by [#25](https://github.com/ydb-platform/sqlc-ydb/issues/25) and [#26](https://github.com/ydb-platform/sqlc-ydb/issues/26). Subsequent changes should remain separate, reviewable PRs.
+
+| Order | Planned capability | Tracking |
+| --- | --- | --- |
+| 1 | Verified integer aliases and LIMIT/OFFSET parameter types | [#27](https://github.com/ydb-platform/sqlc-ydb/issues/27) |
+| 2 | Secondary-index schema metadata and VIEW selection | [#28](https://github.com/ydb-platform/sqlc-ydb/issues/28) |
+| 2 | TablePathPrefix and consistent table resolution | [#29](https://github.com/ydb-platform/sqlc-ydb/issues/29) |
+| 2 | ALTER COLUMN DROP NOT NULL | [#30](https://github.com/ydb-platform/sqlc-ydb/issues/30) |
+| 3 | Shared Boolean expressions, conditional aggregates and scalar conversions | [#31](https://github.com/ydb-platform/sqlc-ydb/issues/31) |
+| 4 | Scoped tabular expressions, IN subqueries and collection aggregation | [#32](https://github.com/ydb-platform/sqlc-ydb/issues/32) |
+| 5 | Multi-statement query scripts with at most one typed result | [#33](https://github.com/ydb-platform/sqlc-ydb/issues/33) |
+| 6 | Typed lambdas and JSON/Yson collection transformations | [#34](https://github.com/ydb-platform/sqlc-ydb/issues/34) |
+| Independent | Typed streaming results with explicit cancellation and ownership | [#35](https://github.com/ydb-platform/sqlc-ydb/issues/35) |
+
+Semantic changes belong in the shared analyzer. Acceptance requires focused diagnostics, generated code compiled against pinned SDKs, and sequential local-ydb execution that asserts values, types and transaction behavior where applicable. Passing generation alone is not runtime acceptance.
+
 ## Shared macros
 
 Macro processing must run once per `sql` entry through `analyzer.Analyze`, before any generator. Keep executable SQL, resolved metadata and original diagnostic positions together. Use tokens and parse contexts so rewrites preserve strings, comments, quoted identifiers and local bindings.

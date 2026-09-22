@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- Support INSERT/UPSERT SELECT without an explicit target column list, matching source columns to destinations by name. Named writes accept wildcard projections and computed columns with aliases, validate destination types, primary keys and required NOT NULL columns, and preserve omitted nullable columns on UPSERT. Explicit target lists retain positional matching and require explicit source projections.
+
+### Fixed
+
+- Accept a trailing comma in Struct type declarations, including structured batch parameters and nested Struct types, while continuing to reject empty or duplicate fields.
+
 ## v0.2.1
 
 ### Added

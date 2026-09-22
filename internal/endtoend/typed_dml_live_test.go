@@ -214,6 +214,56 @@ func TestTypedDML(t *testing.T) {
 	table := ` + strconv.Quote(table) + `
 	schema := ` + strconv.Quote(schema) + `
 ` + setup + cleanup + `
+
+	namedCreated := time.Date(2026, 9, 22, 1, 2, 3, 456000000, time.UTC)
+	for _, batch := range [][]InsertNamedRecordsRowsItem{nil, {}} {
+		if err := q.InsertNamedRecords(ctx, InsertNamedRecordsParams{OwnerID: 123, CreatedAt: namedCreated, Rows: batch}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := q.InsertNamedRecords(ctx, InsertNamedRecordsParams{OwnerID: 123, CreatedAt: namedCreated, Rows: []InsertNamedRecordsRowsItem{
+		{RecordID: "named-1", GroupID: "group-1", Payload: []byte("initial-1"), Attributes: "{}", Note: "keep-1"},
+		{RecordID: "named-2", GroupID: "group-2", Payload: []byte("initial-2"), Attributes: "{}", Note: "keep-2"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	namedRows, err := q.ListRecords(ctx, 123)
+	if err != nil || len(namedRows) != 2 {
+		t.Fatalf("named insert rows=%#v err=%v", namedRows, err)
+	}
+	hash := namedRows[0].OwnerHash
+	for _, batch := range [][]UpsertNamedRecordsRowsItem{nil, {}, {{Key: "named-1", Body: []byte("changed-1"), GroupID: "group-1", Attributes: "{}"}}} {
+		if err := q.UpsertNamedRecords(ctx, UpsertNamedRecordsParams{OwnerHash: hash, OwnerID: 123, CreatedAt: namedCreated, Rows: batch}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, batch := range [][]UpsertWildcardRecordsRowsItem{nil, {}, {{OwnerHash: hash, RecordID: "named-2", Payload: []byte("changed-2"), GroupID: "group-2", OwnerID: 123, Attributes: "{}", CreatedAt: namedCreated, UpdatedAt: namedCreated}}} {
+		if err := q.UpsertWildcardRecords(ctx, batch); err != nil {
+			t.Fatal(err)
+		}
+	}
+	namedRows, err = q.ListRecords(ctx, 123)
+	if err != nil || len(namedRows) != 2 {
+		t.Fatalf("named upsert rows=%#v err=%v", namedRows, err)
+	}
+	for i, row := range namedRows {
+		if row.RecordID != []string{"named-1", "named-2"}[i] || string(row.Payload) != []string{"changed-1", "changed-2"}[i] ||
+			row.GroupID != []string{"group-1", "group-2"}[i] || row.OwnerID != 123 || row.Attributes != "{}" ||
+			row.Note == nil || *row.Note != []string{"keep-1", "keep-2"}[i] ||
+			!row.CreatedAt.Equal(namedCreated) || !row.UpdatedAt.Equal(namedCreated) {
+			t.Fatalf("name mapping or omitted-column preservation: %#v", row)
+		}
+	}
+
+	cleared, err := q.ClearNamedRecordNote(ctx, ClearNamedRecordNoteParams{OwnerHash: hash, RecordID: "named-1"})
+	if err != nil || cleared.RecordID != "named-1" || cleared.Note != nil {
+		t.Fatalf("named UPSERT contextual NULL and RETURNING: %#v err=%v", cleared, err)
+	}
+	namedRows, err = q.ListRecords(ctx, 123)
+	if err != nil || len(namedRows) != 2 || namedRows[0].Note != nil || namedRows[1].Note == nil || *namedRows[1].Note != "keep-2" {
+		t.Fatalf("named UPSERT nullable write: %#v err=%v", namedRows, err)
+	}
+
 	owner := uint64(^uint64(0))
 	created := time.Date(2026, 9, 15, 1, 2, 3, 456000000, time.UTC)
 	updated := created.Add(7 * time.Minute)

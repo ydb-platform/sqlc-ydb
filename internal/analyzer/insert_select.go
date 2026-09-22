@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -96,9 +97,6 @@ func analyzeSelectCore(catalog model.Catalog, block queryBlock, core *parser.Sel
 
 func analyzeInsertSelect(catalog model.Catalog, block queryBlock, statement *parser.Into_table_stmtContext, target *model.Table, bindings, inferred map[string]model.Type, syntax *model.QuerySyntax) []model.Diagnostic {
 	source := statement.Into_values_source()
-	if source.Pure_column_list() == nil {
-		return []model.Diagnostic{diagnosticAt(block.file, block.line-1, statement, "INSERT/UPSERT SELECT requires an explicit target column list")}
-	}
 	stmt := insertSelect(statement)
 	cores, partials, diagnostics := selectArms(block, stmt)
 	if len(diagnostics) != 0 {
@@ -108,6 +106,13 @@ func analyzeInsertSelect(catalog model.Catalog, block queryBlock, statement *par
 		return []model.Diagnostic{diagnosticAt(block.file, block.line-1, statement, "INSERT/UPSERT SELECT supports one SELECT input; UNION is not yet supported")}
 	}
 	core := cores[0]
+	if source.Pure_column_list() == nil {
+		columns, ds := analyzeSelectCore(catalog, block, core, partials[0], bindings, inferred, syntax, selectProjection)
+		if len(ds) != 0 {
+			return ds
+		}
+		return validateNamedDMLColumns(block, statement, target, columns, true)
+	}
 	for _, result := range core.AllResult_column() {
 		if result.ASTERISK() != nil {
 			return []model.Diagnostic{diagnosticAt(block.file, block.line-1, result, "INSERT/UPSERT SELECT requires explicit source columns; wildcard column order is not guaranteed")}
@@ -147,6 +152,11 @@ func analyzeNamedDMLSelect(catalog model.Catalog, block queryBlock, stmt parser.
 	if len(diagnostics) != 0 {
 		return diagnostics
 	}
+	return validateNamedDMLColumns(block, context, target, columns, false)
+}
+
+func validateNamedDMLColumns(block queryBlock, context antlr.ParserRuleContext, target *model.Table, columns []model.Column, insert bool) []model.Diagnostic {
+	var diagnostics []model.Diagnostic
 	seen := map[string]bool{}
 	for _, source := range columns {
 		name := source.ResultName()
@@ -168,9 +178,14 @@ func analyzeNamedDMLSelect(catalog model.Catalog, block queryBlock, stmt parser.
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, context, fmt.Sprintf("source column %q has type %s but target column requires %s", name, source.Type.String(), destination.Type.String())))
 		}
 	}
-	for _, key := range target.PrimaryKey {
-		if !seen[key] {
-			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, context, fmt.Sprintf("missing primary key column %q", key)))
+	for _, column := range target.Columns {
+		if seen[column.Name] || insert && column.SequenceGenerated {
+			continue
+		}
+		if slices.Contains(target.PrimaryKey, column.Name) {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, context, fmt.Sprintf("missing primary key column %q", column.Name)))
+		} else if insert && !column.Type.IsOptional() {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, context, fmt.Sprintf("missing required column %q; INSERT/UPSERT must provide all NOT NULL columns", column.Name)))
 		}
 	}
 	return diagnostics

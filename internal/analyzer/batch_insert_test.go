@@ -86,7 +86,6 @@ func TestBatchStructRejectsDynamicFieldName(t *testing.T) {
 func TestBatchInsertSourceDiagnostics(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, label Json, PRIMARY KEY(id));`}}
 	for _, tc := range []struct{ name, statement, want string }{
-		{"missing target list", "INSERT INTO records SELECT id,label FROM AS_TABLE($books)", "explicit target column list"},
 		{"union", "INSERT INTO records (id,label) SELECT id,label FROM AS_TABLE($books) UNION ALL SELECT id,label FROM AS_TABLE($books)", "UNION is not yet supported"},
 		{"unknown source", "INSERT INTO records (id,label) SELECT id,label FROM missing_table", "unknown table"},
 		{"other function", "INSERT INTO records (id,label) SELECT id,label FROM OtherTable($books)", "dynamic table references"},
