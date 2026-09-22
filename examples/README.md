@@ -9,8 +9,9 @@ YDB adaptations of all five families in [sqlc's examples](https://github.com/sql
 | [booktest](booktest) | Book catalog, joins, JSON tags, updates and a scalar greeting |
 | [jets](jets) | Related tables, aggregate counts and limited result sets |
 | [ondeck](ondeck) | Ordered schema migrations, query directories and venue aggregates |
+| [streaming](streaming) | Typed callback exports; Go native SDK and database/sql |
 
-Every family generates Go native SDK and `database/sql`, C++ native SDK and userver, C# Dapper, Java jOOQ, Kotlin Query SDK, TypeScript, Rust and PHP APIs. The `authors` family also includes Python (native, DB-API, SQLAlchemy), C# ADO.NET, Java native/JDBC, and Kotlin JDBC/Exposed profiles. Shared cross-example builds and test harnesses live in `tests/examples/`, grouped by language. The example directories contain their SQL, generator configuration and code grouped by language and runtime. Runtime commands are in [development](../.agents/development.md).
+The five upstream-derived families generate Go native SDK and `database/sql`, C++ native SDK and userver, C# Dapper, Java jOOQ, Kotlin Query SDK, TypeScript, Rust and PHP APIs. The `authors` family also includes Python (native, DB-API, SQLAlchemy), C# ADO.NET, Java native/JDBC, and Kotlin JDBC/Exposed profiles. Shared cross-example builds and test harnesses live in `tests/examples/`, grouped by language. The sqlc-ydb streaming recipe covers both Go profiles; other profiles reject `:each`. The example directories contain their SQL, generator configuration and code grouped by language and runtime. Runtime commands are in [development](../.agents/development.md).
 
 From the repository root:
 

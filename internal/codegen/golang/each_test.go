@@ -1,6 +1,7 @@
 package golang
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,6 +50,7 @@ import ("context"; "strings"; "testing"; "github.com/ydb-platform/ydb-go-sdk/v3/
 func TestEachDecimalValidation(t *testing.T) {
  err := New(nil).Visit(context.Background(), types.Decimal{Precision:21,Scale:9}, func(VisitRow)error{return nil})
  if err == nil || !strings.Contains(err.Error(), "expects Decimal(22,9)") { t.Fatalf("%v",err) }
+ if wantNative := `+fmt.Sprint(runtime == "ydb")+`; wantNative && strings.Count(err.Error(), "(*Queries).Visit") != 1 { t.Fatalf("expected one query stack frame: %v",err) }
 }
 `)
 		in.Queries[0].ResultSets = nil

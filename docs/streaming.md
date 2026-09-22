@@ -41,7 +41,7 @@ func (q *Queries) VisitDevices(
 ) error
 ```
 
-The `database/sql` signature omits `opts`. Queries with one parameter take that parameter directly; queries with no parameters take only the context, callback and, for native YDB, options. `emit_interface` includes these methods in `Querier`. Row types, tags and parameter binding use the same rules as `:many`. The [executable fixture](../internal/endtoend/testdata/each) includes zero, one and multiple parameters and both profiles.
+The `database/sql` signature omits `opts`. Queries with one parameter take that parameter directly; queries with no parameters take only the context, callback and, for native YDB, options. `emit_interface` includes these methods in `Querier`. Row types, tags and parameter binding use the same rules as `:many`. The [streaming example](../examples/streaming) includes generated code and runnable exports for both Go profiles. The [executable fixture](../internal/endtoend/testdata/each) includes zero, one and multiple parameters and both profiles.
 
 ```go
 q := db.New(session)
@@ -52,13 +52,13 @@ err := q.VisitDevices(ctx, db.VisitDevicesParams{MinID: 0, MaxID: 1000},
 )
 ```
 
-Here `db` is the generated package, `session` is a caller-owned YDB query session and `encoder` is an application-owned encoder. A nil callback is rejected before executing SQL. Initially `:each` accepts one SELECT result set; DML, including DML RETURNING, is rejected. The annotation does not select ScanQuery, change transaction isolation, or add SQL limits.
+Here `db` is the generated package, `session` is a caller-owned YDB query session and `encoder` is an application-owned encoder. A nil callback is rejected before executing SQL. `:each` accepts exactly one SELECT result set; DML, including DML RETURNING, is rejected. The annotation does not select ScanQuery, change transaction isolation, or add SQL limits.
 
 ## Consumption, cancellation and errors
 
 Callbacks run synchronously, one at a time, in the order received from YDB. Use `ORDER BY` when the SQL must guarantee order. The generated method does not retain previous rows or create a producer queue. The SDK may buffer response parts; an application can still consume unbounded memory by retaining rows inside its callback. An empty successful result returns nil without invoking the callback.
 
-Returning a callback error stops consumption immediately. The method cancels its unfinished query stream and closes its result. Use an application-owned error for deliberate early termination and check it with `errors.Is`; there is no special success sentinel. Context cancellation stops further delivery, but cannot interrupt an already-running callback: a long-running callback must observe the context itself.
+Returning a callback error stops consumption immediately. The method cancels its unfinished query stream and closes its result. Use an application-owned error for deliberate early termination and check it with `errors.Is`; there is no special success sentinel. In the native profile, closing the canceled stream can return either nil or `context.Canceled`, depending on whether SDK cancellation has finished. Consequently, an early-stop error can also satisfy `errors.Is(err, context.Canceled)` while the original caller context remains active. Check that original context's `Err()` to distinguish caller cancellation from cancellation initiated by cleanup. Context cancellation stops further delivery, but cannot interrupt an already-running callback: a long-running callback must observe the context itself.
 
 Execution, decoding, iteration and cleanup failures are returned. Cleanup errors returned by the SDK/driver are joined with the primary error, preserving `errors.Is` and `errors.As`. During cancellation, `database/sql` can close rows asynchronously and expose the context error instead of a driver close error. Native methods also add the SDK stack trace. Callback panics propagate after deferred cancellation and cleanup; the generated method does not recover them.
 

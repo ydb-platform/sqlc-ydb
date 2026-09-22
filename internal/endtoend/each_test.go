@@ -13,11 +13,17 @@ import (
 )
 
 func TestEachUnsupportedTargets(t *testing.T) {
-	for _, target := range []string{"python", "cpp", "csharp", "java", "kotlin", "typescript", "rust", "php"} {
-		t.Run(target, func(t *testing.T) {
+	for _, profile := range []struct{ target, runtime string }{
+		{"python", "ydb"}, {"python", "dbapi"}, {"python", "sqlalchemy"},
+		{"cpp", "ydb"}, {"cpp", "userver"}, {"csharp", "adonet"}, {"csharp", "dapper"},
+		{"java", "ydb"}, {"java", "jdbc"}, {"java", "jooq"},
+		{"kotlin", "ydb"}, {"kotlin", "jdbc"}, {"kotlin", "exposed"},
+		{"typescript", "ydb"}, {"rust", "ydb"}, {"php", "ydb"},
+	} {
+		t.Run(profile.target+"/"+profile.runtime, func(t *testing.T) {
 			dir := t.TempDir()
 			copyFixture(t, "testdata/each", dir)
-			cfg := "version: \"2\"\nsql:\n  - engine: ydb\n    schema: schema.sql\n    queries: queries.sql\n    gen:\n      go:\n        out: db\n      " + target + ":\n        out: other\n"
+			cfg := "version: \"2\"\nsql:\n  - engine: ydb\n    schema: schema.sql\n    queries: queries.sql\n    gen:\n      go:\n        out: db\n      " + profile.target + ":\n        out: other\n        runtime: " + profile.runtime + "\n"
 			if err := os.WriteFile(filepath.Join(dir, "sqlc.yaml"), []byte(cfg), 0600); err != nil {
 				t.Fatal(err)
 			}

@@ -225,3 +225,18 @@ func TestUsesSuppliedExecutor(t *testing.T) {
 		}
 	}
 }
+
+// A canceled stream may already be torn down (Close returns nil), or Close may
+// observe the child context cancellation itself. Both preserve the callback
+// error without claiming that the caller's original context was canceled.
+func TestEarlyStopCleanupCancellation(t *testing.T) {
+	stop := errors.New("consumer stop")
+	for _, closeErr := range []error{nil, context.Canceled} {
+		ctx := context.Background()
+		s := &stream{count: 2, closeErr: closeErr}
+		err := New(s).Visit(ctx, func(VisitRow) error { return stop })
+		if !errors.Is(err, stop) || errors.Is(err, context.Canceled) != (closeErr != nil) || ctx.Err() != nil || s.closed != 1 || !s.canceledOnClose {
+			t.Fatalf("callback=%v close=%v caller=%v stream=%+v", err, closeErr, ctx.Err(), s)
+		}
+	}
+}

@@ -786,7 +786,7 @@ func writeDecimalValidations(b *bytes.Buffer, q model.AnalyzedQuery, o Options) 
 
 func decimalValidationFailure(q model.AnalyzedQuery, o Options) string {
 	err := "err"
-	if o.Runtime == "ydb" {
+	if o.Runtime == "ydb" && q.Command != model.Each {
 		err = "xerrors.WithStackTrace(err)"
 	}
 	switch q.Command {

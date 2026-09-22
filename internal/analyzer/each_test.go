@@ -28,3 +28,10 @@ func TestEachSelect(t *testing.T) {
 		t.Fatal("accepted multiple SELECTs")
 	}
 }
+
+func TestMalformedAnnotationListsEach(t *testing.T) {
+	_, err := Analyze(nil, []model.Source{{Name: "queries.sql", Text: "-- name: Visit :each extra\nSELECT 1;"}})
+	if err == nil || !strings.Contains(err.Error(), "expected -- name: QueryName :one|:many|:each|:exec|:execrows") {
+		t.Fatalf("missing annotation guidance: %v", err)
+	}
+}
