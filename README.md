@@ -106,5 +106,3 @@ Input and output paths are relative to the configuration file. `generate` comple
 - [Contributing](CONTRIBUTING.md): contribution workflow and validation requirements.
 - [Code of Conduct](CODE_OF_CONDUCT.md): participation standards and enforcement process.
 - [Security](SECURITY.md): supported versions and private vulnerability reporting.
-
-For repository work, start with [AGENTS.md](AGENTS.md).
