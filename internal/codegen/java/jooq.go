@@ -240,7 +240,12 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 					return nil, e
 				}
 				if seen[alias] {
-					return nil, fmt.Errorf("%s: Java alias collision: %s", q.Name, alias)
+					for authored, generated := range r.aliases {
+						if generated == alias {
+							return nil, fmt.Errorf("%s: Java alias collision: %s (from %q and %q)", q.Name, alias, authored, rel.Alias)
+						}
+					}
+					return nil, fmt.Errorf("%s: Java alias collision: %s (from %q)", q.Name, alias, rel.Alias)
 				}
 				seen[alias] = true
 				fmt.Fprintf(&b, "        var %s = %s.as(%s);\n", alias, tn, quoted(rel.Alias))

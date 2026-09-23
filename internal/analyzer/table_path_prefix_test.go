@@ -326,6 +326,8 @@ func TestTableAliasIsTheOnlyQualifier(t *testing.T) {
 				{"records.id", "unknown column"},
 				{"records.*", "unknown table or alias"},
 				{"records.meta.value AS value", "unknown column"},
+				{"R.id", "unknown column"},
+				{"R.*", "unknown table or alias"},
 				{"r.id", ""},
 				{"r.*", ""},
 				{"r.meta.value AS value", ""},
@@ -340,5 +342,66 @@ func TestTableAliasIsTheOnlyQualifier(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestColumnBindingsPreserveAliasCase(t *testing.T) {
+	for _, prefix := range []string{"", "/local/one"} {
+		t.Run(prefix, func(t *testing.T) {
+			pragma := ""
+			if prefix != "" {
+				pragma = "PRAGMA TablePathPrefix('" + prefix + "'); "
+			}
+			schema := []model.Source{{Name: "schema.sql", Text: pragma + "CREATE TABLE records (id Uint32 NOT NULL, PRIMARY KEY(id)); CREATE TABLE other_records (id Uint64 NOT NULL, PRIMARY KEY(id));"}}
+			sql := "-- name: Read :many\n" + pragma + "SELECT r.id AS lower_id, R.id AS upper_id FROM records AS r JOIN other_records AS R ON r.id = R.id WHERE R.id = $id;"
+			result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			query := result.Queries[0]
+			if query.ResultSets[0].Columns[0].Type.Kind != "Uint32" || query.ResultSets[0].Columns[1].Type.Kind != "Uint64" || !reflect.DeepEqual(query.Parameters, []model.Parameter{{Name: "id", Type: model.Type{Kind: "Uint64"}}}) {
+				t.Fatalf("query types = %#v, parameters = %#v", query.ResultSets, query.Parameters)
+			}
+			bindings := 0
+			for _, ref := range columnRefs(query.Syntax.Root) {
+				wantTable, wantType := "records", "Uint32"
+				if ref.qualifier == "R" {
+					wantTable, wantType = "other_records", "Uint64"
+				}
+				if prefix != "" {
+					wantTable = prefix + "/" + wantTable
+				}
+				binding, ok := query.Syntax.Columns[ref.ctx.GetStart().GetTokenIndex()]
+				if !ok || binding.Alias != ref.qualifier || binding.Table != wantTable || binding.Column.Type.Kind != wantType {
+					t.Errorf("binding for %s = %#v, want alias %q, table %q, type %s", qualifiedName(ref), binding, ref.qualifier, wantTable, wantType)
+				}
+				bindings++
+			}
+			if bindings != 5 {
+				t.Fatalf("checked %d column bindings, want 5", bindings)
+			}
+		})
+	}
+}
+
+func TestTablePathPrefixDeclarationAndAssignmentOrdering(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE `/local/one/records` (id Uint32 NOT NULL, PRIMARY KEY(id));"}}
+	const declaration = "DECLARE $id AS Uint32; "
+	const pragma = "PRAGMA TablePathPrefix('/local/one'); "
+	const assignment = "$key = $id; "
+	for _, preamble := range []string{declaration + pragma, pragma + declaration, pragma + declaration + pragma} {
+		sql := "-- name: Read :many\n" + preamble + assignment + "SELECT id FROM records WHERE id = $key;"
+		result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		query := result.Queries[0]
+		if query.SQL != sql || !reflect.DeepEqual(query.Parameters, []model.Parameter{{Name: "id", Type: model.Type{Kind: "Uint32"}}}) {
+			t.Fatalf("query = %#v", query)
+		}
+	}
+	_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + declaration + assignment + pragma + "SELECT id FROM records WHERE id = $key;"}})
+	if err == nil || !strings.Contains(err.Error(), "must precede local assignments ($name = ...)") || !strings.Contains(err.Error(), "DECLARE may precede the pragma") {
+		t.Fatalf("late pragma error = %v", err)
 	}
 }

@@ -1032,7 +1032,7 @@ func recordColumnBindings(syntax *model.QuerySyntax, root antlr.Tree, relations 
 	}
 	for _, ref := range columnRefs(root) {
 		for _, relation := range relations {
-			if ref.qualifier != "" && !strings.EqualFold(ref.qualifier, relation.alias) {
+			if ref.qualifier != "" && ref.qualifier != relation.alias {
 				continue
 			}
 			if column := tableColumn(relation.table, ref.name); column != nil {

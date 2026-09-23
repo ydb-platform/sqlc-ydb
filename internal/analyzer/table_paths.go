@@ -35,7 +35,7 @@ func tablePathPrefix(file string, lineOffset int, root parser.ISql_queryContext)
 		case pragma.Opt_id_prefix_or_type().GetText() != "" || !strings.EqualFold(identifier(pragma.An_id().GetText()), "TablePathPrefix"):
 			message = "unsupported PRAGMA; only static TablePathPrefix is supported"
 		case started:
-			message = "PRAGMA TablePathPrefix must precede local bindings and data or schema statements"
+			message = "PRAGMA TablePathPrefix must precede local assignments ($name = ...) and data or schema statements; external parameter DECLARE may precede the pragma"
 		case len(pragma.AllPragma_value()) != 1 || pragma.Pragma_value(0).STRING_VALUE() == nil:
 			message = "PRAGMA TablePathPrefix requires one static quoted absolute path, for example '/database/folder'; dynamic values and reset forms are unsupported"
 		default:

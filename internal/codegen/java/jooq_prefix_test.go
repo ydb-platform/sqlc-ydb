@@ -35,6 +35,12 @@ DELETE FROM users WHERE users.id = $id RETURNING id;
 -- name: ReadPath :many
 ` + jooqPrefixPragma + `;
 SELECT ` + "`../a/users`.id FROM `../a/users` WHERE `../a/users`.name = $name;" + `
+-- name: QuestionSingle :many
+PRAGMA TablePathPrefix('/db/?w');
+SELECT u.id FROM ` + "`/local/a/users`" + ` AS u WHERE u.name = $name;
+-- name: QuestionDouble :many
+PRAGMA TablePathPrefix("/db/?w");
+SELECT u.id FROM ` + "`/local/a/users`" + ` AS u WHERE u.name = $name;
 `
 	a, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqPrefixSchema}}, []model.Source{{Name: "queries.sql", Text: queries}})
 	if err != nil {
@@ -54,6 +60,43 @@ SELECT ` + "`../a/users`.id FROM `../a/users` WHERE `../a/users`.name = $name;" 
 		t.Fatal("inferred parameters must retain DSL bindings", code)
 	}
 	t.Run("published dialect", func(t *testing.T) { runJooqPrefixSDK(t, files) })
+}
+
+func TestJooqAliasCollisionNamesAuthoredAlias(t *testing.T) {
+	for _, aliases := range [][2]string{{"a/b", "a_b"}, {"a_b", "a/b"}} {
+		t.Run(aliases[0]+" then "+aliases[1], func(t *testing.T) {
+			query := fmt.Sprintf("-- name: Colliding :many\nSELECT `%s`.id FROM `/local/a/users` AS `%s` JOIN `/local/b/users` AS `%s` ON `%s`.id = `%s`.id;", aliases[0], aliases[0], aliases[1], aliases[0], aliases[1])
+			analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqPrefixSchema}}, []model.Source{{Name: "query.sql", Text: query}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			files, err := Generate(analysis, Options{Package: "prefix", Runtime: "jooq"})
+			want := fmt.Sprintf("Colliding: Java alias collision: aB (from %q and %q)", aliases[0], aliases[1])
+			if files != nil || err == nil || err.Error() != want {
+				t.Fatalf("files %v, error %v; want %q", files, err, want)
+			}
+		})
+	}
+}
+
+func TestJooqAliasCollisionWithParametersAndLocals(t *testing.T) {
+	for _, tc := range []struct{ alias, parameter, identifier string }{
+		{"a/b", "a_b", "aB"},
+		{"stmt", "id", "stmt"},
+	} {
+		t.Run(tc.alias, func(t *testing.T) {
+			query := fmt.Sprintf("-- name: Colliding :many\nSELECT `%s`.id FROM `/local/a/users` AS unaffected JOIN `/local/b/users` AS `%s` ON unaffected.id = `%s`.id WHERE `%s`.id = $%s;", tc.alias, tc.alias, tc.alias, tc.alias, tc.parameter)
+			analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqPrefixSchema}}, []model.Source{{Name: "query.sql", Text: query}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			files, err := Generate(analysis, Options{Package: "prefix", Runtime: "jooq"})
+			want := fmt.Sprintf("Colliding: Java alias collision: %s (from %q)", tc.identifier, tc.alias)
+			if files != nil || err == nil || err.Error() != want {
+				t.Fatalf("files %v, error %v; want %q", files, err, want)
+			}
+		})
+	}
 }
 
 // Generate must reject incomplete semantic input rather than mapping an authored
@@ -155,9 +198,14 @@ public class Main {
             try (var connection = new MockConnection(ctx -> {
                 String sql = ctx.sql();
                 statements.add(sql);
-                if (!sql.startsWith("` + jooqPrefixPragma + `;") || !sql.contains("` + "`" + `" + target + "` + "`" + `")) throw new AssertionError(sql);
+                String pragma = switch (statements.size()) {
+                    case 6 -> "PRAGMA TablePathPrefix('/db/?w')";
+                    case 7 -> "PRAGMA TablePathPrefix(\"/db/?w\")";
+                    default -> "` + jooqPrefixPragma + `";
+                };
+                if (!sql.substring(0, sql.indexOf(';')).equals(pragma) || !sql.contains("` + "`" + `" + target + "` + "`" + `")) throw new AssertionError(sql);
                 Object[] want = switch (statements.size()) {
-                    case 1, 2, 5 -> new Object[]{"Name"};
+                    case 1, 2, 5, 6, 7 -> new Object[]{"Name"};
                     case 3 -> new Object[]{PrimitiveValue.newUint64(-1L), "Name"};
                     case 4 -> new Object[]{PrimitiveValue.newUint64(-1L)};
                     default -> throw new AssertionError("extra execution " + sql);
@@ -178,7 +226,9 @@ public class Main {
                 queries.write(ULong.MAX, "Name");
                 if (!queries.remove(ULong.MAX).orElseThrow().id().equals(ULong.MAX)) throw new AssertionError("returning");
                 if (!queries.readPath("Name").get(0).id().equals(ULong.MAX)) throw new AssertionError("relative path");
-                if (statements.size() != 5 || !statements.get(0).contains("VIEW ` + "`by_name`" + `") || !statements.get(1).contains("` + "`/local/b/mapped`" + `")) throw new AssertionError(statements);
+                if (!queries.questionSingle("Name").get(0).id().equals(ULong.MAX)) throw new AssertionError("single-quoted question mark");
+                if (!queries.questionDouble("Name").get(0).id().equals(ULong.MAX)) throw new AssertionError("double-quoted question mark");
+                if (statements.size() != 7 || !statements.get(0).contains("VIEW ` + "`by_name`" + `") || !statements.get(1).contains("` + "`/local/b/mapped`" + `")) throw new AssertionError(statements);
                 if (!statements.get(0).contains("-- repeated static prefix stays attached to the statement\nPRAGMA TablePathPrefix('/local/a');") || !statements.get(4).contains("` + "`../a/users`.`id`" + `")) throw new AssertionError(statements);
             }
         }
