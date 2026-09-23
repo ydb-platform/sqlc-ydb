@@ -104,4 +104,34 @@ public final class Queries {
                 .where(AUTHORS.ID.eq(val(authorId, YdbTypes.UINT64)))
                 .execute();
     }
+
+    // -- name: FindAuthorsByName :many
+    public List<FindAuthorsByNameRow> findAuthorsByName(String name) {
+        var a = AUTHORS.as("a");
+        return dsl.select(a.ID.as("id"), a.NAME.as("name"), a.BIO.as("bio"))
+                .from(table("{0} VIEW {1}", AUTHORS, name("by_name")).as("a"))
+                .where(a.NAME.eq(val(name, YdbTypes.UTF8)))
+                .orderBy(a.ID)
+                .fetch(mapping(FindAuthorsByNameRow::new));
+    }
+
+    // -- name: FindAuthorsByNameCovering :many
+    public List<FindAuthorsByNameCoveringRow> findAuthorsByNameCovering(String name) {
+        return dsl.connectionResult(_connection -> {
+            try (var _prepared = _connection.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+                DECLARE $name AS Utf8;
+                SELECT `id`, `name`, `bio` FROM\s\
+                """ + dsl.render(AUTHORS) + """
+                 VIEW by_name_covering\
+                """ + " AS `authors`" + """
+                 WHERE name = $name ORDER BY id;\
+                """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+                _prepared.setString("name", name);
+                try (var _rows = _prepared.executeQuery()) {
+                    var _result = dsl.fetch(_rows, YdbTypes.UINT64, YdbTypes.UTF8, YdbTypes.UTF8).map(_row -> new FindAuthorsByNameCoveringRow(_row.get(0, org.jooq.types.ULong.class), _row.get(1, String.class), _row.get(2, String.class)));
+                    return _result;
+                }
+            }
+        });
+    }
 }

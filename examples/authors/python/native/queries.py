@@ -146,3 +146,41 @@ class Querier:
             parameters,
         )
         return None
+
+    # -- name: FindAuthorsByName :many
+    def find_authors_by_name(self, name: str) -> list[_models.Authors]:
+        parameters = {
+            "$name": _ydb.TypedValue(name, _ydb.PrimitiveType.Utf8),
+        }
+        result_sets = self._execute(
+            ("SELECT a.`id` AS `id`, `a`.`name` AS `name`, `a`.`bio` AS `bio` FROM authors VIEW by_name AS a\n"
+             "WHERE a.name = $name ORDER BY a.id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.Authors(
+            id=row["id"],
+            name=row["name"],
+            bio=row["bio"],
+        ) for row in rows]
+
+    # -- name: FindAuthorsByNameCovering :many
+    def find_authors_by_name_covering(self, name: str) -> list[_models.Authors]:
+        parameters = {
+            "$name": _ydb.TypedValue(name, _ydb.PrimitiveType.Utf8),
+        }
+        result_sets = self._execute(
+            ("DECLARE $name AS Utf8;\n"
+             "SELECT `id`, `name`, `bio` FROM authors VIEW by_name_covering WHERE name = $name ORDER BY id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.Authors(
+            id=row["id"],
+            name=row["name"],
+            bio=row["bio"],
+        ) for row in rows]

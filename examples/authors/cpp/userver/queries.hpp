@@ -28,6 +28,8 @@ public:
     std::optional<CreateAuthorRow> CreateAuthor(std::uint64_t author_id, const ::userver::ydb::Utf8& author_name, const std::optional<::userver::ydb::Utf8>& biography) const;
     void UpsertAuthor(std::uint64_t author_id, const ::userver::ydb::Utf8& author_name, const std::optional<::userver::ydb::Utf8>& biography) const;
     void DeleteAuthor(std::uint64_t author_id) const;
+    std::vector<FindAuthorsByNameRow> FindAuthorsByName(const ::userver::ydb::Utf8& name) const;
+    std::vector<FindAuthorsByNameCoveringRow> FindAuthorsByNameCovering(const ::userver::ydb::Utf8& name) const;
 
 private:
     ::userver::ydb::TableClient* client_;

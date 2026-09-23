@@ -439,6 +439,10 @@ func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser
 				continue
 			}
 			tableRef := named.Hinted_single_source().Single_source().Table_ref()
+			if tableRef.Cluster_expr() != nil || tableRef.COMMAT() != nil {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, tableRef, "cluster-qualified and temporary table references are unsupported"))
+				continue
+			}
 			if named.Hinted_single_source().Table_hints() != nil || named.Sample_clause() != nil || named.Tablesample_clause() != nil {
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, "table hints and sampling are not yet supported"))
 				continue
@@ -452,11 +456,23 @@ func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser
 					continue
 				}
 			} else {
-				name := identifier(tableRef.Table_key().GetText())
+				key := tableRef.Table_key()
+				name := tableKeyName(key)
 				table = findTable(catalog, name)
 				if table == nil {
 					diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, fmt.Sprintf("unknown table %q", name)))
 					continue
+				}
+				if view := key.View_name(); view != nil {
+					if view.An_id() == nil {
+						diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, view, "VIEW PRIMARY KEY is not yet supported; select the table without VIEW"))
+						continue
+					}
+					index := identifier(view.An_id().GetText())
+					if _, exists := catalogIndexPosition(*table, index); !exists {
+						diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, view, fmt.Sprintf("unknown index %q on table %q", index, name)))
+						continue
+					}
 				}
 			}
 			alias := table.Name
@@ -978,6 +994,10 @@ func simpleTableName(ctx parser.ISimple_table_refContext) string {
 		return ""
 	}
 	return identifier(ctx.Simple_table_ref_core().GetText())
+}
+
+func tableKeyName(ctx parser.ITable_keyContext) string {
+	return identifier(ctx.Id_table_or_type().GetText())
 }
 
 func findTable(catalog model.Catalog, name string) *model.Table {

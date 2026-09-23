@@ -55,6 +55,9 @@ class GeneratedQueriesTest {
                     if ((method.getName().startsWith("create") && method.getReturnType() != void.class) || method.getName().equals("updateVenueName")) {
                         assertTrue(sql.toLowerCase().contains("returning"), sql);
                     }
+                    if (method.getName().startsWith("findAuthorsByName")) {
+                        assertTrue(sql.replace("`", "").contains("VIEW by_name"), sql);
+                    }
                     if (method.getName().equals("booksByTags")) {
                         assertTrue(sql.contains("Yson::ConvertToStringList"), sql);
                         assertTrue(sql.toLowerCase().contains("left outer join") || sql.toLowerCase().contains("left join"), sql);
@@ -62,7 +65,7 @@ class GeneratedQueriesTest {
                 }
             }
         }
-        assertEquals(44, statements.size());
+        assertEquals(46, statements.size());
     }
     @Test
     void declaredQueryReadsDialectCarriers() throws Exception {

@@ -151,3 +151,45 @@ class Querier:
             return None
         finally:
             cursor.close()
+
+    # -- name: FindAuthorsByName :many
+    def find_authors_by_name(self, name: str) -> list[_models.Authors]:
+        parameters = {
+            "$name": (name, _ydb.PrimitiveType.Utf8),
+        }
+        cursor = self._connection.cursor()
+        try:
+            cursor.execute(
+                ("SELECT a.`id` AS `id`, `a`.`name` AS `name`, `a`.`bio` AS `bio` FROM authors VIEW by_name AS a\n"
+                 "WHERE a.name = $name ORDER BY a.id;"),
+                parameters,
+            )
+            rows = cursor.fetchall()
+            return [_models.Authors(
+                id=row[0],
+                name=row[1],
+                bio=row[2],
+            ) for row in rows]
+        finally:
+            cursor.close()
+
+    # -- name: FindAuthorsByNameCovering :many
+    def find_authors_by_name_covering(self, name: str) -> list[_models.Authors]:
+        parameters = {
+            "$name": (name, _ydb.PrimitiveType.Utf8),
+        }
+        cursor = self._connection.cursor()
+        try:
+            cursor.execute(
+                ("DECLARE $name AS Utf8;\n"
+                 "SELECT `id`, `name`, `bio` FROM authors VIEW by_name_covering WHERE name = $name ORDER BY id;"),
+                parameters,
+            )
+            rows = cursor.fetchall()
+            return [_models.Authors(
+                id=row[0],
+                name=row[1],
+                bio=row[2],
+            ) for row in rows]
+        finally:
+            cursor.close()

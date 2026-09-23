@@ -141,3 +141,80 @@ func TestSharedTransactions(t *testing.T) {
 		t.Fatalf("SQL rollback: %v", err)
 	}
 }
+
+func TestGeneratedIndexQueries(t *testing.T) {
+	db := testdb.Open(t)
+	db.Apply(t, "../../../../examples/authors/schema.sql", "DROP TABLE authors;")
+	ctx := db.Context
+	n, s := native.New(db.Native), sq.New(db.SQL)
+	bio := "covered biography"
+	for _, value := range []native.UpsertAuthorParams{{AuthorID: 1, AuthorName: "same", Biography: &bio}, {AuthorID: 2, AuthorName: "same"}, {AuthorID: 3, AuthorName: "other"}} {
+		if err := n.UpsertAuthor(ctx, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tc := range []struct {
+		name string
+		read func(string) ([]string, error)
+	}{
+		{"native/noncovering", func(name string) ([]string, error) {
+			rows, e := n.FindAuthorsByName(ctx, name)
+			var out []string
+			for _, r := range rows {
+				if r.Bio != nil {
+					out = append(out, *r.Bio)
+				} else {
+					out = append(out, "NULL")
+				}
+			}
+			return out, e
+		}},
+		{"native/covering", func(name string) ([]string, error) {
+			rows, e := n.FindAuthorsByNameCovering(ctx, name)
+			var out []string
+			for _, r := range rows {
+				if r.Bio != nil {
+					out = append(out, *r.Bio)
+				} else {
+					out = append(out, "NULL")
+				}
+			}
+			return out, e
+		}},
+		{"database/sql/noncovering", func(name string) ([]string, error) {
+			rows, e := s.FindAuthorsByName(ctx, name)
+			var out []string
+			for _, r := range rows {
+				if r.Bio != nil {
+					out = append(out, *r.Bio)
+				} else {
+					out = append(out, "NULL")
+				}
+			}
+			return out, e
+		}},
+		{"database/sql/covering", func(name string) ([]string, error) {
+			rows, e := s.FindAuthorsByNameCovering(ctx, name)
+			var out []string
+			for _, r := range rows {
+				if r.Bio != nil {
+					out = append(out, *r.Bio)
+				} else {
+					out = append(out, "NULL")
+				}
+			}
+			return out, e
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rows, err := tc.read("same")
+			if err != nil || len(rows) != 2 || rows[0] != bio || rows[1] != "NULL" {
+				t.Fatalf("indexed results: %v, %v", rows, err)
+			}
+			rows, err = tc.read("missing")
+			if err != nil || len(rows) != 0 {
+				t.Fatalf("empty indexed results: %v, %v", rows, err)
+			}
+		})
+	}
+}

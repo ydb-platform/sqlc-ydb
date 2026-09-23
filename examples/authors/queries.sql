@@ -23,3 +23,11 @@ VALUES ($author_id, $author_name, $biography);
 
 -- name: DeleteAuthor :exec
 DELETE FROM authors WHERE id = $author_id;
+
+-- name: FindAuthorsByName :many
+SELECT a.* FROM authors VIEW by_name AS a
+WHERE a.name = $name ORDER BY a.id;
+
+-- name: FindAuthorsByNameCovering :many
+DECLARE $name AS Utf8;
+SELECT * FROM authors VIEW by_name_covering WHERE name = $name ORDER BY id;

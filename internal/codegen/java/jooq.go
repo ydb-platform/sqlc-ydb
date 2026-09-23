@@ -507,6 +507,34 @@ func (r *jooqRenderer) statement() string {
 	}
 	return body
 }
+
+// Keep VIEW as a table query part so the dialect still maps the base table.
+func (r *jooqRenderer) tableSource(source parser.IFlatten_sourceContext, rel model.TableBinding) string {
+	named := source.Named_single_source()
+	ref := named.Hinted_single_source().Single_source().Table_ref()
+	if ref == nil || ref.Table_key() == nil {
+		return r.fail(source)
+	}
+	view := ref.Table_key().View_name()
+	if view == nil {
+		return r.aliases[rel.Alias]
+	}
+	table, err := jooqConstant(rel.Table)
+	if err != nil {
+		r.err = err
+		return ""
+	}
+	index := view.GetText()
+	if strings.HasPrefix(index, "`") {
+		index = strings.ReplaceAll(index[1:len(index)-1], "``", "`")
+	}
+	result := "table(\"{0} VIEW {1}\", " + table + ", name(" + quoted(index) + "))"
+	if rel.Alias != rel.Table {
+		result += ".as(" + quoted(rel.Alias) + ")"
+	}
+	return result
+}
+
 func (r *jooqRenderer) selectQuery(core *parser.Select_coreContext) string {
 	var cols []string
 	for _, c := range core.AllResult_column() {
@@ -535,7 +563,7 @@ func (r *jooqRenderer) selectQuery(core *parser.Select_coreContext) string {
 			return r.fail(core)
 		}
 		join := core.Join_source(0)
-		body += "\n        .from(" + r.aliases[rel[0].Alias] + ")"
+		body += "\n        .from(" + r.tableSource(join.Flatten_source(0), rel[0]) + ")"
 		for i, op := range join.AllJoin_op() {
 			m := map[string]string{"JOIN": "join", "INNERJOIN": "join", "LEFTJOIN": "leftJoin", "LEFTOUTERJOIN": "leftJoin"}[strings.ToUpper(op.GetText())]
 			if m == "" {
@@ -544,7 +572,7 @@ func (r *jooqRenderer) selectQuery(core *parser.Select_coreContext) string {
 			if i >= len(join.AllJoin_constraint()) {
 				return r.fail(join)
 			}
-			body += "\n        ." + m + "(" + r.aliases[rel[i+1].Alias] + ")\n        .on(" + r.expr(join.Join_constraint(i).Expr()) + ")"
+			body += "\n        ." + m + "(" + r.tableSource(join.Flatten_source(i+1), rel[i+1]) + ")\n        .on(" + r.expr(join.Join_constraint(i).Expr()) + ")"
 		}
 	}
 	// WHERE and HAVING are direct expressions of the SELECT core.

@@ -6,13 +6,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/antlr4-go/antlr/v4"
 	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/codegen/jdbc"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 	"github.com/ydb-platform/sqlc-ydb/internal/source"
+	parser "github.com/ydb-platform/yql-parsers/go"
 )
 
 func TestJooqAllExampleQueries(t *testing.T) {
@@ -181,7 +184,7 @@ func TestJooqDeclaredDMLMapsQualifiedTargetColumns(t *testing.T) {
 // Evaluate mapped fragments together: text-block indentation is computed for
 // each fragment, so a literal-only round trip does not exercise this boundary.
 func TestJooqDeclaredSQLBytesThroughJava(t *testing.T) {
-	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE books (id Uint64 NOT NULL, title Utf8 NOT NULL, PRIMARY KEY(id));"}}
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE books (id Uint64 NOT NULL, title Utf8 NOT NULL, INDEX by_title GLOBAL SYNC ON (title), PRIMARY KEY(id));"}}
 	header := "-- name: Declared :exec\nDECLARE $id AS Uint64;\n\n-- Автор 🚀\n"
 	cases := []struct{ sql, want string }{
 		{"UPDATE books\n    SET title = $title\n\n    WHERE (books.id = $id);", "UPDATE `mapped_books`\n    SET title = $title\n\n    WHERE (`mapped_books`.id = $id);"},
@@ -192,6 +195,12 @@ func TestJooqDeclaredSQLBytesThroughJava(t *testing.T) {
 		{"SELECT b./* wildcard */*\n    FROM books AS b\n    WHERE b.id = $id;", "SELECT b./* wildcard */`id` AS `id`, `b`.`title` AS `title`\n    FROM `mapped_books` AS b\n    WHERE b.id = $id;"},
 		{"DELETE FROM books WHERE books.id = $id RETURNING *;", "DELETE FROM `mapped_books` WHERE `mapped_books`.id = $id RETURNING `id`, `title`;"},
 		{"DECLARE $rows AS List<Struct<id: Uint64, title: Utf8>>;\n\nINSERT INTO books (id, title)\nSELECT\n    id, title\nFROM AS_TABLE($rows);", "DECLARE $rows AS List<Struct<id: Uint64, title: Utf8>>;\n\nINSERT INTO `mapped_books` (id, title)\nSELECT\n    id, title\nFROM AS_TABLE($rows);"},
+		{"SELECT b.id FROM books VIEW by_title AS b WHERE b.id = $id;", "SELECT b.id FROM `mapped_books` VIEW by_title AS b WHERE b.id = $id;"},
+		{"SELECT books.id FROM books /* index */ VIEW `by_title` WHERE books.id = $id;", "SELECT books.id FROM `mapped_books` /* index */ VIEW `by_title` AS `books` WHERE books.id = $id;"},
+		{"SELECT books.id, \"Привет 🪄\"u AS label FROM books /* таблица 🐘 */ VIEW /* индекс 🚀 */ by_title WHERE books.id = $id;", "SELECT books.id, \"Привет 🪄\"u AS label FROM `mapped_books` /* таблица 🐘 */ VIEW /* индекс 🚀 */ by_title AS `books` WHERE books.id = $id;"},
+		{"SELECT `a``b`.id FROM books VIEW by_title AS `a``b` WHERE `a``b`.id = $id;", "SELECT `a``b`.id FROM `mapped_books` VIEW by_title AS `a``b` WHERE `a``b`.id = $id;"},
+		{"SELECT b.id, indexed.title FROM books AS b LEFT JOIN books /* index */ VIEW by_title AS indexed ON b.id = indexed.id WHERE b.id = $id;", "SELECT b.id, indexed.title FROM `mapped_books` AS b LEFT JOIN `mapped_books` /* index */ VIEW by_title AS indexed ON b.id = indexed.id WHERE b.id = $id;"},
+		{"INSERT INTO books SELECT b.* FROM books VIEW by_title AS b WHERE b.id = $id;", "INSERT INTO `mapped_books` SELECT b.`id` AS `id`, `b`.`title` AS `title` FROM `mapped_books` VIEW by_title AS b WHERE b.id = $id;"},
 		{"UPDATE books SET id = (books.id + 2ul) * 3ul - 4ul WHERE books.id = $id;", "UPDATE `mapped_books` SET id = (`mapped_books`.id + 2ul) * 3ul - 4ul WHERE `mapped_books`.id = $id;"},
 	}
 	var program strings.Builder
@@ -281,6 +290,182 @@ func TestJooqDeclaredCarrierValuesWithSDK(t *testing.T) {
 		cmd.Dir = dir
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("%s: %v\n%s", args[0], err, out)
+		}
+	}
+}
+
+func TestJooqIndexViewDSL(t *testing.T) {
+	for _, tc := range []struct{ view, alias, name string }{
+		{"by_title", "", "by_title"},
+		{"by_title", " AS b", "by_title"},
+		{"`by``title`", "", "by`title"},
+		{"`by```", "", "by`"},
+		{"```title`", "", "`title"},
+	} {
+		analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE books (id Uint64 NOT NULL, title Utf8 NOT NULL, INDEX " + tc.view + " GLOBAL SYNC ON (title), PRIMARY KEY(id));"}}, []model.Source{{Name: "queries.sql", Text: "-- name: Indexed :many\nSELECT * FROM books VIEW " + tc.view + tc.alias + " WHERE title = $title;"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		files, err := Generate(analysis, Options{Runtime: "jooq"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := `table("{0} VIEW {1}", BOOKS, name(` + strconv.Quote(tc.name) + `))`
+		for _, file := range files {
+			if file.Name == "Queries.java" && !strings.Contains(string(file.Content), want) {
+				t.Fatalf("VIEW was lost: %s", file.Content)
+			}
+		}
+	}
+}
+
+func TestJooqIndexJoins(t *testing.T) {
+	schema := `CREATE TABLE books (id Uint64 NOT NULL, author_id Uint64 NOT NULL, title Utf8 NOT NULL, INDEX by_title GLOBAL SYNC ON(title), PRIMARY KEY(id));
+CREATE TABLE authors (id Uint64 NOT NULL, name Utf8 NOT NULL, INDEX by_name GLOBAL SYNC ON(name), PRIMARY KEY(id));`
+	queries := `-- name: JoinAuthors :many
+SELECT b.id, a.name FROM books AS b JOIN authors VIEW by_name AS a ON b.author_id = a.id WHERE a.name = $name;
+-- name: LeftJoinAuthors :many
+SELECT books.id, authors.name FROM books VIEW by_title LEFT JOIN authors VIEW by_name ON books.author_id = authors.id WHERE books.title = $title;`
+	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: schema}}, []model.Source{{Name: "queries.sql", Text: queries}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := Generate(analysis, Options{Package: "indexjoin", Runtime: "jooq"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range files {
+		if file.Name != "Queries.java" {
+			continue
+		}
+		for _, want := range []string{`.join(table("{0} VIEW {1}", AUTHORS, name("by_name")).as("a"))`, `.leftJoin(table("{0} VIEW {1}", AUTHORS, name("by_name")))`, `.from(table("{0} VIEW {1}", BOOKS, name("by_title")))`} {
+			if !strings.Contains(string(file.Content), want) {
+				t.Fatalf("missing indexed join source %s in %s", want, file.Content)
+			}
+		}
+	}
+	t.Run("published dialect", func(t *testing.T) {
+		maven := os.Getenv("SQLC_YDB_TEST_MAVEN")
+		if maven == "" {
+			t.Skip("set SQLC_YDB_TEST_MAVEN to compile and render index joins against the published dialect")
+		}
+		dir := t.TempDir()
+		classpath := filepath.Join(dir, "classpath")
+		cmd := exec.Command(maven, "-q", "dependency:build-classpath", "-Dmdep.outputFile="+classpath)
+		cmd.Dir = filepath.Join("..", "..", "..", "tests", "examples", "java", "jooq")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("SDK classpath: %v\n%s", err, out)
+		}
+		cp, err := os.ReadFile(classpath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		program := `package indexjoin;
+import java.util.*;
+import org.jooq.conf.*;
+import org.jooq.tools.jdbc.*;
+import org.jooq.types.ULong;
+import tech.ydb.jooq.YDB;
+public class Main {
+    public static void main(String[] args) throws Exception {
+        var statements = new ArrayList<String>();
+        try (var connection = new MockConnection(ctx -> {
+            String sql = ctx.sql().replace("` + "`" + `", "").replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
+            statements.add(sql);
+            if (!sql.contains("join mapped_authors view by_name") || !sql.contains("mapped_books")) throw new AssertionError(sql);
+            String value = statements.size() == 1 ? "Author" : "Title";
+            if (!Arrays.equals(ctx.bindings(), new Object[]{value})) throw new AssertionError(Arrays.toString(ctx.bindings()));
+            var dsl = YDB.using();
+            var result = dsl.newResult(Tables.BOOKS.ID, Tables.AUTHORS.NAME);
+            result.add(dsl.newRecord(Tables.BOOKS.ID, Tables.AUTHORS.NAME).values(ULong.valueOf(42), statements.size() == 1 ? "Author" : null));
+            return new MockResult[]{new MockResult(1, result)};
+        })) {
+            var settings = new Settings().withRenderMapping(new RenderMapping().withSchemata(new MappedSchema().withInput("").withTables(
+                    new MappedTable().withInput("books").withOutput("mapped_books"), new MappedTable().withInput("authors").withOutput("mapped_authors"))));
+            var queries = new Queries(YDB.using(connection, settings));
+            var joined = queries.joinAuthors("Author");
+            if (joined.size() != 1 || !joined.get(0).id().equals(ULong.valueOf(42)) || !joined.get(0).name().equals("Author")) throw new AssertionError(joined);
+            var left = queries.leftJoinAuthors("Title");
+            if (left.size() != 1 || !left.get(0).id().equals(ULong.valueOf(42)) || left.get(0).name() != null) throw new AssertionError(left);
+            if (statements.size() != 2 || !statements.get(0).contains("b.author_id = a.id") || !statements.get(1).contains("from mapped_books view by_title") || !statements.get(1).contains("left outer join")) throw new AssertionError(statements);
+        }
+    }
+}`
+		files = append(files, model.File{Name: "Main.java", Content: []byte(program)})
+		compile := []string{"-cp", strings.TrimSpace(string(cp)), "-d", dir}
+		for _, file := range files {
+			path := filepath.Join(dir, file.Name)
+			if err := os.WriteFile(path, file.Content, 0600); err != nil {
+				t.Fatal(err)
+			}
+			compile = append(compile, path)
+		}
+		for _, args := range [][]string{append([]string{"javac"}, compile...), {"java", "-cp", dir + string(os.PathListSeparator) + strings.TrimSpace(string(cp)), "indexjoin.Main"}} {
+			if out, err := exec.Command(args[0], args[1:]...).CombinedOutput(); err != nil {
+				t.Fatalf("%s: %v\n%s", args[0], err, out)
+			}
+		}
+	})
+}
+
+// These helpers also reject unsupported input at their own boundary. The full
+// pipeline currently rejects these sources and table names before calling them.
+func TestJooqTableSourceRejectsUnsupportedSources(t *testing.T) {
+	for _, source := range []string{"(SELECT id FROM books) AS b", "AS_TABLE($rows) AS r"} {
+		t.Run(source, func(t *testing.T) {
+			lexer := parser.NewYQLLexer(antlr.NewInputStream(source))
+			p := parser.NewYQLParser(antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel))
+			p.SetErrorHandler(antlr.NewBailErrorStrategy())
+			context := p.Flatten_source()
+			if lexer.HasError() || p.HasError() || len(jooqNodes[antlr.ErrorNode](context)) != 0 {
+				t.Fatal("test source did not parse")
+			}
+			r := jooqRenderer{}
+			if sql := r.tableSource(context, model.TableBinding{}); sql != "" || r.err == nil || !strings.Contains(r.err.Error(), "unsupported jOOQ syntax") {
+				t.Fatalf("unsupported source produced SQL %q, error %v", sql, r.err)
+			}
+		})
+	}
+}
+
+func TestJooqMappingHelpersRejectInvalidTableNames(t *testing.T) {
+	schema := "CREATE TABLE `a``b` (id Uint64 NOT NULL, INDEX by_id GLOBAL SYNC ON(id), PRIMARY KEY(id));"
+	query := "-- name: Read :many\nDECLARE $id AS Uint64; SELECT id FROM `a``b` VIEW by_id WHERE id = $id;"
+	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: schema}}, []model.Source{{Name: "query.sql", Text: query}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := analysis.Queries[0]
+	r := jooqRenderer{query: q}
+	source := jooqNodes[*parser.Flatten_sourceContext](q.Syntax.Root)[0]
+	if sql := r.tableSource(source, q.Syntax.Relations[0]); sql != "" || r.err == nil || r.err.Error() != "cannot represent \"a`b\" as a Java identifier" {
+		t.Fatalf("invalid table produced SQL %q, error %v", sql, r.err)
+	}
+	text, _ := jdbc.SQL(q)
+	if sql, err := jooqDeclaredSQL(q, text); sql != "" || err == nil || err.Error() != "cannot represent \"a``b\" as a Java identifier" {
+		t.Fatalf("invalid declared table produced SQL %q, error %v", sql, err)
+	}
+}
+
+// Table names must also name a generated Java class. Reject names outside that
+// contract before attempting declared SQL mapping, including explicit aliases.
+func TestJooqRejectsBackticksInTableNames(t *testing.T) {
+	for _, table := range []string{"a`b", "a`", "`b", "path/a`b"} {
+		quotedTable := "`" + strings.ReplaceAll(table, "`", "``") + "`"
+		schema := "CREATE TABLE " + quotedTable + " (id Uint64 NOT NULL, INDEX by_id GLOBAL SYNC ON(id), PRIMARY KEY(id));"
+		for _, suffix := range []string{"", " VIEW by_id", " VIEW by_id AS b"} {
+			t.Run(table+suffix, func(t *testing.T) {
+				sql := "-- name: Declared :many\nDECLARE $id AS Uint64; SELECT id FROM " + quotedTable + suffix + " WHERE id = $id;"
+				analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: schema}}, []model.Source{{Name: "query.sql", Text: sql}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				files, err := Generate(analysis, Options{Runtime: "jooq"})
+				want := fmt.Sprintf("cannot represent %q as a Java identifier", table)
+				if err == nil || err.Error() != want || files != nil {
+					t.Fatalf("generated unsupported table name: files=%v err=%v, want %q", files, err, want)
+				}
+			})
 		}
 	}
 }

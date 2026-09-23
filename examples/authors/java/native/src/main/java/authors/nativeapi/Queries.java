@@ -132,4 +132,46 @@ public final class Queries {
             DELETE FROM authors WHERE id = $author_id;\
             """, _params).execute().join().getStatus().expectSuccess();
     }
+
+    // -- name: FindAuthorsByName :many
+    public java.util.List<FindAuthorsByNameRow> findAuthorsByName(String name) {
+        var _params = Params.create();
+        _params.put("$name", PrimitiveValue.newText(name));
+        var _query = QueryReader.readFrom(
+                client.createQuery("""
+                    SELECT a.`id` AS `id`, `a`.`name` AS `name`, `a`.`bio` AS `bio` FROM authors VIEW by_name AS a
+                    WHERE a.name = $name ORDER BY a.id;\
+                    """, _params)).join().getValue();
+        if (_query.getResultSetCount() != 1) throw new IllegalStateException("Expected one result set");
+        var _rows = _query.getResultSet(0);
+        var _items = new java.util.ArrayList<FindAuthorsByNameRow>();
+        while (_rows.next()) {
+            long _value0 = _rows.getColumn(0).getUint64();
+            String _value1 = _rows.getColumn(1).getText();
+            String _value2 = _rows.getColumn(2).getText();
+            _items.add(new FindAuthorsByNameRow(_value0, _value1, _value2));
+        }
+        return _items;
+    }
+
+    // -- name: FindAuthorsByNameCovering :many
+    public java.util.List<FindAuthorsByNameCoveringRow> findAuthorsByNameCovering(String name) {
+        var _params = Params.create();
+        _params.put("$name", PrimitiveValue.newText(name));
+        var _query = QueryReader.readFrom(
+                client.createQuery("""
+                    DECLARE $name AS Utf8;
+                    SELECT `id`, `name`, `bio` FROM authors VIEW by_name_covering WHERE name = $name ORDER BY id;\
+                    """, _params)).join().getValue();
+        if (_query.getResultSetCount() != 1) throw new IllegalStateException("Expected one result set");
+        var _rows = _query.getResultSet(0);
+        var _items = new java.util.ArrayList<FindAuthorsByNameCoveringRow>();
+        while (_rows.next()) {
+            long _value0 = _rows.getColumn(0).getUint64();
+            String _value1 = _rows.getColumn(1).getText();
+            String _value2 = _rows.getColumn(2).getText();
+            _items.add(new FindAuthorsByNameCoveringRow(_value0, _value1, _value2));
+        }
+        return _items;
+    }
 }

@@ -140,3 +140,67 @@ func (q *Queries) DeleteAuthor(ctx context.Context, arg uint64) error {
 
 	return err
 }
+
+// -- name: FindAuthorsByName :many
+func (q *Queries) FindAuthorsByName(ctx context.Context, arg string) ([]FindAuthorsByNameRow, error) {
+	rows, err := q.db.QueryContext(ctx, ""+
+		"SELECT a.`id` AS `id`, `a`.`name` AS `name`, `a`.`bio` AS `bio` FROM authors VIEW by_name AS a\n"+
+		"WHERE a.name = $name ORDER BY a.id;",
+		sql.Named("name", arg),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []FindAuthorsByNameRow(nil)
+	for rows.Next() {
+		var row FindAuthorsByNameRow
+		if err := rows.Scan(
+			&row.ID,
+			&row.Name,
+			&row.Bio,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, row)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
+// -- name: FindAuthorsByNameCovering :many
+func (q *Queries) FindAuthorsByNameCovering(ctx context.Context, arg string) ([]FindAuthorsByNameCoveringRow, error) {
+	rows, err := q.db.QueryContext(ctx, ""+
+		"DECLARE $name AS Utf8;\n"+
+		"SELECT `id`, `name`, `bio` FROM authors VIEW by_name_covering WHERE name = $name ORDER BY id;",
+		sql.Named("name", arg),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []FindAuthorsByNameCoveringRow(nil)
+	for rows.Next() {
+		var row FindAuthorsByNameCoveringRow
+		if err := rows.Scan(
+			&row.ID,
+			&row.Name,
+			&row.Bio,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, row)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}

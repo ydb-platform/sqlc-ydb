@@ -53,3 +53,15 @@ public sealed record UpsertAuthorParams(
     string AuthorName,
     string? Biography
 );
+
+public sealed record FindAuthorsByNameRow(
+    ulong ID,
+    string Name,
+    string? Bio
+);
+
+public sealed record FindAuthorsByNameCoveringRow(
+    ulong ID,
+    string Name,
+    string? Bio
+);

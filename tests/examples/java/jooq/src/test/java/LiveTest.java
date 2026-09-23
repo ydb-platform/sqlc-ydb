@@ -73,13 +73,17 @@ class LiveTest {
     @Test
     void nativeAuthorsContractAndCallerTransaction() throws Exception {
         try (Fixture fixture = new Fixture("authors")) {
-            fixture.create("authors", "id Uint64 NOT NULL, name Utf8 NOT NULL, bio Utf8, PRIMARY KEY(id)");
+            fixture.create("authors", "id Uint64 NOT NULL, name Utf8 NOT NULL, bio Utf8, INDEX by_name GLOBAL SYNC ON (name), INDEX by_name_covering GLOBAL SYNC ON (name) COVER (bio), PRIMARY KEY(id)");
             var queries = new authors.jooq.Queries(fixture.dsl);
             assertNull(queries.createAuthor(ULong.MAX, "Автор", null).orElseThrow().bio());
             assertEquals("Автор", queries.getAuthorName(ULong.MAX).orElseThrow().name());
             queries.upsertAuthor(ULong.MAX, "Updated", "bio");
             assertEquals("bio", queries.getAuthor(ULong.MAX).orElseThrow().bio());
             assertEquals(1, queries.listAuthors().size());
+            assertEquals("bio", queries.findAuthorsByName("Updated").get(0).bio());
+            assertEquals("bio", queries.findAuthorsByNameCovering("Updated").get(0).bio());
+            assertTrue(queries.findAuthorsByName("missing").isEmpty());
+            assertTrue(queries.findAuthorsByNameCovering("missing").isEmpty());
             queries.upsertAuthor(ULong.valueOf(1), "First", null);
             assertEquals(ULong.MAX, queries.listAuthorsPage(1, UInteger.valueOf(1)).get(0).id());
             assertTrue(queries.listAuthorsPage(-1, UInteger.valueOf(1)).isEmpty());

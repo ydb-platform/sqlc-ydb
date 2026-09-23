@@ -137,6 +137,13 @@ type Table struct {
 	Name       string
 	Columns    []Column
 	PrimaryKey []string
+	Indexes    []Index
+}
+type Index struct {
+	Name        string
+	Kind        string // GlobalSync or GlobalAsync.
+	Columns     []string
+	DataColumns []string
 }
 type Catalog struct{ Tables []Table }
 type Parameter struct {

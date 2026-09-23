@@ -32,3 +32,17 @@ pub struct CreateAuthorRow {
     pub name: String,
     pub bio: Option<String>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct FindAuthorsByNameRow {
+    pub id: u64,
+    pub name: String,
+    pub bio: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct FindAuthorsByNameCoveringRow {
+    pub id: u64,
+    pub name: String,
+    pub bio: Option<String>,
+}
