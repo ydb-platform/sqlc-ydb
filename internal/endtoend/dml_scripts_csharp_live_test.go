@@ -95,6 +95,12 @@ SELECT id,value,label FROM records ORDER BY id;
 UPDATE copies SET value=value+1 WHERE id=99ul;
 INSERT INTO copies(id,value,label) VALUES(99ul,999l,'duplicate'u);
 
+-- name: ReadAndFailMany :many
+DECLARE $minimum AS Int64;
+SELECT id,value,label FROM records WHERE value >= $minimum ORDER BY id;
+UPDATE copies SET value=value+1 WHERE id=99ul;
+INSERT INTO copies(id,value,label) VALUES(99ul,999l,'duplicate'u);
+
 -- name: GetCounter :one
 SELECT value FROM copies WHERE id=99ul;
 
@@ -162,6 +168,20 @@ try {
         await transaction.RollbackAsync(cancellationToken);
     }
     await CheckCounter(5);
+    foreach(var minimum in new long[]{0,1000}) {
+        failed=false;
+        try {await queries.ReadAndFailManyAsync(minimum,cancellationToken);} catch(YdbException error) when(error.Code==StatusCode.PreconditionFailed) {failed=true;}
+        if(!failed) throw new Exception($"late :many script error was lost for minimum {minimum}");
+        await CheckCounter(5);
+        await using(var transaction=(YdbTransaction)await connection.BeginTransactionAsync(cancellationToken)) {
+            var tx=queries.WithTransaction(transaction);
+            failed=false;
+            try {await tx.ReadAndFailManyAsync(minimum,cancellationToken);} catch(YdbException error) when(error.Code==StatusCode.PreconditionFailed) {failed=true;}
+            if(!failed) throw new Exception($"late :many transaction error was lost for minimum {minimum}");
+            await transaction.RollbackAsync(cancellationToken);
+        }
+        await CheckCounter(5);
+    }
     await queries.ReadAndMutateAsync(cancellationToken);
     await CheckCounter(6);
 } finally {

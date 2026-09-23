@@ -209,3 +209,18 @@ func TestMixedScriptInferenceGuardPreservesSingleQueryTypes(t *testing.T) {
 		}
 	}
 }
+
+func TestMixedScriptUnresolvedResultParameterKeepsOriginalDiagnostic(t *testing.T) {
+	schema := append([]model.Source{}, dmlScriptSchema...)
+	schema = append(schema, model.Source{Name: "loose.sql", Text: "CREATE TABLE loose(id Uint64 NOT NULL,payload Utf8,PRIMARY KEY(id));"})
+	for _, projection := range []string{"$p AS projected", "id, $p AS projected"} {
+		t.Run(projection, func(t *testing.T) {
+			sql := "-- name: Change :many\nSELECT " + projection + " FROM loose; UPDATE records SET payload=$p;"
+			result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
+			const want = "cannot resolve type of parameter $p; add DECLARE"
+			if err == nil || len(result.Diagnostics) != 1 || result.Diagnostics[0].Message != want {
+				t.Fatalf("diagnostics=%#v error=%v; want only %q", result.Diagnostics, err, want)
+			}
+		})
+	}
+}

@@ -26,7 +26,7 @@ func TestJooqDMLScriptsRequireDeclaredExecution(t *testing.T) {
 				t.Fatal(err)
 			}
 			files, err := Generate(analysis, Options{Package: "scripts", Runtime: "jooq"})
-			const want = "Change: multi-statement queries require the jOOQ typed JDBC path; add an explicit DECLARE for a parameter, or use runtime: jdbc or ydb"
+			const want = "Change: multi-statement queries require the jOOQ declared-query path; add an explicit DECLARE for one of the parameters, or use runtime: jdbc or ydb"
 			if files != nil || err == nil || err.Error() != want {
 				t.Fatalf("files=%v, error=%v; want no output and %q", files, err, want)
 			}
@@ -47,7 +47,7 @@ func TestJooqMixedScriptsRequireDeclaredExecution(t *testing.T) {
 					t.Fatal(err)
 				}
 				files, err := Generate(analysis, Options{Package: "scripts", Runtime: "jooq"})
-				const want = "Change: multi-statement queries require the jOOQ typed JDBC path; add an explicit DECLARE for a parameter, or use runtime: jdbc or ydb"
+				const want = "Change: multi-statement queries require the jOOQ declared-query path; add an explicit DECLARE for one of the parameters, or use runtime: jdbc or ydb"
 				if files != nil || err == nil || err.Error() != want {
 					t.Fatalf("files=%d, error=%v; want %q", len(files), err, want)
 				}
