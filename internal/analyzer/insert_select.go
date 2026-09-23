@@ -87,6 +87,9 @@ func analyzeSelectCore(catalog model.Catalog, block queryBlock, core *parser.Sel
 	}
 	subqueries, ds := analyzeINSubqueries(catalog, block, core, relations, bindings, inferred, syntax)
 	diagnostics = append(diagnostics, ds...)
+	if len(ds) != 0 {
+		return nil, diagnostics
+	}
 	inferFromExpressionContexts(core, bindings, inferred)
 	if partial != nil {
 		inferLimitOffset(partial, bindings, inferred)

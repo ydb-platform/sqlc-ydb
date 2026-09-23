@@ -93,9 +93,6 @@ func validatePredicateAtom(atom *parser.Xor_subexprContext, scope expressionScop
 				}
 				return nil
 			}
-			if inSubquery(inExpr) != nil {
-				return fmt.Errorf("IN subquery could not be resolved")
-			}
 			if bind := directBind(inExpr); bind != nil && inExpr.GetText() == bind.GetText() {
 				typeValue, ok := scope.bindings[bindName(bind)]
 				if !ok || typeValue.Kind != "List" || typeValue.Elem == nil {

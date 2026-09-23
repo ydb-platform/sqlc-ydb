@@ -50,6 +50,51 @@ func inSubquery(expr parser.IIn_exprContext) parser.ISelect_subexprContext {
 	return nil
 }
 
+func containsINSubquery(root antlr.Tree) bool {
+	found := false
+	descendants(root, func(node antlr.Tree) {
+		if in, ok := node.(*parser.In_exprContext); ok && inSubquery(in) != nil {
+			found = true
+		}
+	})
+	return found
+}
+
+func validateINSubqueryContexts(block queryBlock, root antlr.Tree) []model.Diagnostic {
+	var diagnostics []model.Diagnostic
+	descendants(root, func(node antlr.Tree) {
+		in, ok := node.(*parser.In_exprContext)
+		if !ok || inSubquery(in) == nil {
+			return
+		}
+		allowed := false
+		message := "IN subqueries are supported only in WHERE predicates; they are not yet supported in projections, CASE, IF, or HAVING"
+	context:
+		for child, parent := antlr.Tree(in), in.GetParent(); parent != nil; child, parent = parent, parent.GetParent() {
+			switch ctx := parent.(type) {
+			case *parser.Case_exprContext, *parser.Invoke_exprContext, *parser.Cast_exprContext, *parser.Bitcast_exprContext:
+				break context
+			case *parser.Join_constraintContext:
+				message = "IN subqueries are supported only in WHERE predicates; JOIN ON membership is unsupported"
+				break context
+			case *parser.Select_coreContext:
+				allowed = ctx.WHERE() != nil && child == ctx.Expr(0)
+				break context
+			case *parser.Update_stmtContext:
+				allowed = ctx.WHERE() != nil && child == ctx.Expr()
+				break context
+			case *parser.Delete_stmtContext:
+				allowed = ctx.WHERE() != nil && child == ctx.Expr()
+				break context
+			}
+		}
+		if !allowed {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, in, message))
+		}
+	})
+	return diagnostics
+}
+
 func analyzeINSubqueries(catalog model.Catalog, block queryBlock, root antlr.Tree, outer []relation, bindings, inferred map[string]model.Type, syntax *model.QuerySyntax) (map[int]model.Type, []model.Diagnostic) {
 	types := map[int]model.Type{}
 	var diagnostics []model.Diagnostic
@@ -61,15 +106,6 @@ func analyzeINSubqueries(catalog model.Catalog, block queryBlock, root antlr.Tre
 		sub := inSubquery(in)
 		if sub == nil {
 			return
-		}
-		for parent := in.GetParent(); parent != nil; parent = parent.GetParent() {
-			if _, join := parent.(*parser.Join_constraintContext); join {
-				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, in, "IN subqueries are supported only in WHERE predicates; JOIN ON membership is unsupported"))
-				return
-			}
-			if _, selectCore := parent.(*parser.Select_coreContext); selectCore {
-				break
-			}
 		}
 		intersects := sub.Select_subexpr_core().AllSelect_subexpr_intersect()
 		if sub.Cte_with_clause() != nil || len(intersects) != 1 || len(intersects[0].AllSelect_or_expr()) != 1 {
@@ -84,6 +120,7 @@ func analyzeINSubqueries(catalog model.Catalog, block queryBlock, root antlr.Tre
 			return
 		}
 		columns, ds := analyzeSelectCore(catalog, block, core, partial, bindings, inferred, syntax, selectINProjection)
+		diagnostics = append(diagnostics, ds...)
 		if _, resolved := syntax.Selects[core.GetStart().GetTokenIndex()]; resolved && len(ds) != 0 {
 			for _, ref := range columnRefs(core) {
 				if _, bound := syntax.Columns[ref.ctx.GetStart().GetTokenIndex()]; bound {
@@ -97,13 +134,12 @@ func analyzeINSubqueries(catalog model.Catalog, block queryBlock, root antlr.Tre
 				}
 				if !output {
 					if _, err := resolveColumn(outer, ref); err == nil {
-						diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, ref.ctx, fmt.Sprintf("correlated IN subqueries are unsupported: %q refers to an outer column; use only the subquery's own sources", qualifiedName(ref))))
+						diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, ref.ctx, fmt.Sprintf("correlated IN subqueries are unsupported: %q may refer to an outer column; use only the subquery's own sources", qualifiedName(ref))))
 						return
 					}
 				}
 			}
 		}
-		diagnostics = append(diagnostics, ds...)
 		if len(ds) != 0 {
 			return
 		}

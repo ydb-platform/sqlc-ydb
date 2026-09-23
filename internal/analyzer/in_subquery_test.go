@@ -250,3 +250,66 @@ func TestINSubqueryPreservesUsefulDiagnostics(t *testing.T) {
 		})
 	}
 }
+
+func TestINSubqueryRejectsContextsBeforeResolvingInnerQuery(t *testing.T) {
+	const contextError = "IN subqueries are supported only in WHERE predicates; they are not yet supported in projections, CASE, IF, or HAVING"
+	for _, tc := range []struct{ name, command, sql, want string }{
+		{"join", ":many", `SELECT r.tenant FROM records AS r JOIN allowed AS a ON r.tenant = a.tenant AND r.tenant IN (SELECT $unknown);`, "IN subqueries are supported only in WHERE predicates; JOIN ON membership is unsupported"},
+		{"projection inference conflict", ":many", `SELECT tenant IN (SELECT code FROM allowed WHERE code = $selected) AS found FROM records WHERE tenant = $selected;`, contextError},
+		{"projection unknown parameter", ":many", `SELECT tenant IN (SELECT $unknown) AS found FROM records;`, contextError},
+		{"having inference conflict", ":many", `SELECT tenant FROM records WHERE tenant = $selected GROUP BY tenant HAVING tenant IN (SELECT code FROM allowed WHERE code = $selected);`, contextError},
+		{"case in where", ":many", `SELECT tenant FROM records WHERE CASE WHEN tenant IN (SELECT $unknown) THEN true ELSE false END;`, contextError},
+		{"if in where", ":many", `SELECT tenant FROM records WHERE IF(tenant IN (SELECT $unknown), true, false);`, contextError},
+		{"order by", ":many", `SELECT tenant FROM records ORDER BY tenant IN (SELECT $unknown);`, contextError},
+		{"update value", ":exec", `UPDATE records SET enabled = tenant IN (SELECT $unknown);`, contextError},
+		{"nested projection", ":many", `SELECT tenant FROM records WHERE tenant IN (SELECT tenant IN (SELECT $unknown) AS found FROM allowed);`, contextError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := Analyze([]model.Source{{Name: "schema.sql", Text: inSubquerySchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read " + tc.command + "\n" + tc.sql}})
+			if err == nil || len(result.Diagnostics) != 1 || result.Diagnostics[0].Message != tc.want {
+				t.Fatalf("diagnostics = %+v, want exactly %q", result.Diagnostics, tc.want)
+			}
+		})
+	}
+}
+
+func TestINSubqueryFailuresDoNotCascade(t *testing.T) {
+	for _, tc := range []struct{ name, command, sql, want string }{
+		{"union with unknown parameter", ":many", `SELECT tenant FROM records WHERE tenant IN (SELECT $unknown UNION ALL SELECT 1ul);`, "IN subqueries currently require one SELECT; CTEs, UNION and INTERSECT are unsupported"},
+		{"unknown inner parameter", ":many", `SELECT tenant FROM records WHERE tenant IN (SELECT $unknown FROM allowed);`, "cannot resolve type of parameter $unknown; add DECLARE"},
+		{"inner function with inferred parameter", ":many", `SELECT tenant FROM records WHERE tenant IN (SELECT MissingFunction(tenant) FROM allowed WHERE code = $selected);`, `unsupported YQL function "MissingFunction"`},
+		{"update union", ":exec", `UPDATE records SET enabled = true WHERE tenant IN (SELECT $unknown UNION ALL SELECT 1ul);`, "IN subqueries currently require one SELECT; CTEs, UNION and INTERSECT are unsupported"},
+		{"delete unknown inner parameter", ":exec", `DELETE FROM records WHERE tenant IN (SELECT $unknown FROM allowed);`, "cannot resolve type of parameter $unknown; add DECLARE"},
+		{"insert select unknown inner parameter", ":exec", `INSERT INTO records (tenant, code, enabled) SELECT tenant, code, true FROM allowed WHERE tenant IN (SELECT $unknown);`, "cannot resolve type of parameter $unknown; add DECLARE"},
+		{"update select unknown inner parameter", ":exec", `UPDATE records ON SELECT tenant, code FROM allowed WHERE tenant IN (SELECT $unknown);`, "cannot resolve type of parameter $unknown; add DECLARE"},
+		{"delete select unknown inner parameter", ":exec", `DELETE FROM records ON SELECT tenant, code FROM allowed WHERE tenant IN (SELECT $unknown);`, "cannot resolve type of parameter $unknown; add DECLARE"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := Analyze([]model.Source{{Name: "schema.sql", Text: inSubquerySchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read " + tc.command + "\n" + tc.sql}})
+			if err == nil || len(result.Diagnostics) != 1 || result.Diagnostics[0].Message != tc.want {
+				t.Fatalf("diagnostics = %+v, want exactly %q", result.Diagnostics, tc.want)
+			}
+		})
+	}
+}
+
+func TestINSubqueryCorrelationHintPreservesInnerErrors(t *testing.T) {
+	result, err := Analyze([]model.Source{{Name: "schema.sql", Text: inSubquerySchema}}, []model.Source{{Name: "query.sql", Text: `-- name: Read :many
+SELECT tenant FROM records WHERE tenant IN (SELECT MissingFunction(tenant) FROM allowed WHERE enabled);`}})
+	if err == nil {
+		t.Fatal("expected invalid inner query diagnostics")
+	}
+	var messages []string
+	for _, diagnostic := range result.Diagnostics {
+		messages = append(messages, diagnostic.Message)
+	}
+	want := []string{
+		`unsupported YQL function "MissingFunction"`,
+		`unknown column "enabled"`,
+		`invalid predicate: cannot resolve predicate operand "enabled": unknown column "enabled"`,
+		`correlated IN subqueries are unsupported: "enabled" may refer to an outer column; use only the subquery's own sources`,
+	}
+	if !reflect.DeepEqual(messages, want) {
+		t.Fatalf("diagnostics = %#v, want %#v", messages, want)
+	}
+}

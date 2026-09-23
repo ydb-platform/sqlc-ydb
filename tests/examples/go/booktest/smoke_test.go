@@ -150,6 +150,12 @@ func TestGeneratedExample(t *testing.T) {
 	if _, err := s.GetBook(ctx, 101); err == nil {
 		t.Fatal("DeleteAuthorBeforeYear left an old book")
 	}
+	if err := s.DeleteBook(ctx, 102); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := n.GetBook(ctx, 102); err == nil {
+		t.Fatal("DeleteBook left an existing row")
+	}
 	if err := n.DeleteBooksByAuthorName(ctx, "absent"); err != nil {
 		t.Fatal(err)
 	}

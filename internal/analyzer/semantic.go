@@ -69,6 +69,9 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		return query, diagnostics
 	}
 	diagnostics = append(diagnostics, validateQueryStatements(block, tree)...)
+	if contextDiagnostics := validateINSubqueryContexts(block, parsed.tree); len(contextDiagnostics) != 0 {
+		return query, append(diagnostics, contextDiagnostics...)
+	}
 	selectStatement := topLevelSelect(tree.statements)
 	dataStatements := len(tree.insert) + len(tree.updates) + len(tree.deletes)
 	if selectStatement != nil {
@@ -116,6 +119,9 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 			columns, armDiagnostics := analyzeSelectCore(catalog, block, core, partials[i], bindings, inferred, query.Syntax, selectProjection)
 			diagnostics = append(diagnostics, armDiagnostics...)
 			if len(armDiagnostics) != 0 {
+				if columns == nil && containsINSubquery(core) {
+					return query, diagnostics
+				}
 				continue
 			}
 			arms = append(arms, columns)
@@ -153,11 +159,18 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		}
 		subqueries, ds := analyzeINSubqueries(catalog, block, parsed.tree, relations, bindings, inferred, query.Syntax)
 		diagnostics = append(diagnostics, ds...)
+		if len(ds) != 0 {
+			return query, diagnostics
+		}
 		diagnostics = append(diagnostics, validatePredicateContexts(block, parsed.tree, relations, bindings, subqueries)...)
 	}
 	if target != nil && len(tree.insert) == 1 {
 		if stmt := insertSelect(tree.insert[0]); stmt != nil {
-			diagnostics = append(diagnostics, analyzeInsertSelect(catalog, block, tree.insert[0], target, bindings, inferred, query.Syntax)...)
+			ds := analyzeInsertSelect(catalog, block, tree.insert[0], target, bindings, inferred, query.Syntax)
+			diagnostics = append(diagnostics, ds...)
+			if len(ds) != 0 && containsINSubquery(stmt) {
+				return query, diagnostics
+			}
 		} else {
 			diagnostics = append(diagnostics, inferInsert(block, tree.insert[0], target, bindings, inferred)...)
 		}
@@ -167,7 +180,11 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 			if tree.updates[0].Into_values_source().Pure_column_list() != nil {
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, tree.updates[0].Into_values_source().Pure_column_list(), "UPDATE ON SELECT with an explicit source column list is unsupported"))
 			} else {
-				diagnostics = append(diagnostics, analyzeNamedDMLSelect(catalog, block, stmt, tree.updates[0], target, bindings, inferred, query.Syntax)...)
+				ds := analyzeNamedDMLSelect(catalog, block, stmt, tree.updates[0], target, bindings, inferred, query.Syntax)
+				diagnostics = append(diagnostics, ds...)
+				if len(ds) != 0 && containsINSubquery(stmt) {
+					return query, diagnostics
+				}
 			}
 		} else if tree.updates[0].ON() != nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, tree.updates[0], "UPDATE ON currently requires a SELECT source"))
@@ -180,7 +197,11 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 			if tree.deletes[0].Into_values_source().Pure_column_list() != nil {
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, tree.deletes[0].Into_values_source().Pure_column_list(), "DELETE ON SELECT with an explicit source column list is unsupported"))
 			} else {
-				diagnostics = append(diagnostics, analyzeNamedDMLSelect(catalog, block, stmt, tree.deletes[0], target, bindings, inferred, query.Syntax)...)
+				ds := analyzeNamedDMLSelect(catalog, block, stmt, tree.deletes[0], target, bindings, inferred, query.Syntax)
+				diagnostics = append(diagnostics, ds...)
+				if len(ds) != 0 && containsINSubquery(stmt) {
+					return query, diagnostics
+				}
 			}
 		} else if tree.deletes[0].ON() != nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, tree.deletes[0], "DELETE ON currently requires a SELECT source"))
