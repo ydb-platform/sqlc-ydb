@@ -67,6 +67,7 @@ func TestINSubqueryPredicateForms(t *testing.T) {
 	}{
 		{"shadowed alias", ":many", `SELECT r.code FROM records AS r WHERE r.tenant IN (SELECT r.code FROM numeric_codes AS r WHERE r.code = $selected);`, 1},
 		{"inner aggregate", ":many", `SELECT code FROM records WHERE tenant IN (SELECT COUNT(*) FROM allowed);`, 1},
+		{"parenthesized scalar key", ":many", `SELECT code FROM records WHERE (tenant) IN (SELECT (tenant) FROM allowed);`, 1},
 		{"nested membership", ":many", `SELECT code FROM records WHERE tenant IN (SELECT tenant FROM allowed WHERE tenant IN (SELECT code FROM numeric_codes));`, 1},
 		{"scoped wildcards", ":many", `SELECT r.* FROM records AS r WHERE r.tenant IN (SELECT * FROM numeric_codes);`, 3},
 		{"nullable key", ":many", `DECLARE $keys AS List<Struct<code:Utf8?>>; SELECT code FROM records WHERE code NOT IN (SELECT code FROM AS_TABLE($keys));`, 1},
@@ -200,5 +201,52 @@ SELECT id FROM small_keys WHERE id IN (SELECT id FROM small_keys WHERE id = $cou
 	parameters := result.Queries[0].Parameters
 	if len(parameters) != 1 || parameters[0].Name != "count" || parameters[0].Type.Kind != "Uint32" {
 		t.Fatalf("parameters = %+v", parameters)
+	}
+}
+
+func TestINSubqueryPreservesUsefulDiagnostics(t *testing.T) {
+	for _, tc := range []struct {
+		name, sql, want, absent string
+	}{
+		{
+			name: "invalid inner predicate with shadowing output alias",
+			sql: `SELECT code FROM records WHERE tenant IN (
+    SELECT tenant + 1ul AS enabled FROM allowed WHERE code = 1ul ORDER BY enabled
+);`,
+			want:   "comparison operands have incompatible types",
+			absent: "correlated IN subqueries",
+		},
+		{
+			name:   "unknown outer key",
+			sql:    `SELECT code FROM records WHERE missing_key IN (SELECT tenant FROM allowed);`,
+			want:   `unknown column "missing_key"`,
+			absent: "correlated IN subqueries",
+		},
+		{
+			name:   "named tuple projection",
+			sql:    `SELECT code FROM records WHERE (tenant, code) IN (SELECT (tenant, code AS key) FROM allowed);`,
+			want:   `computed result expression "(tenant,codeASkey)" is not supported`,
+			absent: "correlated IN subqueries",
+		},
+		{
+			name: "empty tuple key",
+			sql:  `SELECT code FROM records WHERE () IN (SELECT tenant FROM allowed);`,
+			want: `unsupported scalar expression "()"`,
+		},
+		{
+			name: "empty parenthesized IN operand",
+			sql:  `SELECT code FROM records WHERE tenant IN ();`,
+			want: `unsupported IN operand "()"`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Analyze([]model.Source{{Name: "schema.sql", Text: inSubquerySchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + tc.sql}})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want %q", err, tc.want)
+			}
+			if tc.absent != "" && strings.Contains(err.Error(), tc.absent) {
+				t.Fatalf("error = %v must not contain %q", err, tc.absent)
+			}
+		})
 	}
 }

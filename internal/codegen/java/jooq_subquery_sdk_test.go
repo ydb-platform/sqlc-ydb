@@ -16,7 +16,7 @@ func TestJooqSubqueriesPublishedSDK(t *testing.T) {
 	if maven == "" {
 		t.Skip("set SQLC_YDB_TEST_MAVEN to compile and execute IN subqueries against the published dialect")
 	}
-	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqSubquerySchema}}, []model.Source{{Name: "queries.sql", Text: jooqSubqueryQueries}})
+	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqSubquerySchema}}, []model.Source{{Name: "queries.sql", Text: jooqSubqueryQueries + "\n-- name: ReadNegatedDistinct :many\nSELECT id FROM records WHERE NOT (id IN (SELECT DISTINCT id FROM selected));"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,10 +55,11 @@ public class Main {
             if (index == 0 && !sql.contains("r.id in (select r.id from mapped_selected r where r.label = ?")) throw new AssertionError(sql);
             if (index == 1 && !sql.contains("not in (select")) throw new AssertionError(sql);
             int orderCount = sql.split("order by", -1).length - 1;
-            int wantOrders = index >= 6 ? 2 : index <= 2 ? 1 : 0;
+            int wantOrders = (index == 6 || index == 7) ? 2 : index <= 2 ? 1 : 0;
             if (orderCount != wantOrders) throw new AssertionError(sql);
             if (index == 6 && (!sql.contains("order by mapped_selected.label desc") || !sql.endsWith("order by mapped_records.id"))) throw new AssertionError(sql);
             if (index == 7 && !sql.contains("order by n desc limit 1")) throw new AssertionError(sql);
+            if (index == 8 && (!sql.contains("not (") || !sql.contains("select distinct"))) throw new AssertionError(sql);
             Object[] want = switch(index) {
                 case 0, 2, 4 -> new Object[]{"chosen"};
                 case 3 -> new Object[]{"changed", "chosen"};
@@ -92,7 +93,8 @@ public class Main {
             if (!queries.readMixedTypes(2).equals(List.of(new ReadMixedTypesRow(ULong.MAX)))) throw new AssertionError("mixed numeric types");
             if (!queries.readInnerOrder().equals(List.of(new ReadInnerOrderRow(ULong.MAX)))) throw new AssertionError("inner order");
             if (!queries.readAggregate().equals(List.of(new ReadAggregateRow(ULong.MAX)))) throw new AssertionError("aggregate order");
-            if (statements.size() != 8) throw new AssertionError(statements);
+            if (!queries.readNegatedDistinct().equals(List.of(new ReadNegatedDistinctRow(ULong.MAX)))) throw new AssertionError("negated distinct membership");
+            if (statements.size() != 9) throw new AssertionError(statements);
         }
     }
 }`
