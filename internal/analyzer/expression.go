@@ -100,7 +100,7 @@ func resolveComparison(expr antlr.ParserRuleContext, scope expressionScope) (mod
 			return model.Type{Kind: "Bool"}, true, nil
 		}
 		if condition.IN() != nil {
-			return model.Type{}, true, fmt.Errorf("typed IN expressions are not yet supported outside WHERE or JOIN predicates")
+			return model.Type{}, true, fmt.Errorf("typed IN expressions are supported only in WHERE and JOIN predicates; they are not yet supported in projections, CASE, IF, or HAVING")
 		}
 		operands = append(operands, xor.Eq_subexpr())
 		for _, operand := range condition.AllEq_subexpr() {

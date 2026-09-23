@@ -348,6 +348,24 @@ func (r *jooqRenderer) expr(n antlr.Tree) string {
 		if c, ok := r.query.Syntax.Columns[node.GetStart().GetTokenIndex()]; ok && node.Unary_casual_subexpr() != nil {
 			return r.col(r.aliases[c.Alias], c.Column.Name)
 		}
+		if casual := node.Unary_casual_subexpr(); casual != nil && casual.Id_expr() != nil && casual.Unary_subexpr_suffix().GetText() == "" {
+			identifier := casual.Id_expr().GetText()
+			if strings.HasPrefix(identifier, "`") {
+				identifier = strings.ReplaceAll(identifier[1:len(identifier)-1], "``", "`")
+			}
+			for parent := node.GetParent(); parent != nil; parent = parent.GetParent() {
+				if _, ok := parent.(*parser.Order_by_clauseContext); ok {
+					for _, result := range r.query.ResultSets {
+						for _, column := range result.Columns {
+							if identifier == column.ResultName() {
+								// Result types were validated before rendering the statement.
+								return "field(name(" + quoted(column.ResultName()) + "), YdbTypes." + strings.ToUpper(column.Type.UnwrapOptional().Kind) + ")"
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 	switch node := n.(type) {
 	case *parser.Cast_exprContext:
@@ -637,12 +655,16 @@ func (r *jooqRenderer) selectQuery(core *parser.Select_coreContext) string {
 		}
 		body += "\n        .groupBy(" + strings.Join(items, ", ") + ")"
 	}
+	var ordering []string
 	for _, order := range jooqNodes[*parser.Sort_specificationContext](r.query.Syntax.Root) {
 		expr := r.expr(order.Expr())
 		if strings.HasSuffix(strings.ToUpper(order.GetText()), "DESC") {
 			expr += ".desc()"
 		}
-		body += "\n        .orderBy(" + expr + ")"
+		ordering = append(ordering, expr)
+	}
+	if len(ordering) != 0 {
+		body += "\n        " + strings.ReplaceAll(jooqCall(".orderBy", ordering), "\n", "\n        ")
 	}
 	for _, limit := range jooqNodes[*parser.Select_kind_partialContext](r.query.Syntax.Root) {
 		if limit.LIMIT() == nil {
