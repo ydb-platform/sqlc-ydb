@@ -122,10 +122,7 @@ func validatePredicateAtom(atom *parser.Xor_subexprContext, scope expressionScop
 			}
 			return nil
 		}
-		_, matched, err := resolveComparison(atom, scope)
-		if !matched {
-			return fmt.Errorf("unsupported predicate %q", atom.GetText())
-		}
+		_, _, err = resolveComparison(atom, scope)
 		return err
 	}
 
