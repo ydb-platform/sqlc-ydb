@@ -270,4 +270,83 @@ public final class Queries {
                 )
                 .execute();
     }
+
+    // -- name: DeleteAuthorWithBooks :exec
+    public void deleteAuthorWithBooks(ULong authorId) {
+        dsl.connection(_connection -> {
+            try (var _prepared = _connection.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+                DECLARE $author_id AS Uint64;
+                DELETE FROM\s\
+                """ + dsl.render(BOOKS) + """
+                 WHERE author_id = $author_id;
+                DELETE FROM\s\
+                """ + dsl.render(AUTHORS) + """
+                 WHERE author_id = $author_id;\
+                """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+                _prepared.setObject("author_id", tech.ydb.table.values.PrimitiveValue.newUint64(authorId.longValue()));
+                _prepared.execute();
+            }
+        });
+    }
+
+    // -- name: UpdateAuthorAndListBooks :many
+    public List<UpdateAuthorAndListBooksRow> updateAuthorAndListBooks(ULong authorId, String name) {
+        return dsl.connectionResult(_connection -> {
+            try (var _prepared = _connection.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+                DECLARE $author_id AS Uint64;
+                DECLARE $name AS Utf8;
+                UPDATE\s\
+                """ + dsl.render(AUTHORS) + """
+                 SET name = $name WHERE author_id = $author_id;
+                SELECT book_id, title FROM\s\
+                """ + dsl.render(BOOKS) + " AS `books`" + """
+                 WHERE author_id = $author_id ORDER BY book_id;\
+                """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+                _prepared.setObject("author_id", tech.ydb.table.values.PrimitiveValue.newUint64(authorId.longValue()));
+                _prepared.setString("name", name);
+                _prepared.execute();
+                while (_prepared.getResultSet() == null && _prepared.getUpdateCount() != -1) {
+                    _prepared.getMoreResults();
+                }
+                try (var _rows = _prepared.getResultSet()) {
+                    if (_rows == null) throw new java.sql.SQLException("Expected one result set");
+                    var _result = dsl.fetch(_rows, YdbTypes.UINT64, YdbTypes.UTF8).map(_row -> new UpdateAuthorAndListBooksRow(_row.get(0, org.jooq.types.ULong.class), _row.get(1, String.class)));
+                    while (_prepared.getMoreResults() || _prepared.getUpdateCount() != -1) {
+                        if (_prepared.getResultSet() != null) throw new java.sql.SQLException("Expected one result set");
+                    }
+                    return _result;
+                }
+            }
+        });
+    }
+
+    // -- name: SelectAuthorAndDeleteBooks :one
+    public Optional<SelectAuthorAndDeleteBooksRow> selectAuthorAndDeleteBooks(ULong authorId) {
+        return dsl.connectionResult(_connection -> {
+            try (var _prepared = _connection.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+                DECLARE $author_id AS Uint64;
+                SELECT author_id, name FROM\s\
+                """ + dsl.render(AUTHORS) + " AS `authors`" + """
+                 WHERE author_id = $author_id;
+                DELETE FROM\s\
+                """ + dsl.render(BOOKS) + """
+                 WHERE author_id = $author_id;\
+                """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+                _prepared.setObject("author_id", tech.ydb.table.values.PrimitiveValue.newUint64(authorId.longValue()));
+                _prepared.execute();
+                while (_prepared.getResultSet() == null && _prepared.getUpdateCount() != -1) {
+                    _prepared.getMoreResults();
+                }
+                try (var _rows = _prepared.getResultSet()) {
+                    if (_rows == null) throw new java.sql.SQLException("Expected one result set");
+                    var _result = dsl.fetch(_rows, YdbTypes.UINT64, YdbTypes.UTF8).map(_row -> new SelectAuthorAndDeleteBooksRow(_row.get(0, org.jooq.types.ULong.class), _row.get(1, String.class)));
+                    while (_prepared.getMoreResults() || _prepared.getUpdateCount() != -1) {
+                        if (_prepared.getResultSet() != null) throw new java.sql.SQLException("Expected one result set");
+                    }
+                    if (_result.size() > 1) throw new org.jooq.exception.TooManyRowsException("Expected at most one row");
+                    return _result.stream().findFirst();
+                }
+            }
+        });
+    }
 }

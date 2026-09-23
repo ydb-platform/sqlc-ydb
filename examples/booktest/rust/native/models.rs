@@ -79,3 +79,15 @@ pub struct ListBooksWithRecentEditionsRow {
     pub available: std::time::SystemTime,
     pub tags: String,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct UpdateAuthorAndListBooksRow {
+    pub book_id: u64,
+    pub title: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct SelectAuthorAndDeleteBooksRow {
+    pub author_id: u64,
+    pub name: String,
+}

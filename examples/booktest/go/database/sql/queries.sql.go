@@ -348,3 +348,69 @@ func (q *Queries) DeleteBooksByAuthorName(ctx context.Context, arg string) error
 
 	return err
 }
+
+// -- name: DeleteAuthorWithBooks :exec
+func (q *Queries) DeleteAuthorWithBooks(ctx context.Context, arg uint64) error {
+	_, err := q.db.ExecContext(ctx, ""+
+		"DECLARE $author_id AS Uint64;\n"+
+		"DELETE FROM books WHERE author_id = $author_id;\n"+
+		"DELETE FROM authors WHERE author_id = $author_id;",
+		sql.Named("author_id", arg),
+	)
+
+	return err
+}
+
+// -- name: UpdateAuthorAndListBooks :many
+func (q *Queries) UpdateAuthorAndListBooks(ctx context.Context, arg UpdateAuthorAndListBooksParams) ([]UpdateAuthorAndListBooksRow, error) {
+	rows, err := q.db.QueryContext(ctx, ""+
+		"DECLARE $author_id AS Uint64;\n"+
+		"DECLARE $name AS Utf8;\n"+
+		"UPDATE authors SET name = $name WHERE author_id = $author_id;\n"+
+		"SELECT book_id, title FROM books WHERE author_id = $author_id ORDER BY book_id;",
+		sql.Named("author_id", arg.AuthorID),
+		sql.Named("name", arg.Name),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []UpdateAuthorAndListBooksRow(nil)
+	for rows.Next() {
+		var row UpdateAuthorAndListBooksRow
+		if err := rows.Scan(
+			&row.BookID,
+			&row.Title,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, row)
+	}
+
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
+// -- name: SelectAuthorAndDeleteBooks :one
+func (q *Queries) SelectAuthorAndDeleteBooks(ctx context.Context, arg uint64) (SelectAuthorAndDeleteBooksRow, error) {
+	var row SelectAuthorAndDeleteBooksRow
+	err := q.db.QueryRowContext(ctx, ""+
+		"DECLARE $author_id AS Uint64;\n"+
+		"SELECT author_id, name FROM authors WHERE author_id = $author_id;\n"+
+		"DELETE FROM books WHERE author_id = $author_id;",
+		sql.Named("author_id", arg),
+	).Scan(
+		&row.AuthorID,
+		&row.Name,
+	)
+
+	return row, err
+}

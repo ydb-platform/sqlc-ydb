@@ -81,4 +81,14 @@ struct ListBooksWithRecentEditionsRow final {
     ::userver::formats::json::Value tags;
 };
 
+struct UpdateAuthorAndListBooksRow final {
+    std::uint64_t book_id;
+    ::userver::ydb::Utf8 title;
+};
+
+struct SelectAuthorAndDeleteBooksRow final {
+    std::uint64_t author_id;
+    ::userver::ydb::Utf8 name;
+};
+
 }  // namespace booktest::userver

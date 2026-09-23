@@ -115,6 +115,21 @@ export type ListBooksWithRecentEditionsRow = {
   readonly tags: JSValue;
 };
 
+export type UpdateAuthorAndListBooksParams = {
+  readonly authorId: bigint;
+  readonly name: string;
+};
+
+export type UpdateAuthorAndListBooksRow = {
+  readonly book_id: bigint;
+  readonly title: string;
+};
+
+export type SelectAuthorAndDeleteBooksRow = {
+  readonly author_id: bigint;
+  readonly name: string;
+};
+
 export class Queries {
   readonly #sql: SQL;
 
@@ -359,5 +374,56 @@ export class Queries {
       .parameter("author_name", new Utf8(authorName));
     configure?.(stmt);
     await stmt;
+  }
+
+  // -- name: DeleteAuthorWithBooks :exec
+  async deleteAuthorWithBooks(authorId: bigint, configure?: ConfigureQuery): Promise<void> {
+    const stmt = this.#sql(
+      "DECLARE $author_id AS Uint64;\n" +
+      "DELETE FROM books WHERE author_id = $author_id;\n" +
+      "DELETE FROM authors WHERE author_id = $author_id;"
+    );
+    // Keep explicit DECLARE statements; the SDK otherwise prepends duplicates.
+    Object.defineProperty(stmt, "text", { value: stmt.text, writable: false });
+    stmt
+      .parameter("author_id", new Uint64(authorId));
+    configure?.(stmt);
+    await stmt;
+  }
+
+  // -- name: UpdateAuthorAndListBooks :many
+  async updateAuthorAndListBooks(args: UpdateAuthorAndListBooksParams, configure?: ConfigureQuery): Promise<UpdateAuthorAndListBooksRow[]> {
+    const stmt = this.#sql<[UpdateAuthorAndListBooksRow]>(
+      "DECLARE $author_id AS Uint64;\n" +
+      "DECLARE $name AS Utf8;\n" +
+      "UPDATE authors SET name = $name WHERE author_id = $author_id;\n" +
+      "SELECT book_id, title FROM books WHERE author_id = $author_id ORDER BY book_id;"
+    );
+    // Keep explicit DECLARE statements; the SDK otherwise prepends duplicates.
+    Object.defineProperty(stmt, "text", { value: stmt.text, writable: false });
+    stmt
+      .parameter("author_id", new Uint64(args.authorId))
+      .parameter("name", new Utf8(args.name));
+    configure?.(stmt);
+    const [rows] = await stmt;
+
+    return rows;
+  }
+
+  // -- name: SelectAuthorAndDeleteBooks :one
+  async selectAuthorAndDeleteBooks(authorId: bigint, configure?: ConfigureQuery): Promise<SelectAuthorAndDeleteBooksRow | null> {
+    const stmt = this.#sql<[SelectAuthorAndDeleteBooksRow]>(
+      "DECLARE $author_id AS Uint64;\n" +
+      "SELECT author_id, name FROM authors WHERE author_id = $author_id;\n" +
+      "DELETE FROM books WHERE author_id = $author_id;"
+    );
+    // Keep explicit DECLARE statements; the SDK otherwise prepends duplicates.
+    Object.defineProperty(stmt, "text", { value: stmt.text, writable: false });
+    stmt
+      .parameter("author_id", new Uint64(authorId));
+    configure?.(stmt);
+    const [rows] = await stmt;
+
+    return rows[0] ?? null;
   }
 }

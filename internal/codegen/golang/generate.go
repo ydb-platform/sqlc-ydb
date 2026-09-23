@@ -693,6 +693,9 @@ func writeSQL(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 		b.WriteString("if err := " + scanCall("rows.Scan", scanDestinations(q.ResultSets[0])) + "; err != nil { return nil, err }\n")
 		b.WriteString("items = append(items, row)\n")
 		b.WriteString("}\n\n")
+		if q.MultipleStatements {
+			b.WriteString("if err := rows.Close(); err != nil { return nil, err }\n\n")
+		}
 		b.WriteString("if err := rows.Err(); err != nil { return nil, err }\n\n")
 		b.WriteString("return items, nil\n")
 	}

@@ -31,3 +31,8 @@ class BooksByTagsRow:
 @dataclass
 class SayHelloRow:
     greeting: str
+
+@dataclass
+class UpdateAuthorAndListBooksRow:
+    book_id: int
+    title: str

@@ -80,6 +80,14 @@ public sealed class Queries
             ["book_type"] = nameof(ListBooksWithRecentEditionsRow.BookType),
             ["publication_year"] = nameof(ListBooksWithRecentEditionsRow.PublicationYear),
         }));
+        SqlMapper.SetTypeMap(typeof(UpdateAuthorAndListBooksRow), new ColumnTypeMap(typeof(UpdateAuthorAndListBooksRow), new Dictionary<string, string>
+        {
+            ["book_id"] = nameof(UpdateAuthorAndListBooksRow.BookID),
+        }));
+        SqlMapper.SetTypeMap(typeof(SelectAuthorAndDeleteBooksRow), new ColumnTypeMap(typeof(SelectAuthorAndDeleteBooksRow), new Dictionary<string, string>
+        {
+            ["author_id"] = nameof(SelectAuthorAndDeleteBooksRow.AuthorID),
+        }));
     }
 
     private sealed class ColumnTypeMap : SqlMapper.ITypeMap
@@ -444,6 +452,71 @@ public sealed class Queries
             cancellationToken: cancellationToken);
 
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
+    }
+
+    // -- name: DeleteAuthorWithBooks :exec
+    public async Task DeleteAuthorWithBooksAsync(ulong authorId, CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var parameters = new YdbParameters(
+            new YdbParameter("$author_id", DbType.UInt64, authorId)
+        );
+
+        var command = new CommandDefinition(
+            commandText: """
+            DECLARE $author_id AS Uint64;
+            DELETE FROM books WHERE author_id = $author_id;
+            DELETE FROM authors WHERE author_id = $author_id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        await _connection.ExecuteAsync(command).ConfigureAwait(false);
+    }
+
+    // -- name: UpdateAuthorAndListBooks :many
+    public async Task<IReadOnlyList<UpdateAuthorAndListBooksRow>> UpdateAuthorAndListBooksAsync(UpdateAuthorAndListBooksParams args, CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var parameters = new YdbParameters(
+            new YdbParameter("$author_id", DbType.UInt64, args.AuthorID),
+            new YdbParameter("$name", DbType.String, args.Name)
+        );
+
+        var command = new CommandDefinition(
+            commandText: """
+            DECLARE $author_id AS Uint64;
+            DECLARE $name AS Utf8;
+            UPDATE authors SET name = $name WHERE author_id = $author_id;
+            SELECT book_id, title FROM books WHERE author_id = $author_id ORDER BY book_id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        return (await _connection.QueryAsync<UpdateAuthorAndListBooksRow>(command).ConfigureAwait(false)).AsList();
+    }
+
+    // -- name: SelectAuthorAndDeleteBooks :one
+    public async Task<SelectAuthorAndDeleteBooksRow> SelectAuthorAndDeleteBooksAsync(ulong authorId, CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var parameters = new YdbParameters(
+            new YdbParameter("$author_id", DbType.UInt64, authorId)
+        );
+
+        var command = new CommandDefinition(
+            commandText: """
+            DECLARE $author_id AS Uint64;
+            SELECT author_id, name FROM authors WHERE author_id = $author_id;
+            DELETE FROM books WHERE author_id = $author_id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        return await _connection.QueryFirstAsync<SelectAuthorAndDeleteBooksRow>(command).ConfigureAwait(false);
     }
 
     private sealed class YdbParameters : SqlMapper.IDynamicParameters

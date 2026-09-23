@@ -635,4 +635,126 @@ void Queries::DeleteBooksByAuthorName(const std::string& author_name) const {
     NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
 }
 
+// -- name: DeleteAuthorWithBooks :exec
+void Queries::DeleteAuthorWithBooks(std::uint64_t author_id) const {
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_params = NYdb::TParamsBuilder()
+            .AddParam("$author_id").Uint64(author_id).Build()
+            .Build();
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            "DECLARE $author_id AS Uint64;\n"
+            "DELETE FROM books WHERE author_id = $author_id;\n"
+            "DELETE FROM authors WHERE author_id = $author_id;",
+            sqlc_tx,
+            sqlc_params,
+            this->execute_settings_
+        ).GetValueSync();
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+}
+
+// -- name: UpdateAuthorAndListBooks :many
+std::vector<UpdateAuthorAndListBooksRow> Queries::UpdateAuthorAndListBooks(std::uint64_t author_id, const std::string& name) const {
+    std::optional<NYdb::TResultSet> sqlc_result_set;
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_params = NYdb::TParamsBuilder()
+            .AddParam("$author_id").Uint64(author_id).Build()
+            .AddParam("$name").Utf8(name).Build()
+            .Build();
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            "DECLARE $author_id AS Uint64;\n"
+            "DECLARE $name AS Utf8;\n"
+            "UPDATE authors SET name = $name WHERE author_id = $author_id;\n"
+            "SELECT book_id, title FROM books WHERE author_id = $author_id ORDER BY book_id;",
+            sqlc_tx,
+            sqlc_params,
+            this->execute_settings_
+        ).GetValueSync();
+        if (sqlc_result.IsSuccess()) {
+            if (sqlc_result.GetResultSets().size() != 1) {
+                throw std::runtime_error("expected exactly one result set");
+            }
+            sqlc_result_set = sqlc_result.GetResultSet(0);
+        }
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+    if (!sqlc_result_set) {
+        throw std::runtime_error("UpdateAuthorAndListBooks: successful query returned no result set");
+    }
+    NYdb::TResultSetParser sqlc_parser(*sqlc_result_set);
+    std::vector<UpdateAuthorAndListBooksRow> sqlc_rows;
+    sqlc_rows.reserve(sqlc_result_set->RowsCount());
+    while (sqlc_parser.TryNextRow()) {
+        sqlc_rows.push_back(UpdateAuthorAndListBooksRow{
+            sqlc_parser.ColumnParser("book_id").GetUint64(),
+            sqlc_parser.ColumnParser("title").GetUtf8(),
+        });
+    }
+    return sqlc_rows;
+}
+
+// -- name: SelectAuthorAndDeleteBooks :one
+std::optional<SelectAuthorAndDeleteBooksRow> Queries::SelectAuthorAndDeleteBooks(std::uint64_t author_id) const {
+    std::optional<NYdb::TResultSet> sqlc_result_set;
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_params = NYdb::TParamsBuilder()
+            .AddParam("$author_id").Uint64(author_id).Build()
+            .Build();
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            "DECLARE $author_id AS Uint64;\n"
+            "SELECT author_id, name FROM authors WHERE author_id = $author_id;\n"
+            "DELETE FROM books WHERE author_id = $author_id;",
+            sqlc_tx,
+            sqlc_params,
+            this->execute_settings_
+        ).GetValueSync();
+        if (sqlc_result.IsSuccess()) {
+            if (sqlc_result.GetResultSets().size() != 1) {
+                throw std::runtime_error("expected exactly one result set");
+            }
+            sqlc_result_set = sqlc_result.GetResultSet(0);
+        }
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+    if (!sqlc_result_set) {
+        throw std::runtime_error("SelectAuthorAndDeleteBooks: successful query returned no result set");
+    }
+    NYdb::TResultSetParser sqlc_parser(*sqlc_result_set);
+    if (!sqlc_parser.TryNextRow()) {
+        return std::nullopt;
+    }
+    SelectAuthorAndDeleteBooksRow sqlc_row{
+        sqlc_parser.ColumnParser("author_id").GetUint64(),
+        sqlc_parser.ColumnParser("name").GetUtf8(),
+    };
+    return sqlc_row;
+}
+
 }  // namespace booktest::native

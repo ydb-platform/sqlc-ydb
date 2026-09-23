@@ -12,7 +12,7 @@ let mut query_client = client.query_client();
 let mut queries = generated::queries::Queries::new(&mut query_client);
 ```
 
-Each generated method executes one statement through the Query Service API. `:exec` uses `QueryClient::exec`; `:one` uses `query_row`, and `:many` uses `query_result_set`. `:one` requires exactly one row: it reports `YdbError::NoRows` for an empty result and an SDK error for multiple rows. This is stricter than upstream sqlc's first-row contract; use `LIMIT 1` when the query intentionally selects one of several matches. With a `QueryClient`, methods use the SDK's one-shot operations and retry policy. With a `Transaction`, all methods execute in that transaction. Generated code does not begin, commit, roll back, or retry transactions; the caller controls their lifetime.
+Each generated method executes one named query through the Query Service API. `:exec` uses `QueryClient::exec`; `:one` uses `query_row`, and `:many` uses `query_result_set`. `:one` requires exactly one row: it reports `YdbError::NoRows` for an empty result and an SDK error for multiple rows. This is stricter than upstream sqlc's first-row contract; use `LIMIT 1` when the query intentionally selects one of several matches. With a `QueryClient`, methods use the SDK's one-shot operations and retry policy. With a `Transaction`, all methods execute in that transaction. Generated code does not begin, commit, roll back, or retry transactions; the caller controls their lifetime.
 
 Use `retry_tx` to execute several generated queries atomically:
 

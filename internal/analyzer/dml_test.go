@@ -59,8 +59,8 @@ func TestAnalyzeRejectsUnsupportedQueryForms(t *testing.T) {
 	for _, tt := range []struct{ name, command, sql, want string }{
 		{"tuple update", ":exec", "UPDATE records SET (id, label) = ($id, $label);", "only individual UPDATE SET assignments are supported"},
 		{"exec select", ":exec", "SELECT id FROM records;", "command :exec cannot be used with a row-returning statement"},
-		{"two data statements", ":exec", "DELETE FROM records; DELETE FROM records;", "exactly one supported SELECT, INSERT/UPSERT, UPDATE, or DELETE statement; found 2"},
-		{"query ddl", ":exec", "CREATE TABLE other (id Uint64, PRIMARY KEY (id));", "exactly one supported SELECT, INSERT/UPSERT, UPDATE, or DELETE statement; found 0"},
+		{"two data statements with row count", ":execrows", "DELETE FROM records; DELETE FROM records;", "multi-statement :execrows is unsupported; use :exec, :one, or :many"},
+		{"query ddl", ":exec", "CREATE TABLE other (id Uint64, PRIMARY KEY (id));", "unsupported statement in named query"},
 		{"join using", ":many", "SELECT a.id FROM records a JOIN records b USING (id);", "JOIN USING is not yet supported; use an explicit ON condition"},
 		{"derived table", ":many", "SELECT id FROM (SELECT id FROM records) r;", "only named catalog tables are supported in FROM and JOIN"},
 		{"table function", ":many", "SELECT id FROM AS_TABLE($rows);", "requires DECLARE $rows AS List<Struct<...>>"},
@@ -90,5 +90,25 @@ func TestAnalyzeInsertMultipleRows(t *testing.T) {
 	q := got.Queries[0]
 	if q.Command != model.Exec || len(q.ResultSets) != 0 || !reflect.DeepEqual(q.Parameters, want) {
 		t.Fatalf("query = %#v, want parameters %#v", q, want)
+	}
+}
+
+func TestAnalyzeDMLWithoutReturningRequiresExec(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records(id Uint64 NOT NULL,label Utf8,PRIMARY KEY(id));"}}
+	for _, command := range []string{":one", ":many"} {
+		for _, sql := range []string{
+			"INSERT INTO records(id,label) VALUES(1ul,'value'u);",
+			"UPSERT INTO records(id,label) VALUES(1ul,'value'u);",
+			"UPDATE records SET label='value'u WHERE id=1ul;",
+			"DELETE FROM records WHERE id=1ul;",
+		} {
+			t.Run(command+"/"+strings.Fields(sql)[0], func(t *testing.T) {
+				result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Change " + command + "\n" + sql}})
+				want := model.Diagnostic{Position: model.Position{File: "query.sql", Line: 1, Column: 1}, Message: "command " + command + " requires a result set"}
+				if err == nil || !reflect.DeepEqual(result.Diagnostics, []model.Diagnostic{want}) {
+					t.Fatalf("diagnostics=%#v error=%v; want %#v", result.Diagnostics, err, want)
+				}
+			})
+		}
 	}
 }

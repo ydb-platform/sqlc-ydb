@@ -490,7 +490,12 @@ func writeMethod(b *bytes.Buffer, q model.AnalyzedQuery) {
 	case model.Exec:
 		b.WriteString("        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);\n")
 	case model.One:
-		b.WriteString("        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);\n        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))\n        {\n            throw new InvalidOperationException(\"query returned no rows\");\n        }\n        return " + name + "RowFrom(reader);\n")
+		b.WriteString("        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);\n        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))\n        {\n            throw new InvalidOperationException(\"query returned no rows\");\n        }\n")
+		if q.MultipleStatements {
+			b.WriteString("        var row = " + name + "RowFrom(reader);\n        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))\n        {\n        }\n        return row;\n")
+		} else {
+			b.WriteString("        return " + name + "RowFrom(reader);\n")
+		}
 	case model.Many:
 		b.WriteString("        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);\n        var rows = new List<" + name + "Row>();\n        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))\n        {\n            rows.Add(" + name + "RowFrom(reader));\n        }\n        return rows;\n")
 	}

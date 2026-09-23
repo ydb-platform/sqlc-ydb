@@ -38,6 +38,9 @@ public:
     std::vector<ListAuthorsWithRecentBooksRow> ListAuthorsWithRecentBooks(std::int32_t since_year) const;
     std::vector<ListBooksWithRecentEditionsRow> ListBooksWithRecentEditions(std::int32_t since_year) const;
     void DeleteBooksByAuthorName(const std::string& author_name) const;
+    void DeleteAuthorWithBooks(std::uint64_t author_id) const;
+    std::vector<UpdateAuthorAndListBooksRow> UpdateAuthorAndListBooks(std::uint64_t author_id, const std::string& name) const;
+    std::optional<SelectAuthorAndDeleteBooksRow> SelectAuthorAndDeleteBooks(std::uint64_t author_id) const;
 
 private:
     NYdb::NQuery::TQueryClient* client_;

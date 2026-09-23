@@ -360,4 +360,70 @@ void Queries::DeleteBooksByAuthorName(const ::userver::ydb::Utf8& author_name) c
     );
 }
 
+// -- name: DeleteAuthorWithBooks :exec
+void Queries::DeleteAuthorWithBooks(std::uint64_t author_id) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "DECLARE $author_id AS Uint64;\n"
+        "DELETE FROM books WHERE author_id = $author_id;\n"
+        "DELETE FROM authors WHERE author_id = $author_id;",
+        ::userver::ydb::Query::Name{"DeleteAuthorWithBooks"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    static_cast<void>(
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$author_id", author_id)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$author_id", author_id)
+    );
+}
+
+// -- name: UpdateAuthorAndListBooks :many
+std::vector<UpdateAuthorAndListBooksRow> Queries::UpdateAuthorAndListBooks(std::uint64_t author_id, const ::userver::ydb::Utf8& name) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "DECLARE $author_id AS Uint64;\n"
+        "DECLARE $name AS Utf8;\n"
+        "UPDATE authors SET name = $name WHERE author_id = $author_id;\n"
+        "SELECT book_id, title FROM books WHERE author_id = $author_id ORDER BY book_id;",
+        ::userver::ydb::Query::Name{"UpdateAuthorAndListBooks"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    auto sqlc_response =
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$author_id", author_id, "$name", name)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$author_id", author_id, "$name", name);
+    auto sqlc_cursor = sqlc_response.GetSingleCursor();
+    std::vector<UpdateAuthorAndListBooksRow> sqlc_rows;
+    sqlc_rows.reserve(sqlc_cursor.size());
+    for (auto sqlc_row : sqlc_cursor) {
+        sqlc_rows.push_back(UpdateAuthorAndListBooksRow{
+            sqlc_row.Get<std::uint64_t>("book_id"),
+            sqlc_row.Get<::userver::ydb::Utf8>("title"),
+        });
+    }
+    return sqlc_rows;
+}
+
+// -- name: SelectAuthorAndDeleteBooks :one
+std::optional<SelectAuthorAndDeleteBooksRow> Queries::SelectAuthorAndDeleteBooks(std::uint64_t author_id) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "DECLARE $author_id AS Uint64;\n"
+        "SELECT author_id, name FROM authors WHERE author_id = $author_id;\n"
+        "DELETE FROM books WHERE author_id = $author_id;",
+        ::userver::ydb::Query::Name{"SelectAuthorAndDeleteBooks"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    auto sqlc_response =
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$author_id", author_id)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$author_id", author_id);
+    auto sqlc_cursor = sqlc_response.GetSingleCursor();
+    if (sqlc_cursor.empty()) {
+        return std::nullopt;
+    }
+    auto sqlc_row = sqlc_cursor.GetFirstRow();
+    return SelectAuthorAndDeleteBooksRow{
+        sqlc_row.Get<std::uint64_t>("author_id"),
+        sqlc_row.Get<::userver::ydb::Utf8>("name"),
+    };
+}
+
 }  // namespace booktest::userver

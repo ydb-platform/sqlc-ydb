@@ -526,3 +526,104 @@ func (q *Queries) DeleteBooksByAuthorName(ctx context.Context, arg string, opts 
 
 	return xerrors.WithStackTrace(err)
 }
+
+// -- name: DeleteAuthorWithBooks :exec
+func (q *Queries) DeleteAuthorWithBooks(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$author_id").Uint64(arg)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	err := q.db.Exec(ctx, ""+
+		"DECLARE $author_id AS Uint64;\n"+
+		"DELETE FROM books WHERE author_id = $author_id;\n"+
+		"DELETE FROM authors WHERE author_id = $author_id;",
+		callOptions...,
+	)
+
+	return xerrors.WithStackTrace(err)
+}
+
+// -- name: UpdateAuthorAndListBooks :many
+func (q *Queries) UpdateAuthorAndListBooks(ctx context.Context, arg UpdateAuthorAndListBooksParams, opts ...query.ExecuteOption) ([]UpdateAuthorAndListBooksRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$author_id").Uint64(arg.AuthorID)
+	parameters = parameters.Param("$name").Text(arg.Name)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	result, err := q.db.Query(ctx, ""+
+		"DECLARE $author_id AS Uint64;\n"+
+		"DECLARE $name AS Utf8;\n"+
+		"UPDATE authors SET name = $name WHERE author_id = $author_id;\n"+
+		"SELECT book_id, title FROM books WHERE author_id = $author_id ORDER BY book_id;",
+		callOptions...,
+	)
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
+	}
+	defer result.Close(ctx)
+
+	resultSet, err := result.NextResultSet(ctx)
+	if errors.Is(err, io.EOF) {
+		return nil, xerrors.WithStackTrace(query.ErrNoResultSets)
+	}
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
+	}
+
+	items := make([]UpdateAuthorAndListBooksRow, 0)
+	for r, err := range resultSet.Rows(ctx) {
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+		var row UpdateAuthorAndListBooksRow
+		if err := r.ScanNamed(
+			query.Named("book_id", &row.BookID),
+			query.Named("title", &row.Title),
+		); err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+		items = append(items, row)
+	}
+
+	_, err = result.NextResultSet(ctx)
+	if err == nil {
+		return nil, xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+	} else if !errors.Is(err, io.EOF) {
+		return nil, xerrors.WithStackTrace(err)
+	}
+
+	return items, nil
+}
+
+// -- name: SelectAuthorAndDeleteBooks :one
+func (q *Queries) SelectAuthorAndDeleteBooks(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (SelectAuthorAndDeleteBooksRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$author_id").Uint64(arg)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	result, err := q.db.QueryRow(ctx, ""+
+		"DECLARE $author_id AS Uint64;\n"+
+		"SELECT author_id, name FROM authors WHERE author_id = $author_id;\n"+
+		"DELETE FROM books WHERE author_id = $author_id;",
+		callOptions...,
+	)
+	if err != nil {
+		return SelectAuthorAndDeleteBooksRow{}, xerrors.WithStackTrace(err)
+	}
+
+	var row SelectAuthorAndDeleteBooksRow
+	if err := result.ScanNamed(
+		query.Named("author_id", &row.AuthorID),
+		query.Named("name", &row.Name),
+	); err != nil {
+		return SelectAuthorAndDeleteBooksRow{}, xerrors.WithStackTrace(err)
+	}
+
+	return row, nil
+}

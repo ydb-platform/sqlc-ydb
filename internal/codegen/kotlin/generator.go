@@ -365,7 +365,11 @@ func emitJDBC(b *strings.Builder, q model.AnalyzedQuery, names []string, binding
 	if q.Command == model.Exec {
 		b.WriteString("            _prepared.execute()\n")
 	} else {
-		b.WriteString("            _prepared.executeQuery().use { _rows ->\n")
+		if q.MultipleStatements {
+			b.WriteString("            _prepared.execute()\n            while (_prepared.resultSet == null && _prepared.updateCount != -1) {\n                _prepared.moreResults\n            }\n            _prepared.resultSet.use { _rows ->\n                if (_rows == null) throw java.sql.SQLException(\"Expected one result set\")\n")
+		} else {
+			b.WriteString("            _prepared.executeQuery().use { _rows ->\n")
+		}
 		emitRows(b, q, row, "                ", false)
 		b.WriteString("            }\n")
 	}
@@ -397,9 +401,19 @@ func emitJDBCParameter(b *strings.Builder, p model.Parameter, name string, posit
 	}
 	fmt.Fprintf(b, "            _prepared.set%s(%d, %s)\n", s.jdbc, position, name)
 }
+func emitJDBCScriptFinish(b *strings.Builder, indent string) {
+	b.WriteString(indent + "while (_prepared.moreResults || _prepared.updateCount != -1) {\n" + indent + "    if (_prepared.resultSet != null) throw java.sql.SQLException(\"Expected one result set\")\n" + indent + "}\n")
+}
+
 func emitRows(b *strings.Builder, q model.AnalyzedQuery, row, indent string, native bool) {
 	if q.Command == model.One {
-		b.WriteString(indent + "if (!_rows.next()) return null\n")
+		if q.MultipleStatements && !native {
+			b.WriteString(indent + "if (!_rows.next()) {\n")
+			emitJDBCScriptFinish(b, indent+"    ")
+			b.WriteString(indent + "    return null\n" + indent + "}\n")
+		} else {
+			b.WriteString(indent + "if (!_rows.next()) return null\n")
+		}
 	} else {
 		fmt.Fprintf(b, "%sval _items = ArrayList<%s>()\n%swhile (_rows.next()) {\n", indent, row, indent)
 		indent += "    "
@@ -436,11 +450,19 @@ func emitRows(b *strings.Builder, q model.AnalyzedQuery, row, indent string, nat
 	}
 	newRow := row + "(" + strings.Join(values, ", ") + ")"
 	if q.Command == model.One {
+		if q.MultipleStatements && !native {
+			b.WriteString(indent + "while (_rows.next()) {}\n")
+			emitJDBCScriptFinish(b, indent)
+		}
 		fmt.Fprintf(b, "%sreturn %s\n", indent, newRow)
 	} else {
 		fmt.Fprintf(b, "%s_items.add(%s)\n", indent, newRow)
 		indent = strings.TrimSuffix(indent, "    ")
-		b.WriteString(indent + "}\n" + indent + "return _items\n")
+		b.WriteString(indent + "}\n")
+		if q.MultipleStatements && !native {
+			emitJDBCScriptFinish(b, indent)
+		}
+		b.WriteString(indent + "return _items\n")
 	}
 }
 

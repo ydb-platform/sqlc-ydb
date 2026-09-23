@@ -187,9 +187,94 @@ func TestGeneratedExample(t *testing.T) {
 			t.Fatalf("DeleteBook(%d) left a row", id)
 		}
 	}
+	for _, authorID := range []uint64{100, 999} {
+		if _, err := s.CreateBook(ctx, sq.CreateBookParams{
+			BookID: authorID + 1000, AuthorID: authorID, Isbn: "cleanup", BookType: "FICTION",
+			Title: "Author cleanup", PublicationYear: 2026, Available: available, Tags: `[]`,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := n.DeleteAuthorWithBooks(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetBook(ctx, 1100); err == nil {
+		t.Fatal("native DeleteAuthorWithBooks left the book")
+	}
+	if _, err := s.GetAuthor(ctx, 100); err == nil {
+		t.Fatal("native DeleteAuthorWithBooks left the author")
+	}
+	if _, err := n.GetBook(ctx, 1999); err != nil {
+		t.Fatalf("DeleteAuthorWithBooks removed another author's book: %v", err)
+	}
+	if _, err := n.GetAuthor(ctx, 999); err != nil {
+		t.Fatalf("DeleteAuthorWithBooks removed another author: %v", err)
+	}
+	if err := s.DeleteAuthorWithBooks(ctx, 999); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := n.GetBook(ctx, 1999); err == nil {
+		t.Fatal("database/sql DeleteAuthorWithBooks left the book")
+	}
+	if _, err := n.GetAuthor(ctx, 999); err == nil {
+		t.Fatal("database/sql DeleteAuthorWithBooks left the author")
+	}
 }
 
 func sameJSON(left, right string) bool {
 	var l, r any
 	return json.Unmarshal([]byte(left), &l) == nil && json.Unmarshal([]byte(right), &r) == nil && reflect.DeepEqual(l, r)
+}
+
+func TestGeneratedMixedScripts(t *testing.T) {
+	db := testdb.Open(t)
+	db.Apply(t, "../../../../examples/booktest/schema.sql", "DROP TABLE books;", "DROP TABLE authors;")
+	ctx := db.Context
+	n := native.New(db.Native)
+	s := sq.New(db.SQL)
+	for _, authorID := range []uint64{700, 800} {
+		if _, err := n.CreateAuthor(ctx, native.CreateAuthorParams{AuthorID: authorID, Name: "Before"}); err != nil {
+			t.Fatal(err)
+		}
+		for _, bookID := range []uint64{authorID + 1, authorID + 2} {
+			if _, err := s.CreateBook(ctx, sq.CreateBookParams{BookID: bookID, AuthorID: authorID, Isbn: "script", BookType: "FICTION", Title: "Book", PublicationYear: 2026, Available: time.Now().UTC(), Tags: `[]`}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	rows, err := n.UpdateAuthorAndListBooks(ctx, native.UpdateAuthorAndListBooksParams{AuthorID: 700, Name: "Native"})
+	if err != nil || len(rows) != 2 || rows[0].BookID != 701 || rows[1].BookID != 702 || rows[0].Title != "Book" {
+		t.Fatalf("native UpdateAuthorAndListBooks: %#v, %v", rows, err)
+	}
+	if author, err := s.GetAuthor(ctx, 700); err != nil || author.Name != "Native" {
+		t.Fatalf("native script write: %#v, %v", author, err)
+	}
+	sqlRows, err := s.UpdateAuthorAndListBooks(ctx, sq.UpdateAuthorAndListBooksParams{AuthorID: 800, Name: "SQL"})
+	if err != nil || len(sqlRows) != 2 || sqlRows[0].BookID != 801 || sqlRows[1].BookID != 802 || sqlRows[0].Title != "Book" {
+		t.Fatalf("database/sql UpdateAuthorAndListBooks: %#v, %v", sqlRows, err)
+	}
+	if author, err := n.SelectAuthorAndDeleteBooks(ctx, 700); err != nil || author.AuthorID != 700 || author.Name != "Native" {
+		t.Fatalf("native SelectAuthorAndDeleteBooks: %#v, %v", author, err)
+	}
+	for _, bookID := range []uint64{701, 702} {
+		if _, err := s.GetBook(ctx, bookID); err == nil {
+			t.Fatalf("native script left book %d", bookID)
+		}
+	}
+	if _, err := s.GetBook(ctx, 801); err != nil {
+		t.Fatalf("native script removed unrelated book: %v", err)
+	}
+	if author, err := s.SelectAuthorAndDeleteBooks(ctx, 800); err != nil || author.AuthorID != 800 || author.Name != "SQL" {
+		t.Fatalf("database/sql SelectAuthorAndDeleteBooks: %#v, %v", author, err)
+	}
+	for _, bookID := range []uint64{801, 802} {
+		if _, err := n.GetBook(ctx, bookID); err == nil {
+			t.Fatalf("database/sql script left book %d", bookID)
+		}
+	}
+	for _, authorID := range []uint64{700, 800} {
+		if _, err := n.GetAuthor(ctx, authorID); err != nil {
+			t.Fatalf("script removed author %d: %v", authorID, err)
+		}
+	}
 }

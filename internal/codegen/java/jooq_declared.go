@@ -160,7 +160,7 @@ func emitJooqDeclared(b *strings.Builder, q model.AnalyzedQuery, names []string,
 	if q.Command == model.Exec {
 		b.WriteString("                _prepared.execute();\n")
 	} else {
-		b.WriteString("                try (var _rows = _prepared.executeQuery()) {\n")
+		emitJDBCResultStart(b, q, "                ")
 		var types, values []string
 		for i, c := range q.ResultSets[0].Columns {
 			typ, dt, _ := jooqType(c.Type)
@@ -168,6 +168,9 @@ func emitJooqDeclared(b *strings.Builder, q model.AnalyzedQuery, names []string,
 			values = append(values, fmt.Sprintf("_row.get(%d, %s.class)", i, typ))
 		}
 		fmt.Fprintf(b, "                    var _result = dsl.fetch(_rows, %s).map(_row -> new %s(%s));\n", strings.Join(types, ", "), row, strings.Join(values, ", "))
+		if q.MultipleStatements {
+			emitJDBCScriptFinish(b, "                    ")
+		}
 		if q.Command == model.One {
 			b.WriteString("                    if (_result.size() > 1) throw new org.jooq.exception.TooManyRowsException(\"Expected at most one row\");\n                    return _result.stream().findFirst();\n")
 		} else {

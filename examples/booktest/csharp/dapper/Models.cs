@@ -128,3 +128,18 @@ public sealed record ListBooksWithRecentEditionsRow(
     DateTime Available,
     string Tags
 );
+
+public sealed record UpdateAuthorAndListBooksParams(
+    ulong AuthorID,
+    string Name
+);
+
+public sealed record UpdateAuthorAndListBooksRow(
+    ulong BookID,
+    string Title
+);
+
+public sealed record SelectAuthorAndDeleteBooksRow(
+    ulong AuthorID,
+    string Name
+);

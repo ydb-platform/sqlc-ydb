@@ -229,6 +229,9 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			b.WriteString("    }\n")
 			continue
 		}
+		if q.MultipleStatements {
+			return nil, fmt.Errorf("%s: multi-statement queries require the jOOQ declared-query path; add an explicit DECLARE for one of the parameters, or use runtime: jdbc or ydb", q.Name)
+		}
 		isSelect := jooqIsSelect(q.Syntax.Root)
 		for _, rel := range q.Syntax.Relations {
 			tn, e := jooqTableConstant(rel.Table)

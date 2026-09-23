@@ -314,4 +314,56 @@ public final class Queries {
             WHERE author_id IN (SELECT author_id FROM authors WHERE name = $author_name);\
             """, _params).execute().join().getStatus().expectSuccess();
     }
+
+    // -- name: DeleteAuthorWithBooks :exec
+    public void deleteAuthorWithBooks(long authorId) {
+        var _params = Params.create();
+        _params.put("$author_id", PrimitiveValue.newUint64(authorId));
+        client.createQuery("""
+            DECLARE $author_id AS Uint64;
+            DELETE FROM books WHERE author_id = $author_id;
+            DELETE FROM authors WHERE author_id = $author_id;\
+            """, _params).execute().join().getStatus().expectSuccess();
+    }
+
+    // -- name: UpdateAuthorAndListBooks :many
+    public java.util.List<UpdateAuthorAndListBooksRow> updateAuthorAndListBooks(long authorId, String name) {
+        var _params = Params.create();
+        _params.put("$author_id", PrimitiveValue.newUint64(authorId));
+        _params.put("$name", PrimitiveValue.newText(name));
+        var _query = QueryReader.readFrom(
+                client.createQuery("""
+                    DECLARE $author_id AS Uint64;
+                    DECLARE $name AS Utf8;
+                    UPDATE authors SET name = $name WHERE author_id = $author_id;
+                    SELECT book_id, title FROM books WHERE author_id = $author_id ORDER BY book_id;\
+                    """, _params)).join().getValue();
+        if (_query.getResultSetCount() != 1) throw new IllegalStateException("Expected one result set");
+        var _rows = _query.getResultSet(0);
+        var _items = new java.util.ArrayList<UpdateAuthorAndListBooksRow>();
+        while (_rows.next()) {
+            long _value0 = _rows.getColumn(0).getUint64();
+            String _value1 = _rows.getColumn(1).getText();
+            _items.add(new UpdateAuthorAndListBooksRow(_value0, _value1));
+        }
+        return _items;
+    }
+
+    // -- name: SelectAuthorAndDeleteBooks :one
+    public java.util.Optional<SelectAuthorAndDeleteBooksRow> selectAuthorAndDeleteBooks(long authorId) {
+        var _params = Params.create();
+        _params.put("$author_id", PrimitiveValue.newUint64(authorId));
+        var _query = QueryReader.readFrom(
+                client.createQuery("""
+                    DECLARE $author_id AS Uint64;
+                    SELECT author_id, name FROM authors WHERE author_id = $author_id;
+                    DELETE FROM books WHERE author_id = $author_id;\
+                    """, _params)).join().getValue();
+        if (_query.getResultSetCount() != 1) throw new IllegalStateException("Expected one result set");
+        var _rows = _query.getResultSet(0);
+        if (!_rows.next()) return java.util.Optional.empty();
+        long _value0 = _rows.getColumn(0).getUint64();
+        String _value1 = _rows.getColumn(1).getText();
+        return java.util.Optional.of(new SelectAuthorAndDeleteBooksRow(_value0, _value1));
+    }
 }

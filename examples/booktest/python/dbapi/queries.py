@@ -365,3 +365,66 @@ class Querier:
             return None
         finally:
             cursor.close()
+
+    # -- name: DeleteAuthorWithBooks :exec
+    def delete_author_with_books(self, author_id: int) -> None:
+        parameters = {
+            "$author_id": (author_id, _ydb.PrimitiveType.Uint64),
+        }
+        cursor = self._connection.cursor()
+        try:
+            cursor.execute(
+                ("DECLARE $author_id AS Uint64;\n"
+                 "DELETE FROM books WHERE author_id = $author_id;\n"
+                 "DELETE FROM authors WHERE author_id = $author_id;"),
+                parameters,
+            )
+            return None
+        finally:
+            cursor.close()
+
+    # -- name: UpdateAuthorAndListBooks :many
+    def update_author_and_list_books(self, author_id: int, name: str) -> list[_models.UpdateAuthorAndListBooksRow]:
+        parameters = {
+            "$author_id": (author_id, _ydb.PrimitiveType.Uint64),
+            "$name": (name, _ydb.PrimitiveType.Utf8),
+        }
+        cursor = self._connection.cursor()
+        try:
+            cursor.execute(
+                ("DECLARE $author_id AS Uint64;\n"
+                 "DECLARE $name AS Utf8;\n"
+                 "UPDATE authors SET name = $name WHERE author_id = $author_id;\n"
+                 "SELECT book_id, title FROM books WHERE author_id = $author_id ORDER BY book_id;"),
+                parameters,
+            )
+            rows = cursor.fetchall()
+            return [_models.UpdateAuthorAndListBooksRow(
+                book_id=row[0],
+                title=row[1],
+            ) for row in rows]
+        finally:
+            cursor.close()
+
+    # -- name: SelectAuthorAndDeleteBooks :one
+    def select_author_and_delete_books(self, author_id: int) -> Optional[_models.Authors]:
+        parameters = {
+            "$author_id": (author_id, _ydb.PrimitiveType.Uint64),
+        }
+        cursor = self._connection.cursor()
+        try:
+            cursor.execute(
+                ("DECLARE $author_id AS Uint64;\n"
+                 "SELECT author_id, name FROM authors WHERE author_id = $author_id;\n"
+                 "DELETE FROM books WHERE author_id = $author_id;"),
+                parameters,
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return _models.Authors(
+                author_id=row[0],
+                name=row[1],
+            )
+        finally:
+            cursor.close()
