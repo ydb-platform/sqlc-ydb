@@ -116,7 +116,7 @@ func databaseTableReferences(blocks []queryBlock) ([]databaseTableReference, []m
 				if source.Cluster_expr() != nil || source.COMMAT() != nil {
 					reject(source, "cluster-qualified and temporary table references are unsupported in database analysis")
 				} else if source.Table_key() != nil {
-					add(identifier(source.Table_key().GetText()), source)
+					add(tableKeyName(source.Table_key()), source)
 				} else if source.An_id_expr() == nil || !strings.EqualFold(source.An_id_expr().GetText(), "AS_TABLE") {
 					reject(source, "dynamic table references are unsupported; use AS_TABLE($parameter) with DECLARE List<Struct<...>>")
 				}
@@ -177,6 +177,29 @@ func compareDatabaseTable(local, remote model.Table) error {
 	}
 	if !slices.Equal(local.PrimaryKey, remote.PrimaryKey) {
 		return fmt.Errorf("local primary key %v differs from database primary key %v", local.PrimaryKey, remote.PrimaryKey)
+	}
+	for _, index := range local.Indexes {
+		position := slices.IndexFunc(remote.Indexes, func(other model.Index) bool { return other.Name == index.Name })
+		if position < 0 {
+			return fmt.Errorf("index %q is missing from the database", index.Name)
+		}
+		other := remote.Indexes[position]
+		if index.Kind != other.Kind {
+			return fmt.Errorf("index %q has local kind %s and database kind %s", index.Name, index.Kind, other.Kind)
+		}
+		if !slices.Equal(index.Columns, other.Columns) {
+			return fmt.Errorf("index %q has local key columns %v and database key columns %v", index.Name, index.Columns, other.Columns)
+		}
+		localCover := slices.Sorted(slices.Values(index.DataColumns))
+		remoteCover := slices.Sorted(slices.Values(other.DataColumns))
+		if !slices.Equal(localCover, remoteCover) {
+			return fmt.Errorf("index %q has local covering columns %v and database covering columns %v", index.Name, index.DataColumns, other.DataColumns)
+		}
+	}
+	for _, index := range remote.Indexes {
+		if !slices.ContainsFunc(local.Indexes, func(other model.Index) bool { return other.Name == index.Name }) {
+			return fmt.Errorf("database index %q is missing from the local schema", index.Name)
+		}
 	}
 	return nil
 }

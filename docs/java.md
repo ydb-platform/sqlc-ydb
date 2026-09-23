@@ -62,6 +62,8 @@ gen:
 
 Each output contains `Tables.java` (typed fields derived from the local schema), `Queries.java` and projection records. Generation is offline and does not need a second jOOQ schema-generation step or a running database. Table aliases retain typed fields. Parameters are bound with the YDB field types, never interpolated into SQL. The constructor borrows a `YdbDSLContext`: callers own connection, transaction, retry and lifecycle. `:one` returns `Optional<Row>` and rejects multiple rows; `:many` returns `List<Row>`; `:exec` returns `void`.
 
+Secondary-index sources retain `VIEW index` in both DSL and explicitly declared SQL. The base table remains a mapped table reference, and aliases follow the index selection. The [authors example](../examples/authors/README.md) includes ordinary and covering index reads through both paths.
+
 For jOOQ callback transactions, wrap the callback's transaction-local configuration with `YDB.using(configuration)` and pass that `YdbDSLContext` to `Queries`. A cast from `configuration.dsl()` is invalid because jOOQ returns a plain `DefaultDSLContext` there.
 
 The shared [Maven project](../tests/examples/java/jooq/pom.xml) records the Java, jOOQ, YDB dialect and JDBC dependencies used for verification. DSL value carriers follow that dialect: Uint64 uses ULong, Json uses JSON, Timestamp uses Instant, Utf8 uses String. DTO members use reference types, including nullable values. Structured batch records use the JDBC carriers described above: `long` for `Uint64`, `String` for `Json`, and `Instant` for `Timestamp`.

@@ -198,7 +198,7 @@ jobs:
       # Keep local-ydb acceptance sequential: concurrent tests/compilers can
       # exhaust the memory budget even when they use only one YDB service.
       - name: Verify analyzer types, database analysis and generated typed DML with YDB
-        run: go test -p 1 -count=1 -timeout=300s -covermode=atomic -coverpkg=./... -coverprofile=coverage-semantic.out ./internal/endtoend -run '^(TestLiveYDBSemanticTypes|TestLiveYDBTypedDML|TestLiveYDBComputedDML|TestLiveYDBDatabaseAnalysis|TestLiveYDBWildcardSchemaEvolution)$' -v
+        run: go test -p 1 -count=1 -timeout=300s -covermode=atomic -coverpkg=./... -coverprofile=coverage-semantic.out ./internal/endtoend -run '^(TestLiveYDBSemanticTypes|TestLiveYDBTypedDML|TestLiveYDBComputedDML|TestLiveYDBDatabaseAnalysis|TestLiveYDBWildcardSchemaEvolution|TestLiveYDBIndexes|TestLiveYDBIndexMetadata)$' -v
       - name: Verify streaming callbacks with YDB
         timeout-minutes: 5
         run: go test -p 1 -count=1 -timeout=240s -covermode=atomic -coverpkg=./... -coverprofile=coverage-each-live.out ./internal/endtoend -run '^TestLiveYDBEach$' -v
@@ -299,7 +299,7 @@ jobs:
       - name: Verify public query metadata and EXPLAIN contracts
         run: go test -p 1 -count=1 -timeout=120s ./internal/database -run '^TestLiveYDBQueryMetadata$' -v
       - name: Verify database-assisted generation
-        run: go test -p 1 -count=1 -timeout=240s ./internal/endtoend -run '^(TestLiveYDBComputedDML|TestLiveYDBDatabaseAnalysis|TestLiveYDBWildcardSchemaEvolution)$' -v
+        run: go test -p 1 -count=1 -timeout=240s ./internal/endtoend -run '^(TestLiveYDBComputedDML|TestLiveYDBDatabaseAnalysis|TestLiveYDBWildcardSchemaEvolution|TestLiveYDBIndexes|TestLiveYDBIndexMetadata)$' -v
       - name: Verify streaming callbacks with nightly YDB
         timeout-minutes: 5
         run: go test -p 1 -count=1 -timeout=240s ./internal/endtoend -run '^TestLiveYDBEach$' -v

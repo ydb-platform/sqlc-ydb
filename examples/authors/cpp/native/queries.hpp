@@ -30,6 +30,8 @@ public:
     std::optional<CreateAuthorRow> CreateAuthor(std::uint64_t author_id, const std::string& author_name, const std::optional<std::string>& biography) const;
     void UpsertAuthor(std::uint64_t author_id, const std::string& author_name, const std::optional<std::string>& biography) const;
     void DeleteAuthor(std::uint64_t author_id) const;
+    std::vector<FindAuthorsByNameRow> FindAuthorsByName(const std::string& name) const;
+    std::vector<FindAuthorsByNameCoveringRow> FindAuthorsByNameCovering(const std::string& name) const;
 
 private:
     NYdb::NQuery::TQueryClient* client_;

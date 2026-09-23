@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb_Table"
@@ -46,6 +47,42 @@ func decodeTable(name string, description *Ydb_Table.DescribeTableResult) (model
 			return table, fmt.Errorf("server returned an unknown or duplicate primary key column %q", key)
 		}
 		keys[key] = true
+	}
+	indexes := make(map[string]bool, len(description.GetIndexes()))
+	for _, metadata := range description.GetIndexes() {
+		name := metadata.GetName()
+		if name == "" || indexes[name] {
+			return table, fmt.Errorf("server returned an empty or duplicate index name %q", name)
+		}
+		indexes[name] = true
+		index := model.Index{Name: name, Columns: slices.Clone(metadata.GetIndexColumns()), DataColumns: slices.Clone(metadata.GetDataColumns())}
+		switch metadata.GetType().(type) {
+		case *Ydb_Table.TableIndexDescription_GlobalIndex:
+			index.Kind = "GlobalSync"
+		case *Ydb_Table.TableIndexDescription_GlobalAsyncIndex:
+			index.Kind = "GlobalAsync"
+		default:
+			return table, fmt.Errorf("index %q: unsupported index type %T; database analysis supports GLOBAL SYNC and GLOBAL ASYNC indexes", name, metadata.GetType())
+		}
+		if len(index.Columns) == 0 {
+			return table, fmt.Errorf("index %q: server returned no key columns", name)
+		}
+		for _, columns := range []struct {
+			role  string
+			names []string
+		}{{"key", index.Columns}, {"covering", index.DataColumns}} {
+			seen := make(map[string]bool, len(columns.names))
+			for _, column := range columns.names {
+				if !names[column] || seen[column] {
+					return table, fmt.Errorf("index %q: server returned an unknown or duplicate %s column %q", name, columns.role, column)
+				}
+				if columns.role == "covering" && (keys[column] || slices.Contains(index.Columns, column)) {
+					return table, fmt.Errorf("index %q: key column %q cannot also be a covering column", name, column)
+				}
+				seen[column] = true
+			}
+		}
+		table.Indexes = append(table.Indexes, index)
 	}
 	return table, nil
 }

@@ -29,4 +29,16 @@ struct CreateAuthorRow final {
     std::optional<std::string> bio;
 };
 
+struct FindAuthorsByNameRow final {
+    std::uint64_t id;
+    std::string name;
+    std::optional<std::string> bio;
+};
+
+struct FindAuthorsByNameCoveringRow final {
+    std::uint64_t id;
+    std::string name;
+    std::optional<std::string> bio;
+};
+
 }  // namespace authors::native

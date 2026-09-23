@@ -30,4 +30,16 @@ struct CreateAuthorRow final {
     std::optional<::userver::ydb::Utf8> bio;
 };
 
+struct FindAuthorsByNameRow final {
+    std::uint64_t id;
+    ::userver::ydb::Utf8 name;
+    std::optional<::userver::ydb::Utf8> bio;
+};
+
+struct FindAuthorsByNameCoveringRow final {
+    std::uint64_t id;
+    ::userver::ydb::Utf8 name;
+    std::optional<::userver::ydb::Utf8> bio;
+};
+
 }  // namespace authors::userver

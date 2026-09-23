@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -120,6 +121,29 @@ func applyAlterTable(catalog *model.Catalog, file string, alter parser.IAlter_ta
 }
 
 func applyAlterTableAction(catalog model.Catalog, tableIndex int, table *model.Table, file string, action parser.IAlter_table_actionContext) []model.Diagnostic {
+	if add := action.Alter_table_add_index(); add != nil {
+		index, err := parseTableIndex(add.Table_index())
+		if err == nil {
+			err = validateTableIndex(*table, index)
+		}
+		if err != nil {
+			return []model.Diagnostic{diagnosticAt(file, 0, add, err.Error())}
+		}
+		if _, exists := catalogIndexPosition(*table, index.Name); exists {
+			return []model.Diagnostic{diagnosticAt(file, 0, add, fmt.Sprintf("index %q already exists in table %q", index.Name, table.Name))}
+		}
+		table.Indexes = append(table.Indexes, index)
+		return nil
+	}
+	if drop := action.Alter_table_drop_index(); drop != nil {
+		name := identifier(drop.An_id().GetText())
+		index, exists := catalogIndexPosition(*table, name)
+		if !exists {
+			return []model.Diagnostic{diagnosticAt(file, 0, drop, fmt.Sprintf("index %q does not exist in table %q", name, table.Name))}
+		}
+		table.Indexes = append(table.Indexes[:index], table.Indexes[index+1:]...)
+		return nil
+	}
 	if add := action.Alter_table_add_column(); add != nil {
 		column, err := catalogColumn(table.Name, add.Column_schema())
 		if err != nil {
@@ -145,6 +169,11 @@ func applyAlterTableAction(catalog model.Catalog, tableIndex int, table *model.T
 				return []model.Diagnostic{diagnosticAt(file, 0, drop, fmt.Sprintf("cannot drop primary key column %q from table %q", name, table.Name))}
 			}
 		}
+		for _, index := range table.Indexes {
+			if slices.Contains(index.Columns, name) || slices.Contains(index.DataColumns, name) {
+				return []model.Diagnostic{diagnosticAt(file, 0, drop, fmt.Sprintf("cannot drop column %q used by index %q; drop the index first", name, index.Name))}
+			}
+		}
 		table.Columns = append(table.Columns[:columnIndex], table.Columns[columnIndex+1:]...)
 		return nil
 	}
@@ -159,7 +188,7 @@ func applyAlterTableAction(catalog model.Catalog, tableIndex int, table *model.T
 		}
 		return nil
 	}
-	return []model.Diagnostic{diagnosticAt(file, 0, action, fmt.Sprintf("unsupported ALTER TABLE action %q; supported actions are ADD COLUMN, DROP COLUMN, and RENAME TO", action.GetText()))}
+	return []model.Diagnostic{diagnosticAt(file, 0, action, fmt.Sprintf("unsupported ALTER TABLE action %q; supported actions are ADD COLUMN, DROP COLUMN, ADD INDEX, DROP INDEX, and RENAME TO", action.GetText()))}
 }
 
 func catalogTableIndex(catalog model.Catalog, name string) (int, bool) {
@@ -183,6 +212,7 @@ func catalogColumnIndex(table model.Table, name string) (int, bool) {
 func cloneTable(table model.Table) model.Table {
 	table.Columns = append([]model.Column(nil), table.Columns...)
 	table.PrimaryKey = append([]string(nil), table.PrimaryKey...)
+	table.Indexes = append([]model.Index(nil), table.Indexes...)
 	return table
 }
 
@@ -205,6 +235,9 @@ func catalogTable(file string, create parser.ICreate_table_stmtContext) (model.T
 	primaryKeyNames := map[string]bool{}
 	primaryKeyDeclarations := 0
 	for _, entry := range create.AllCreate_table_entry() {
+		if entry.Table_index() != nil {
+			continue
+		}
 		if columnContext := entry.Column_schema(); columnContext != nil {
 			column, err := catalogColumn(table.Name, columnContext)
 			if err != nil {
@@ -256,6 +289,25 @@ func catalogTable(file string, create parser.ICreate_table_stmtContext) (model.T
 		if column.SequenceGenerated && !primaryKeyNames[column.Name] {
 			diagnostics = append(diagnostics, diagnosticAt(file, 0, create, serialPrimaryKeyError(column.Name)))
 		}
+	}
+	for _, entry := range create.AllCreate_table_entry() {
+		ctx := entry.Table_index()
+		if ctx == nil {
+			continue
+		}
+		index, err := parseTableIndex(ctx)
+		if err == nil {
+			err = validateTableIndex(table, index)
+		}
+		if err != nil {
+			diagnostics = append(diagnostics, diagnosticAt(file, 0, ctx, err.Error()))
+			continue
+		}
+		if _, exists := catalogIndexPosition(table, index.Name); exists {
+			diagnostics = append(diagnostics, diagnosticAt(file, 0, ctx, fmt.Sprintf("index %q is declared more than once", index.Name)))
+			continue
+		}
+		table.Indexes = append(table.Indexes, index)
 	}
 	// PARTITION BY and WITH describe physical storage and do not change the
 	// tables, columns, types, or primary keys represented by model.Catalog.

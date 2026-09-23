@@ -21,6 +21,8 @@ sql:
 
 Set `YDB_CONNECTION_STRING` to a URI such as `grpc://localhost:2136/local`, then run `sqlc-ydb generate`. Table columns, nullability, primary keys and sequence-generated columns come from `TableService.DescribeTable`. Names in queries may be relative to the configured database or absolute YDB paths. Relative names must not contain parent (`..`) path segments; use an explicit absolute path when referring outside the configured database. Unrelated tables are not enumerated. Discovery supports ordinary tables, not topics, views or external data sources. Unsupported column types and literal column defaults produce errors; they are not replaced with guessed values.
 
+DescribeTable also supplies ordinary global synchronous/asynchronous indexes, their ordered key columns and covering columns. `FROM table VIEW index` discovers the base table and validates the selected index against that metadata. Unsupported index kinds fail discovery with an actionable error, even when the query does not select that index; they are never treated as ordinary indexes or omitted silently.
+
 The existing semantic analyzer resolves parameters and query projections against this catalog. Database discovery does not add support for expressions, functions, CTEs or other syntax outside the [current analyzer coverage](compatibility.md#current-analyzer-coverage). In particular, connecting to YDB does not make a computed projection supported automatically.
 
 ## Check a local schema against YDB
@@ -42,7 +44,7 @@ sql:
         sql_package: database/sql
 ```
 
-Every table in the local catalog must already exist with the same columns, types, nullability, primary-key order and sequence-generation contract. Extra columns are also reported as schema drift. Unrelated server tables are ignored. Apply migrations separately to a disposable development or CI database; the analyzer never applies them itself.
+Every table in the local catalog must already exist with the same columns, types, nullability, primary-key order, sequence-generation contract and secondary indexes. Index comparison checks names, synchronous/asynchronous kind, ordered key columns and the set of covering columns. Index declaration order and covering-column order do not matter; readiness and size statistics are transient metadata and are not compared. Missing or extra indexes, like extra columns, are reported as schema drift. Unrelated server tables are ignored. Apply migrations separately to a disposable development or CI database; the analyzer never applies them itself.
 
 Before generation, the shared analyzer expands supported `SELECT *`, `SELECT alias.*` and `RETURNING *` projections into explicit quoted column lists. With local schema inputs, both offline and connected analysis retain local catalog order; without them, discovery uses the column order returned by DescribeTable. Explicit projections keep their query order. The generated SQL fixes the selected columns and their order, so adding an unrelated column after generation does not add unexpected values to positional decoders. Dropping, renaming or changing the type of a selected column still requires updating the query and regenerating code.
 

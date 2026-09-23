@@ -34,3 +34,15 @@ type UpsertAuthorParams struct {
 	AuthorName string
 	Biography  *string
 }
+
+type FindAuthorsByNameRow struct {
+	ID   uint64
+	Name string
+	Bio  *string
+}
+
+type FindAuthorsByNameCoveringRow struct {
+	ID   uint64
+	Name string
+	Bio  *string
+}

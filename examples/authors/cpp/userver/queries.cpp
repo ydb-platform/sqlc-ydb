@@ -125,4 +125,54 @@ void Queries::DeleteAuthor(std::uint64_t author_id) const {
     );
 }
 
+// -- name: FindAuthorsByName :many
+std::vector<FindAuthorsByNameRow> Queries::FindAuthorsByName(const ::userver::ydb::Utf8& name) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "SELECT a.`id` AS `id`, `a`.`name` AS `name`, `a`.`bio` AS `bio` FROM authors VIEW by_name AS a\n"
+        "WHERE a.name = $name ORDER BY a.id;",
+        ::userver::ydb::Query::Name{"FindAuthorsByName"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    auto sqlc_response =
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$name", name)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$name", name);
+    auto sqlc_cursor = sqlc_response.GetSingleCursor();
+    std::vector<FindAuthorsByNameRow> sqlc_rows;
+    sqlc_rows.reserve(sqlc_cursor.size());
+    for (auto sqlc_row : sqlc_cursor) {
+        sqlc_rows.push_back(FindAuthorsByNameRow{
+            sqlc_row.Get<std::uint64_t>("id"),
+            sqlc_row.Get<::userver::ydb::Utf8>("name"),
+            sqlc_row.Get<std::optional<::userver::ydb::Utf8>>("bio"),
+        });
+    }
+    return sqlc_rows;
+}
+
+// -- name: FindAuthorsByNameCovering :many
+std::vector<FindAuthorsByNameCoveringRow> Queries::FindAuthorsByNameCovering(const ::userver::ydb::Utf8& name) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "DECLARE $name AS Utf8;\n"
+        "SELECT `id`, `name`, `bio` FROM authors VIEW by_name_covering WHERE name = $name ORDER BY id;",
+        ::userver::ydb::Query::Name{"FindAuthorsByNameCovering"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    auto sqlc_response =
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$name", name)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$name", name);
+    auto sqlc_cursor = sqlc_response.GetSingleCursor();
+    std::vector<FindAuthorsByNameCoveringRow> sqlc_rows;
+    sqlc_rows.reserve(sqlc_cursor.size());
+    for (auto sqlc_row : sqlc_cursor) {
+        sqlc_rows.push_back(FindAuthorsByNameCoveringRow{
+            sqlc_row.Get<std::uint64_t>("id"),
+            sqlc_row.Get<::userver::ydb::Utf8>("name"),
+            sqlc_row.Get<std::optional<::userver::ydb::Utf8>>("bio"),
+        });
+    }
+    return sqlc_rows;
+}
+
 }  // namespace authors::userver

@@ -147,6 +147,46 @@ public sealed class Queries
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
 
+    // -- name: FindAuthorsByName :many
+    public async Task<IReadOnlyList<FindAuthorsByNameRow>> FindAuthorsByNameAsync(string name, CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var parameters = new YdbParameters(
+            new YdbParameter("$name", DbType.String, name)
+        );
+
+        var command = new CommandDefinition(
+            commandText: """
+            SELECT a.`id` AS `id`, `a`.`name` AS `name`, `a`.`bio` AS `bio` FROM authors VIEW by_name AS a
+            WHERE a.name = $name ORDER BY a.id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        return (await _connection.QueryAsync<FindAuthorsByNameRow>(command).ConfigureAwait(false)).AsList();
+    }
+
+    // -- name: FindAuthorsByNameCovering :many
+    public async Task<IReadOnlyList<FindAuthorsByNameCoveringRow>> FindAuthorsByNameCoveringAsync(string name, CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var parameters = new YdbParameters(
+            new YdbParameter("$name", DbType.String, name)
+        );
+
+        var command = new CommandDefinition(
+            commandText: """
+            DECLARE $name AS Utf8;
+            SELECT `id`, `name`, `bio` FROM authors VIEW by_name_covering WHERE name = $name ORDER BY id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        return (await _connection.QueryAsync<FindAuthorsByNameCoveringRow>(command).ConfigureAwait(false)).AsList();
+    }
+
     private sealed class YdbParameters : SqlMapper.IDynamicParameters
     {
         private readonly YdbParameter[] _parameters;

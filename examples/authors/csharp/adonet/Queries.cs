@@ -131,4 +131,48 @@ public sealed class Queries
         command.Parameters.Add(new YdbParameter("$author_id", DbType.UInt64, authorId));
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    // -- name: FindAuthorsByName :many
+    public async Task<IReadOnlyList<FindAuthorsByNameRow>> FindAuthorsByNameAsync(string name, CancellationToken cancellationToken = default)
+    {
+        await using var command = new YdbCommand(
+            "SELECT a.`id` AS `id`, `a`.`name` AS `name`, `a`.`bio` AS `bio` FROM authors VIEW by_name AS a\n" +
+            "WHERE a.name = $name ORDER BY a.id;", _connection) { Transaction = _transaction };
+        command.Parameters.Add(new YdbParameter("$name", DbType.String, name));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        var rows = new List<FindAuthorsByNameRow>();
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            rows.Add(FindAuthorsByNameRowFrom(reader));
+        }
+        return rows;
+    }
+
+    private static FindAuthorsByNameRow FindAuthorsByNameRowFrom(DbDataReader reader) => new(
+        reader.GetFieldValue<ulong>(0),
+        reader.GetFieldValue<string>(1),
+        reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)
+    );
+
+    // -- name: FindAuthorsByNameCovering :many
+    public async Task<IReadOnlyList<FindAuthorsByNameCoveringRow>> FindAuthorsByNameCoveringAsync(string name, CancellationToken cancellationToken = default)
+    {
+        await using var command = new YdbCommand(
+            "DECLARE $name AS Utf8;\n" +
+            "SELECT `id`, `name`, `bio` FROM authors VIEW by_name_covering WHERE name = $name ORDER BY id;", _connection) { Transaction = _transaction };
+        command.Parameters.Add(new YdbParameter("$name", DbType.String, name));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        var rows = new List<FindAuthorsByNameCoveringRow>();
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            rows.Add(FindAuthorsByNameCoveringRowFrom(reader));
+        }
+        return rows;
+    }
+
+    private static FindAuthorsByNameCoveringRow FindAuthorsByNameCoveringRowFrom(DbDataReader reader) => new(
+        reader.GetFieldValue<ulong>(0),
+        reader.GetFieldValue<string>(1),
+        reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)
+    );
 }

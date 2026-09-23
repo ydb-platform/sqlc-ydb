@@ -132,3 +132,47 @@ class Querier:
         )
         result.close()
         return None
+
+    # -- name: FindAuthorsByName :many
+    def find_authors_by_name(self, name: str) -> list[_models.Authors]:
+        parameters = {
+            "name": (name, _ydb.PrimitiveType.Utf8),
+        }
+        result = self._connection.execute(
+            _text(
+                ("SELECT a.`id` AS `id`, `a`.`name` AS `name`, `a`.`bio` AS `bio` FROM authors VIEW by_name AS a\n"
+                 "WHERE a.name = :name ORDER BY a.id;")
+            ),
+            parameters,
+        )
+        try:
+            rows = result.fetchall()
+        finally:
+            result.close()
+        return [_models.Authors(
+            id=row._mapping["id"],
+            name=row._mapping["name"],
+            bio=row._mapping["bio"],
+        ) for row in rows]
+
+    # -- name: FindAuthorsByNameCovering :many
+    def find_authors_by_name_covering(self, name: str) -> list[_models.Authors]:
+        parameters = {
+            "name": (name, _ydb.PrimitiveType.Utf8),
+        }
+        result = self._connection.execute(
+            _text(
+                ("DECLARE $name AS Utf8;\n"
+                 "SELECT `id`, `name`, `bio` FROM authors VIEW by_name_covering WHERE name = :name ORDER BY id;")
+            ),
+            parameters,
+        )
+        try:
+            rows = result.fetchall()
+        finally:
+            result.close()
+        return [_models.Authors(
+            id=row._mapping["id"],
+            name=row._mapping["name"],
+            bio=row._mapping["bio"],
+        ) for row in rows]
