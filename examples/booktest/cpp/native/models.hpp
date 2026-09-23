@@ -79,4 +79,14 @@ struct ListBooksWithRecentEditionsRow final {
     std::string tags;
 };
 
+struct UpdateAuthorAndListBooksRow final {
+    std::uint64_t book_id;
+    std::string title;
+};
+
+struct SelectAuthorAndDeleteBooksRow final {
+    std::uint64_t author_id;
+    std::string name;
+};
+
 }  // namespace booktest::native

@@ -772,6 +772,103 @@ final class Queries
         });
     }
 
+    /** @return list<UpdateAuthorAndListBooksRow> */
+    // -- name: UpdateAuthorAndListBooks :many
+    public function updateAuthorAndListBooks(UpdateAuthorAndListBooksParams $params): array
+    {
+        $parameters = [
+            '$author_id' => YdbValueCodec::typedUint64($params->authorId, 'author_id'),
+            '$name' => YdbValueCodec::typedUtf8($params->name, 'name'),
+        ];
+
+        $result = $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                DECLARE $author_id AS Uint64;
+                DECLARE $name AS Utf8;
+                UPDATE authors SET name = $name WHERE author_id = $author_id;
+                SELECT book_id, title FROM books WHERE author_id = $author_id ORDER BY book_id;
+                SQLC_YDB_YQL)
+                ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0);
+            if ($this->txId !== null) {
+                $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
+            } else {
+                $query->beginTx('serializable_read_write');
+            }
+            if ($this->configure !== null) {
+                ($this->configure)($query);
+            }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
+
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
+        });
+
+        $rows = $this->decodeRows(
+            $result,
+            'UpdateAuthorAndListBooks',
+            [
+                ['book_id', PrimitiveTypeId::UINT64, false],
+                ['title', PrimitiveTypeId::UTF8, false],
+            ],
+            static fn($items): UpdateAuthorAndListBooksRow => new UpdateAuthorAndListBooksRow(
+                YdbValueCodec::uint64($items->offsetGet(0), 'UpdateAuthorAndListBooks.book_id'),
+                YdbValueCodec::utf8($items->offsetGet(1), 'UpdateAuthorAndListBooks.title'),
+            ),
+        );
+
+        return $rows;
+    }
+
+    // -- name: SelectAuthorAndDeleteBooks :one
+    public function selectAuthorAndDeleteBooks(string $authorId): ?SelectAuthorAndDeleteBooksRow
+    {
+        $parameters = [
+            '$author_id' => YdbValueCodec::typedUint64($authorId, 'author_id'),
+        ];
+
+        $result = $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                DECLARE $author_id AS Uint64;
+                SELECT author_id, name FROM authors WHERE author_id = $author_id;
+                DELETE FROM books WHERE author_id = $author_id;
+                SQLC_YDB_YQL)
+                ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0);
+            if ($this->txId !== null) {
+                $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
+            } else {
+                $query->beginTx('serializable_read_write');
+            }
+            if ($this->configure !== null) {
+                ($this->configure)($query);
+            }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
+
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
+        });
+
+        $rows = $this->decodeRows(
+            $result,
+            'SelectAuthorAndDeleteBooks',
+            [
+                ['author_id', PrimitiveTypeId::UINT64, false],
+                ['name', PrimitiveTypeId::UTF8, false],
+            ],
+            static fn($items): SelectAuthorAndDeleteBooksRow => new SelectAuthorAndDeleteBooksRow(
+                YdbValueCodec::uint64($items->offsetGet(0), 'SelectAuthorAndDeleteBooks.author_id'),
+                YdbValueCodec::utf8($items->offsetGet(1), 'SelectAuthorAndDeleteBooks.name'),
+            ),
+        );
+
+        return $rows[0] ?? null;
+    }
+
     /**
      * @param array<int, array{0: string, 1: int, 2: bool}> $expectedColumns
      * @return list<object>

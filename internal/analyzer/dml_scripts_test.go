@@ -26,7 +26,7 @@ func TestDMLScriptPreservesOneQueryAndSharedBindings(t *testing.T) {
 	}
 	q := result.Queries[0]
 	want := []model.Parameter{{Name: "id", Type: model.Type{Kind: "Uint64"}}, {Name: "payload", Type: model.Type{Kind: "Utf8"}}}
-	if q.SQL != sql || len(q.ResultSets) != 0 || !reflect.DeepEqual(q.Parameters, want) || !reflect.DeepEqual(q.DeclaredParameters, []string{"id", "payload"}) {
+	if !q.MultipleStatements || q.SQL != sql || len(q.ResultSets) != 0 || !reflect.DeepEqual(q.Parameters, want) || !reflect.DeepEqual(q.DeclaredParameters, []string{"id", "payload"}) {
 		t.Fatalf("query = %#v", q)
 	}
 	tables := map[string]bool{}
@@ -97,13 +97,13 @@ func TestDMLScriptSelectSourcesAndWildcardNormalization(t *testing.T) {
 
 func TestDMLScriptRejectsUnsupportedShapes(t *testing.T) {
 	for _, tc := range []struct{ name, command, sql, want string }{
-		{"rows command", ":execrows", "DELETE FROM records; DELETE FROM copies;", "multiple data statements require :exec"},
-		{"row command", ":many", "DELETE FROM records; DELETE FROM copies;", "multiple data statements require :exec"},
-		{"select before", ":exec", "SELECT id FROM records; DELETE FROM records;", "multi-statement queries support only INSERT/UPSERT, UPDATE, and DELETE without RETURNING"},
-		{"select after", ":exec", "DELETE FROM records; SELECT id FROM records;", "multi-statement queries support only INSERT/UPSERT, UPDATE, and DELETE without RETURNING"},
-		{"insert returning", ":exec", "INSERT INTO records(id,payload) VALUES(1ul,'a'u) RETURNING id; DELETE FROM copies;", "multi-statement queries support only INSERT/UPSERT, UPDATE, and DELETE without RETURNING"},
-		{"update returning", ":exec", "UPDATE records SET payload='a'u RETURNING id; DELETE FROM copies;", "multi-statement queries support only INSERT/UPSERT, UPDATE, and DELETE without RETURNING"},
-		{"returning", ":exec", "DELETE FROM records RETURNING id; DELETE FROM copies;", "multi-statement queries support only INSERT/UPSERT, UPDATE, and DELETE without RETURNING"},
+		{"rows command", ":execrows", "DELETE FROM records; DELETE FROM copies;", "multi-statement :execrows is unsupported; use :exec, :one, or :many"},
+		{"row command", ":many", "DELETE FROM records; DELETE FROM copies;", "command :many requires exactly one result-producing statement in a script"},
+		{"select before", ":exec", "SELECT id FROM records; DELETE FROM records;", "command :exec cannot be used with a row-returning script; use :one or :many"},
+		{"select after", ":exec", "DELETE FROM records; SELECT id FROM records;", "command :exec cannot be used with a row-returning script; use :one or :many"},
+		{"insert returning", ":exec", "INSERT INTO records(id,payload) VALUES(1ul,'a'u) RETURNING id; DELETE FROM copies;", "command :exec cannot be used with a row-returning script; use :one or :many"},
+		{"update returning", ":exec", "UPDATE records SET payload='a'u RETURNING id; DELETE FROM copies;", "command :exec cannot be used with a row-returning script; use :one or :many"},
+		{"returning", ":exec", "DELETE FROM records RETURNING id; DELETE FROM copies;", "command :exec cannot be used with a row-returning script; use :one or :many"},
 		{"late declaration", ":exec", "DELETE FROM records; DECLARE $id AS Uint64; DELETE FROM copies WHERE id=$id;", "DECLARE and scalar local assignments must precede all data statements in a script"},
 		{"declaration after local", ":exec", "$local=$id; DECLARE $id AS Uint64; DELETE FROM records WHERE id=$local; DELETE FROM copies;", "DECLARE statements must precede scalar local assignments in a script"},
 		{"late local", ":exec", "DECLARE $id AS Uint64; DELETE FROM records; $local=$id; DELETE FROM copies WHERE id=$local;", "DECLARE and scalar local assignments must precede all data statements in a script"},

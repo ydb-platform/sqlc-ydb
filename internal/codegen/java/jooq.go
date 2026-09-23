@@ -229,6 +229,9 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			b.WriteString("    }\n")
 			continue
 		}
+		if q.MultipleStatements {
+			return nil, fmt.Errorf("%s: multi-statement queries require the jOOQ typed JDBC path; add an explicit DECLARE for a parameter, or use runtime: jdbc or ydb", q.Name)
+		}
 		isSelect := jooqIsSelect(q.Syntax.Root)
 		for _, rel := range q.Syntax.Relations {
 			tn, e := jooqTableConstant(rel.Table)
@@ -545,16 +548,8 @@ func (r *jooqRenderer) inSubquery(left antlr.Tree, condition *parser.Cond_exprCo
 
 func (r *jooqRenderer) statement() string {
 	root := r.query.Syntax.Root
-	dmlStatements := 0
 	for _, stmt := range jooqNodes[*parser.Sql_stmtContext](root) {
 		core := stmt.Sql_stmt_core()
-		if core.Into_table_stmt() != nil || core.Update_stmt() != nil || core.Delete_stmt() != nil {
-			dmlStatements++
-			if dmlStatements > 1 {
-				r.err = fmt.Errorf("multi-statement DML requires the jOOQ typed JDBC path; add an explicit DECLARE for a parameter, or use runtime: jdbc or ydb")
-				return ""
-			}
-		}
 		if core.Pragma_stmt() != nil && r.query.Syntax.TablePathPrefix != "" {
 			continue
 		}

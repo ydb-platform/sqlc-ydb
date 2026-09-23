@@ -478,4 +478,60 @@ class Queries {
             }.join().getStatus().expectSuccess()
         }
     }
+
+    // -- name: UpdateAuthorAndListBooks :many
+    fun updateAuthorAndListBooks(authorId: Long, name: String): List<UpdateAuthorAndListBooksRow> {
+        val _params = Params.create()
+        _params.put("\$author_id", PrimitiveValue.newUint64(authorId))
+        _params.put("\$name", PrimitiveValue.newText(name))
+        val _query = if (transaction != null) {
+            QueryReader.readFrom(transaction.createQuery(
+                "DECLARE \$author_id AS Uint64;\n" +
+                "DECLARE \$name AS Utf8;\n" +
+                "UPDATE authors SET name = \$name WHERE author_id = \$author_id;\n" +
+                "SELECT book_id, title FROM books WHERE author_id = \$author_id ORDER BY book_id;", _params)).join().getValue()
+        } else {
+            client!!.supplyResult { _session ->
+                QueryReader.readFrom(_session.createQuery(
+                    "DECLARE \$author_id AS Uint64;\n" +
+                    "DECLARE \$name AS Utf8;\n" +
+                    "UPDATE authors SET name = \$name WHERE author_id = \$author_id;\n" +
+                    "SELECT book_id, title FROM books WHERE author_id = \$author_id ORDER BY book_id;", TxMode.SERIALIZABLE_RW, _params))
+            }.join().getValue()
+        }
+        kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
+        val _rows = _query.getResultSet(0)
+        val _items = ArrayList<UpdateAuthorAndListBooksRow>()
+        while (_rows.next()) {
+            val _value0: Long = _rows.getColumn(0).getUint64()
+            val _value1: String = _rows.getColumn(1).getText()
+            _items.add(UpdateAuthorAndListBooksRow(_value0, _value1))
+        }
+        return _items
+    }
+
+    // -- name: SelectAuthorAndDeleteBooks :one
+    fun selectAuthorAndDeleteBooks(authorId: Long): SelectAuthorAndDeleteBooksRow? {
+        val _params = Params.create()
+        _params.put("\$author_id", PrimitiveValue.newUint64(authorId))
+        val _query = if (transaction != null) {
+            QueryReader.readFrom(transaction.createQuery(
+                "DECLARE \$author_id AS Uint64;\n" +
+                "SELECT author_id, name FROM authors WHERE author_id = \$author_id;\n" +
+                "DELETE FROM books WHERE author_id = \$author_id;", _params)).join().getValue()
+        } else {
+            client!!.supplyResult { _session ->
+                QueryReader.readFrom(_session.createQuery(
+                    "DECLARE \$author_id AS Uint64;\n" +
+                    "SELECT author_id, name FROM authors WHERE author_id = \$author_id;\n" +
+                    "DELETE FROM books WHERE author_id = \$author_id;", TxMode.SERIALIZABLE_RW, _params))
+            }.join().getValue()
+        }
+        kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
+        val _rows = _query.getResultSet(0)
+        if (!_rows.next()) return null
+        val _value0: Long = _rows.getColumn(0).getUint64()
+        val _value1: String = _rows.getColumn(1).getText()
+        return SelectAuthorAndDeleteBooksRow(_value0, _value1)
+    }
 }

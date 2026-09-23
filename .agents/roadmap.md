@@ -8,14 +8,13 @@ The following issues track planned work; their examples and acceptance criteria 
 
 The noncorrelated scalar/tuple IN subquery portion of [#32](https://github.com/ydb-platform/sqlc-ydb/issues/32) is implemented; its remaining scope is listed below.
 
-Multi-statement DML scripts without results are implemented for `:exec`; [#33](https://github.com/ydb-platform/sqlc-ydb/issues/33) still tracks scripts combining DML with one typed result.
+Multi-statement DML scripts without results (`:exec`) or with one typed SELECT/RETURNING result (`:one`/`:many`) are implemented; their scope is recorded in [#33](https://github.com/ydb-platform/sqlc-ydb/issues/33) and the [compatibility contract](../docs/compatibility.md#current-analyzer-coverage).
 
 | Order | Planned capability | Tracking |
 | --- | --- | --- |
 | 2 | ALTER COLUMN DROP NOT NULL | [#30](https://github.com/ydb-platform/sqlc-ydb/issues/30) |
 | 3 | Shared Boolean expressions, conditional aggregates and scalar conversions | [#31](https://github.com/ydb-platform/sqlc-ydb/issues/31) |
 | 4 | Derived FROM/JOIN sources, named SELECT bindings and collection aggregation | [#32](https://github.com/ydb-platform/sqlc-ydb/issues/32) |
-| 5 | Multi-statement query scripts combining DML with one typed result | [#33](https://github.com/ydb-platform/sqlc-ydb/issues/33) |
 | 6 | Typed lambdas and JSON/Yson collection transformations | [#34](https://github.com/ydb-platform/sqlc-ydb/issues/34) |
 | Independent | Typed streaming results with explicit cancellation and ownership | [#35](https://github.com/ydb-platform/sqlc-ydb/issues/35) |
 

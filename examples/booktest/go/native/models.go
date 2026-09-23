@@ -117,6 +117,21 @@ type ListBooksWithRecentEditionsRow struct {
 	Tags            string    `json:"tags"`
 }
 
+type UpdateAuthorAndListBooksRow struct {
+	BookID uint64 `json:"book_id"`
+	Title  string `json:"title"`
+}
+
+type UpdateAuthorAndListBooksParams struct {
+	AuthorID uint64 `json:"author_id"`
+	Name     string `json:"name"`
+}
+
+type SelectAuthorAndDeleteBooksRow struct {
+	AuthorID uint64 `json:"author_id"`
+	Name     string `json:"name"`
+}
+
 type Querier interface {
 	GetAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorRow, error)
 	GetBook(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetBookRow, error)
@@ -133,4 +148,6 @@ type Querier interface {
 	ListBooksWithRecentEditions(ctx context.Context, arg int32, opts ...query.ExecuteOption) ([]ListBooksWithRecentEditionsRow, error)
 	DeleteBooksByAuthorName(ctx context.Context, arg string, opts ...query.ExecuteOption) error
 	DeleteAuthorWithBooks(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error
+	UpdateAuthorAndListBooks(ctx context.Context, arg UpdateAuthorAndListBooksParams, opts ...query.ExecuteOption) ([]UpdateAuthorAndListBooksRow, error)
+	SelectAuthorAndDeleteBooks(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (SelectAuthorAndDeleteBooksRow, error)
 }

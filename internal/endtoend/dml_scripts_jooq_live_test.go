@@ -22,7 +22,7 @@ func dmlScriptsJooq(t *testing.T) {
 	}
 	table := fmt.Sprintf("sqlc_jooq_dml_t%d", time.Now().UnixNano())
 	schema := strings.NewReplacer("records", table, "copies", table+"_copies").Replace(dmlScriptsSchema)
-	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: dmlScriptsSchema}}, []model.Source{{Name: "queries.sql", Text: dmlScriptsQueries + dmlScriptsJooqQueries}})
+	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: dmlScriptsSchema}}, []model.Source{{Name: "queries.sql", Text: dmlScriptsQueries + dmlScriptsResultQueries + dmlScriptsJooqQueries}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,6 +63,12 @@ const dmlScriptsJooqQueries = `
 DECLARE $id AS Uint64;
 UPDATE records SET label = $label WHERE id = $id;
 DELETE FROM copies WHERE id = $id;
+
+-- name: ReadPatchedValue :one
+DECLARE $id AS Uint64;
+UPDATE records SET label = $label WHERE id = $id;
+SELECT id, value, label FROM records WHERE id = $id;
+DELETE FROM copies WHERE id = $id;
 `
 
 const dmlScriptsJooqProgram = `package dmlscriptslive;
@@ -77,13 +83,17 @@ public class Main {
         if (!queries.listRecords().equals(List.of(new ListRecordsRow(ULong.valueOf(id),value,label)))) throw new AssertionError("record state");
         if (!queries.listCopies().equals(List.of(new ListCopiesRow(ULong.valueOf(id),copiedValue,label)))) throw new AssertionError("copy/read-your-writes state");
     }
+` + dmlScriptsResultJooqMethods + `
     public static void main(String[] args) throws Exception {
+      for (boolean stream : List.of(false,true)) {
         var created = new ArrayList<String>();
-        String table = $TABLE;
-        try (var connection = DriverManager.getConnection("jdbc:ydb:" + System.getenv("YDB_CONNECTION_STRING"))) {
+        String table = $TABLE + (stream ? "_stream" : "");
+        var properties = new java.util.Properties();
+        properties.setProperty("useStreamResultSets",Boolean.toString(stream));
+        try (var connection = DriverManager.getConnection("jdbc:ydb:" + System.getenv("YDB_CONNECTION_STRING"),properties)) {
             try {
                 try (var statement = connection.createStatement()) {
-                    for (String ddl : $SCHEMA.split(";")) {
+                    for (String ddl : $SCHEMA.replace($TABLE,table).split(";")) {
                         if (ddl.isBlank()) continue;
                         statement.execute(ddl);
                         created.add(ddl.trim().split("\\s+")[2]);
@@ -126,6 +136,7 @@ public class Main {
                 queries.deleteTogether(ULong.valueOf(2));
                 queries.mutateTogether(ULong.valueOf(4),10L,"recovered",ULong.valueOf(99));
                 check(queries,4,11,10,"recovered");
+                checkMixed(queries,connection);
             } finally {
                 if (!connection.getAutoCommit()) {
                     connection.rollback();
@@ -136,5 +147,6 @@ public class Main {
                 }
             }
         }
+      }
     }
 }`

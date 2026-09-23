@@ -190,6 +190,7 @@ type AnalyzedQuery struct {
 	SQL                string
 	Parameters         []Parameter // names without the leading dollar sign
 	DeclaredParameters []string    `json:",omitempty"` // names explicitly declared in the original SQL
+	MultipleStatements bool        `json:",omitempty"` // more than one top-level data statement, excluding declarations and locals
 	ResultSets         []ResultSet
 	Source             Position
 }

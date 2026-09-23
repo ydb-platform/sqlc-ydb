@@ -112,3 +112,18 @@ type ListBooksWithRecentEditionsRow struct {
 	Available       time.Time
 	Tags            string
 }
+
+type UpdateAuthorAndListBooksRow struct {
+	BookID uint64
+	Title  string
+}
+
+type UpdateAuthorAndListBooksParams struct {
+	AuthorID uint64
+	Name     string
+}
+
+type SelectAuthorAndDeleteBooksRow struct {
+	AuthorID uint64
+	Name     string
+}

@@ -323,4 +323,65 @@ public final class Queries {
             _prepared.execute();
         }
     }
+
+    // -- name: UpdateAuthorAndListBooks :many
+    public java.util.List<UpdateAuthorAndListBooksRow> updateAuthorAndListBooks(long authorId, String name) throws java.sql.SQLException {
+        try (var _prepared = client.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+            DECLARE $author_id AS Uint64;
+            DECLARE $name AS Utf8;
+            UPDATE authors SET name = $name WHERE author_id = $author_id;
+            SELECT book_id, title FROM books WHERE author_id = $author_id ORDER BY book_id;\
+            """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+            _prepared.setObject("author_id", PrimitiveValue.newUint64(authorId));
+            _prepared.setString("name", name);
+            _prepared.execute();
+            while (_prepared.getResultSet() == null && _prepared.getUpdateCount() != -1) {
+                _prepared.getMoreResults();
+            }
+            try (var _rows = _prepared.getResultSet()) {
+                if (_rows == null) throw new java.sql.SQLException("Expected one result set");
+                var _items = new java.util.ArrayList<UpdateAuthorAndListBooksRow>();
+                while (_rows.next()) {
+                    long _value0 = _rows.getLong(1);
+                    String _value1 = _rows.getString(2);
+                    _items.add(new UpdateAuthorAndListBooksRow(_value0, _value1));
+                }
+                while (_prepared.getMoreResults() || _prepared.getUpdateCount() != -1) {
+                    if (_prepared.getResultSet() != null) throw new java.sql.SQLException("Expected one result set");
+                }
+                return _items;
+            }
+        }
+    }
+
+    // -- name: SelectAuthorAndDeleteBooks :one
+    public java.util.Optional<SelectAuthorAndDeleteBooksRow> selectAuthorAndDeleteBooks(long authorId) throws java.sql.SQLException {
+        try (var _prepared = client.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+            DECLARE $author_id AS Uint64;
+            SELECT author_id, name FROM authors WHERE author_id = $author_id;
+            DELETE FROM books WHERE author_id = $author_id;\
+            """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+            _prepared.setObject("author_id", PrimitiveValue.newUint64(authorId));
+            _prepared.execute();
+            while (_prepared.getResultSet() == null && _prepared.getUpdateCount() != -1) {
+                _prepared.getMoreResults();
+            }
+            try (var _rows = _prepared.getResultSet()) {
+                if (_rows == null) throw new java.sql.SQLException("Expected one result set");
+                if (!_rows.next()) {
+                    while (_prepared.getMoreResults() || _prepared.getUpdateCount() != -1) {
+                        if (_prepared.getResultSet() != null) throw new java.sql.SQLException("Expected one result set");
+                    }
+                    return java.util.Optional.empty();
+                }
+                long _value0 = _rows.getLong(1);
+                String _value1 = _rows.getString(2);
+                while (_rows.next()) {}
+                while (_prepared.getMoreResults() || _prepared.getUpdateCount() != -1) {
+                    if (_prepared.getResultSet() != null) throw new java.sql.SQLException("Expected one result set");
+                }
+                return java.util.Optional.of(new SelectAuthorAndDeleteBooksRow(_value0, _value1));
+            }
+        }
+    }
 }

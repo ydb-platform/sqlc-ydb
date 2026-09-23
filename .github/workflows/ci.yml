@@ -224,6 +224,7 @@ jobs:
         timeout-minutes: 5
         env:
           SQLC_YDB_TEST_MAVEN: mvn
+          SQLC_YDB_CSHARP_DOTNET: dotnet
         run: go test -p 1 -count=1 -timeout=240s -covermode=atomic -coverpkg=./... -coverprofile=coverage-dml-scripts-live.out ./internal/endtoend -run '^TestLiveYDBDMLScripts$' -v
       - name: Verify public query metadata and EXPLAIN contracts
         run: go test -p 1 -count=1 -timeout=120s ./internal/database -run '^TestLiveYDBQueryMetadata$' -v

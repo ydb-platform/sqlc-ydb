@@ -420,7 +420,7 @@ func emitJDBCOn(b *strings.Builder, q model.AnalyzedQuery, names []string, bindi
 	if q.Command == model.Exec {
 		b.WriteString(indent + "_prepared.execute();\n")
 	} else {
-		b.WriteString(indent + "try (var _rows = _prepared.executeQuery()) {\n")
+		emitJDBCResultStart(b, q, indent)
 		emitRows(b, q, row, indent+"    ", false)
 		b.WriteString(indent + "}\n")
 	}
@@ -428,9 +428,27 @@ func emitJDBCOn(b *strings.Builder, q model.AnalyzedQuery, names []string, bindi
 	b.WriteString(indent + "}\n")
 }
 
+func emitJDBCResultStart(b *strings.Builder, q model.AnalyzedQuery, indent string) {
+	if !q.MultipleStatements {
+		b.WriteString(indent + "try (var _rows = _prepared.executeQuery()) {\n")
+		return
+	}
+	b.WriteString(indent + "_prepared.execute();\n" + indent + "while (_prepared.getResultSet() == null && _prepared.getUpdateCount() != -1) {\n" + indent + "    _prepared.getMoreResults();\n" + indent + "}\n" + indent + "try (var _rows = _prepared.getResultSet()) {\n" + indent + "    if (_rows == null) throw new java.sql.SQLException(\"Expected one result set\");\n")
+}
+
+func emitJDBCScriptFinish(b *strings.Builder, indent string) {
+	b.WriteString(indent + "while (_prepared.getMoreResults() || _prepared.getUpdateCount() != -1) {\n" + indent + "    if (_prepared.getResultSet() != null) throw new java.sql.SQLException(\"Expected one result set\");\n" + indent + "}\n")
+}
+
 func emitRows(b *strings.Builder, q model.AnalyzedQuery, row, indent string, native bool) {
 	if q.Command == model.One {
-		b.WriteString(indent + "if (!_rows.next()) return java.util.Optional.empty();\n")
+		if q.MultipleStatements && !native {
+			b.WriteString(indent + "if (!_rows.next()) {\n")
+			emitJDBCScriptFinish(b, indent+"    ")
+			b.WriteString(indent + "    return java.util.Optional.empty();\n" + indent + "}\n")
+		} else {
+			b.WriteString(indent + "if (!_rows.next()) return java.util.Optional.empty();\n")
+		}
 	} else {
 		fmt.Fprintf(b, "%svar _items = new java.util.ArrayList<%s>();\n%swhile (_rows.next()) {\n", indent, row, indent)
 		indent += "    "
@@ -460,11 +478,19 @@ func emitRows(b *strings.Builder, q model.AnalyzedQuery, row, indent string, nat
 	}
 	newRow := "new " + row + "(" + strings.Join(values, ", ") + ")"
 	if q.Command == model.One {
+		if q.MultipleStatements && !native {
+			b.WriteString(indent + "while (_rows.next()) {}\n")
+			emitJDBCScriptFinish(b, indent)
+		}
 		fmt.Fprintf(b, "%sreturn java.util.Optional.of(%s);\n", indent, newRow)
 	} else {
 		fmt.Fprintf(b, "%s_items.add(%s);\n", indent, newRow)
 		indent = strings.TrimSuffix(indent, "    ")
-		b.WriteString(indent + "}\n" + indent + "return _items;\n")
+		b.WriteString(indent + "}\n")
+		if q.MultipleStatements && !native {
+			emitJDBCScriptFinish(b, indent)
+		}
+		b.WriteString(indent + "return _items;\n")
 	}
 }
 

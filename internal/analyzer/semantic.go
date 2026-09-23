@@ -101,18 +101,33 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	}
 	inferred := map[string]model.Type{}
 	var resultColumns []model.Column
+	resultParameters := map[string]model.Type{}
+	dataStatements := 0
 	for _, statement := range tree.statements {
 		core := statement.Sql_stmt_core()
 		if core.Select_stmt() == nil && core.Into_table_stmt() == nil && core.Update_stmt() == nil && core.Delete_stmt() == nil {
 			continue
 		}
+		dataStatements++
 		columns, ds := analyzeDataStatement(catalog, block, statement, bindings, inferred, query.Syntax)
 		diagnostics = append(diagnostics, ds...)
 		if len(ds) != 0 && columns == nil && containsINSubquery(statement) {
 			return query, diagnostics
 		}
-		resultColumns = columns
+		if len(columns) != 0 {
+			resultColumns = columns
+			if core.Select_stmt() != nil {
+				for _, bind := range collectQueryTree(statement).binds {
+					name := bindName(bind)
+					if _, explicit := declared[name]; !explicit && !localNames[name] {
+						resultParameters[name] = inferred[name]
+					}
+				}
+			}
+		}
 	}
+
+	query.MultipleStatements = dataStatements > 1
 
 	for name, localType := range localTypes {
 		if usedType, ok := inferred[name]; ok {
@@ -131,6 +146,11 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	parameters, parameterDiagnostics := externalParameters(block, tree.binds, declared, inferred, declarationPositions, localPositions, localNames)
 	diagnostics = append(diagnostics, parameterDiagnostics...)
 	query.Parameters = parameters
+	for _, parameter := range parameters {
+		if previous, ok := resultParameters[parameter.Name]; ok && !previous.Equal(parameter.Type) {
+			diagnostics = append(diagnostics, model.Diagnostic{Position: query.Source, Message: fmt.Sprintf("parameter $%s changes inferred type from %s to %s after the result statement; add DECLARE before the script to keep its result type stable", parameter.Name, previous.String(), parameter.Type.String())})
+		}
+	}
 
 	for _, column := range resultColumns {
 		if column.Type.Kind == "Null" {
@@ -375,17 +395,31 @@ func validateQueryStatements(block queryBlock, tree queryTree) []model.Diagnosti
 	if len(dataStatements) == 1 {
 		return nil
 	}
-	if block.command != model.Exec {
-		return []model.Diagnostic{diagnosticAt(block.file, block.line-1, dataStatements[0], "multiple data statements require :exec")}
-	}
+	results := 0
 	for _, statement := range dataStatements {
 		core := statement.Sql_stmt_core()
 		if core.Select_stmt() != nil ||
 			core.Into_table_stmt() != nil && core.Into_table_stmt().Returning_columns_list() != nil ||
 			core.Update_stmt() != nil && core.Update_stmt().Returning_columns_list() != nil ||
 			core.Delete_stmt() != nil && core.Delete_stmt().Returning_columns_list() != nil {
-			return []model.Diagnostic{diagnosticAt(block.file, block.line-1, statement, "multi-statement queries support only INSERT/UPSERT, UPDATE, and DELETE without RETURNING")}
+			results++
 		}
+	}
+	message := ""
+	switch {
+	case results > 1:
+		message = fmt.Sprintf("multi-statement queries support at most one result-producing statement; found %d", results)
+	case block.command == model.Each:
+		message = "multi-statement :each is unsupported; use :one or :many to consume the result before returning"
+	case block.command == model.ExecRows:
+		message = "multi-statement :execrows is unsupported; use :exec, :one, or :many"
+	case block.command == model.Exec && results != 0:
+		message = "command :exec cannot be used with a row-returning script; use :one or :many"
+	case (block.command == model.One || block.command == model.Many) && results == 0:
+		message = fmt.Sprintf("command %s requires exactly one result-producing statement in a script", block.command)
+	}
+	if message != "" {
+		return []model.Diagnostic{diagnosticAt(block.file, block.line-1, dataStatements[0], message)}
 	}
 	if lateBinding != nil {
 		return []model.Diagnostic{diagnosticAt(block.file, block.line-1, lateBinding, "DECLARE and scalar local assignments must precede all data statements in a script")}

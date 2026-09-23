@@ -70,13 +70,19 @@ class GeneratedQueriesTest {
                         assertTrue(sql.contains("Yson::ConvertToStringList"), sql);
                         assertTrue(sql.toLowerCase().contains("left outer join") || sql.toLowerCase().contains("left join"), sql);
                     }
+                    if (method.getName().equals("updateAuthorAndListBooks")) {
+                        assertEquals("DECLARE $author_id AS Uint64;\nDECLARE $name AS Utf8;\nUPDATE `authors` SET name = $name WHERE author_id = $author_id;\nSELECT book_id, title FROM `books` AS `books` WHERE author_id = $author_id ORDER BY book_id;", sql);
+                    }
+                    if (method.getName().equals("selectAuthorAndDeleteBooks")) {
+                        assertEquals("DECLARE $author_id AS Uint64;\nSELECT author_id, name FROM `authors` AS `authors` WHERE author_id = $author_id;\nDELETE FROM `books` WHERE author_id = $author_id;", sql);
+                    }
                     if (method.getName().equals("deleteAuthorWithBooks")) {
                         assertEquals("DECLARE $author_id AS Uint64;\nDELETE FROM `books` WHERE author_id = $author_id;\nDELETE FROM `authors` WHERE author_id = $author_id;", sql);
                     }
                 }
             }
         }
-        assertEquals(59, statements.size());
+        assertEquals(61, statements.size());
     }
     @Test
     void declaredQueryReadsDialectCarriers() throws Exception {
@@ -114,8 +120,9 @@ class GeneratedQueriesTest {
                                     if (operation.getName().equals("setObject")) assertInstanceOf(tech.ydb.table.values.Value.class, values[1]);
                                     return null;
                                 }
-                                if (operation.getName().equals("executeQuery")) {
-                                    var rows = statement.executeQuery();
+                                if (operation.getName().equals("executeQuery") || operation.getName().equals("getResultSet")) {
+                                    var rows = operation.getName().equals("executeQuery") ? statement.executeQuery() : statement.getResultSet();
+                                    if (rows == null) return null;
                                     return java.lang.reflect.Proxy.newProxyInstance(GeneratedQueriesTest.class.getClassLoader(),
                                             new Class<?>[]{tech.ydb.jdbc.YdbResultSet.class}, (rowProxy, getter, indexes) -> {
                                                 if (getter.getName().equals("getMetaData")) {

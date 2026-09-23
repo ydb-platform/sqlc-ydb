@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -208,6 +209,34 @@ func TestAllSupportedScalarsCompileAgainstAuthorsMavenProfiles(t *testing.T) {
 // This test executes generated JDBC code without a YDB server. Its proxy only
 // supplies the standard JDBC surface; parameter binding is delegated to the
 // published driver's InMemoryQuery to verify actual positional types.
+func TestGenerateMixedScripts(t *testing.T) {
+	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "queries.sql", Text: `-- name: ReadAndClear :one
+DELETE FROM records; SELECT 42 AS answer; DELETE FROM records;
+-- name: ReadManyAndClear :many
+DELETE FROM records; SELECT 42 AS answer; DELETE FROM records;`}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, runtime := range []string{"ydb", "jdbc"} {
+		t.Run(runtime, func(t *testing.T) {
+			files, err := Generate(analysis, Options{Package: "scripts", Runtime: runtime})
+			if err != nil {
+				t.Fatal(err)
+			}
+			code := string(files[len(files)-1].Content)
+			if strings.Count(code, "DELETE FROM records; SELECT 42 AS answer; DELETE FROM records;") != 2 {
+				t.Fatalf("mixed script text changed: %s", code)
+			}
+			if runtime != "ydb" && strings.Contains(code, ".executeQuery()") {
+				t.Fatalf("script execution must traverse JDBC update counts: %s", code)
+			}
+			if runtime != "ydb" && !strings.Contains(code, "Expected one result set") {
+				t.Fatalf("script execution must reject a mismatched result count: %s", code)
+			}
+		})
+	}
+}
+
 func TestGeneratedJDBCUsesTypedDriverValuesAndGuardsUnsignedRanges(t *testing.T) {
 	maven := os.Getenv("SQLC_YDB_TEST_MAVEN")
 	if maven == "" {
@@ -240,6 +269,11 @@ func TestGeneratedJDBCUsesTypedDriverValuesAndGuardsUnsignedRanges(t *testing.T)
 			{Name: "payload", Type: model.Optional(model.Type{Kind: "String"})},
 		}}},
 	})
+	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "queries.sql", Text: "-- name: ReadAndClear :one\nDELETE FROM records; SELECT 42 AS value; DELETE FROM records;\n-- name: ReadManyAndClear :many\nDELETE FROM records; SELECT 42 AS value; DELETE FROM records;"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	queries = append(queries, analysis.Queries...)
 	queries = append(queries, batchQuery(), optionalBatchQuery(), listBooksQuery(), declaredBatchQuery(), declaredMixedQuery())
 	files, err := Generate(&model.AnalysisResult{Queries: queries}, Options{Package: "synthetic.jdbc", Runtime: "jdbc"})
 	if err != nil {
@@ -296,6 +330,7 @@ public final class Main {
     private Main() { }
 
     public static void main(String[] args) throws Exception {
+        verifyTerminalStatus();
         Queries guarded = new Queries(refusingConnection());
         expectRange(() -> guarded.bad8(-1));
         expectRange(() -> guarded.bad8(256));
@@ -423,6 +458,63 @@ public final class Main {
             }
             throw new AssertionError(method);
         });
+    }
+
+    private static void verifyTerminalStatus() throws Exception {
+        for (boolean many : new boolean[]{false, true}) for (boolean leading : new boolean[]{false, true}) for (int mode = 0; mode < 8; mode++) {
+            int selectedMode = mode;
+            int[] next = {0};
+            int[] position = {leading ? 0 : 1};
+            boolean[] closed = {false, false};
+            var terminal = new java.sql.SQLException("late DML failure");
+            var rows = (java.sql.ResultSet) Proxy.newProxyInstance(Main.class.getClassLoader(), new Class<?>[]{java.sql.ResultSet.class}, (proxy, method, args) -> {
+                if (method.getName().equals("next")) {
+                    next[0]++;
+                    if (selectedMode == 2 || selectedMode == 1 && next[0] > 1) throw terminal;
+                    return selectedMode == 0 ? next[0] <= 2 : selectedMode != 3 && selectedMode != 5 && next[0] == 1;
+                }
+                if (method.getName().equals("getInt")) return 42;
+                if (method.getName().equals("close")) { closed[0] = true; return null; }
+                throw new AssertionError(method);
+            });
+            var statement = (PreparedStatement) Proxy.newProxyInstance(Main.class.getClassLoader(), new Class<?>[]{PreparedStatement.class}, (proxy, method, args) -> {
+                if (method.getName().equals("execute")) return !leading && selectedMode != 7;
+                if (method.getName().equals("getResultSet")) return selectedMode != 7 && (position[0] == 1 || selectedMode == 6 && position[0] == 2) ? rows : null;
+                if (method.getName().equals("getUpdateCount")) return position[0] >= 3 ? -1 : 0;
+                if (method.getName().equals("getMoreResults")) {
+                    position[0]++;
+                    if (position[0] == 2 && (selectedMode == 4 || selectedMode == 5)) throw terminal;
+                    return selectedMode != 7 && (position[0] == 1 || selectedMode == 6 && position[0] == 2);
+                }
+                if (method.getName().equals("close")) { closed[1] = true; return null; }
+                throw new AssertionError(method);
+            });
+            var connection = (Connection) Proxy.newProxyInstance(Main.class.getClassLoader(), new Class<?>[]{Connection.class}, (proxy, method, args) -> {
+                if (method.getName().equals("prepareStatement")) {
+                    check(args[0].equals("DELETE FROM records; SELECT 42 AS value; DELETE FROM records;"), "script changed");
+                    return statement;
+                }
+                throw new AssertionError("borrowed connection: " + method);
+            });
+            try {
+                if (many) {
+                    var values = new Queries(connection).readManyAndClear();
+                    check(mode == 0 || mode == 3, "late execution failure was ignored");
+                    if (mode == 0) check(values.size() == 2 && values.get(0).value() == 42, "many result changed");
+                    else check(values.isEmpty(), "empty many result changed");
+                } else {
+                    var value = new Queries(connection).readAndClear();
+                    check(mode == 0 || mode == 3, "late execution failure was ignored");
+                    if (mode == 0) check(value.orElseThrow().value() == 42 && next[0] == 3, "first-row result returned before terminal status");
+                    else check(value.isEmpty(), "empty result contract changed");
+                }
+                check(position[0] == 3, "trailing update count was not consumed");
+            } catch (java.sql.SQLException error) {
+                if (mode == 6 || mode == 7) check(error.getMessage().equals("Expected one result set"), "wrong result count error");
+                else check((mode == 1 || mode == 2 || mode == 4 || mode == 5) && error == terminal, "wrong terminal error");
+            }
+            check((closed[0] || mode == 7) && closed[1], "owned JDBC resources leaked");
+        }
     }
 
     private static Connection refusingConnection() {

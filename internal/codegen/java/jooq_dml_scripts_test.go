@@ -26,11 +26,33 @@ func TestJooqDMLScriptsRequireDeclaredExecution(t *testing.T) {
 				t.Fatal(err)
 			}
 			files, err := Generate(analysis, Options{Package: "scripts", Runtime: "jooq"})
-			const want = "Change: multi-statement DML requires the jOOQ typed JDBC path; add an explicit DECLARE for a parameter, or use runtime: jdbc or ydb"
+			const want = "Change: multi-statement queries require the jOOQ typed JDBC path; add an explicit DECLARE for a parameter, or use runtime: jdbc or ydb"
 			if files != nil || err == nil || err.Error() != want {
 				t.Fatalf("files=%v, error=%v; want no output and %q", files, err, want)
 			}
 		})
+	}
+}
+
+func TestJooqMixedScriptsRequireDeclaredExecution(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT id FROM records; DELETE FROM records;",
+		"DELETE FROM records; SELECT id FROM records;",
+		"UPDATE records SET label='changed'u; SELECT id FROM records; DELETE FROM children;",
+	} {
+		for _, command := range []string{":one", ":many"} {
+			t.Run(command+sql, func(t *testing.T) {
+				analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqDMLScriptSchema}}, []model.Source{{Name: "queries.sql", Text: "-- name: Change " + command + "\n" + sql}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				files, err := Generate(analysis, Options{Package: "scripts", Runtime: "jooq"})
+				const want = "Change: multi-statement queries require the jOOQ typed JDBC path; add an explicit DECLARE for a parameter, or use runtime: jdbc or ydb"
+				if files != nil || err == nil || err.Error() != want {
+					t.Fatalf("files=%d, error=%v; want %q", len(files), err, want)
+				}
+			})
+		}
 	}
 }
 
@@ -71,6 +93,39 @@ func TestJooqDeclaredDMLScriptsPreserveWholeRequest(t *testing.T) {
 		}
 	}
 	t.Run("published SDK", func(t *testing.T) { runJooqDMLScriptSDK(t, files) })
+}
+
+func TestJooqDeclaredMixedScriptsPreserveWholeRequest(t *testing.T) {
+	const queries = `-- name: UpdateThenRead :many
+DECLARE $id AS Uint64;
+UPDATE records SET label = $label WHERE id = $id;
+SELECT id, label FROM records WHERE id = $id;
+-- name: ReadThenDelete :one
+DECLARE $id AS Uint64;
+SELECT id, label FROM records WHERE id = $id;
+DELETE FROM children WHERE owner = $id;`
+	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqDMLScriptSchema}}, []model.Source{{Name: "queries.sql", Text: queries}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := Generate(analysis, Options{Package: "scripts", Runtime: "jooq"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range files {
+		if file.Name != "Queries.java" {
+			continue
+		}
+		code := string(file.Content)
+		for _, want := range []string{"DECLARE $label AS Utf8;", "UPDATE", "SELECT id, label FROM", "DELETE FROM", "dsl.render(RECORDS)", "dsl.render(CHILDREN)", "_prepared.getMoreResults()", "Expected one result set"} {
+			if !strings.Contains(code, want) {
+				t.Fatalf("missing %q in generated script:\n%s", want, code)
+			}
+		}
+		if strings.Count(code, ".prepareStatement(") != 2 || strings.Count(code, "_prepared.execute();") != 2 || strings.Contains(code, ".executeQuery(") {
+			t.Fatalf("expected one JDBC execution per mixed script:\n%s", code)
+		}
+	}
 }
 
 func TestJooqStructuredDMLScriptsRetainBatchRestrictions(t *testing.T) {

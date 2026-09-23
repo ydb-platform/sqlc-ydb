@@ -355,3 +355,46 @@ class Querier:
             parameters,
         )
         return None
+
+    # -- name: UpdateAuthorAndListBooks :many
+    def update_author_and_list_books(self, author_id: int, name: str) -> list[_models.UpdateAuthorAndListBooksRow]:
+        parameters = {
+            "$author_id": _ydb.TypedValue(author_id, _ydb.PrimitiveType.Uint64),
+            "$name": _ydb.TypedValue(name, _ydb.PrimitiveType.Utf8),
+        }
+        result_sets = self._execute(
+            ("DECLARE $author_id AS Uint64;\n"
+             "DECLARE $name AS Utf8;\n"
+             "UPDATE authors SET name = $name WHERE author_id = $author_id;\n"
+             "SELECT book_id, title FROM books WHERE author_id = $author_id ORDER BY book_id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.UpdateAuthorAndListBooksRow(
+            book_id=row["book_id"],
+            title=row["title"],
+        ) for row in rows]
+
+    # -- name: SelectAuthorAndDeleteBooks :one
+    def select_author_and_delete_books(self, author_id: int) -> Optional[_models.Authors]:
+        parameters = {
+            "$author_id": _ydb.TypedValue(author_id, _ydb.PrimitiveType.Uint64),
+        }
+        result_sets = self._execute(
+            ("DECLARE $author_id AS Uint64;\n"
+             "SELECT author_id, name FROM authors WHERE author_id = $author_id;\n"
+             "DELETE FROM books WHERE author_id = $author_id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        row = rows[0] if rows else None
+        if row is None:
+            return None
+        return _models.Authors(
+            author_id=row["author_id"],
+            name=row["name"],
+        )

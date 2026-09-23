@@ -365,4 +365,53 @@ public sealed class Queries
         command.Parameters.Add(new YdbParameter("$author_id", DbType.UInt64, authorId));
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    // -- name: UpdateAuthorAndListBooks :many
+    public async Task<IReadOnlyList<UpdateAuthorAndListBooksRow>> UpdateAuthorAndListBooksAsync(UpdateAuthorAndListBooksParams args, CancellationToken cancellationToken = default)
+    {
+        await using var command = new YdbCommand(
+            "DECLARE $author_id AS Uint64;\n" +
+            "DECLARE $name AS Utf8;\n" +
+            "UPDATE authors SET name = $name WHERE author_id = $author_id;\n" +
+            "SELECT book_id, title FROM books WHERE author_id = $author_id ORDER BY book_id;", _connection) { Transaction = _transaction };
+        command.Parameters.Add(new YdbParameter("$author_id", DbType.UInt64, args.AuthorID));
+        command.Parameters.Add(new YdbParameter("$name", DbType.String, args.Name));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        var rows = new List<UpdateAuthorAndListBooksRow>();
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            rows.Add(UpdateAuthorAndListBooksRowFrom(reader));
+        }
+        return rows;
+    }
+
+    private static UpdateAuthorAndListBooksRow UpdateAuthorAndListBooksRowFrom(DbDataReader reader) => new(
+        reader.GetFieldValue<ulong>(0),
+        reader.GetFieldValue<string>(1)
+    );
+
+    // -- name: SelectAuthorAndDeleteBooks :one
+    public async Task<SelectAuthorAndDeleteBooksRow> SelectAuthorAndDeleteBooksAsync(ulong authorId, CancellationToken cancellationToken = default)
+    {
+        await using var command = new YdbCommand(
+            "DECLARE $author_id AS Uint64;\n" +
+            "SELECT author_id, name FROM authors WHERE author_id = $author_id;\n" +
+            "DELETE FROM books WHERE author_id = $author_id;", _connection) { Transaction = _transaction };
+        command.Parameters.Add(new YdbParameter("$author_id", DbType.UInt64, authorId));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException("query returned no rows");
+        }
+        var row = SelectAuthorAndDeleteBooksRowFrom(reader);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+        }
+        return row;
+    }
+
+    private static SelectAuthorAndDeleteBooksRow SelectAuthorAndDeleteBooksRowFrom(DbDataReader reader) => new(
+        reader.GetFieldValue<ulong>(0),
+        reader.GetFieldValue<string>(1)
+    );
 }

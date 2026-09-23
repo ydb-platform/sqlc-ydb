@@ -387,3 +387,51 @@ class Querier:
         )
         result.close()
         return None
+
+    # -- name: UpdateAuthorAndListBooks :many
+    def update_author_and_list_books(self, author_id: int, name: str) -> list[_models.UpdateAuthorAndListBooksRow]:
+        parameters = {
+            "author_id": (author_id, _ydb.PrimitiveType.Uint64),
+            "name": (name, _ydb.PrimitiveType.Utf8),
+        }
+        result = self._connection.execute(
+            _text(
+                ("DECLARE $author_id AS Uint64;\n"
+                 "DECLARE $name AS Utf8;\n"
+                 "UPDATE authors SET name = :name WHERE author_id = :author_id;\n"
+                 "SELECT book_id, title FROM books WHERE author_id = :author_id ORDER BY book_id;")
+            ),
+            parameters,
+        )
+        try:
+            rows = result.fetchall()
+        finally:
+            result.close()
+        return [_models.UpdateAuthorAndListBooksRow(
+            book_id=row._mapping["book_id"],
+            title=row._mapping["title"],
+        ) for row in rows]
+
+    # -- name: SelectAuthorAndDeleteBooks :one
+    def select_author_and_delete_books(self, author_id: int) -> Optional[_models.Authors]:
+        parameters = {
+            "author_id": (author_id, _ydb.PrimitiveType.Uint64),
+        }
+        result = self._connection.execute(
+            _text(
+                ("DECLARE $author_id AS Uint64;\n"
+                 "SELECT author_id, name FROM authors WHERE author_id = :author_id;\n"
+                 "DELETE FROM books WHERE author_id = :author_id;")
+            ),
+            parameters,
+        )
+        try:
+            row = result.fetchone()
+        finally:
+            result.close()
+        if row is None:
+            return None
+        return _models.Authors(
+            author_id=row._mapping["author_id"],
+            name=row._mapping["name"],
+        )

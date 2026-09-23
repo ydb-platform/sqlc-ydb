@@ -24,6 +24,7 @@ func TestLiveYDBDMLScripts(t *testing.T) {
 	}
 	runDMLScripts(t, dsn, false)
 	t.Run("jooq", dmlScriptsJooq)
+	t.Run("csharp", dmlScriptsCsharp)
 }
 
 func runDMLScripts(t *testing.T, dsn string, compileOnly bool) {
@@ -36,7 +37,7 @@ func runDMLScripts(t *testing.T, dsn string, compileOnly bool) {
 	for _, runtime := range []string{"ydb", "database/sql"} {
 		configuration += "- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n  gen:\n    go:\n      package: records\n      out: " + strings.ReplaceAll(runtime, "/", "_") + "\n      sql_package: " + runtime + "\n"
 	}
-	for name, contents := range map[string]string{"schema.sql": schema, "queries.sql": replace.Replace(dmlScriptsQueries), "sqlc.yaml": configuration, "go.mod": "module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"} {
+	for name, contents := range map[string]string{"schema.sql": schema, "queries.sql": replace.Replace(dmlScriptsQueries + dmlScriptsResultQueries), "sqlc.yaml": configuration, "go.mod": "module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(contents), 0600); err != nil {
 			t.Fatal(err)
 		}
@@ -94,7 +95,16 @@ SELECT id, value, label FROM copies ORDER BY id;
 func dmlScriptsGoRuntime(native bool) string {
 	imports := `"database/sql"
  "github.com/ydb-platform/ydb-go-sdk/v3/retry"`
-	counted := `func (c *countedDB) ExecContext(ctx context.Context, statement string, args ...interface{}) (sql.Result, error) {
+	noRows := "sql.ErrNoRows"
+	counted := `func (c *countedDB) QueryContext(ctx context.Context, statement string, args ...interface{}) (*sql.Rows, error) {
+ c.queries++
+ return c.DBTX.QueryContext(ctx, statement, args...)
+}
+func (c *countedDB) QueryRowContext(ctx context.Context, statement string, args ...interface{}) *sql.Row {
+ c.queries++
+ return c.DBTX.QueryRowContext(ctx, statement, args...)
+}
+func (c *countedDB) ExecContext(ctx context.Context, statement string, args ...interface{}) (sql.Result, error) {
  c.execs++
  return c.DBTX.ExecContext(ctx, statement, args...)
 }`
@@ -106,8 +116,17 @@ func dmlScriptsGoRuntime(native bool) string {
   return retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error { return fn(ctx, New(tx)) })
  }`
 	if native {
+		noRows = "query.ErrNoRows"
 		imports = `"github.com/ydb-platform/ydb-go-sdk/v3/query"`
-		counted = `func (c *countedDB) Exec(ctx context.Context, statement string, opts ...query.ExecuteOption) error {
+		counted = `func (c *countedDB) Query(ctx context.Context, statement string, opts ...query.ExecuteOption) (query.Result, error) {
+ c.queries++
+ return c.DBTX.Query(ctx, statement, opts...)
+}
+func (c *countedDB) QueryRow(ctx context.Context, statement string, opts ...query.ExecuteOption) (query.Row, error) {
+ c.queries++
+ return c.DBTX.QueryRow(ctx, statement, opts...)
+}
+func (c *countedDB) Exec(ctx context.Context, statement string, opts ...query.ExecuteOption) error {
  c.execs++
  return c.DBTX.Exec(ctx, statement, opts...)
 }`
@@ -131,7 +150,7 @@ import (
  "github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 )
 
-type countedDB struct { DBTX; execs int }
+type countedDB struct { DBTX; execs,queries int }
 ` + counted + `
 
 func TestDMLScripts(t *testing.T) {
@@ -200,6 +219,7 @@ func TestDMLScripts(t *testing.T) {
  if err := q.DeleteTogether(ctx,2);err != nil {t.Fatal(err)}
  if err := q.MutateTogether(ctx,MutateTogetherParams{ID:4,Value:10,Label:"recovered",ObsoleteID:99});err != nil {t.Fatal(err)}
  if err := checkScriptRows(ctx,q,4,11,10,"recovered");err != nil {t.Fatal(err)}
+ checkMixedDMLScripts(t,ctx,q,withTx,counter)
 }
 
 func checkScriptRows(ctx context.Context,q *Queries,id uint64,value,copyValue int64,label string) error {
@@ -221,5 +241,5 @@ func checkEmptyScriptTables(ctx context.Context,q *Queries) error {
  if len(copies)!=0 {return fmt.Errorf("copies not empty in transaction: %+v",copies)}
  return nil
 }
-`
+` + strings.ReplaceAll(dmlScriptsResultGoRuntime, "$NO_ROWS", noRows)
 }

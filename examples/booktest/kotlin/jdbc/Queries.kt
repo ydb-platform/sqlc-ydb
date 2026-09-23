@@ -301,4 +301,63 @@ class Queries(private val client: java.sql.Connection) {
             _prepared.execute()
         }
     }
+
+    // -- name: UpdateAuthorAndListBooks :many
+    fun updateAuthorAndListBooks(authorId: Long, name: String): List<UpdateAuthorAndListBooksRow> {
+        client.unwrap(tech.ydb.jdbc.YdbConnection::class.java).prepareStatement(
+            "DECLARE \$author_id AS Uint64;\n" +
+            "DECLARE \$name AS Utf8;\n" +
+            "UPDATE authors SET name = \$name WHERE author_id = \$author_id;\n" +
+            "SELECT book_id, title FROM books WHERE author_id = \$author_id ORDER BY book_id;", tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY).use { _prepared ->
+            _prepared.setObject("author_id", PrimitiveValue.newUint64(authorId))
+            _prepared.setString("name", name)
+            _prepared.execute()
+            while (_prepared.resultSet == null && _prepared.updateCount != -1) {
+                _prepared.moreResults
+            }
+            _prepared.resultSet.use { _rows ->
+                if (_rows == null) throw java.sql.SQLException("Expected one result set")
+                val _items = ArrayList<UpdateAuthorAndListBooksRow>()
+                while (_rows.next()) {
+                    val _value0: Long = _rows.getLong(1)
+                    val _value1: String = _rows.getString(2)
+                    _items.add(UpdateAuthorAndListBooksRow(_value0, _value1))
+                }
+                while (_prepared.moreResults || _prepared.updateCount != -1) {
+                    if (_prepared.resultSet != null) throw java.sql.SQLException("Expected one result set")
+                }
+                return _items
+            }
+        }
+    }
+
+    // -- name: SelectAuthorAndDeleteBooks :one
+    fun selectAuthorAndDeleteBooks(authorId: Long): SelectAuthorAndDeleteBooksRow? {
+        client.unwrap(tech.ydb.jdbc.YdbConnection::class.java).prepareStatement(
+            "DECLARE \$author_id AS Uint64;\n" +
+            "SELECT author_id, name FROM authors WHERE author_id = \$author_id;\n" +
+            "DELETE FROM books WHERE author_id = \$author_id;", tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY).use { _prepared ->
+            _prepared.setObject("author_id", PrimitiveValue.newUint64(authorId))
+            _prepared.execute()
+            while (_prepared.resultSet == null && _prepared.updateCount != -1) {
+                _prepared.moreResults
+            }
+            _prepared.resultSet.use { _rows ->
+                if (_rows == null) throw java.sql.SQLException("Expected one result set")
+                if (!_rows.next()) {
+                    while (_prepared.moreResults || _prepared.updateCount != -1) {
+                        if (_prepared.resultSet != null) throw java.sql.SQLException("Expected one result set")
+                    }
+                    return null
+                }
+                val _value0: Long = _rows.getLong(1)
+                val _value1: String = _rows.getString(2)
+                while (_rows.next()) {}
+                while (_prepared.moreResults || _prepared.updateCount != -1) {
+                    if (_prepared.resultSet != null) throw java.sql.SQLException("Expected one result set")
+                }
+                return SelectAuthorAndDeleteBooksRow(_value0, _value1)
+            }
+        }
+    }
 }
