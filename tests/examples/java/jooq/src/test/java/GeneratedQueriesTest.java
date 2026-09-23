@@ -35,6 +35,7 @@ class GeneratedQueriesTest {
                         if (parameter == ULong.class) args[i] = ULong.MAX;
                         else if (parameter == UInteger.class) args[i] = UInteger.MAX;
                         else if (parameter == String.class) args[i] = "value";
+                        else if (parameter == byte[].class) args[i] = "Book".getBytes(java.nio.charset.StandardCharsets.UTF_8);
                         else if (parameter == Integer.class) args[i] = 2026;
                         else if (parameter == Instant.class) args[i] = Instant.parse("2026-01-01T00:00:00.123456Z");
                         else if (parameter == List.class && method.getName().equals("createAuthors")) args[i] = List.of(new batch.jooq.CreateAuthorsAuthorsItem("Author", -1L));
@@ -82,7 +83,7 @@ class GeneratedQueriesTest {
                 }
             }
         }
-        assertEquals(61, statements.size());
+        assertEquals(63, statements.size());
     }
     @Test
     void declaredQueryReadsDialectCarriers() throws Exception {
