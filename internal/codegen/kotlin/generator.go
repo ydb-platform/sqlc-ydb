@@ -177,7 +177,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		return nil
 	}
 	for _, table := range a.Catalog.Tables {
-		n, err := name(table.Name, true)
+		n, err := name(strings.ReplaceAll(table.Name, "/", "_"), true)
 		if err != nil {
 			return nil, err
 		}

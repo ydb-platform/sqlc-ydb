@@ -26,6 +26,7 @@
             <source>${project.basedir}/../../../../examples/booktest/java/jooq</source>
             <source>${project.basedir}/../../../../examples/jets/java/jooq</source>
             <source>${project.basedir}/../../../../examples/ondeck/java/jooq</source>
+            <source>${project.basedir}/../../../../examples/namespaces/java/jooq</source>
           </sources></configuration>
         </execution></executions>
       </plugin>

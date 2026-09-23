@@ -88,6 +88,16 @@ func name(s string, upper bool) (string, error) {
 	return n, nil
 }
 
+// Table paths retain their namespace in generated types; other identifiers do
+// not admit path separators.
+func tableName(path string) (string, error) {
+	n, err := name(strings.ReplaceAll(path, "/", "_"), true)
+	if err != nil {
+		return "", fmt.Errorf("cannot represent %q as a Java identifier", path)
+	}
+	return n, nil
+}
+
 // quoted also escapes backslashes preceding u: Java Unicode escapes are processed
 // before tokenization. Doubling every input backslash keeps them literal.
 func quoted(s string) string {
@@ -199,7 +209,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		return nil
 	}
 	for _, table := range a.Catalog.Tables {
-		n, err := name(table.Name, true)
+		n, err := tableName(table.Name)
 		if err != nil {
 			return nil, err
 		}

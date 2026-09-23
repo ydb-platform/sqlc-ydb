@@ -106,6 +106,25 @@ The [computed DML fixture](../internal/endtoend/testdata/computed_dml/queries.sq
 
 INSERT/UPSERT SELECT supports two mapping contracts. With an explicit target column list, explicit source expressions match the targets positionally; source aliases are optional and do not retarget values by name, and wildcard source projections remain unsupported. Without a target column list, source result names select the destination columns; supported expressions need aliases, while column projections keep their names. This named form accepts `*`, `alias.*` and computed columns combined with wildcards. Duplicate names, unknown destination columns and incompatible types fail analysis. Both forms reject missing required NOT NULL columns and missing non-generated primary-key columns before generation. Omitted generated serial keys use the sequence; other primary-key columns must be supplied. UPSERT preserves omitted nullable columns on an existing row, but all NOT NULL columns without generated defaults must still be supplied, even for an empty source or when the row already exists. UPDATE/DELETE ON SELECT instead match source result names to target columns and require every primary-key column with a compatible declared type. Shared query-file declarations must currently be moved into each named query. These are temporary coverage limits, separate from the permanent decision to exclude plugins. Comments and whitespace may precede the first query annotation; comment-only query files are ignored.
 
+## Table path resolution
+
+Named queries and schema sources accept `PRAGMA TablePathPrefix("/database/folder");` with a nonempty absolute string literal. Relative table references then resolve under that prefix; an absolute table reference bypasses it. Include the database name in the prefix. A relative prefix is not relative to the connection's database, so relative and empty prefixes are rejected with an explicit-path hint. Parameterized or computed prefix values and other pragmas remain unsupported.
+
+```sql
+-- name: GetStagingUser :one
+PRAGMA TablePathPrefix("/database/staging");
+DECLARE $id AS Uint64;
+SELECT u.id, u.name
+FROM users AS u
+WHERE u.id = $id;
+```
+
+The offline catalog must describe the same resolved table path: use this prefix in its schema source or declare the table as `/database/staging/users`. Each named query and each schema source has its own prefix scope. Put the pragma before data or schema statements, and repeat it in every source that needs it. Identical repeated prefixes are accepted; conflicting prefixes are rejected because YDB applies the last value across the whole request rather than changing it statement by statement. Query-file preambles before `-- name:` remain unsupported.
+
+Path resolution is shared by SELECT sources, joins, secondary-index VIEW selection, supported writes and schema migrations. Tables with the same basename in different directories remain distinct catalog entries. Aliases, column names, strings and comments retain their original meaning. Executable SQL retains the pragma and authored table references; wildcard expansion continues to replace only the projection spans. The jOOQ target renders its resolved table identities through the dialect, preserving the pragma's execution context and table mappings.
+
+The prefix is static SQL, not a generated method argument or a runtime environment-variable substitution. To select a different environment, prepare matching schema/query inputs with the intended absolute prefix and regenerate. The [namespaces example](../examples/namespaces) demonstrates two catalogs, indexed reads, writes and a join that bypasses the prefix with an absolute table path. Connected analysis uses the same resolved identities; see [database-assisted analysis](database-analysis.md).
+
 ## Schema migration coverage
 
 Ordinary secondary indexes support `INDEX name GLOBAL [SYNC|ASYNC] ON (key_columns) [COVER (data_columns)]` in CREATE TABLE and `ALTER TABLE ... ADD INDEX`; omitting SYNC/ASYNC selects SYNC. `DROP INDEX` removes the named index from the catalog. `FROM table VIEW index` resolves the index against the underlying table, including quoted names, aliases, joins, wildcard projections and supported SELECT-backed DML. Column types and wildcard order come from the base table. Generated SQL preserves explicit index selection; an unknown index is an error. Vector, unique, local and other specialized index types and index settings are currently unsupported.

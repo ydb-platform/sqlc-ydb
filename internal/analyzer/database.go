@@ -88,12 +88,18 @@ func databaseTableReferences(blocks []queryBlock) ([]databaseTableReference, []m
 			continue
 		}
 		block.parsed = &parsed
+		prefix, prefixDiagnostics := tablePathPrefix(block.file, block.line-1, parsed.tree)
+		diagnostics = append(diagnostics, prefixDiagnostics...)
+		if len(prefixDiagnostics) != 0 {
+			continue
+		}
 		tree := collectQueryTree(parsed.tree)
 		diagnostics = append(diagnostics, validateQueryStatements(*block, tree)...)
 		diagnostics = append(diagnostics, unsupportedSQLCMacroDiagnostics(*block, parsed.tokens)...)
 		_, _, declarationDiagnostics := declarations(*block, tree)
 		diagnostics = append(diagnostics, declarationDiagnostics...)
 		add := func(name string, node antlr.ParserRuleContext) {
+			name = resolveTablePath(prefix, name)
 			if name != "" && !seen[name] {
 				seen[name] = true
 				references = append(references, databaseTableReference{name: name, position: diagnosticAt(block.file, block.line-1, node, "").Position})

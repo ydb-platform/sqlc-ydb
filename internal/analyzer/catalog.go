@@ -25,22 +25,30 @@ func buildCatalog(sources []model.Source) (model.Catalog, []model.Diagnostic) {
 			diagnostics = append(diagnostics, model.Diagnostic{Position: model.Position{File: source.Name, Line: 1, Column: 1}, Message: "unsupported schema query form"})
 			continue
 		}
+		prefix, prefixDiagnostics := tablePathPrefix(source.Name, 0, parsed.tree)
+		diagnostics = append(diagnostics, prefixDiagnostics...)
+		if len(prefixDiagnostics) != 0 {
+			continue
+		}
 		for _, statement := range statementList.AllSql_stmt() {
 			core := statement.Sql_stmt_core()
 			if statement.EXPLAIN() != nil || core == nil {
 				diagnostics = append(diagnostics, diagnosticAt(source.Name, 0, statement, fmt.Sprintf("unsupported schema statement %q; supported statements are CREATE TABLE, ALTER TABLE, and DROP TABLE", statement.GetText())))
 				continue
 			}
+			if core.Pragma_stmt() != nil {
+				continue
+			}
 			if create := core.Create_table_stmt(); create != nil {
-				diagnostics = append(diagnostics, applyCreateTable(&catalog, source.Name, create)...)
+				diagnostics = append(diagnostics, applyCreateTable(&catalog, source.Name, prefix, create)...)
 				continue
 			}
 			if alter := core.Alter_table_stmt(); alter != nil {
-				diagnostics = append(diagnostics, applyAlterTable(&catalog, source.Name, alter)...)
+				diagnostics = append(diagnostics, applyAlterTable(&catalog, source.Name, prefix, alter)...)
 				continue
 			}
 			if drop := core.Drop_table_stmt(); drop != nil {
-				diagnostics = append(diagnostics, applyDropTable(&catalog, source.Name, drop)...)
+				diagnostics = append(diagnostics, applyDropTable(&catalog, source.Name, prefix, drop)...)
 				continue
 			}
 			diagnostics = append(diagnostics, diagnosticAt(source.Name, 0, statement, fmt.Sprintf("unsupported schema statement %q; supported statements are CREATE TABLE, ALTER TABLE, and DROP TABLE", statement.GetText())))
@@ -49,11 +57,11 @@ func buildCatalog(sources []model.Source) (model.Catalog, []model.Diagnostic) {
 	return catalog, diagnostics
 }
 
-func applyCreateTable(catalog *model.Catalog, file string, create parser.ICreate_table_stmtContext) []model.Diagnostic {
+func applyCreateTable(catalog *model.Catalog, file, prefix string, create parser.ICreate_table_stmtContext) []model.Diagnostic {
 	if diagnostic := validateCreateTableShape(file, create); diagnostic != nil {
 		return []model.Diagnostic{*diagnostic}
 	}
-	name := simpleTableName(create.Simple_table_ref())
+	name := resolveTablePath(prefix, simpleTableName(create.Simple_table_ref()))
 	if name != "" {
 		if _, exists := catalogTableIndex(*catalog, name); exists {
 			if create.IF() != nil && create.NOT() != nil && create.EXISTS() != nil {
@@ -64,7 +72,7 @@ func applyCreateTable(catalog *model.Catalog, file string, create parser.ICreate
 			return []model.Diagnostic{diagnosticAt(file, 0, create, fmt.Sprintf("table %q already exists", name))}
 		}
 	}
-	table, diagnostics := catalogTable(file, create)
+	table, diagnostics := catalogTable(file, prefix, create)
 	if len(diagnostics) != 0 {
 		return diagnostics
 	}
@@ -72,11 +80,11 @@ func applyCreateTable(catalog *model.Catalog, file string, create parser.ICreate
 	return nil
 }
 
-func applyDropTable(catalog *model.Catalog, file string, drop parser.IDrop_table_stmtContext) []model.Diagnostic {
+func applyDropTable(catalog *model.Catalog, file, prefix string, drop parser.IDrop_table_stmtContext) []model.Diagnostic {
 	if drop.TABLE() == nil || drop.EXTERNAL() != nil || drop.TABLESTORE() != nil {
 		return []model.Diagnostic{diagnosticAt(file, 0, drop, "only ordinary DROP TABLE is supported")}
 	}
-	name := simpleTableName(drop.Simple_table_ref())
+	name := resolveTablePath(prefix, simpleTableName(drop.Simple_table_ref()))
 	if name == "" {
 		return []model.Diagnostic{diagnosticAt(file, 0, drop, "DROP TABLE has no resolvable table name")}
 	}
@@ -91,8 +99,8 @@ func applyDropTable(catalog *model.Catalog, file string, drop parser.IDrop_table
 	return nil
 }
 
-func applyAlterTable(catalog *model.Catalog, file string, alter parser.IAlter_table_stmtContext) []model.Diagnostic {
-	name := simpleTableName(alter.Simple_table_ref())
+func applyAlterTable(catalog *model.Catalog, file, prefix string, alter parser.IAlter_table_stmtContext) []model.Diagnostic {
+	name := resolveTablePath(prefix, simpleTableName(alter.Simple_table_ref()))
 	if name == "" {
 		return []model.Diagnostic{diagnosticAt(file, 0, alter, "ALTER TABLE has no resolvable table name")}
 	}
@@ -111,7 +119,7 @@ func applyAlterTable(catalog *model.Catalog, file string, alter parser.IAlter_ta
 		}
 	}
 	for _, action := range actions {
-		diagnostics = append(diagnostics, applyAlterTableAction(*catalog, index, &working, file, action)...)
+		diagnostics = append(diagnostics, applyAlterTableAction(*catalog, index, &working, file, prefix, action)...)
 		if len(diagnostics) != 0 {
 			return diagnostics
 		}
@@ -120,7 +128,7 @@ func applyAlterTable(catalog *model.Catalog, file string, alter parser.IAlter_ta
 	return nil
 }
 
-func applyAlterTableAction(catalog model.Catalog, tableIndex int, table *model.Table, file string, action parser.IAlter_table_actionContext) []model.Diagnostic {
+func applyAlterTableAction(catalog model.Catalog, tableIndex int, table *model.Table, file, prefix string, action parser.IAlter_table_actionContext) []model.Diagnostic {
 	if add := action.Alter_table_add_index(); add != nil {
 		index, err := parseTableIndex(add.Table_index())
 		if err == nil {
@@ -178,7 +186,7 @@ func applyAlterTableAction(catalog model.Catalog, tableIndex int, table *model.T
 		return nil
 	}
 	if rename := action.Alter_table_rename_to(); rename != nil {
-		newName := identifier(rename.An_id_table().GetText())
+		newName := resolveTablePath(prefix, identifier(rename.An_id_table().GetText()))
 		if otherIndex, exists := catalogTableIndex(catalog, newName); exists && otherIndex != tableIndex {
 			return []model.Diagnostic{diagnosticAt(file, 0, rename, fmt.Sprintf("table %q already exists", newName))}
 		}
@@ -224,13 +232,13 @@ func validateCreateTableShape(file string, create parser.ICreate_table_stmtConte
 	return nil
 }
 
-func catalogTable(file string, create parser.ICreate_table_stmtContext) (model.Table, []model.Diagnostic) {
+func catalogTable(file, prefix string, create parser.ICreate_table_stmtContext) (model.Table, []model.Diagnostic) {
 	var diagnostics []model.Diagnostic
 	ref := create.Simple_table_ref()
 	if ref == nil || ref.Simple_table_ref_core() == nil {
 		return model.Table{}, []model.Diagnostic{diagnosticAt(file, 0, create, "CREATE TABLE has no resolvable table name")}
 	}
-	table := model.Table{Name: identifier(ref.Simple_table_ref_core().GetText())}
+	table := model.Table{Name: resolveTablePath(prefix, simpleTableName(ref))}
 	columnNames := map[string]bool{}
 	primaryKeyNames := map[string]bool{}
 	primaryKeyDeclarations := 0

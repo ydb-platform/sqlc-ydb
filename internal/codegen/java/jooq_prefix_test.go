@@ -1,0 +1,177 @@
+package java
+
+import (
+	"encoding/base64"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
+	"github.com/ydb-platform/sqlc-ydb/internal/codegen/jdbc"
+	"github.com/ydb-platform/sqlc-ydb/internal/model"
+)
+
+const jooqPrefixSchema = "CREATE TABLE `/local/a/users` (id Uint64 NOT NULL, name Utf8 NOT NULL, INDEX by_name GLOBAL SYNC ON(name), PRIMARY KEY(id));\nCREATE TABLE `/local/b/users` (id Uint64 NOT NULL, name Utf8 NOT NULL, PRIMARY KEY(id));"
+const jooqPrefixPragma = "PRAGMA /* namespace 🚀 {0} */ TablePathPrefix = '/local/a'"
+
+func TestJooqPrefixDSL(t *testing.T) {
+	queries := `-- name: Read :many
+` + jooqPrefixPragma + `;
+-- repeated static prefix stays attached to the statement
+PRAGMA TablePathPrefix('/local/a');
+SELECT users.id FROM users VIEW by_name WHERE users.name = $name;
+-- name: JoinUsers :many
+` + jooqPrefixPragma + `;
+SELECT a.id AS id FROM users AS a JOIN ` + "`/local/b/users`" + ` AS b ON a.id = b.id WHERE a.name = $name;
+-- name: Write :exec
+` + jooqPrefixPragma + `;
+UPSERT INTO users (id, name) VALUES ($id, $name);
+-- name: Remove :one
+` + jooqPrefixPragma + `;
+DELETE FROM users WHERE users.id = $id RETURNING id;
+-- name: ReadPath :many
+` + jooqPrefixPragma + `;
+SELECT ` + "`../a/users`.id FROM `../a/users` WHERE `../a/users`.name = $name;" + `
+`
+	a, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqPrefixSchema}}, []model.Source{{Name: "queries.sql", Text: queries}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := Generate(a, Options{Package: "prefix", Runtime: "jooq"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	code := string(files[len(files)-1].Content)
+	for _, want := range []string{jooqPrefixPragma, `dsl.resultQuery("{0};\n{1}"`, `dsl.query("{0};\n{1}"`, "LOCAL_A_USERS", "LOCAL_B_USERS"} {
+		if !strings.Contains(code, want) {
+			t.Fatalf("missing %q in %s", want, code)
+		}
+	}
+	if strings.Contains(code, "DECLARE") {
+		t.Fatal("inferred parameters must retain DSL bindings", code)
+	}
+	t.Run("published dialect", func(t *testing.T) { runJooqPrefixSDK(t, files) })
+}
+
+func TestJooqPrefixDeclaredSQLBytesThroughJava(t *testing.T) {
+	header := "-- name: Read :many\n" + jooqPrefixPragma + ";\nDECLARE $id AS Uint64;\n-- literals and comments are retained 🪄\n"
+	var program strings.Builder
+	program.WriteString("public class Main { static final String LOCAL_A_USERS = \"`/local/a/mapped_users`\", LOCAL_B_USERS = \"`/local/b/mapped_users`\"; static final Main dsl = new Main(); String render(String table) { return table; } public static void main(String[] args) {\n")
+	for i, tc := range []struct{ sql, want string }{
+		{"SELECT users.id FROM users WHERE users.id = $id;", "SELECT users.id FROM `/local/a/mapped_users` AS `users` WHERE users.id = $id;"},
+		{"SELECT users.id FROM users /* index 🐘 */ VIEW by_name WHERE users.id = $id;", "SELECT users.id FROM `/local/a/mapped_users` /* index 🐘 */ VIEW by_name AS `users` WHERE users.id = $id;"},
+		{"SELECT a.id AS id FROM users AS a JOIN `/local/b/users` AS b ON a.id = b.id WHERE a.id = $id;", "SELECT a.id AS id FROM `/local/a/mapped_users` AS a JOIN `/local/b/mapped_users` AS b ON a.id = b.id WHERE a.id = $id;"},
+		{"DELETE FROM users WHERE users.id = $id RETURNING id;", "DELETE FROM `/local/a/mapped_users` WHERE `/local/a/mapped_users`.id = $id RETURNING id;"},
+		{"SELECT users.id, 'users /local/a/users'u AS label FROM users WHERE users.id = $id;", "SELECT users.id, 'users /local/a/users'u AS label FROM `/local/a/mapped_users` AS `users` WHERE users.id = $id;"},
+		{"SELECT `../a/users`.id FROM `../a/users` WHERE `../a/users`.id = $id;", "SELECT `../a/users`.id FROM `/local/a/mapped_users` AS `../a/users` WHERE `../a/users`.id = $id;"},
+		{"UPSERT INTO users SELECT users.id AS id, users.name AS name FROM users WHERE users.id = $id;", "UPSERT INTO `/local/a/mapped_users` SELECT users.id AS id, users.name AS name FROM `/local/a/mapped_users` AS `users` WHERE users.id = $id;"},
+	} {
+		annotation := header
+		if strings.HasPrefix(tc.sql, "UPSERT") {
+			annotation = strings.Replace(header, ":many", ":exec", 1)
+		}
+		a, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqPrefixSchema}}, []model.Source{{Name: "q.sql", Text: annotation + tc.sql}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		q := a.Queries[0]
+		sql, _ := jdbc.SQL(q)
+		expression, err := jooqDeclaredSQL(q, sql)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := strings.TrimPrefix(header, "-- name: Read :many\n") + tc.want
+		fmt.Fprintf(&program, "if (!java.util.Base64.getEncoder().encodeToString((%s).getBytes(java.nio.charset.StandardCharsets.UTF_8)).equals(%q)) throw new AssertionError(\"case %d\");\n", expression, base64.StdEncoding.EncodeToString([]byte(want)), i)
+	}
+	program.WriteString("}}")
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Main.java"), []byte(program.String()), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"javac", "--release", "17", "Main.java"}, {"java", "-cp", dir, "Main"}} {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%s: %v\n%s\n%s", args[0], err, out, program.String())
+		}
+	}
+}
+
+func runJooqPrefixSDK(t *testing.T, files []model.File) {
+	t.Helper()
+	maven := os.Getenv("SQLC_YDB_TEST_MAVEN")
+	if maven == "" {
+		t.Skip("set SQLC_YDB_TEST_MAVEN to execute prefixed queries against the published dialect")
+	}
+	dir := t.TempDir()
+	classpath := filepath.Join(dir, "classpath")
+	cmd := exec.Command(maven, "-q", "dependency:build-classpath", "-Dmdep.outputFile="+classpath)
+	cmd.Dir = filepath.Join("..", "..", "..", "tests", "examples", "java", "jooq")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("SDK classpath: %v\n%s", err, out)
+	}
+	cp, err := os.ReadFile(classpath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	program := `package prefix;
+import java.util.*;
+import org.jooq.conf.*;
+import org.jooq.tools.jdbc.*;
+import org.jooq.types.ULong;
+import tech.ydb.jooq.YDB;
+import tech.ydb.table.values.PrimitiveValue;
+public class Main {
+    public static void main(String[] args) throws Exception {
+        for (String target : List.of("mapped_users", "/local/mapped/users")) {
+            var statements = new ArrayList<String>();
+            try (var connection = new MockConnection(ctx -> {
+                String sql = ctx.sql();
+                statements.add(sql);
+                if (!sql.startsWith("` + jooqPrefixPragma + `;") || !sql.contains("` + "`" + `" + target + "` + "`" + `")) throw new AssertionError(sql);
+                Object[] want = switch (statements.size()) {
+                    case 1, 2, 5 -> new Object[]{"Name"};
+                    case 3 -> new Object[]{PrimitiveValue.newUint64(-1L), "Name"};
+                    case 4 -> new Object[]{PrimitiveValue.newUint64(-1L)};
+                    default -> throw new AssertionError("extra execution " + sql);
+                };
+                if (!Arrays.equals(ctx.bindings(), want)) throw new AssertionError(Arrays.toString(ctx.bindings()) + " type=" + ctx.bindings()[0].getClass() + " SQL=" + sql);
+                if (statements.size() == 3 && !sql.contains("into ` + "`" + `" + target + "` + "`" + ` (` + "`id`, `name`" + `)")) throw new AssertionError(sql);
+                if (statements.size() == 3) return new MockResult[]{new MockResult(1)};
+                var dsl = YDB.using();
+                var result = dsl.newResult(Tables.LOCAL_A_USERS.ID);
+                result.add(dsl.newRecord(Tables.LOCAL_A_USERS.ID).values(ULong.MAX));
+                return new MockResult[]{new MockResult(1, result)};
+            })) {
+                var settings = new Settings().withRenderMapping(new RenderMapping().withSchemata(new MappedSchema().withInput("").withTables(
+                        new MappedTable().withInput("/local/a/users").withOutput(target), new MappedTable().withInput("/local/b/users").withOutput("/local/b/mapped"))));
+                var queries = new Queries(YDB.using(connection, settings));
+                if (!queries.read("Name").get(0).id().equals(ULong.MAX)) throw new AssertionError("read");
+                if (!queries.joinUsers("Name").get(0).id().equals(ULong.MAX)) throw new AssertionError("join");
+                queries.write(ULong.MAX, "Name");
+                if (!queries.remove(ULong.MAX).orElseThrow().id().equals(ULong.MAX)) throw new AssertionError("returning");
+                if (!queries.readPath("Name").get(0).id().equals(ULong.MAX)) throw new AssertionError("relative path");
+                if (statements.size() != 5 || !statements.get(0).contains("VIEW ` + "`by_name`" + `") || !statements.get(1).contains("` + "`/local/b/mapped`" + `")) throw new AssertionError(statements);
+                if (!statements.get(0).contains("-- repeated static prefix stays attached to the statement\nPRAGMA TablePathPrefix('/local/a');") || !statements.get(4).contains("` + "`../a/users`.`id`" + `")) throw new AssertionError(statements);
+            }
+        }
+    }
+}`
+	files = append(files, model.File{Name: "Main.java", Content: []byte(program)})
+	compile := []string{"-cp", strings.TrimSpace(string(cp)), "-d", dir}
+	for _, file := range files {
+		path := filepath.Join(dir, file.Name)
+		if err := os.WriteFile(path, file.Content, 0600); err != nil {
+			t.Fatal(err)
+		}
+		compile = append(compile, path)
+	}
+	for _, args := range [][]string{append([]string{"javac"}, compile...), {"java", "-cp", dir + string(os.PathListSeparator) + strings.TrimSpace(string(cp)), "prefix.Main"}} {
+		if out, err := exec.Command(args[0], args[1:]...).CombinedOutput(); err != nil {
+			t.Fatalf("%s: %v\n%s", args[0], err, out)
+		}
+	}
+}

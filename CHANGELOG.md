@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Support static absolute TablePathPrefix pragmas in named queries and schema sources, with consistent offline and connected table resolution, preserved SQL execution context and namespaced models. Add a namespaces example for every language/runtime profile.
+
 ## v0.2.4
 
 ### Added

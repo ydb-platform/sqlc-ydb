@@ -4,6 +4,12 @@ This maintainer reference records API snapshots and non-obvious SDK behavior use
 
 Language-level generated API, value mappings and ownership contracts remain in the public guides under `docs/`. C++ build details are in [C++ development](cpp-development.md), and additional C# source evidence is in [C# SDK evidence](csharp-sdk-evidence.md).
 
+## TablePathPrefix execution
+
+On 2026-09-23, the Java generator's pinned SDK tests and `TestLiveYDBTablePathPrefix` validated jOOQ 3.21.0, YDB dialect 2.0.0 and JDBC 2.4.1 with static absolute prefixes. Non-declared queries retain the typed DSL statement as a QueryPart in `dsl.query`/`dsl.resultQuery`, preceded by the exact pragma source; result queries use typed `Field` coercions. This preserves typed binds and the same prefix context as the existing declared JDBC path, including relative RenderMapping outputs. Absolute mapped paths bypass the pragma. Rendering a resolved table path and dropping the pragma would change relative mappings; replacing the prefix with an empty string would change YDB's path root. The static wrapper avoids both without generated runtime path heuristics.
+
+The live suite used `ydbplatform/local-ydb:26.3.1.16` (`sha256:32687d3bc4b7a3e4200e2142800e5fc2e91d48ba46160ea094e9f1ce56794c12`) and also exercised generated native Go/database/sql clients using SDK v3.151.1. It verified actual returned values and writes, including namespace isolation, VIEW, cross-namespace SELECT-backed writes and typed Uint64 boundaries. Compiler/mock checks remain distinct from these server execution checks.
+
 ## Go error stack traces
 
 Checked against the pinned Go SDK 3.151.1 on 2026-09-13: [`pkg/xerrors.WithStackTrace`](https://github.com/ydb-platform/ydb-go-sdk/blob/v3.151.1/pkg/xerrors/stacktrace.go) delegates to the [internal wrapper](https://github.com/ydb-platform/ydb-go-sdk/blob/v3.151.1/internal/xerrors/stacktrace.go), which returns `nil` for `nil`, records the caller location and exposes the original error through `Unwrap`. Generated native methods and Decimal validation helpers wrap returned errors; `database/sql` retains its error behavior. `TestGeneratedYDBErrorStackTraces` compiles separate `:one`, `:many` and `:exec` files against this SDK and executes failure paths to verify generated locations, `errors.Is`/`errors.As`, Decimal validation and successful `Exec` returning `nil`.

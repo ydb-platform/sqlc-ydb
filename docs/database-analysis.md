@@ -23,6 +23,8 @@ Set `YDB_CONNECTION_STRING` to a URI such as `grpc://localhost:2136/local`, then
 
 DescribeTable also supplies ordinary global synchronous/asynchronous indexes, their ordered key columns and covering columns. `FROM table VIEW index` discovers the base table and validates the selected index against that metadata. Unsupported index kinds fail discovery with an actionable error, even when the query does not select that index; they are never treated as ordinary indexes or omitted silently.
 
+With a supported absolute `PRAGMA TablePathPrefix`, discovery resolves each relative table reference under that prefix before calling DescribeTable. Explicit absolute table paths bypass the prefix. Offline catalog lookup, live discovery and schema-drift checks use the same resolved identities, including tables with identical basenames in different directories. Local schema sources must resolve to those same paths. EXPLAIN and generated executable SQL retain the source pragma; the compiler does not infer a prefix from `database.uri` or substitute a runtime value. See [table path resolution](compatibility.md#table-path-resolution) for accepted forms and source scopes.
+
 The existing semantic analyzer resolves parameters and query projections against this catalog. Database discovery does not add support for expressions, functions, CTEs or other syntax outside the [current analyzer coverage](compatibility.md#current-analyzer-coverage). In particular, connecting to YDB does not make a computed projection supported automatically.
 
 ## Check a local schema against YDB

@@ -442,7 +442,7 @@ func TestJooqMappingHelpersRejectInvalidTableNames(t *testing.T) {
 		t.Fatalf("invalid table produced SQL %q, error %v", sql, r.err)
 	}
 	text, _ := jdbc.SQL(q)
-	if sql, err := jooqDeclaredSQL(q, text); sql != "" || err == nil || err.Error() != "cannot represent \"a``b\" as a Java identifier" {
+	if sql, err := jooqDeclaredSQL(q, text); sql != "" || err == nil || err.Error() != "cannot represent \"a`b\" as a Java identifier" {
 		t.Fatalf("invalid declared table produced SQL %q, error %v", sql, err)
 	}
 }

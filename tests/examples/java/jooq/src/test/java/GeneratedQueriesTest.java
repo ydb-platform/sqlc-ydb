@@ -24,7 +24,7 @@ class GeneratedQueriesTest {
             return new MockResult[] {new MockResult(0, DSL.using(YDB.DIALECT).newResult())};
         })) {
             var dsl = YDB.using(withNamedBinding(connection));
-            for (String family : List.of("authors", "batch", "booktest", "jets", "ondeck")) {
+            for (String family : List.of("authors", "batch", "booktest", "jets", "ondeck", "namespaces")) {
                 Class<?> type = Class.forName(family + ".jooq.Queries");
                 Object queries = type.getConstructor(tech.ydb.jooq.YdbDSLContext.class).newInstance(dsl);
                 for (Method method : type.getDeclaredMethods()) {
@@ -65,7 +65,7 @@ class GeneratedQueriesTest {
                 }
             }
         }
-        assertEquals(46, statements.size());
+        assertEquals(52, statements.size());
     }
     @Test
     void declaredQueryReadsDialectCarriers() throws Exception {
