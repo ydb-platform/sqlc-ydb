@@ -311,4 +311,16 @@ public final class Queries {
             _prepared.execute();
         }
     }
+
+    // -- name: DeleteAuthorWithBooks :exec
+    public void deleteAuthorWithBooks(long authorId) throws java.sql.SQLException {
+        try (var _prepared = client.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+            DECLARE $author_id AS Uint64;
+            DELETE FROM books WHERE author_id = $author_id;
+            DELETE FROM authors WHERE author_id = $author_id;\
+            """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+            _prepared.setObject("author_id", PrimitiveValue.newUint64(authorId));
+            _prepared.execute();
+        }
+    }
 }

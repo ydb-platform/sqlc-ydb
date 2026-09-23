@@ -70,10 +70,13 @@ class GeneratedQueriesTest {
                         assertTrue(sql.contains("Yson::ConvertToStringList"), sql);
                         assertTrue(sql.toLowerCase().contains("left outer join") || sql.toLowerCase().contains("left join"), sql);
                     }
+                    if (method.getName().equals("deleteAuthorWithBooks")) {
+                        assertEquals("DECLARE $author_id AS Uint64;\nDELETE FROM `books` WHERE author_id = $author_id;\nDELETE FROM `authors` WHERE author_id = $author_id;", sql);
+                    }
                 }
             }
         }
-        assertEquals(58, statements.size());
+        assertEquals(59, statements.size());
     }
     @Test
     void declaredQueryReadsDialectCarriers() throws Exception {

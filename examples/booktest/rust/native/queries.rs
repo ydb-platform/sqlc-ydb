@@ -368,4 +368,17 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
             .param("$author_name", author_name)
             .await
     }
+
+    // -- name: DeleteAuthorWithBooks :exec
+    #[builder(on(String, into))]
+    pub async fn delete_author_with_books(&mut self, author_id: u64) -> ydb::YdbResult<()> {
+        self.client
+            .exec(concat!(
+                "DECLARE $author_id AS Uint64;\n",
+                "DELETE FROM books WHERE author_id = $author_id;\n",
+                "DELETE FROM authors WHERE author_id = $author_id;",
+            ))
+            .param("$author_id", author_id)
+            .await
+    }
 }

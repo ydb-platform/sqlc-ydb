@@ -187,6 +187,38 @@ func TestGeneratedExample(t *testing.T) {
 			t.Fatalf("DeleteBook(%d) left a row", id)
 		}
 	}
+	for _, authorID := range []uint64{100, 999} {
+		if _, err := s.CreateBook(ctx, sq.CreateBookParams{
+			BookID: authorID + 1000, AuthorID: authorID, Isbn: "cleanup", BookType: "FICTION",
+			Title: "Author cleanup", PublicationYear: 2026, Available: available, Tags: `[]`,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := n.DeleteAuthorWithBooks(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetBook(ctx, 1100); err == nil {
+		t.Fatal("native DeleteAuthorWithBooks left the book")
+	}
+	if _, err := s.GetAuthor(ctx, 100); err == nil {
+		t.Fatal("native DeleteAuthorWithBooks left the author")
+	}
+	if _, err := n.GetBook(ctx, 1999); err != nil {
+		t.Fatalf("DeleteAuthorWithBooks removed another author's book: %v", err)
+	}
+	if _, err := n.GetAuthor(ctx, 999); err != nil {
+		t.Fatalf("DeleteAuthorWithBooks removed another author: %v", err)
+	}
+	if err := s.DeleteAuthorWithBooks(ctx, 999); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := n.GetBook(ctx, 1999); err == nil {
+		t.Fatal("database/sql DeleteAuthorWithBooks left the book")
+	}
+	if _, err := n.GetAuthor(ctx, 999); err == nil {
+		t.Fatal("database/sql DeleteAuthorWithBooks left the author")
+	}
 }
 
 func sameJSON(left, right string) bool {

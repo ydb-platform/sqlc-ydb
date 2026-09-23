@@ -35,6 +35,7 @@ public:
     std::vector<ListAuthorsWithRecentBooksRow> ListAuthorsWithRecentBooks(std::int32_t since_year) const;
     std::vector<ListBooksWithRecentEditionsRow> ListBooksWithRecentEditions(std::int32_t since_year) const;
     void DeleteBooksByAuthorName(const ::userver::ydb::Utf8& author_name) const;
+    void DeleteAuthorWithBooks(std::uint64_t author_id) const;
 
 private:
     ::userver::ydb::TableClient* client_;

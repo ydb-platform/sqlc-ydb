@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 
@@ -68,18 +69,13 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	if diagnostics = unsupportedSQLCMacroDiagnostics(block, parsed.tokens); len(diagnostics) != 0 {
 		return query, diagnostics
 	}
-	diagnostics = append(diagnostics, validateQueryStatements(block, tree)...)
+	if diagnostics = validateQueryStatements(block, tree); len(diagnostics) != 0 {
+		return query, diagnostics
+	}
 	if contextDiagnostics := validateINSubqueryContexts(block, parsed.tree); len(contextDiagnostics) != 0 {
 		return query, append(diagnostics, contextDiagnostics...)
 	}
 	selectStatement := topLevelSelect(tree.statements)
-	dataStatements := len(tree.insert) + len(tree.updates) + len(tree.deletes)
-	if selectStatement != nil {
-		dataStatements++
-	}
-	if dataStatements != 1 {
-		return query, []model.Diagnostic{diagnosticAt(block.file, block.line-1, parsed.tree, fmt.Sprintf("query must contain exactly one supported SELECT, INSERT/UPSERT, UPDATE, or DELETE statement; found %d", dataStatements))}
-	}
 
 	if block.command == model.Each && selectStatement == nil {
 		return query, []model.Diagnostic{{Position: query.Source, Message: ":each requires a SELECT; use :one or :many for DML RETURNING"}}
@@ -104,6 +100,63 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		bindings[name] = typeValue
 	}
 	inferred := map[string]model.Type{}
+	var resultColumns []model.Column
+	for _, statement := range tree.statements {
+		core := statement.Sql_stmt_core()
+		if core.Select_stmt() == nil && core.Into_table_stmt() == nil && core.Update_stmt() == nil && core.Delete_stmt() == nil {
+			continue
+		}
+		columns, ds := analyzeDataStatement(catalog, block, statement, bindings, inferred, query.Syntax)
+		diagnostics = append(diagnostics, ds...)
+		if len(ds) != 0 && columns == nil && containsINSubquery(statement) {
+			return query, diagnostics
+		}
+		resultColumns = columns
+	}
+
+	for name, localType := range localTypes {
+		if usedType, ok := inferred[name]; ok {
+			message := ""
+			if usedType.Kind == "" {
+				message = fmt.Sprintf("local $%s is constrained by incompatible column types", name)
+			} else if !compatibleTypes(localType, usedType) {
+				message = fmt.Sprintf("local $%s has type %s but is used with %s", name, localType.String(), usedType.String())
+			}
+			if message != "" {
+				diagnostics = append(diagnostics, model.Diagnostic{Position: model.Position{File: block.file, Line: block.line, Column: 1}, Message: message})
+			}
+		}
+	}
+
+	parameters, parameterDiagnostics := externalParameters(block, tree.binds, declared, inferred, declarationPositions, localPositions, localNames)
+	diagnostics = append(diagnostics, parameterDiagnostics...)
+	query.Parameters = parameters
+
+	for _, column := range resultColumns {
+		if column.Type.Kind == "Null" {
+			diagnostics = append(diagnostics, model.Diagnostic{Position: query.Source, Message: fmt.Sprintf("result column %q has unresolved Null type; cast it or combine it with a concrete compatible type", column.Name)})
+		}
+	}
+	returnsRows := len(resultColumns) != 0
+	if len(diagnostics) == 0 {
+		if (block.command == model.One || block.command == model.Many || block.command == model.Each) && !returnsRows {
+			diagnostics = append(diagnostics, model.Diagnostic{Position: query.Source, Message: fmt.Sprintf("command %s requires a result set", block.command)})
+		}
+		if (block.command == model.Exec || block.command == model.ExecRows) && returnsRows {
+			diagnostics = append(diagnostics, model.Diagnostic{Position: query.Source, Message: fmt.Sprintf("command %s cannot be used with a row-returning statement", block.command)})
+		}
+	}
+	if returnsRows {
+		query.ResultSets = []model.ResultSet{{Columns: resultColumns}}
+	}
+	return query, diagnostics
+}
+
+func analyzeDataStatement(catalog model.Catalog, block queryBlock, statement *parser.Sql_stmtContext, bindings, inferred map[string]model.Type, syntax *model.QuerySyntax) ([]model.Column, []model.Diagnostic) {
+	bindings = maps.Clone(bindings)
+	tree := collectQueryTree(statement)
+	selectStatement := topLevelSelect(tree.statements)
+	var diagnostics []model.Diagnostic
 	var relations []relation
 	var resultColumns []model.Column
 	var target *model.Table
@@ -116,11 +169,11 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		cores, partials, selectDiagnostics = selectArms(block, selectStatement)
 		diagnostics = append(diagnostics, selectDiagnostics...)
 		for i, core := range cores {
-			columns, armDiagnostics := analyzeSelectCore(catalog, block, core, partials[i], bindings, inferred, query.Syntax, selectProjection)
+			columns, armDiagnostics := analyzeSelectCore(catalog, block, core, partials[i], bindings, inferred, syntax, selectProjection)
 			diagnostics = append(diagnostics, armDiagnostics...)
 			if len(armDiagnostics) != 0 {
 				if columns == nil && containsINSubquery(core) {
-					return query, diagnostics
+					return nil, diagnostics
 				}
 				continue
 			}
@@ -148,28 +201,28 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	}
 
 	if selectStatement == nil && len(relations) != 0 && !(len(tree.insert) == 1 && insertSelect(tree.insert[0]) != nil) && !(len(tree.updates) == 1 && updateSelect(tree.updates[0]) != nil) && !(len(tree.deletes) == 1 && deleteSelect(tree.deletes[0]) != nil) {
-		recordColumnBindings(query.Syntax, parsed.tree, relations)
-		diagnostics = append(diagnostics, validateColumnReferences(block, parsed.tree, relations, nil)...)
-		inferFromComparisons(parsed.tree, relations, inferred)
-		inferFromInLists(parsed.tree, relations, inferred)
+		recordColumnBindings(syntax, statement, relations)
+		diagnostics = append(diagnostics, validateColumnReferences(block, statement, relations, nil)...)
+		inferFromComparisons(statement, relations, inferred)
+		inferFromInLists(statement, relations, inferred)
 		for name, typeValue := range inferred {
 			if _, exists := bindings[name]; !exists && typeValue.Kind != "" {
 				bindings[name] = typeValue
 			}
 		}
-		subqueries, ds := analyzeINSubqueries(catalog, block, parsed.tree, relations, bindings, inferred, query.Syntax)
+		subqueries, ds := analyzeINSubqueries(catalog, block, statement, relations, bindings, inferred, syntax)
 		diagnostics = append(diagnostics, ds...)
 		if len(ds) != 0 {
-			return query, diagnostics
+			return nil, diagnostics
 		}
-		diagnostics = append(diagnostics, validatePredicateContexts(block, parsed.tree, relations, bindings, subqueries)...)
+		diagnostics = append(diagnostics, validatePredicateContexts(block, statement, relations, bindings, subqueries)...)
 	}
 	if target != nil && len(tree.insert) == 1 {
 		if stmt := insertSelect(tree.insert[0]); stmt != nil {
-			ds := analyzeInsertSelect(catalog, block, tree.insert[0], target, bindings, inferred, query.Syntax)
+			ds := analyzeInsertSelect(catalog, block, tree.insert[0], target, bindings, inferred, syntax)
 			diagnostics = append(diagnostics, ds...)
 			if len(ds) != 0 && containsINSubquery(stmt) {
-				return query, diagnostics
+				return nil, diagnostics
 			}
 		} else {
 			diagnostics = append(diagnostics, inferInsert(block, tree.insert[0], target, bindings, inferred)...)
@@ -180,10 +233,10 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 			if tree.updates[0].Into_values_source().Pure_column_list() != nil {
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, tree.updates[0].Into_values_source().Pure_column_list(), "UPDATE ON SELECT with an explicit source column list is unsupported"))
 			} else {
-				ds := analyzeNamedDMLSelect(catalog, block, stmt, tree.updates[0], target, bindings, inferred, query.Syntax)
+				ds := analyzeNamedDMLSelect(catalog, block, stmt, tree.updates[0], target, bindings, inferred, syntax)
 				diagnostics = append(diagnostics, ds...)
 				if len(ds) != 0 && containsINSubquery(stmt) {
-					return query, diagnostics
+					return nil, diagnostics
 				}
 			}
 		} else if tree.updates[0].ON() != nil {
@@ -197,34 +250,16 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 			if tree.deletes[0].Into_values_source().Pure_column_list() != nil {
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, tree.deletes[0].Into_values_source().Pure_column_list(), "DELETE ON SELECT with an explicit source column list is unsupported"))
 			} else {
-				ds := analyzeNamedDMLSelect(catalog, block, stmt, tree.deletes[0], target, bindings, inferred, query.Syntax)
+				ds := analyzeNamedDMLSelect(catalog, block, stmt, tree.deletes[0], target, bindings, inferred, syntax)
 				diagnostics = append(diagnostics, ds...)
 				if len(ds) != 0 && containsINSubquery(stmt) {
-					return query, diagnostics
+					return nil, diagnostics
 				}
 			}
 		} else if tree.deletes[0].ON() != nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, tree.deletes[0], "DELETE ON currently requires a SELECT source"))
 		}
 	}
-	for name, localType := range localTypes {
-		if usedType, ok := inferred[name]; ok {
-			message := ""
-			if usedType.Kind == "" {
-				message = fmt.Sprintf("local $%s is constrained by incompatible column types", name)
-			} else if !compatibleTypes(localType, usedType) {
-				message = fmt.Sprintf("local $%s has type %s but is used with %s", name, localType.String(), usedType.String())
-			}
-			if message != "" {
-				diagnostics = append(diagnostics, model.Diagnostic{Position: model.Position{File: block.file, Line: block.line, Column: 1}, Message: message})
-			}
-		}
-	}
-
-	parameters, parameterDiagnostics := externalParameters(block, tree.binds, declared, inferred, declarationPositions, localPositions, localNames)
-	diagnostics = append(diagnostics, parameterDiagnostics...)
-	query.Parameters = parameters
-
 	if target != nil {
 		var returning parser.IReturning_columns_listContext
 		switch {
@@ -236,29 +271,13 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 			returning = tree.deletes[0].Returning_columns_list()
 		}
 		if returning != nil {
-			resultColumns, parameterDiagnostics = returningProjection(block, returning, target)
-			diagnostics = append(diagnostics, parameterDiagnostics...)
+			var ds []model.Diagnostic
+			resultColumns, ds = returningProjection(block, returning, target)
+			diagnostics = append(diagnostics, ds...)
 		}
 	}
 
-	for _, column := range resultColumns {
-		if column.Type.Kind == "Null" {
-			diagnostics = append(diagnostics, model.Diagnostic{Position: query.Source, Message: fmt.Sprintf("result column %q has unresolved Null type; cast it or combine it with a concrete compatible type", column.Name)})
-		}
-	}
-	returnsRows := len(resultColumns) != 0
-	if len(diagnostics) == 0 {
-		if (block.command == model.One || block.command == model.Many || block.command == model.Each) && !returnsRows {
-			diagnostics = append(diagnostics, model.Diagnostic{Position: query.Source, Message: fmt.Sprintf("command %s requires a result set", block.command)})
-		}
-		if (block.command == model.Exec || block.command == model.ExecRows) && returnsRows {
-			diagnostics = append(diagnostics, model.Diagnostic{Position: query.Source, Message: fmt.Sprintf("command %s cannot be used with a row-returning statement", block.command)})
-		}
-	}
-	if returnsRows {
-		query.ResultSets = []model.ResultSet{{Columns: resultColumns}}
-	}
-	return query, diagnostics
+	return resultColumns, diagnostics
 }
 
 func inferFromExpressionContexts(root antlr.Tree, declared, inferred map[string]model.Type) {
@@ -323,7 +342,8 @@ func inferFromConcatenation(concatenation *parser.Mul_subexprContext, declared, 
 
 func validateQueryStatements(block queryBlock, tree queryTree) []model.Diagnostic {
 	var diagnostics []model.Diagnostic
-	mainStatements := 0
+	var dataStatements []*parser.Sql_stmtContext
+	var lateBinding antlr.ParserRuleContext
 	for _, statement := range tree.statements {
 		core := statement.Sql_stmt_core()
 		if statement.EXPLAIN() != nil {
@@ -335,18 +355,49 @@ func validateQueryStatements(block queryBlock, tree queryTree) []model.Diagnosti
 			continue
 		}
 		switch {
-		case core.Declare_stmt() != nil, core.Pragma_stmt() != nil:
-		case core.Named_nodes_stmt() != nil:
+		case core.Pragma_stmt() != nil:
+		case core.Declare_stmt() != nil, core.Named_nodes_stmt() != nil:
+			if len(dataStatements) != 0 && lateBinding == nil {
+				lateBinding = statement
+			}
 		case core.Select_stmt() != nil, core.Into_table_stmt() != nil, core.Update_stmt() != nil, core.Delete_stmt() != nil:
-			mainStatements++
+			dataStatements = append(dataStatements, statement)
 		default:
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, fmt.Sprintf("unsupported statement in named query: %q", statement.GetText())))
 		}
 	}
-	if mainStatements != 1 {
-		diagnostics = append(diagnostics, model.Diagnostic{Position: model.Position{File: block.file, Line: block.line, Column: 1}, Message: fmt.Sprintf("named query must have exactly one top-level data statement; found %d", mainStatements)})
+	if len(diagnostics) != 0 {
+		return diagnostics
 	}
-	return diagnostics
+	if len(dataStatements) == 0 {
+		return []model.Diagnostic{{Position: model.Position{File: block.file, Line: block.line, Column: 1}, Message: "named query requires a SELECT, INSERT/UPSERT, UPDATE, or DELETE statement"}}
+	}
+	if len(dataStatements) == 1 {
+		return nil
+	}
+	if block.command != model.Exec {
+		return []model.Diagnostic{diagnosticAt(block.file, block.line-1, dataStatements[0], "multiple data statements require :exec")}
+	}
+	for _, statement := range dataStatements {
+		core := statement.Sql_stmt_core()
+		if core.Select_stmt() != nil ||
+			core.Into_table_stmt() != nil && core.Into_table_stmt().Returning_columns_list() != nil ||
+			core.Update_stmt() != nil && core.Update_stmt().Returning_columns_list() != nil ||
+			core.Delete_stmt() != nil && core.Delete_stmt().Returning_columns_list() != nil {
+			return []model.Diagnostic{diagnosticAt(block.file, block.line-1, statement, "multi-statement queries support only INSERT/UPSERT, UPDATE, and DELETE without RETURNING")}
+		}
+	}
+	if lateBinding != nil {
+		return []model.Diagnostic{diagnosticAt(block.file, block.line-1, lateBinding, "DECLARE and scalar local assignments must precede all data statements in a script")}
+	}
+	if len(tree.named) != 0 {
+		for _, declaration := range tree.declares {
+			if declaration.GetStart().GetTokenIndex() > tree.named[0].GetStart().GetTokenIndex() {
+				return []model.Diagnostic{diagnosticAt(block.file, block.line-1, declaration, "DECLARE statements must precede scalar local assignments in a script")}
+			}
+		}
+	}
+	return nil
 }
 
 func declarations(block queryBlock, tree queryTree) (map[string]model.Type, map[int]bool, []model.Diagnostic) {

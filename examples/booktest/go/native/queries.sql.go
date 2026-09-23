@@ -526,3 +526,21 @@ func (q *Queries) DeleteBooksByAuthorName(ctx context.Context, arg string, opts 
 
 	return xerrors.WithStackTrace(err)
 }
+
+// -- name: DeleteAuthorWithBooks :exec
+func (q *Queries) DeleteAuthorWithBooks(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$author_id").Uint64(arg)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	err := q.db.Exec(ctx, ""+
+		"DECLARE $author_id AS Uint64;\n"+
+		"DELETE FROM books WHERE author_id = $author_id;\n"+
+		"DELETE FROM authors WHERE author_id = $author_id;",
+		callOptions...,
+	)
+
+	return xerrors.WithStackTrace(err)
+}

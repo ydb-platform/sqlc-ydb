@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Support multiple DML statements under one `:exec` annotation, with shared parameter types and one execution of the complete script. Add generated author-and-books deletion examples for every booktest runtime profile.
+
 ## v0.2.7
 
 ### Added

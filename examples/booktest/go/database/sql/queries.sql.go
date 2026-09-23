@@ -348,3 +348,15 @@ func (q *Queries) DeleteBooksByAuthorName(ctx context.Context, arg string) error
 
 	return err
 }
+
+// -- name: DeleteAuthorWithBooks :exec
+func (q *Queries) DeleteAuthorWithBooks(ctx context.Context, arg uint64) error {
+	_, err := q.db.ExecContext(ctx, ""+
+		"DECLARE $author_id AS Uint64;\n"+
+		"DELETE FROM books WHERE author_id = $author_id;\n"+
+		"DELETE FROM authors WHERE author_id = $author_id;",
+		sql.Named("author_id", arg),
+	)
+
+	return err
+}

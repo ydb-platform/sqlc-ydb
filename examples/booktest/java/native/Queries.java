@@ -314,4 +314,15 @@ public final class Queries {
             WHERE author_id IN (SELECT author_id FROM authors WHERE name = $author_name);\
             """, _params).execute().join().getStatus().expectSuccess();
     }
+
+    // -- name: DeleteAuthorWithBooks :exec
+    public void deleteAuthorWithBooks(long authorId) {
+        var _params = Params.create();
+        _params.put("$author_id", PrimitiveValue.newUint64(authorId));
+        client.createQuery("""
+            DECLARE $author_id AS Uint64;
+            DELETE FROM books WHERE author_id = $author_id;
+            DELETE FROM authors WHERE author_id = $author_id;\
+            """, _params).execute().join().getStatus().expectSuccess();
+    }
 }

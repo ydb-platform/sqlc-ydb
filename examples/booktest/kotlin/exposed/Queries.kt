@@ -304,4 +304,16 @@ class Queries(private val client: org.jetbrains.exposed.v1.jdbc.JdbcTransaction)
             _prepared.execute()
         }
     }
+
+    // -- name: DeleteAuthorWithBooks :exec
+    fun deleteAuthorWithBooks(authorId: Long): Unit {
+        val _connection = client.connection.connection as java.sql.Connection
+        _connection.unwrap(tech.ydb.jdbc.YdbConnection::class.java).prepareStatement(
+            "DECLARE \$author_id AS Uint64;\n" +
+            "DELETE FROM books WHERE author_id = \$author_id;\n" +
+            "DELETE FROM authors WHERE author_id = \$author_id;", tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY).use { _prepared ->
+            _prepared.setObject("author_id", PrimitiveValue.newUint64(authorId))
+            _prepared.execute()
+        }
+    }
 }

@@ -290,4 +290,15 @@ class Queries(private val client: java.sql.Connection) {
             _prepared.execute()
         }
     }
+
+    // -- name: DeleteAuthorWithBooks :exec
+    fun deleteAuthorWithBooks(authorId: Long): Unit {
+        client.unwrap(tech.ydb.jdbc.YdbConnection::class.java).prepareStatement(
+            "DECLARE \$author_id AS Uint64;\n" +
+            "DELETE FROM books WHERE author_id = \$author_id;\n" +
+            "DELETE FROM authors WHERE author_id = \$author_id;", tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY).use { _prepared ->
+            _prepared.setObject("author_id", PrimitiveValue.newUint64(authorId))
+            _prepared.execute()
+        }
+    }
 }

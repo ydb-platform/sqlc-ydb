@@ -132,4 +132,5 @@ type Querier interface {
 	ListAuthorsWithRecentBooks(ctx context.Context, arg int32, opts ...query.ExecuteOption) ([]ListAuthorsWithRecentBooksRow, error)
 	ListBooksWithRecentEditions(ctx context.Context, arg int32, opts ...query.ExecuteOption) ([]ListBooksWithRecentEditionsRow, error)
 	DeleteBooksByAuthorName(ctx context.Context, arg string, opts ...query.ExecuteOption) error
+	DeleteAuthorWithBooks(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error
 }

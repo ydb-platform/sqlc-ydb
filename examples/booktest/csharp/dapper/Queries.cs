@@ -446,6 +446,27 @@ public sealed class Queries
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
 
+    // -- name: DeleteAuthorWithBooks :exec
+    public async Task DeleteAuthorWithBooksAsync(ulong authorId, CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var parameters = new YdbParameters(
+            new YdbParameter("$author_id", DbType.UInt64, authorId)
+        );
+
+        var command = new CommandDefinition(
+            commandText: """
+            DECLARE $author_id AS Uint64;
+            DELETE FROM books WHERE author_id = $author_id;
+            DELETE FROM authors WHERE author_id = $author_id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        await _connection.ExecuteAsync(command).ConfigureAwait(false);
+    }
+
     private sealed class YdbParameters : SqlMapper.IDynamicParameters
     {
         private readonly YdbParameter[] _parameters;

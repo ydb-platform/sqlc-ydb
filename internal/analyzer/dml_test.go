@@ -59,8 +59,8 @@ func TestAnalyzeRejectsUnsupportedQueryForms(t *testing.T) {
 	for _, tt := range []struct{ name, command, sql, want string }{
 		{"tuple update", ":exec", "UPDATE records SET (id, label) = ($id, $label);", "only individual UPDATE SET assignments are supported"},
 		{"exec select", ":exec", "SELECT id FROM records;", "command :exec cannot be used with a row-returning statement"},
-		{"two data statements", ":exec", "DELETE FROM records; DELETE FROM records;", "exactly one supported SELECT, INSERT/UPSERT, UPDATE, or DELETE statement; found 2"},
-		{"query ddl", ":exec", "CREATE TABLE other (id Uint64, PRIMARY KEY (id));", "exactly one supported SELECT, INSERT/UPSERT, UPDATE, or DELETE statement; found 0"},
+		{"two data statements with row count", ":execrows", "DELETE FROM records; DELETE FROM records;", "multiple data statements require :exec"},
+		{"query ddl", ":exec", "CREATE TABLE other (id Uint64, PRIMARY KEY (id));", "unsupported statement in named query"},
 		{"join using", ":many", "SELECT a.id FROM records a JOIN records b USING (id);", "JOIN USING is not yet supported; use an explicit ON condition"},
 		{"derived table", ":many", "SELECT id FROM (SELECT id FROM records) r;", "only named catalog tables are supported in FROM and JOIN"},
 		{"table function", ":many", "SELECT id FROM AS_TABLE($rows);", "requires DECLARE $rows AS List<Struct<...>>"},

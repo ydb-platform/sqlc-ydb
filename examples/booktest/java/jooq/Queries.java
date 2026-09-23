@@ -270,4 +270,22 @@ public final class Queries {
                 )
                 .execute();
     }
+
+    // -- name: DeleteAuthorWithBooks :exec
+    public void deleteAuthorWithBooks(ULong authorId) {
+        dsl.connection(_connection -> {
+            try (var _prepared = _connection.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+                DECLARE $author_id AS Uint64;
+                DELETE FROM\s\
+                """ + dsl.render(BOOKS) + """
+                 WHERE author_id = $author_id;
+                DELETE FROM\s\
+                """ + dsl.render(AUTHORS) + """
+                 WHERE author_id = $author_id;\
+                """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+                _prepared.setObject("author_id", tech.ydb.table.values.PrimitiveValue.newUint64(authorId.longValue()));
+                _prepared.execute();
+            }
+        });
+    }
 }

@@ -98,3 +98,8 @@ ORDER BY b.book_id;
 -- name: DeleteBooksByAuthorName :exec
 DELETE FROM books
 WHERE author_id IN (SELECT author_id FROM authors WHERE name = $author_name);
+
+-- name: DeleteAuthorWithBooks :exec
+DECLARE $author_id AS Uint64;
+DELETE FROM books WHERE author_id = $author_id;
+DELETE FROM authors WHERE author_id = $author_id;

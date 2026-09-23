@@ -311,7 +311,7 @@ func TestTablePathPrefixDatabaseRejectsUnsupportedBeforeDiscovery(t *testing.T) 
 
 func TestTablePathPrefixDoesNotEnableAnsiDialect(t *testing.T) {
 	_, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\nPRAGMA ANSI 1;"}})
-	if err == nil || !strings.Contains(err.Error(), "exactly one supported SELECT") {
+	if err == nil || !strings.Contains(err.Error(), "named query requires a SELECT") {
 		t.Fatalf("error = %v", err)
 	}
 }

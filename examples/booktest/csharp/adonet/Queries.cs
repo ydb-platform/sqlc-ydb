@@ -354,4 +354,15 @@ public sealed class Queries
         command.Parameters.Add(new YdbParameter("$author_name", DbType.String, authorName));
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    // -- name: DeleteAuthorWithBooks :exec
+    public async Task DeleteAuthorWithBooksAsync(ulong authorId, CancellationToken cancellationToken = default)
+    {
+        await using var command = new YdbCommand(
+            "DECLARE $author_id AS Uint64;\n" +
+            "DELETE FROM books WHERE author_id = $author_id;\n" +
+            "DELETE FROM authors WHERE author_id = $author_id;", _connection) { Transaction = _transaction };
+        command.Parameters.Add(new YdbParameter("$author_id", DbType.UInt64, authorId));
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
 }

@@ -360,4 +360,19 @@ export class Queries {
     configure?.(stmt);
     await stmt;
   }
+
+  // -- name: DeleteAuthorWithBooks :exec
+  async deleteAuthorWithBooks(authorId: bigint, configure?: ConfigureQuery): Promise<void> {
+    const stmt = this.#sql(
+      "DECLARE $author_id AS Uint64;\n" +
+      "DELETE FROM books WHERE author_id = $author_id;\n" +
+      "DELETE FROM authors WHERE author_id = $author_id;"
+    );
+    // Keep explicit DECLARE statements; the SDK otherwise prepends duplicates.
+    Object.defineProperty(stmt, "text", { value: stmt.text, writable: false });
+    stmt
+      .parameter("author_id", new Uint64(authorId));
+    configure?.(stmt);
+    await stmt;
+  }
 }

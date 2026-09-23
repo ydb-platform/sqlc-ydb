@@ -371,3 +371,19 @@ class Querier:
         )
         result.close()
         return None
+
+    # -- name: DeleteAuthorWithBooks :exec
+    def delete_author_with_books(self, author_id: int) -> None:
+        parameters = {
+            "author_id": (author_id, _ydb.PrimitiveType.Uint64),
+        }
+        result = self._connection.execute(
+            _text(
+                ("DECLARE $author_id AS Uint64;\n"
+                 "DELETE FROM books WHERE author_id = :author_id;\n"
+                 "DELETE FROM authors WHERE author_id = :author_id;")
+            ),
+            parameters,
+        )
+        result.close()
+        return None

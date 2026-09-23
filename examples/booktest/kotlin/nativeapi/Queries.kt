@@ -459,4 +459,23 @@ class Queries {
             }.join().getStatus().expectSuccess()
         }
     }
+
+    // -- name: DeleteAuthorWithBooks :exec
+    fun deleteAuthorWithBooks(authorId: Long): Unit {
+        val _params = Params.create()
+        _params.put("\$author_id", PrimitiveValue.newUint64(authorId))
+        if (transaction != null) {
+            transaction.createQuery(
+                "DECLARE \$author_id AS Uint64;\n" +
+                "DELETE FROM books WHERE author_id = \$author_id;\n" +
+                "DELETE FROM authors WHERE author_id = \$author_id;", _params).execute().join().getStatus().expectSuccess()
+        } else {
+            client!!.supplyResult { _session ->
+                _session.createQuery(
+                    "DECLARE \$author_id AS Uint64;\n" +
+                    "DELETE FROM books WHERE author_id = \$author_id;\n" +
+                    "DELETE FROM authors WHERE author_id = \$author_id;", TxMode.SERIALIZABLE_RW, _params).execute()
+            }.join().getStatus().expectSuccess()
+        }
+    }
 }

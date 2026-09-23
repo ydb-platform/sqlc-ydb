@@ -635,4 +635,31 @@ void Queries::DeleteBooksByAuthorName(const std::string& author_name) const {
     NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
 }
 
+// -- name: DeleteAuthorWithBooks :exec
+void Queries::DeleteAuthorWithBooks(std::uint64_t author_id) const {
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_params = NYdb::TParamsBuilder()
+            .AddParam("$author_id").Uint64(author_id).Build()
+            .Build();
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            "DECLARE $author_id AS Uint64;\n"
+            "DELETE FROM books WHERE author_id = $author_id;\n"
+            "DELETE FROM authors WHERE author_id = $author_id;",
+            sqlc_tx,
+            sqlc_params,
+            this->execute_settings_
+        ).GetValueSync();
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+}
+
 }  // namespace booktest::native

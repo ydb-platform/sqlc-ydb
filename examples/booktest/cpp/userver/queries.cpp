@@ -360,4 +360,20 @@ void Queries::DeleteBooksByAuthorName(const ::userver::ydb::Utf8& author_name) c
     );
 }
 
+// -- name: DeleteAuthorWithBooks :exec
+void Queries::DeleteAuthorWithBooks(std::uint64_t author_id) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "DECLARE $author_id AS Uint64;\n"
+        "DELETE FROM books WHERE author_id = $author_id;\n"
+        "DELETE FROM authors WHERE author_id = $author_id;",
+        ::userver::ydb::Query::Name{"DeleteAuthorWithBooks"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    static_cast<void>(
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$author_id", author_id)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$author_id", author_id)
+    );
+}
+
 }  // namespace booktest::userver

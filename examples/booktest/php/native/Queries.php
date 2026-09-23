@@ -740,6 +740,38 @@ final class Queries
         });
     }
 
+    // -- name: DeleteAuthorWithBooks :exec
+    public function deleteAuthorWithBooks(string $authorId): void
+    {
+        $parameters = [
+            '$author_id' => YdbValueCodec::typedUint64($authorId, 'author_id'),
+        ];
+
+        $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                DECLARE $author_id AS Uint64;
+                DELETE FROM books WHERE author_id = $author_id;
+                DELETE FROM authors WHERE author_id = $author_id;
+                SQLC_YDB_YQL)
+                ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0);
+            if ($this->txId !== null) {
+                $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
+            } else {
+                $query->beginTx('serializable_read_write');
+            }
+            if ($this->configure !== null) {
+                ($this->configure)($query);
+            }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
+
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
+        });
+    }
+
     /**
      * @param array<int, array{0: string, 1: int, 2: bool}> $expectedColumns
      * @return list<object>
