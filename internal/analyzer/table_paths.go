@@ -12,8 +12,8 @@ import (
 	parser "github.com/ydb-platform/yql-parsers/go"
 )
 
-// A single leading prefix avoids depending on YDB's module-wide last-pragma
-// behavior. Its scope is one schema source or one named query, never another file.
+// A single leading absolute prefix is the supported compiler contract.
+// Its scope is one schema source or one named query, never another file.
 func tablePathPrefix(file string, lineOffset int, root parser.ISql_queryContext) (string, []model.Diagnostic) {
 	var prefix string
 	var diagnostics []model.Diagnostic

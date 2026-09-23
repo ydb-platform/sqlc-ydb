@@ -56,6 +56,30 @@ SELECT ` + "`../a/users`.id FROM `../a/users` WHERE `../a/users`.name = $name;" 
 	t.Run("published dialect", func(t *testing.T) { runJooqPrefixSDK(t, files) })
 }
 
+// Generate must reject incomplete semantic input rather than mapping an authored
+// relative table name as though it were the resolved physical namespace.
+func TestJooqPrefixRejectsMissingTableResolution(t *testing.T) {
+	for _, tc := range []struct{ name, command, statement string }{
+		{"select", ":many", "SELECT users.id FROM users WHERE users.id = $id;"},
+		{"delete", ":exec", "DELETE FROM users WHERE users.id = $id;"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			query := "-- name: Incomplete " + tc.command + "\n" + jooqPrefixPragma + ";\nDECLARE $id AS Uint64;\n" + tc.statement
+			analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqPrefixSchema}}, []model.Source{{Name: "query.sql", Text: query}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			// The analyzer normally supplies this metadata. Exercise the generator's
+			// explicit invalid-input contract while retaining the real parsed query.
+			analysis.Queries[0].Syntax.Tables = nil
+			files, err := Generate(analysis, Options{Package: "prefix", Runtime: "jooq"})
+			if files != nil || err == nil || err.Error() != `Incomplete: missing resolved jOOQ table "users"` {
+				t.Fatalf("incomplete table resolution produced files %v, error %v", files, err)
+			}
+		})
+	}
+}
+
 func TestJooqPrefixDeclaredSQLBytesThroughJava(t *testing.T) {
 	header := "-- name: Read :many\n" + jooqPrefixPragma + ";\nDECLARE $id AS Uint64;\n-- literals and comments are retained 🪄\n"
 	var program strings.Builder

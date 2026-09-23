@@ -108,7 +108,7 @@ INSERT/UPSERT SELECT supports two mapping contracts. With an explicit target col
 
 ## Table path resolution
 
-Named queries and schema sources accept `PRAGMA TablePathPrefix("/database/folder");` with a nonempty absolute string literal. Relative table references then resolve under that prefix; an absolute table reference bypasses it. Include the database name in the prefix. A relative prefix is not relative to the connection's database, so relative and empty prefixes are rejected with an explicit-path hint. Parameterized or computed prefix values and other pragmas remain unsupported.
+Named queries and schema sources accept `PRAGMA TablePathPrefix("/database/folder");` with a nonempty absolute string literal. Relative table references then resolve under that prefix; an absolute table reference bypasses it. Include the database name in the prefix. Relative and empty prefix values are outside the compiler's current coverage and are rejected with an explicit-path hint. Parameterized or computed prefix values and other pragmas remain unsupported.
 
 ```sql
 -- name: GetStagingUser :one
@@ -119,7 +119,7 @@ FROM users AS u
 WHERE u.id = $id;
 ```
 
-The offline catalog must describe the same resolved table path: use this prefix in its schema source or declare the table as `/database/staging/users`. Each named query and each schema source has its own prefix scope. Put the pragma before data or schema statements, and repeat it in every source that needs it. Identical repeated prefixes are accepted; conflicting prefixes are rejected because YDB applies the last value across the whole request rather than changing it statement by statement. Query-file preambles before `-- name:` remain unsupported.
+The offline catalog must describe the same resolved table path: use this prefix in its schema source or declare the table as `/database/staging/users`. Each named query and each schema source has its own prefix scope. Put the pragma before local bindings and data or schema statements, and repeat it in every source that needs it. Identical repeated prefixes are accepted; prefix changes within a named query or schema source are not supported by the compiler. Query-file preambles before `-- name:` remain unsupported.
 
 Path resolution is shared by SELECT sources, joins, secondary-index VIEW selection, supported writes and schema migrations. Tables with the same basename in different directories remain distinct catalog entries. Aliases, column names, strings and comments retain their original meaning. Executable SQL retains the pragma and authored table references; wildcard expansion continues to replace only the projection spans. The jOOQ target renders its resolved table identities through the dialect, preserving the pragma's execution context and table mappings.
 
