@@ -21,6 +21,17 @@ public sealed record ListAuthorsRow(
     string? Bio
 );
 
+public sealed record ListAuthorsPageParams(
+    int PageSize,
+    uint Offset
+);
+
+public sealed record ListAuthorsPageRow(
+    ulong ID,
+    string Name,
+    string? Bio
+);
+
 public sealed record GetAuthorNameRow(
     string Name
 );

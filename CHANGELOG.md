@@ -5,6 +5,11 @@
 ### Added
 
 - Support ordinary and covering GLOBAL SYNC/ASYNC secondary indexes in CREATE TABLE and ADD/DROP INDEX migrations. Resolve `FROM table VIEW index` against the base table, retain index selection in generated SQL, and include index definitions in database discovery and schema-drift checks.
+- Accept the verified integer aliases TinyInt, SmallInt, Int, Integer and BigInt while generating bindings with their canonical widths and signedness.
+
+### Fixed
+
+- Preserve supported declared LIMIT/OFFSET parameter types instead of forcing Uint64. Validate pagination expression types against the YDB contract, including optional integers, while retaining Uint64 inference for unresolved direct parameters. Signed and NULL values keep their server-defined behavior.
 
 ## v0.2.3
 

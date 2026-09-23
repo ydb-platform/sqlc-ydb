@@ -71,6 +71,37 @@ class Queries {
         return _items
     }
 
+    // -- name: ListAuthorsPage :many
+    fun listAuthorsPage(pageSize: Int, offset: Long): List<ListAuthorsPageRow> {
+        kotlin.require(offset >= 0 && offset <= 4294967295L) { "parameter \$offset is outside Uint32 range" }
+        val _params = Params.create()
+        _params.put("\$page_size", PrimitiveValue.newInt32(pageSize))
+        _params.put("\$offset", PrimitiveValue.newUint32(offset))
+        val _query = if (transaction != null) {
+            QueryReader.readFrom(transaction.createQuery(
+                "DECLARE \$page_size AS Int;\n" +
+                "DECLARE \$offset AS Uint32;\n" +
+                "SELECT id, name, bio FROM authors ORDER BY id LIMIT \$page_size OFFSET \$offset;", _params)).join().getValue()
+        } else {
+            client!!.supplyResult { _session ->
+                QueryReader.readFrom(_session.createQuery(
+                    "DECLARE \$page_size AS Int;\n" +
+                    "DECLARE \$offset AS Uint32;\n" +
+                    "SELECT id, name, bio FROM authors ORDER BY id LIMIT \$page_size OFFSET \$offset;", TxMode.SERIALIZABLE_RW, _params))
+            }.join().getValue()
+        }
+        kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
+        val _rows = _query.getResultSet(0)
+        val _items = ArrayList<ListAuthorsPageRow>()
+        while (_rows.next()) {
+            val _value0: Long = _rows.getColumn(0).getUint64()
+            val _value1: String = _rows.getColumn(1).getText()
+            val _value2: String? = _rows.getColumn(2).getText()
+            _items.add(ListAuthorsPageRow(_value0, _value1, _value2))
+        }
+        return _items
+    }
+
     // -- name: GetAuthorName :one
     fun getAuthorName(authorId: Long): GetAuthorNameRow? {
         val _params = Params.create()

@@ -15,6 +15,13 @@ pub struct ListAuthorsRow {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ListAuthorsPageRow {
+    pub id: u64,
+    pub name: String,
+    pub bio: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct GetAuthorNameRow {
     pub name: String,
 }

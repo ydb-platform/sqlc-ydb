@@ -85,6 +85,60 @@ func (q *Queries) ListAuthors(ctx context.Context, opts ...query.ExecuteOption) 
 	return items, nil
 }
 
+// -- name: ListAuthorsPage :many
+func (q *Queries) ListAuthorsPage(ctx context.Context, arg ListAuthorsPageParams, opts ...query.ExecuteOption) ([]ListAuthorsPageRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$page_size").Int32(arg.PageSize)
+	parameters = parameters.Param("$offset").Uint32(arg.Offset)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	result, err := q.db.Query(ctx, ""+
+		"DECLARE $page_size AS Int;\n"+
+		"DECLARE $offset AS Uint32;\n"+
+		"SELECT id, name, bio FROM authors ORDER BY id LIMIT $page_size OFFSET $offset;",
+		callOptions...,
+	)
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
+	}
+	defer result.Close(ctx)
+
+	resultSet, err := result.NextResultSet(ctx)
+	if errors.Is(err, io.EOF) {
+		return nil, xerrors.WithStackTrace(query.ErrNoResultSets)
+	}
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
+	}
+
+	items := make([]ListAuthorsPageRow, 0)
+	for r, err := range resultSet.Rows(ctx) {
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+		var row ListAuthorsPageRow
+		if err := r.ScanNamed(
+			query.Named("id", &row.ID),
+			query.Named("name", &row.Name),
+			query.Named("bio", &row.Bio),
+		); err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+		items = append(items, row)
+	}
+
+	_, err = result.NextResultSet(ctx)
+	if err == nil {
+		return nil, xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+	} else if !errors.Is(err, io.EOF) {
+		return nil, xerrors.WithStackTrace(err)
+	}
+
+	return items, nil
+}
+
 // -- name: GetAuthorName :one
 func (q *Queries) GetAuthorName(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorNameRow, error) {
 	parameters := ydb.ParamsBuilder()

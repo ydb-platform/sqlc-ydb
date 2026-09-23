@@ -4,6 +4,11 @@ SELECT id, name, bio FROM authors WHERE id = $author_id;
 -- name: ListAuthors :many
 SELECT id, name, bio FROM authors ORDER BY name;
 
+-- name: ListAuthorsPage :many
+DECLARE $page_size AS Int;
+DECLARE $offset AS Uint32;
+SELECT id, name, bio FROM authors ORDER BY id LIMIT $page_size OFFSET $offset;
+
 -- name: GetAuthorName :one
 SELECT name FROM authors WHERE id = $author_id;
 

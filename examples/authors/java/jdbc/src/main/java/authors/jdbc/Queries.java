@@ -45,6 +45,29 @@ public final class Queries {
         }
     }
 
+    // -- name: ListAuthorsPage :many
+    public java.util.List<ListAuthorsPageRow> listAuthorsPage(int pageSize, long offset) throws java.sql.SQLException {
+        if (offset < 0 || offset > 4294967295L) throw new IllegalArgumentException("parameter $offset is outside Uint32 range");
+        try (var _prepared = client.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+            DECLARE $page_size AS Int;
+            DECLARE $offset AS Uint32;
+            SELECT id, name, bio FROM authors ORDER BY id LIMIT $page_size OFFSET $offset;\
+            """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+            _prepared.setInt("page_size", pageSize);
+            _prepared.setLong("offset", offset);
+            try (var _rows = _prepared.executeQuery()) {
+                var _items = new java.util.ArrayList<ListAuthorsPageRow>();
+                while (_rows.next()) {
+                    long _value0 = _rows.getLong(1);
+                    String _value1 = _rows.getString(2);
+                    String _value2 = _rows.getString(3);
+                    _items.add(new ListAuthorsPageRow(_value0, _value1, _value2));
+                }
+                return _items;
+            }
+        }
+    }
+
     // -- name: GetAuthorName :one
     public java.util.Optional<GetAuthorNameRow> getAuthorName(long authorId) throws java.sql.SQLException {
         try (var _prepared = client.prepareStatement("""

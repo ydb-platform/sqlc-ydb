@@ -23,6 +23,7 @@ public:
 
     std::optional<GetAuthorRow> GetAuthor(std::uint64_t author_id) const;
     std::vector<ListAuthorsRow> ListAuthors() const;
+    std::vector<ListAuthorsPageRow> ListAuthorsPage(std::int32_t page_size, std::uint32_t offset) const;
     std::optional<GetAuthorNameRow> GetAuthorName(std::uint64_t author_id) const;
     std::optional<CreateAuthorRow> CreateAuthor(std::uint64_t author_id, const ::userver::ydb::Utf8& author_name, const std::optional<::userver::ydb::Utf8>& biography) const;
     void UpsertAuthor(std::uint64_t author_id, const ::userver::ydb::Utf8& author_name, const std::optional<::userver::ydb::Utf8>& biography) const;

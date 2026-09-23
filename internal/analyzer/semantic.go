@@ -934,7 +934,7 @@ func externalParameters(block queryBlock, binds []parser.IBind_parameterContext,
 			typeValue, ok = inferred[name]
 		}
 		if ok && typeValue.Kind == "" {
-			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, bind, fmt.Sprintf("external parameter $%s is constrained by incompatible column types", name)))
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, bind, fmt.Sprintf("external parameter $%s has incompatible inferred types; add DECLARE to specify its intended type", name)))
 			continue
 		}
 		if !ok {

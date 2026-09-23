@@ -13,6 +13,17 @@ type ListAuthorsRow struct {
 	Bio  *string
 }
 
+type ListAuthorsPageRow struct {
+	ID   uint64
+	Name string
+	Bio  *string
+}
+
+type ListAuthorsPageParams struct {
+	PageSize int32
+	Offset   uint32
+}
+
 type GetAuthorNameRow struct {
 	Name string
 }

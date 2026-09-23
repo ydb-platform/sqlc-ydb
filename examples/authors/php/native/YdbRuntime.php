@@ -83,6 +83,16 @@ final class YdbValueCodec
         }
     }
 
+    public static function typedInt32(int $value, string $where): TypedValue
+    {
+        return self::typedInt($value, -2147483648, 2147483647, PrimitiveTypeId::INT32, 'int32_value', $where);
+    }
+
+    public static function typedUint32(int $value, string $where): TypedValue
+    {
+        return self::typedInt($value, 0, 4294967295, PrimitiveTypeId::UINT32, 'uint32_value', $where);
+    }
+
     public static function typedUint64(string $value, string $where): TypedValue
     {
         self::validateUint64($value, $where);
@@ -139,6 +149,20 @@ final class YdbValueCodec
     private static function type(int $typeId): Type
     {
         return new Type(['type_id' => $typeId]);
+    }
+
+    private static function typedInt(int $value, int $min, int $max, int $typeId, string $case, string $where): TypedValue
+    {
+        self::range($value, $min, $max, $where);
+
+        return self::typed($typeId, $case, $value);
+    }
+
+    private static function range(int $value, int $min, int $max, string $where): void
+    {
+        if ($value < $min || $value > $max) {
+            throw new \RangeException($where . ': integer is outside the declared YQL range');
+        }
     }
 
     private static function validUtf8(string $value, string $where): void

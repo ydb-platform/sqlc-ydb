@@ -80,13 +80,14 @@ func analyzeSelectCore(catalog model.Catalog, block queryBlock, core *parser.Sel
 	inferFromInLists(tree.conds, relations, inferred)
 	inferFromExpressionContexts(core, bindings, inferred)
 	if partial != nil {
-		inferLimitOffset(partial, inferred)
+		inferLimitOffset(partial, bindings, inferred)
 	}
 	for name, typ := range inferred {
 		if _, ok := bindings[name]; !ok && typ.Kind != "" {
 			bindings[name] = typ
 		}
 	}
+	diagnostics = append(diagnostics, validateLimitOffset(block, partial, bindings)...)
 	columns, ds := projection(block, core, relations, bindings)
 	diagnostics = append(diagnostics, ds...)
 	diagnostics = append(diagnostics, validateColumnReferences(block, core, relations)...)

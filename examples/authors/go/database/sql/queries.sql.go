@@ -52,6 +52,40 @@ func (q *Queries) ListAuthors(ctx context.Context) ([]ListAuthorsRow, error) {
 	return items, nil
 }
 
+// -- name: ListAuthorsPage :many
+func (q *Queries) ListAuthorsPage(ctx context.Context, arg ListAuthorsPageParams) ([]ListAuthorsPageRow, error) {
+	rows, err := q.db.QueryContext(ctx, ""+
+		"DECLARE $page_size AS Int;\n"+
+		"DECLARE $offset AS Uint32;\n"+
+		"SELECT id, name, bio FROM authors ORDER BY id LIMIT $page_size OFFSET $offset;",
+		sql.Named("page_size", arg.PageSize),
+		sql.Named("offset", arg.Offset),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []ListAuthorsPageRow(nil)
+	for rows.Next() {
+		var row ListAuthorsPageRow
+		if err := rows.Scan(
+			&row.ID,
+			&row.Name,
+			&row.Bio,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, row)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
 // -- name: GetAuthorName :one
 func (q *Queries) GetAuthorName(ctx context.Context, arg uint64) (GetAuthorNameRow, error) {
 	var row GetAuthorNameRow
