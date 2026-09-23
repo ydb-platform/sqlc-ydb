@@ -104,9 +104,9 @@ func TestDMLScriptRejectsUnsupportedShapes(t *testing.T) {
 		{"insert returning", ":exec", "INSERT INTO records(id,payload) VALUES(1ul,'a'u) RETURNING id; DELETE FROM copies;", "command :exec cannot be used with a row-returning script; use :one or :many"},
 		{"update returning", ":exec", "UPDATE records SET payload='a'u RETURNING id; DELETE FROM copies;", "command :exec cannot be used with a row-returning script; use :one or :many"},
 		{"returning", ":exec", "DELETE FROM records RETURNING id; DELETE FROM copies;", "command :exec cannot be used with a row-returning script; use :one or :many"},
-		{"late declaration", ":exec", "DELETE FROM records; DECLARE $id AS Uint64; DELETE FROM copies WHERE id=$id;", "DECLARE and scalar local assignments must precede all data statements in a script"},
-		{"declaration after local", ":exec", "$local=$id; DECLARE $id AS Uint64; DELETE FROM records WHERE id=$local; DELETE FROM copies;", "DECLARE statements must precede scalar local assignments in a script"},
-		{"late local", ":exec", "DECLARE $id AS Uint64; DELETE FROM records; $local=$id; DELETE FROM copies WHERE id=$local;", "DECLARE and scalar local assignments must precede all data statements in a script"},
+		{"late declaration", ":exec", "DELETE FROM records; DECLARE $id AS Uint64; DELETE FROM copies WHERE id=$id;", "DECLARE and local assignments must precede all data statements in a script"},
+		{"declaration after local", ":exec", "$local=$id; DECLARE $id AS Uint64; DELETE FROM records WHERE id=$local; DELETE FROM copies;", "DECLARE statements must precede local assignments in a script"},
+		{"late local", ":exec", "DECLARE $id AS Uint64; DELETE FROM records; $local=$id; DELETE FROM copies WHERE id=$local;", "DECLARE and local assignments must precede all data statements in a script"},
 		{"unsupported command", ":exec", "DELETE FROM records; COMMIT; DELETE FROM copies;", "unsupported statement in named query: \"COMMIT\""},
 		{"no data", ":exec", "DECLARE $id AS Uint64;", "named query requires a SELECT, INSERT/UPSERT, UPDATE, or DELETE statement"},
 	} {

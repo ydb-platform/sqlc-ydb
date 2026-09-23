@@ -757,4 +757,115 @@ std::optional<SelectAuthorAndDeleteBooksRow> Queries::SelectAuthorAndDeleteBooks
     return sqlc_row;
 }
 
+// -- name: ListAuthorBookTitles :many
+std::vector<ListAuthorBookTitlesRow> Queries::ListAuthorBookTitles(std::int32_t since_year) const {
+    std::optional<NYdb::TResultSet> sqlc_result_set;
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_params = NYdb::TParamsBuilder()
+            .AddParam("$since_year").Int32(since_year).Build()
+            .Build();
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            "DECLARE $since_year AS Int32;\n"
+            "$recent = (SELECT author_id, title FROM books WHERE publication_year >= $since_year);\n"
+            "$grouped = (\n"
+            "    SELECT author_id, AGGREGATE_LIST(title, 100u) AS titles\n"
+            "    FROM $recent\n"
+            "    GROUP BY author_id\n"
+            ");\n"
+            "SELECT a.author_id, a.name, Yson::SerializeJson(Json::From(g.titles)) AS titles_json\n"
+            "FROM (SELECT author_id, name FROM authors) AS a\n"
+            "JOIN $grouped AS g ON a.author_id = g.author_id\n"
+            "ORDER BY a.author_id;",
+            sqlc_tx,
+            sqlc_params,
+            this->execute_settings_
+        ).GetValueSync();
+        if (sqlc_result.IsSuccess()) {
+            if (sqlc_result.GetResultSets().size() != 1) {
+                throw std::runtime_error("expected exactly one result set");
+            }
+            sqlc_result_set = sqlc_result.GetResultSet(0);
+        }
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+    if (!sqlc_result_set) {
+        throw std::runtime_error("ListAuthorBookTitles: successful query returned no result set");
+    }
+    NYdb::TResultSetParser sqlc_parser(*sqlc_result_set);
+    std::vector<ListAuthorBookTitlesRow> sqlc_rows;
+    sqlc_rows.reserve(sqlc_result_set->RowsCount());
+    while (sqlc_parser.TryNextRow()) {
+        sqlc_rows.push_back(ListAuthorBookTitlesRow{
+            sqlc_parser.ColumnParser("a.author_id").GetUint64(),
+            sqlc_parser.ColumnParser("a.name").GetUtf8(),
+            sqlc_parser.ColumnParser("titles_json").GetOptionalJson(),
+        });
+    }
+    return sqlc_rows;
+}
+
+// -- name: InspectBookText :one
+std::optional<InspectBookTextRow> Queries::InspectBookText(const std::string& text) const {
+    std::optional<NYdb::TResultSet> sqlc_result_set;
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_params = NYdb::TParamsBuilder()
+            .AddParam("$text").String(text).Build()
+            .Build();
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            "DECLARE $text AS String;\n"
+            "SELECT\n"
+            "    String::Base32Encode($text) AS base32,\n"
+            "    Unicode::IsAlpha(\"Book\"u) AS alphabetic,\n"
+            "    Url::GetHost(\"https://example.org/books\") AS host,\n"
+            "    Math::Sqrt(9.0) AS square_root,\n"
+            "    Yson::IsString(Yson::From($text)) AS yson_string,\n"
+            "    Pire::Grep(\"book\")($text) AS pattern_found;",
+            sqlc_tx,
+            sqlc_params,
+            this->execute_settings_
+        ).GetValueSync();
+        if (sqlc_result.IsSuccess()) {
+            if (sqlc_result.GetResultSets().size() != 1) {
+                throw std::runtime_error("expected exactly one result set");
+            }
+            sqlc_result_set = sqlc_result.GetResultSet(0);
+        }
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+    if (!sqlc_result_set) {
+        throw std::runtime_error("InspectBookText: successful query returned no result set");
+    }
+    NYdb::TResultSetParser sqlc_parser(*sqlc_result_set);
+    if (!sqlc_parser.TryNextRow()) {
+        return std::nullopt;
+    }
+    InspectBookTextRow sqlc_row{
+        sqlc_parser.ColumnParser("base32").GetString(),
+        sqlc_parser.ColumnParser("alphabetic").GetBool(),
+        sqlc_parser.ColumnParser("host").GetOptionalString(),
+        sqlc_parser.ColumnParser("square_root").GetDouble(),
+        sqlc_parser.ColumnParser("yson_string").GetBool(),
+        sqlc_parser.ColumnParser("pattern_found").GetBool(),
+    };
+    return sqlc_row;
+}
+
 }  // namespace booktest::native

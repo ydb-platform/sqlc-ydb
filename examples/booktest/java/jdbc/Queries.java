@@ -384,4 +384,59 @@ public final class Queries {
             }
         }
     }
+
+    // -- name: ListAuthorBookTitles :many
+    public java.util.List<ListAuthorBookTitlesRow> listAuthorBookTitles(int sinceYear) throws java.sql.SQLException {
+        try (var _prepared = client.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+            DECLARE $since_year AS Int32;
+            $recent = (SELECT author_id, title FROM books WHERE publication_year >= $since_year);
+            $grouped = (
+                SELECT author_id, AGGREGATE_LIST(title, 100u) AS titles
+                FROM $recent
+                GROUP BY author_id
+            );
+            SELECT a.author_id, a.name, Yson::SerializeJson(Json::From(g.titles)) AS titles_json
+            FROM (SELECT author_id, name FROM authors) AS a
+            JOIN $grouped AS g ON a.author_id = g.author_id
+            ORDER BY a.author_id;\
+            """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+            _prepared.setInt("since_year", sinceYear);
+            try (var _rows = _prepared.executeQuery()) {
+                var _items = new java.util.ArrayList<ListAuthorBookTitlesRow>();
+                while (_rows.next()) {
+                    long _value0 = _rows.getLong(1);
+                    String _value1 = _rows.getString(2);
+                    String _value2 = _rows.getString(3);
+                    _items.add(new ListAuthorBookTitlesRow(_value0, _value1, _value2));
+                }
+                return _items;
+            }
+        }
+    }
+
+    // -- name: InspectBookText :one
+    public java.util.Optional<InspectBookTextRow> inspectBookText(byte[] text) throws java.sql.SQLException {
+        try (var _prepared = client.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+            DECLARE $text AS String;
+            SELECT
+                String::Base32Encode($text) AS base32,
+                Unicode::IsAlpha(\"Book\"u) AS alphabetic,
+                Url::GetHost(\"https://example.org/books\") AS host,
+                Math::Sqrt(9.0) AS square_root,
+                Yson::IsString(Yson::From($text)) AS yson_string,
+                Pire::Grep(\"book\")($text) AS pattern_found;\
+            """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+            _prepared.setBytes("text", text);
+            try (var _rows = _prepared.executeQuery()) {
+                if (!_rows.next()) return java.util.Optional.empty();
+                byte[] _value0 = _rows.getBytes(1);
+                boolean _value1 = _rows.getBoolean(2);
+                byte[] _value2 = _rows.getBytes(3);
+                double _value3 = _rows.getDouble(4);
+                boolean _value4 = _rows.getBoolean(5);
+                boolean _value5 = _rows.getBoolean(6);
+                return java.util.Optional.of(new InspectBookTextRow(_value0, _value1, _value2, _value3, _value4, _value5));
+            }
+        }
+    }
 }

@@ -398,3 +398,62 @@ class Querier:
             author_id=row["author_id"],
             name=row["name"],
         )
+
+    # -- name: ListAuthorBookTitles :many
+    def list_author_book_titles(self, since_year: int) -> list[_models.ListAuthorBookTitlesRow]:
+        parameters = {
+            "$since_year": _ydb.TypedValue(since_year, _ydb.PrimitiveType.Int32),
+        }
+        result_sets = self._execute(
+            ("DECLARE $since_year AS Int32;\n"
+             "$recent = (SELECT author_id, title FROM books WHERE publication_year >= $since_year);\n"
+             "$grouped = (\n"
+             "    SELECT author_id, AGGREGATE_LIST(title, 100u) AS titles\n"
+             "    FROM $recent\n"
+             "    GROUP BY author_id\n"
+             ");\n"
+             "SELECT a.author_id, a.name, Yson::SerializeJson(Json::From(g.titles)) AS titles_json\n"
+             "FROM (SELECT author_id, name FROM authors) AS a\n"
+             "JOIN $grouped AS g ON a.author_id = g.author_id\n"
+             "ORDER BY a.author_id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.ListAuthorBookTitlesRow(
+            author_id=row["a.author_id"],
+            name=row["a.name"],
+            titles_json=row["titles_json"],
+        ) for row in rows]
+
+    # -- name: InspectBookText :one
+    def inspect_book_text(self, text: bytes) -> Optional[_models.InspectBookTextRow]:
+        parameters = {
+            "$text": _ydb.TypedValue(text, _ydb.PrimitiveType.String),
+        }
+        result_sets = self._execute(
+            ("DECLARE $text AS String;\n"
+             "SELECT\n"
+             "    String::Base32Encode($text) AS base32,\n"
+             "    Unicode::IsAlpha(\"Book\"u) AS alphabetic,\n"
+             "    Url::GetHost(\"https://example.org/books\") AS host,\n"
+             "    Math::Sqrt(9.0) AS square_root,\n"
+             "    Yson::IsString(Yson::From($text)) AS yson_string,\n"
+             "    Pire::Grep(\"book\")($text) AS pattern_found;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        row = rows[0] if rows else None
+        if row is None:
+            return None
+        return _models.InspectBookTextRow(
+            base32=row["base32"],
+            alphabetic=row["alphabetic"],
+            host=row["host"],
+            square_root=row["square_root"],
+            yson_string=row["yson_string"],
+            pattern_found=row["pattern_found"],
+        )

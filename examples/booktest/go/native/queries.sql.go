@@ -627,3 +627,102 @@ func (q *Queries) SelectAuthorAndDeleteBooks(ctx context.Context, arg uint64, op
 
 	return row, nil
 }
+
+// -- name: ListAuthorBookTitles :many
+func (q *Queries) ListAuthorBookTitles(ctx context.Context, arg int32, opts ...query.ExecuteOption) ([]ListAuthorBookTitlesRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$since_year").Int32(arg)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	result, err := q.db.Query(ctx, ""+
+		"DECLARE $since_year AS Int32;\n"+
+		"$recent = (SELECT author_id, title FROM books WHERE publication_year >= $since_year);\n"+
+		"$grouped = (\n"+
+		"    SELECT author_id, AGGREGATE_LIST(title, 100u) AS titles\n"+
+		"    FROM $recent\n"+
+		"    GROUP BY author_id\n"+
+		");\n"+
+		"SELECT a.author_id, a.name, Yson::SerializeJson(Json::From(g.titles)) AS titles_json\n"+
+		"FROM (SELECT author_id, name FROM authors) AS a\n"+
+		"JOIN $grouped AS g ON a.author_id = g.author_id\n"+
+		"ORDER BY a.author_id;",
+		callOptions...,
+	)
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
+	}
+	defer result.Close(ctx)
+
+	resultSet, err := result.NextResultSet(ctx)
+	if errors.Is(err, io.EOF) {
+		return nil, xerrors.WithStackTrace(query.ErrNoResultSets)
+	}
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
+	}
+
+	items := make([]ListAuthorBookTitlesRow, 0)
+	for r, err := range resultSet.Rows(ctx) {
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+		var row ListAuthorBookTitlesRow
+		if err := r.ScanNamed(
+			query.Named("a.author_id", &row.AuthorID),
+			query.Named("a.name", &row.Name),
+			query.Named("titles_json", &row.TitlesJson),
+		); err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+		items = append(items, row)
+	}
+
+	_, err = result.NextResultSet(ctx)
+	if err == nil {
+		return nil, xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+	} else if !errors.Is(err, io.EOF) {
+		return nil, xerrors.WithStackTrace(err)
+	}
+
+	return items, nil
+}
+
+// -- name: InspectBookText :one
+func (q *Queries) InspectBookText(ctx context.Context, arg []byte, opts ...query.ExecuteOption) (InspectBookTextRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$text").Bytes(arg)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	result, err := q.db.QueryRow(ctx, ""+
+		"DECLARE $text AS String;\n"+
+		"SELECT\n"+
+		"    String::Base32Encode($text) AS base32,\n"+
+		"    Unicode::IsAlpha(\"Book\"u) AS alphabetic,\n"+
+		"    Url::GetHost(\"https://example.org/books\") AS host,\n"+
+		"    Math::Sqrt(9.0) AS square_root,\n"+
+		"    Yson::IsString(Yson::From($text)) AS yson_string,\n"+
+		"    Pire::Grep(\"book\")($text) AS pattern_found;",
+		callOptions...,
+	)
+	if err != nil {
+		return InspectBookTextRow{}, xerrors.WithStackTrace(err)
+	}
+
+	var row InspectBookTextRow
+	if err := result.ScanNamed(
+		query.Named("base32", &row.Base32),
+		query.Named("alphabetic", &row.Alphabetic),
+		query.Named("host", &row.Host),
+		query.Named("square_root", &row.SquareRoot),
+		query.Named("yson_string", &row.YsonString),
+		query.Named("pattern_found", &row.PatternFound),
+	); err != nil {
+		return InspectBookTextRow{}, xerrors.WithStackTrace(err)
+	}
+
+	return row, nil
+}

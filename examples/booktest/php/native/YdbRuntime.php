@@ -100,6 +100,11 @@ final class YdbValueCodec
         return self::typed(PrimitiveTypeId::UTF8, 'text_value', $value);
     }
 
+    public static function typedBytes(string $value, string $where): TypedValue
+    {
+        return self::typed(PrimitiveTypeId::STRING, 'bytes_value', $value);
+    }
+
     public static function typedJson(string $value, string $where): TypedValue
     {
         self::validJson($value, $where);
@@ -111,6 +116,16 @@ final class YdbValueCodec
     {
         self::validateTimestamp($value, $where);
         return self::typed(PrimitiveTypeId::TIMESTAMP, 'uint64_value', (string) $value);
+    }
+
+    public static function bool(Value $value, string $where): bool
+    {
+        $raw = self::read($value, 'bool_value', 'getBoolValue', $where);
+        if (!is_bool($raw)) {
+            throw new UnexpectedValueException($where . ': invalid Bool value');
+        }
+
+        return $raw;
     }
 
     public static function int32(Value $value, string $where): int
@@ -128,12 +143,22 @@ final class YdbValueCodec
         self::validateUint64($text, $where);
         return $text;
     }
+    public static function double(Value $value, string $where): float
+    {
+        return self::decodedFloat($value, 'double_value', 'getDoubleValue', $where);
+    }
+
     public static function utf8(Value $value, string $where): string
     {
         $raw = self::decodedString($value, 'text_value', 'getTextValue', $where);
         self::validUtf8($raw, $where);
 
         return $raw;
+    }
+
+    public static function bytes(Value $value, string $where): string
+    {
+        return self::decodedString($value, 'bytes_value', 'getBytesValue', $where);
     }
 
     public static function json(Value $value, string $where): string
@@ -154,6 +179,16 @@ final class YdbValueCodec
     public static function optionalUtf8(Value $value, string $where): ?string
     {
         return self::isNull($value) ? null : self::utf8($value, $where);
+    }
+
+    public static function optionalBytes(Value $value, string $where): ?string
+    {
+        return self::isNull($value) ? null : self::bytes($value, $where);
+    }
+
+    public static function optionalJson(Value $value, string $where): ?string
+    {
+        return self::isNull($value) ? null : self::json($value, $where);
     }
 
     private static function typed(int $typeId, string $case, mixed $value): TypedValue
@@ -225,6 +260,14 @@ final class YdbValueCodec
         $raw = self::read($value, $case, $getter, $where);
         if (!is_int($raw) || $raw < $min || $raw > $max) throw new UnexpectedValueException($where . ': invalid integer value');
         return $raw;
+    }
+    private static function decodedFloat(Value $value, string $case, string $getter, string $where): float
+    {
+        $raw = self::read($value, $case, $getter, $where);
+        if (!is_float($raw) && !is_int($raw)) throw new UnexpectedValueException($where . ': invalid floating-point value');
+        $result = (float) $raw;
+        if (!is_finite($result)) throw new UnexpectedValueException($where . ': non-finite floating-point value');
+        return $result;
     }
     private static function decodedString(Value $value, string $case, string $getter, string $where): string
     {

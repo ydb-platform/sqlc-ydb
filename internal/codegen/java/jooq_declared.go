@@ -43,23 +43,26 @@ func jooqDeclaredSQL(q model.AnalyzedQuery, sql string) (string, error) {
 		seen[ctx.GetStart().GetStart()] = true
 		return nil
 	}
-	for _, named := range jooqNodes[*parser.Named_single_sourceContext](q.Syntax.Root) {
-		hinted := named.Hinted_single_source()
-		if hinted == nil || hinted.Single_source() == nil || hinted.Single_source().Table_ref() == nil {
+	for _, key := range jooqNodes[*parser.Table_keyContext](q.Syntax.Root) {
+		var named *parser.Named_single_sourceContext
+		for parent := key.GetParent(); parent != nil; parent = parent.GetParent() {
+			if source, ok := parent.(*parser.Named_single_sourceContext); ok {
+				named = source
+				break
+			}
+		}
+		if named == nil {
 			continue
 		}
-		ref := hinted.Single_source().Table_ref()
-		if key := ref.Table_key(); key != nil {
-			unaliased := named.An_id() == nil && named.An_id_as_compat() == nil
-			if err := add(key.Id_table_or_type(), unaliased && key.View_name() == nil); err != nil {
-				return "", err
-			}
-			if unaliased && key.View_name() != nil {
-				// VIEW belongs between the mapped table and its preserved qualifier.
-				end := key.GetStop().GetStop() + 1 + shift
-				original := jooqID(key.Id_table_or_type().GetText())
-				replacements = append(replacements, replacement{end, end, quoted(" AS `" + strings.ReplaceAll(original, "`", "``") + "`")})
-			}
+		unaliased := named.An_id() == nil && named.An_id_as_compat() == nil
+		if err := add(key.Id_table_or_type(), unaliased && key.View_name() == nil); err != nil {
+			return "", err
+		}
+		if unaliased && key.View_name() != nil {
+			// VIEW belongs between the mapped table and its preserved qualifier.
+			end := key.GetStop().GetStop() + 1 + shift
+			original := jooqID(key.Id_table_or_type().GetText())
+			replacements = append(replacements, replacement{end, end, quoted(" AS `" + strings.ReplaceAll(original, "`", "``") + "`")})
 		}
 	}
 	targets := map[model.TableBinding]bool{}

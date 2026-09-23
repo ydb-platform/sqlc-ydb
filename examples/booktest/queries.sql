@@ -114,3 +114,26 @@ SELECT book_id, title FROM books WHERE author_id = $author_id ORDER BY book_id;
 DECLARE $author_id AS Uint64;
 SELECT author_id, name FROM authors WHERE author_id = $author_id;
 DELETE FROM books WHERE author_id = $author_id;
+
+-- name: ListAuthorBookTitles :many
+DECLARE $since_year AS Int32;
+$recent = (SELECT author_id, title FROM books WHERE publication_year >= $since_year);
+$grouped = (
+    SELECT author_id, AGGREGATE_LIST(title, 100u) AS titles
+    FROM $recent
+    GROUP BY author_id
+);
+SELECT a.author_id, a.name, Yson::SerializeJson(Json::From(g.titles)) AS titles_json
+FROM (SELECT author_id, name FROM authors) AS a
+JOIN $grouped AS g ON a.author_id = g.author_id
+ORDER BY a.author_id;
+
+-- name: InspectBookText :one
+DECLARE $text AS String;
+SELECT
+    String::Base32Encode($text) AS base32,
+    Unicode::IsAlpha("Book"u) AS alphabetic,
+    Url::GetHost("https://example.org/books") AS host,
+    Math::Sqrt(9.0) AS square_root,
+    Yson::IsString(Yson::From($text)) AS yson_string,
+    Pire::Grep("book")($text) AS pattern_found;

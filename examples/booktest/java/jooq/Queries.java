@@ -349,4 +349,56 @@ public final class Queries {
             }
         });
     }
+
+    // -- name: ListAuthorBookTitles :many
+    public List<ListAuthorBookTitlesRow> listAuthorBookTitles(Integer sinceYear) {
+        return dsl.connectionResult(_connection -> {
+            try (var _prepared = _connection.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+                DECLARE $since_year AS Int32;
+                $recent = (SELECT author_id, title FROM\s\
+                """ + dsl.render(BOOKS) + " AS `books`" + """
+                 WHERE publication_year >= $since_year);
+                $grouped = (
+                    SELECT author_id, AGGREGATE_LIST(title, 100u) AS titles
+                    FROM $recent
+                    GROUP BY author_id
+                );
+                SELECT a.author_id, a.name, Yson::SerializeJson(Json::From(g.titles)) AS titles_json
+                FROM (SELECT author_id, name FROM\s\
+                """ + dsl.render(AUTHORS) + " AS `authors`" + """
+                ) AS a
+                JOIN $grouped AS g ON a.author_id = g.author_id
+                ORDER BY a.author_id;\
+                """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+                _prepared.setInt("since_year", sinceYear);
+                try (var _rows = _prepared.executeQuery()) {
+                    var _result = dsl.fetch(_rows, YdbTypes.UINT64, YdbTypes.UTF8, YdbTypes.JSON).map(_row -> new ListAuthorBookTitlesRow(_row.get(0, org.jooq.types.ULong.class), _row.get(1, String.class), _row.get(2, org.jooq.JSON.class)));
+                    return _result;
+                }
+            }
+        });
+    }
+
+    // -- name: InspectBookText :one
+    public Optional<InspectBookTextRow> inspectBookText(byte[] text) {
+        return dsl.connectionResult(_connection -> {
+            try (var _prepared = _connection.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+                DECLARE $text AS String;
+                SELECT
+                    String::Base32Encode($text) AS base32,
+                    Unicode::IsAlpha(\"Book\"u) AS alphabetic,
+                    Url::GetHost(\"https://example.org/books\") AS host,
+                    Math::Sqrt(9.0) AS square_root,
+                    Yson::IsString(Yson::From($text)) AS yson_string,
+                    Pire::Grep(\"book\")($text) AS pattern_found;\
+                """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+                _prepared.setBytes("text", text);
+                try (var _rows = _prepared.executeQuery()) {
+                    var _result = dsl.fetch(_rows, YdbTypes.STRING, YdbTypes.BOOL, YdbTypes.STRING, YdbTypes.DOUBLE, YdbTypes.BOOL, YdbTypes.BOOL).map(_row -> new InspectBookTextRow(_row.get(0, byte[].class), _row.get(1, Boolean.class), _row.get(2, byte[].class), _row.get(3, Double.class), _row.get(4, Boolean.class), _row.get(5, Boolean.class)));
+                    if (_result.size() > 1) throw new org.jooq.exception.TooManyRowsException("Expected at most one row");
+                    return _result.stream().findFirst();
+                }
+            }
+        });
+    }
 }

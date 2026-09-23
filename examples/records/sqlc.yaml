@@ -4,12 +4,6 @@ sql:
     engine: ydb
     schema: schema.sql
     queries: queries.sql
-    analyzer:
-      functions:
-        - name: Unicode::Reverse
-          args:
-            - {type: Utf8, auto_map: true}
-          returns: Utf8
     gen:
       go:
         package: records
@@ -19,12 +13,6 @@ sql:
     engine: ydb
     schema: schema.sql
     queries: queries.sql
-    analyzer:
-      functions:
-        - name: Unicode::Reverse
-          args:
-            - {type: Utf8, auto_map: true}
-          returns: Utf8
     gen:
       go:
         package: records

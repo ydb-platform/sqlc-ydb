@@ -366,4 +366,61 @@ public final class Queries {
         String _value1 = _rows.getColumn(1).getText();
         return java.util.Optional.of(new SelectAuthorAndDeleteBooksRow(_value0, _value1));
     }
+
+    // -- name: ListAuthorBookTitles :many
+    public java.util.List<ListAuthorBookTitlesRow> listAuthorBookTitles(int sinceYear) {
+        var _params = Params.create();
+        _params.put("$since_year", PrimitiveValue.newInt32(sinceYear));
+        var _query = QueryReader.readFrom(
+                client.createQuery("""
+                    DECLARE $since_year AS Int32;
+                    $recent = (SELECT author_id, title FROM books WHERE publication_year >= $since_year);
+                    $grouped = (
+                        SELECT author_id, AGGREGATE_LIST(title, 100u) AS titles
+                        FROM $recent
+                        GROUP BY author_id
+                    );
+                    SELECT a.author_id, a.name, Yson::SerializeJson(Json::From(g.titles)) AS titles_json
+                    FROM (SELECT author_id, name FROM authors) AS a
+                    JOIN $grouped AS g ON a.author_id = g.author_id
+                    ORDER BY a.author_id;\
+                    """, _params)).join().getValue();
+        if (_query.getResultSetCount() != 1) throw new IllegalStateException("Expected one result set");
+        var _rows = _query.getResultSet(0);
+        var _items = new java.util.ArrayList<ListAuthorBookTitlesRow>();
+        while (_rows.next()) {
+            long _value0 = _rows.getColumn(0).getUint64();
+            String _value1 = _rows.getColumn(1).getText();
+            String _value2 = _rows.getColumn(2).getJson();
+            _items.add(new ListAuthorBookTitlesRow(_value0, _value1, _value2));
+        }
+        return _items;
+    }
+
+    // -- name: InspectBookText :one
+    public java.util.Optional<InspectBookTextRow> inspectBookText(byte[] text) {
+        var _params = Params.create();
+        _params.put("$text", PrimitiveValue.newBytes(text));
+        var _query = QueryReader.readFrom(
+                client.createQuery("""
+                    DECLARE $text AS String;
+                    SELECT
+                        String::Base32Encode($text) AS base32,
+                        Unicode::IsAlpha(\"Book\"u) AS alphabetic,
+                        Url::GetHost(\"https://example.org/books\") AS host,
+                        Math::Sqrt(9.0) AS square_root,
+                        Yson::IsString(Yson::From($text)) AS yson_string,
+                        Pire::Grep(\"book\")($text) AS pattern_found;\
+                    """, _params)).join().getValue();
+        if (_query.getResultSetCount() != 1) throw new IllegalStateException("Expected one result set");
+        var _rows = _query.getResultSet(0);
+        if (!_rows.next()) return java.util.Optional.empty();
+        byte[] _value0 = _rows.getColumn(0).getBytes();
+        boolean _value1 = _rows.getColumn(1).getBool();
+        byte[] _value2 = _rows.getColumn(2).getBytes();
+        double _value3 = _rows.getColumn(3).getDouble();
+        boolean _value4 = _rows.getColumn(4).getBool();
+        boolean _value5 = _rows.getColumn(5).getBool();
+        return java.util.Optional.of(new InspectBookTextRow(_value0, _value1, _value2, _value3, _value4, _value5));
+    }
 }

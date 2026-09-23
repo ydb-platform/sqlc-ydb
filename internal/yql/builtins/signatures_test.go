@@ -1,11 +1,49 @@
 package builtins
 
 import (
+	"math/big"
 	"strings"
 	"testing"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
+
+func TestSignatureFittingIntegerLiteral(t *testing.T) {
+	r, err := NewRegistry([]Signature{{Name: "Acme::Byte", Arguments: []Parameter{{Type: scalar("Uint8")}}, Returns: scalar("Bool")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []string{"Int32", "Uint64"} {
+		result, err := r.ResolveCall("Acme::Byte", []CallArgument{{Type: scalar(kind), IntegerLiteral: big.NewInt(50)}})
+		if err != nil || result.Kind != "Bool" {
+			t.Fatalf("%s fitting literal: result %s, error %v", kind, result.String(), err)
+		}
+	}
+	for _, argument := range []CallArgument{
+		{Type: scalar("Int32"), IntegerLiteral: big.NewInt(256)},
+		{Type: scalar("Int32")},
+	} {
+		if _, err := r.ResolveCall("Acme::Byte", []CallArgument{argument}); err == nil {
+			t.Fatalf("accepted non-fitting argument %+v", argument)
+		}
+	}
+}
+
+func TestUnicodeAcceptsValidStringLiteral(t *testing.T) {
+	value := "жніўня"
+	for _, name := range []string{"Unicode::GetLength", "Unicode::Reverse"} {
+		if _, err := defaultRegistry.ResolveCall(name, []CallArgument{{Type: scalar("String"), StringLiteral: &value}}); err != nil {
+			t.Fatalf("%s literal: %v", name, err)
+		}
+		if _, err := defaultRegistry.ResolveCall(name, []CallArgument{{Type: scalar("String")}}); err == nil {
+			t.Fatalf("%s accepted a nonliteral String", name)
+		}
+	}
+	bad := string([]byte{0xff})
+	if _, err := defaultRegistry.ResolveCall("Unicode::GetLength", []CallArgument{{Type: scalar("String"), StringLiteral: &bad}}); err == nil {
+		t.Fatal("accepted invalid UTF-8 literal")
+	}
+}
 
 func TestRegistryResolvesDigestSignatures(t *testing.T) {
 	r, err := NewRegistry(nil)

@@ -414,4 +414,65 @@ public sealed class Queries
         reader.GetFieldValue<ulong>(0),
         reader.GetFieldValue<string>(1)
     );
+
+    // -- name: ListAuthorBookTitles :many
+    public async Task<IReadOnlyList<ListAuthorBookTitlesRow>> ListAuthorBookTitlesAsync(int sinceYear, CancellationToken cancellationToken = default)
+    {
+        await using var command = new YdbCommand(
+            "DECLARE $since_year AS Int32;\n" +
+            "$recent = (SELECT author_id, title FROM books WHERE publication_year >= $since_year);\n" +
+            "$grouped = (\n" +
+            "    SELECT author_id, AGGREGATE_LIST(title, 100u) AS titles\n" +
+            "    FROM $recent\n" +
+            "    GROUP BY author_id\n" +
+            ");\n" +
+            "SELECT a.author_id, a.name, Yson::SerializeJson(Json::From(g.titles)) AS titles_json\n" +
+            "FROM (SELECT author_id, name FROM authors) AS a\n" +
+            "JOIN $grouped AS g ON a.author_id = g.author_id\n" +
+            "ORDER BY a.author_id;", _connection) { Transaction = _transaction };
+        command.Parameters.Add(new YdbParameter("$since_year", DbType.Int32, sinceYear));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        var rows = new List<ListAuthorBookTitlesRow>();
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            rows.Add(ListAuthorBookTitlesRowFrom(reader));
+        }
+        return rows;
+    }
+
+    private static ListAuthorBookTitlesRow ListAuthorBookTitlesRowFrom(DbDataReader reader) => new(
+        reader.GetFieldValue<ulong>(0),
+        reader.GetFieldValue<string>(1),
+        reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)
+    );
+
+    // -- name: InspectBookText :one
+    public async Task<InspectBookTextRow> InspectBookTextAsync(byte[] text, CancellationToken cancellationToken = default)
+    {
+        await using var command = new YdbCommand(
+            "DECLARE $text AS String;\n" +
+            "SELECT\n" +
+            "    String::Base32Encode($text) AS base32,\n" +
+            "    Unicode::IsAlpha(\"Book\"u) AS alphabetic,\n" +
+            "    Url::GetHost(\"https://example.org/books\") AS host,\n" +
+            "    Math::Sqrt(9.0) AS square_root,\n" +
+            "    Yson::IsString(Yson::From($text)) AS yson_string,\n" +
+            "    Pire::Grep(\"book\")($text) AS pattern_found;", _connection) { Transaction = _transaction };
+        command.Parameters.Add(new YdbParameter("$text", DbType.Binary, text));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException("query returned no rows");
+        }
+        return InspectBookTextRowFrom(reader);
+    }
+
+    private static InspectBookTextRow InspectBookTextRowFrom(DbDataReader reader) => new(
+        reader.GetFieldValue<byte[]>(0),
+        reader.GetFieldValue<bool>(1),
+        reader.IsDBNull(2) ? null : reader.GetFieldValue<byte[]>(2),
+        reader.GetFieldValue<double>(3),
+        reader.GetFieldValue<bool>(4),
+        reader.GetFieldValue<bool>(5)
+    );
 }

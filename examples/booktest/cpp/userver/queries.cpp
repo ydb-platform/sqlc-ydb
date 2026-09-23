@@ -426,4 +426,71 @@ std::optional<SelectAuthorAndDeleteBooksRow> Queries::SelectAuthorAndDeleteBooks
     };
 }
 
+// -- name: ListAuthorBookTitles :many
+std::vector<ListAuthorBookTitlesRow> Queries::ListAuthorBookTitles(std::int32_t since_year) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "DECLARE $since_year AS Int32;\n"
+        "$recent = (SELECT author_id, title FROM books WHERE publication_year >= $since_year);\n"
+        "$grouped = (\n"
+        "    SELECT author_id, AGGREGATE_LIST(title, 100u) AS titles\n"
+        "    FROM $recent\n"
+        "    GROUP BY author_id\n"
+        ");\n"
+        "SELECT a.author_id, a.name, Yson::SerializeJson(Json::From(g.titles)) AS titles_json\n"
+        "FROM (SELECT author_id, name FROM authors) AS a\n"
+        "JOIN $grouped AS g ON a.author_id = g.author_id\n"
+        "ORDER BY a.author_id;",
+        ::userver::ydb::Query::Name{"ListAuthorBookTitles"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    auto sqlc_response =
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$since_year", since_year)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$since_year", since_year);
+    auto sqlc_cursor = sqlc_response.GetSingleCursor();
+    std::vector<ListAuthorBookTitlesRow> sqlc_rows;
+    sqlc_rows.reserve(sqlc_cursor.size());
+    for (auto sqlc_row : sqlc_cursor) {
+        sqlc_rows.push_back(ListAuthorBookTitlesRow{
+            sqlc_row.Get<std::uint64_t>("a.author_id"),
+            sqlc_row.Get<::userver::ydb::Utf8>("a.name"),
+            sqlc_row.Get<std::optional<::userver::formats::json::Value>>("titles_json"),
+        });
+    }
+    return sqlc_rows;
+}
+
+// -- name: InspectBookText :one
+std::optional<InspectBookTextRow> Queries::InspectBookText(const std::string& text) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "DECLARE $text AS String;\n"
+        "SELECT\n"
+        "    String::Base32Encode($text) AS base32,\n"
+        "    Unicode::IsAlpha(\"Book\"u) AS alphabetic,\n"
+        "    Url::GetHost(\"https://example.org/books\") AS host,\n"
+        "    Math::Sqrt(9.0) AS square_root,\n"
+        "    Yson::IsString(Yson::From($text)) AS yson_string,\n"
+        "    Pire::Grep(\"book\")($text) AS pattern_found;",
+        ::userver::ydb::Query::Name{"InspectBookText"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    auto sqlc_response =
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$text", text)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$text", text);
+    auto sqlc_cursor = sqlc_response.GetSingleCursor();
+    if (sqlc_cursor.empty()) {
+        return std::nullopt;
+    }
+    auto sqlc_row = sqlc_cursor.GetFirstRow();
+    return InspectBookTextRow{
+        sqlc_row.Get<std::string>("base32"),
+        sqlc_row.Get<bool>("alphabetic"),
+        sqlc_row.Get<std::optional<std::string>>("host"),
+        sqlc_row.Get<double>("square_root"),
+        sqlc_row.Get<bool>("yson_string"),
+        sqlc_row.Get<bool>("pattern_found"),
+    };
+}
+
 }  // namespace booktest::userver

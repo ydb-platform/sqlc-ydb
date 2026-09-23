@@ -360,4 +360,57 @@ class Queries(private val client: java.sql.Connection) {
             }
         }
     }
+
+    // -- name: ListAuthorBookTitles :many
+    fun listAuthorBookTitles(sinceYear: Int): List<ListAuthorBookTitlesRow> {
+        client.unwrap(tech.ydb.jdbc.YdbConnection::class.java).prepareStatement(
+            "DECLARE \$since_year AS Int32;\n" +
+            "\$recent = (SELECT author_id, title FROM books WHERE publication_year >= \$since_year);\n" +
+            "\$grouped = (\n" +
+            "    SELECT author_id, AGGREGATE_LIST(title, 100u) AS titles\n" +
+            "    FROM \$recent\n" +
+            "    GROUP BY author_id\n" +
+            ");\n" +
+            "SELECT a.author_id, a.name, Yson::SerializeJson(Json::From(g.titles)) AS titles_json\n" +
+            "FROM (SELECT author_id, name FROM authors) AS a\n" +
+            "JOIN \$grouped AS g ON a.author_id = g.author_id\n" +
+            "ORDER BY a.author_id;", tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY).use { _prepared ->
+            _prepared.setInt("since_year", sinceYear)
+            _prepared.executeQuery().use { _rows ->
+                val _items = ArrayList<ListAuthorBookTitlesRow>()
+                while (_rows.next()) {
+                    val _value0: Long = _rows.getLong(1)
+                    val _value1: String = _rows.getString(2)
+                    val _value2: String? = _rows.getString(3)
+                    _items.add(ListAuthorBookTitlesRow(_value0, _value1, _value2))
+                }
+                return _items
+            }
+        }
+    }
+
+    // -- name: InspectBookText :one
+    fun inspectBookText(text: ByteArray): InspectBookTextRow? {
+        client.unwrap(tech.ydb.jdbc.YdbConnection::class.java).prepareStatement(
+            "DECLARE \$text AS String;\n" +
+            "SELECT\n" +
+            "    String::Base32Encode(\$text) AS base32,\n" +
+            "    Unicode::IsAlpha(\"Book\"u) AS alphabetic,\n" +
+            "    Url::GetHost(\"https://example.org/books\") AS host,\n" +
+            "    Math::Sqrt(9.0) AS square_root,\n" +
+            "    Yson::IsString(Yson::From(\$text)) AS yson_string,\n" +
+            "    Pire::Grep(\"book\")(\$text) AS pattern_found;", tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY).use { _prepared ->
+            _prepared.setBytes("text", text)
+            _prepared.executeQuery().use { _rows ->
+                if (!_rows.next()) return null
+                val _value0: ByteArray = _rows.getBytes(1)
+                val _value1: Boolean = _rows.getBoolean(2)
+                val _value2: ByteArray? = _rows.getBytes(3)
+                val _value3: Double = _rows.getDouble(4)
+                val _value4: Boolean = _rows.getBoolean(5)
+                val _value5: Boolean = _rows.getBoolean(6)
+                return InspectBookTextRow(_value0, _value1, _value2, _value3, _value4, _value5)
+            }
+        }
+    }
 }

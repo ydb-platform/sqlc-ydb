@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <optional>
 #include <vector>
+#include <string>
 
 #include <userver/ydb/table.hpp>
 #include <userver/ydb/transaction.hpp>
@@ -38,6 +39,8 @@ public:
     void DeleteAuthorWithBooks(std::uint64_t author_id) const;
     std::vector<UpdateAuthorAndListBooksRow> UpdateAuthorAndListBooks(std::uint64_t author_id, const ::userver::ydb::Utf8& name) const;
     std::optional<SelectAuthorAndDeleteBooksRow> SelectAuthorAndDeleteBooks(std::uint64_t author_id) const;
+    std::vector<ListAuthorBookTitlesRow> ListAuthorBookTitles(std::int32_t since_year) const;
+    std::optional<InspectBookTextRow> InspectBookText(const std::string& text) const;
 
 private:
     ::userver::ydb::TableClient* client_;

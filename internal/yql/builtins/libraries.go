@@ -14,9 +14,12 @@ func resolveLibrary(name string, args []model.Type) (model.Type, error) {
 }
 
 func lookupLibrary(name string) functionResolver {
+	if resolver := lookupDateTimeDigestIpMath(name); resolver != nil {
+		return resolver
+	}
 	switch name {
-	case "Yson::ConvertToStringList":
-		return resolveYsonConvertToStringList
+	case "Json::From":
+		return func(args []model.Type) (model.Type, error) { return resolveJsonFrom(name, args) }
 	case "String::Base64Encode", "String::EscapeC", "String::UnescapeC", "String::HexEncode",
 		"String::EncodeHtml", "String::DecodeHtml", "String::CgiEscape", "String::CgiUnescape",
 		"String::Strip", "String::Collapse", "String::AsciiToLower", "String::AsciiToUpper", "String::AsciiToTitle":
@@ -40,22 +43,8 @@ func lookupLibrary(name string) functionResolver {
 	case "Unicode::ToLower", "Unicode::ToUpper", "Unicode::ToTitle", "Unicode::Normalize",
 		"Unicode::NormalizeNFC", "Unicode::NormalizeNFD", "Unicode::NormalizeNFKC", "Unicode::NormalizeNFKD":
 		return func(args []model.Type) (model.Type, error) { return autoMapUnary(name, args, "Utf8", "Utf8") }
-	case "DateTime::GetYear":
-		return func(args []model.Type) (model.Type, error) { return resolveDateTimeGetYear(name, args) }
-	case "DateTime::GetDayOfYear":
-		return func(args []model.Type) (model.Type, error) { return dateTimeComponent(name, args, "Uint16") }
-	case "DateTime::GetMonth", "DateTime::GetWeekOfYear", "DateTime::GetWeekOfYearIso8601",
-		"DateTime::GetDayOfMonth", "DateTime::GetDayOfWeek", "DateTime::GetHour",
-		"DateTime::GetMinute", "DateTime::GetSecond":
-		return func(args []model.Type) (model.Type, error) { return dateTimeComponent(name, args, "Uint8") }
-	case "DateTime::GetMillisecondOfSecond", "DateTime::GetMicrosecondOfSecond":
-		return func(args []model.Type) (model.Type, error) { return dateTimeComponent(name, args, "Uint32") }
-	case "DateTime::GetTimezoneId":
-		return func(args []model.Type) (model.Type, error) { return dateTimeComponent(name, args, "Uint16") }
-	case "DateTime::GetMonthName", "DateTime::GetDayOfWeekName", "DateTime::GetTimezoneName":
-		return func(args []model.Type) (model.Type, error) { return dateTimeComponent(name, args, "String") }
 	default:
-		return nil
+		return lookupSpecializedUDF(name)
 	}
 }
 
@@ -176,37 +165,6 @@ func requireOptionalScalar(name string, args []model.Type, index int, kind strin
 		return fmt.Errorf("%s argument %d must be %s, Optional<%s>, or Null", name, index+1, kind, kind)
 	}
 	return nil
-}
-
-func resolveDateTimeGetYear(name string, args []model.Type) (model.Type, error) {
-	base, nullable, err := dateTimeArgument(name, args)
-	if err != nil {
-		return model.Type{}, err
-	}
-	result := "Uint16"
-	if isExtendedDateTime(base.Kind) {
-		result = "Int32"
-	}
-	return withOptional(model.Type{Kind: result}, nullable), nil
-}
-
-func dateTimeComponent(name string, args []model.Type, result string) (model.Type, error) {
-	_, nullable, err := dateTimeArgument(name, args)
-	if err != nil {
-		return model.Type{}, err
-	}
-	return withOptional(model.Type{Kind: result}, nullable), nil
-}
-
-func dateTimeArgument(name string, args []model.Type) (model.Type, bool, error) {
-	if err := arity(name, args, 1); err != nil {
-		return model.Type{}, false, err
-	}
-	base, nullable, err := baseType(args[0])
-	if err != nil || (!isBasicDateTime(base.Kind) && !isExtendedDateTime(base.Kind)) {
-		return model.Type{}, false, fmt.Errorf("%s argument 1 must be a date/time value or its Optional form", name)
-	}
-	return base, nullable, nil
 }
 
 func isBasicDateTime(kind string) bool {

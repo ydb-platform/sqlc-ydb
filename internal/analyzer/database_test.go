@@ -280,7 +280,6 @@ func TestDatabaseAnalysisChecksPrimaryKeyOrder(t *testing.T) {
 
 func TestDatabaseAnalysisRejectsUnsupportedSourcesBeforeDiscovery(t *testing.T) {
 	for _, sql := range []string{
-		"-- name: Read :one\nSELECT id FROM (SELECT id FROM records) AS r;",
 		"-- name: Read :one\nWITH r AS (SELECT id FROM records) SELECT id FROM r;",
 		"-- name: Read :one\nSELECT id FROM $table;",
 		"-- name: Read :one\nSELECT id FROM cluster.records;",

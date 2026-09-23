@@ -91,3 +91,20 @@ pub struct SelectAuthorAndDeleteBooksRow {
     pub author_id: u64,
     pub name: String,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ListAuthorBookTitlesRow {
+    pub author_id: u64,
+    pub name: String,
+    pub titles_json: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct InspectBookTextRow {
+    pub base32: ydb::Bytes,
+    pub alphabetic: bool,
+    pub host: Option<ydb::Bytes>,
+    pub square_root: f64,
+    pub yson_string: bool,
+    pub pattern_found: bool,
+}

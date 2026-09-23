@@ -12,9 +12,9 @@ A record store with a hashed owner key, batch writes and filtered reads/deletes.
 | `FilterRecords`, `DeleteRecords` | A typed `List<Utf8>` binds `IN $record_ids`; `DELETE ... ON SELECT` combines that list with owner and group predicates. |
 | `ListRecords` | `SELECT *` is expanded to fixed columns before generation. |
 | `FindRecordsByTags` | JSON arrays of tags are converted with `Yson::ConvertToStringList` and compared with a scalar list using `ToSet` and `SetIsDisjoint`. Store JSON arrays in `attributes` for this query. |
-| `ReverseGroupLabel` | A configured `Unicode::Reverse` signature accepts a nullable label through AutoMap and returns the reversed Unicode text. |
+| `ReverseGroupLabel` | The built-in `Unicode::Reverse` signature accepts a nullable label through AutoMap and returns the reversed Unicode text. |
 
-The [configuration](sqlc.yaml) declares the documented [`Unicode::Reverse`](https://ydb.tech/docs/en/yql/reference/udf/list/unicode) contract: `Utf8{Flags:AutoMap} -> Utf8`. This function is available in YDB but outside sqlc-ydb's built-in catalog. AutoMap makes a null input return null, represented as `*string` in Go. A configured signature supplies type information only; it does not install a UDF or verify its availability. See [function signatures](../../docs/functions.md).
+The built-in [`Unicode::Reverse`](https://ydb.tech/docs/en/yql/reference/udf/list/unicode) contract is `Utf8{Flags:AutoMap} -> Utf8`. AutoMap makes a null input return null, represented as `*string` in Go. See [function signatures](../../docs/functions.md).
 
 ## Generated calls
 

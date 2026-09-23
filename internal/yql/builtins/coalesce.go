@@ -30,6 +30,10 @@ func resolveCoalesceArguments(name string, args []CallArgument) (model.Type, err
 		if right.Kind == "Null" {
 			continue
 		}
+		if argument.EmptyList && argument.Type.Kind == "List" && left.Kind == "List" {
+			right = left
+			rightOptional = false
+		}
 		// YQL reconciles COALESCE from left to right. Only the original
 		// right-hand literal can narrow to the accumulated left-hand type.
 		if !rightOptional && isInteger(left.Kind) && isInteger(right.Kind) && integerLiteralFits(argument.IntegerLiteral, left.Kind) {

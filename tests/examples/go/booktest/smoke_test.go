@@ -3,6 +3,7 @@ package booktest_test
 import (
 	"encoding/json"
 	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -115,6 +116,18 @@ func TestGeneratedExample(t *testing.T) {
 	if rows, err := s.ListBooksWithRecentEditions(ctx, 2021); err != nil || len(rows) != 0 {
 		t.Fatalf("database/sql empty tuple subquery = %#v, %v", rows, err)
 	}
+	if rows, err := n.ListAuthorBookTitles(ctx, 1970); err != nil || len(rows) != 1 || rows[0].AuthorID != 100 || rows[0].Name != author.Name || !sameJSONStrings(rows[0].TitlesJson, "The Dispossessed", "Words Are My Matter") {
+		t.Fatalf("native grouped book titles = %#v, %v", rows, err)
+	}
+	if rows, err := s.ListAuthorBookTitles(ctx, 2000); err != nil || len(rows) != 1 || rows[0].AuthorID != 100 || rows[0].Name != author.Name || !sameJSONStrings(rows[0].TitlesJson, "Words Are My Matter") {
+		t.Fatalf("database/sql grouped book titles = %#v, %v", rows, err)
+	}
+	if rows, err := n.ListAuthorBookTitles(ctx, 2021); err != nil || len(rows) != 0 {
+		t.Fatalf("native empty grouped book titles = %#v, %v", rows, err)
+	}
+	if rows, err := s.ListAuthorBookTitles(ctx, 2021); err != nil || len(rows) != 0 {
+		t.Fatalf("database/sql empty grouped book titles = %#v, %v", rows, err)
+	}
 
 	tx, err := db.SQL.BeginTx(ctx, nil)
 	if err != nil {
@@ -142,6 +155,12 @@ func TestGeneratedExample(t *testing.T) {
 	}
 	if greeting, err := s.SayHello(ctx, "Tenar"); err != nil || greeting.Greeting != "hello Tenar" {
 		t.Fatalf("database/sql SayHello() = %#v, %v", greeting, err)
+	}
+	if got, err := n.InspectBookText(ctx, []byte("book")); err != nil || string(got.Base32) != "MJXW62Y=" || !got.Alphabetic || got.Host == nil || string(*got.Host) != "example.org" || got.SquareRoot != 3 || !got.YsonString || !got.PatternFound {
+		t.Fatalf("native InspectBookText() = %#v, %v", got, err)
+	}
+	if got, err := s.InspectBookText(ctx, []byte("book")); err != nil || string(got.Base32) != "MJXW62Y=" || !got.Alphabetic || got.Host == nil || string(*got.Host) != "example.org" || got.SquareRoot != 3 || !got.YsonString || !got.PatternFound {
+		t.Fatalf("database/sql InspectBookText() = %#v, %v", got, err)
 	}
 
 	if err := n.DeleteAuthorBeforeYear(ctx, native.DeleteAuthorBeforeYearParams{AuthorID: 100, PublicationYear: 1970}); err != nil {
@@ -224,6 +243,19 @@ func TestGeneratedExample(t *testing.T) {
 func sameJSON(left, right string) bool {
 	var l, r any
 	return json.Unmarshal([]byte(left), &l) == nil && json.Unmarshal([]byte(right), &r) == nil && reflect.DeepEqual(l, r)
+}
+
+func sameJSONStrings(value *string, want ...string) bool {
+	if value == nil {
+		return false
+	}
+	var got []string
+	if err := json.Unmarshal([]byte(*value), &got); err != nil {
+		return false
+	}
+	sort.Strings(got)
+	sort.Strings(want)
+	return reflect.DeepEqual(got, want)
 }
 
 func TestGeneratedMixedScripts(t *testing.T) {

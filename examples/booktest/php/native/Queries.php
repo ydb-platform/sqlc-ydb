@@ -869,6 +869,124 @@ final class Queries
         return $rows[0] ?? null;
     }
 
+    /** @return list<ListAuthorBookTitlesRow> */
+    // -- name: ListAuthorBookTitles :many
+    public function listAuthorBookTitles(int $sinceYear): array
+    {
+        $parameters = [
+            '$since_year' => YdbValueCodec::typedInt32($sinceYear, 'since_year'),
+        ];
+
+        $result = $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                DECLARE $since_year AS Int32;
+                $recent = (SELECT author_id, title FROM books WHERE publication_year >= $since_year);
+                $grouped = (
+                    SELECT author_id, AGGREGATE_LIST(title, 100u) AS titles
+                    FROM $recent
+                    GROUP BY author_id
+                );
+                SELECT a.author_id, a.name, Yson::SerializeJson(Json::From(g.titles)) AS titles_json
+                FROM (SELECT author_id, name FROM authors) AS a
+                JOIN $grouped AS g ON a.author_id = g.author_id
+                ORDER BY a.author_id;
+                SQLC_YDB_YQL)
+                ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0);
+            if ($this->txId !== null) {
+                $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
+            } else {
+                $query->beginTx('serializable_read_write');
+            }
+            if ($this->configure !== null) {
+                ($this->configure)($query);
+            }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
+
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
+        });
+
+        $rows = $this->decodeRows(
+            $result,
+            'ListAuthorBookTitles',
+            [
+                ['a.author_id', PrimitiveTypeId::UINT64, false],
+                ['a.name', PrimitiveTypeId::UTF8, false],
+                ['titles_json', PrimitiveTypeId::JSON, true],
+            ],
+            static fn($items): ListAuthorBookTitlesRow => new ListAuthorBookTitlesRow(
+                YdbValueCodec::uint64($items->offsetGet(0), 'ListAuthorBookTitles.author_id'),
+                YdbValueCodec::utf8($items->offsetGet(1), 'ListAuthorBookTitles.name'),
+                YdbValueCodec::optionalJson($items->offsetGet(2), 'ListAuthorBookTitles.titles_json'),
+            ),
+        );
+
+        return $rows;
+    }
+
+    // -- name: InspectBookText :one
+    public function inspectBookText(string $text): ?InspectBookTextRow
+    {
+        $parameters = [
+            '$text' => YdbValueCodec::typedBytes($text, 'text'),
+        ];
+
+        $result = $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                DECLARE $text AS String;
+                SELECT
+                    String::Base32Encode($text) AS base32,
+                    Unicode::IsAlpha("Book"u) AS alphabetic,
+                    Url::GetHost("https://example.org/books") AS host,
+                    Math::Sqrt(9.0) AS square_root,
+                    Yson::IsString(Yson::From($text)) AS yson_string,
+                    Pire::Grep("book")($text) AS pattern_found;
+                SQLC_YDB_YQL)
+                ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0);
+            if ($this->txId !== null) {
+                $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
+            } else {
+                $query->beginTx('serializable_read_write');
+            }
+            if ($this->configure !== null) {
+                ($this->configure)($query);
+            }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
+
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
+        });
+
+        $rows = $this->decodeRows(
+            $result,
+            'InspectBookText',
+            [
+                ['base32', PrimitiveTypeId::STRING, false],
+                ['alphabetic', PrimitiveTypeId::BOOL, false],
+                ['host', PrimitiveTypeId::STRING, true],
+                ['square_root', PrimitiveTypeId::DOUBLE, false],
+                ['yson_string', PrimitiveTypeId::BOOL, false],
+                ['pattern_found', PrimitiveTypeId::BOOL, false],
+            ],
+            static fn($items): InspectBookTextRow => new InspectBookTextRow(
+                YdbValueCodec::bytes($items->offsetGet(0), 'InspectBookText.base32'),
+                YdbValueCodec::bool($items->offsetGet(1), 'InspectBookText.alphabetic'),
+                YdbValueCodec::optionalBytes($items->offsetGet(2), 'InspectBookText.host'),
+                YdbValueCodec::double($items->offsetGet(3), 'InspectBookText.square_root'),
+                YdbValueCodec::bool($items->offsetGet(4), 'InspectBookText.yson_string'),
+                YdbValueCodec::bool($items->offsetGet(5), 'InspectBookText.pattern_found'),
+            ),
+        );
+
+        return $rows[0] ?? null;
+    }
+
     /**
      * @param array<int, array{0: string, 1: int, 2: bool}> $expectedColumns
      * @return list<object>

@@ -181,11 +181,14 @@ func TestMixedScriptReturningTypeDoesNotDependOnParameterRefinement(t *testing.T
 	}
 }
 
-func TestMixedScriptDoesNotEnableNamedTabularBindings(t *testing.T) {
+func TestMixedScriptUsesNamedTabularBindings(t *testing.T) {
 	const sql = "-- name: Change :many\n$selection=(SELECT id FROM records); DELETE FROM copies; SELECT id FROM $selection;"
 	result, err := Analyze(dmlScriptSchema, []model.Source{{Name: "query.sql", Text: sql}})
-	if err == nil || len(result.Diagnostics) == 0 || !strings.HasPrefix(result.Diagnostics[0].Message, "cannot resolve type of local $selection:") {
-		t.Fatalf("diagnostics=%#v error=%v", result.Diagnostics, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q := result.Queries[0]; q.SQL != sql || !q.MultipleStatements || len(q.ResultSets) != 1 || len(q.ResultSets[0].Columns) != 1 || q.ResultSets[0].Columns[0].Type.Kind != "Uint64" {
+		t.Fatalf("query=%#v", q)
 	}
 }
 

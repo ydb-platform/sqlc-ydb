@@ -87,6 +87,7 @@ func TestINSubqueryPredicateForms(t *testing.T) {
 		{"delete select predicate", ":exec", `DELETE FROM records ON SELECT tenant, code FROM allowed WHERE tenant IN (SELECT code FROM numeric_codes);`, 0},
 		{"parameter lhs", ":many", `DECLARE $key AS Uint64; SELECT code FROM records WHERE $key IN (SELECT code FROM numeric_codes);`, 1},
 		{"grouped subquery", ":many", `SELECT code FROM records WHERE tenant IN (SELECT tenant FROM allowed GROUP BY tenant HAVING COUNT(*) > 0ul);`, 1},
+		{"derived subquery source", ":many", `SELECT code FROM records WHERE tenant IN (SELECT tenant FROM (SELECT tenant FROM allowed));`, 1},
 		{"inner output alias shadows outer", ":many", `SELECT code FROM records WHERE tenant IN (SELECT tenant AS enabled FROM allowed ORDER BY enabled);`, 1},
 		{"tuple grouping", ":many", `SELECT code FROM records WHERE (tenant,code) IN (SELECT DISTINCT (tenant,code) FROM allowed GROUP BY tenant,code);`, 1},
 	} {
@@ -132,7 +133,6 @@ func TestINSubqueryRejectsInvalidScopesAndKeys(t *testing.T) {
 		{"discard subquery", `SELECT code FROM records WHERE tenant IN (DISCARD SELECT tenant FROM allowed);`, "without DISCARD or INTO RESULT"},
 		{"multiple wildcard columns", `SELECT code FROM records WHERE tenant IN (SELECT * FROM allowed);`, "must return exactly one column"},
 		{"union", `SELECT code FROM records WHERE tenant IN (SELECT tenant FROM allowed UNION ALL SELECT code FROM numeric_codes);`, "CTEs, UNION and INTERSECT are unsupported"},
-		{"derived source", `SELECT code FROM records WHERE tenant IN (SELECT tenant FROM (SELECT tenant FROM allowed));`, "only named catalog tables are supported"},
 		{"shared external conflict", `SELECT r.code FROM records AS r WHERE r.code = $selected AND r.tenant IN (SELECT r.code FROM numeric_codes AS r WHERE r.code = $selected);`, "incompatible"},
 		{"outer aggregate rejected", `SELECT code FROM records WHERE COUNT(*) IN (SELECT code FROM numeric_codes);`, "aggregate functions are not allowed in WHERE"},
 		{"inner aggregate predicate rejected", `SELECT code FROM records WHERE tenant IN (SELECT tenant FROM allowed WHERE COUNT(*) > 0ul);`, "aggregate functions are not allowed in WHERE"},

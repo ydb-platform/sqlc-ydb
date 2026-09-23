@@ -19,6 +19,9 @@ func Resolve(name string, args []model.Type) (model.Type, error) {
 }
 
 func resolveLegacy(name string, args []model.Type) (model.Type, error) {
+	if result, handled, err := resolveHistogramAggregate(name, args); handled {
+		return result, err
+	}
 	if strings.Contains(name, "::") {
 		return resolveLibrary(name, args)
 	}
@@ -74,6 +77,8 @@ func lookupCore(name string) functionResolver {
 		return resolveAbs
 	case "TOSET":
 		return resolveToSet
+	case "LISTCREATE":
+		return resolveListCreate
 	case "SETISDISJOINT":
 		return resolveSetIsDisjoint
 	case "COUNT":
@@ -86,6 +91,8 @@ func lookupCore(name string) functionResolver {
 		return resolveSum
 	case "AVG":
 		return resolveAvg
+	case "AGGREGATE_LIST", "AGG_LIST", "AGGREGATE_LIST_DISTINCT", "AGG_LIST_DISTINCT":
+		return resolveAggregateList
 	default:
 		return nil
 	}
@@ -130,6 +137,28 @@ func resolveCountIf(args []model.Type) (model.Type, error) {
 		return model.Type{}, fmt.Errorf("COUNT_IF argument must be Bool or Optional<Bool>")
 	}
 	return model.Type{Kind: "Uint64"}, nil
+}
+
+func resolveAggregateList(args []model.Type) (model.Type, error) {
+	if len(args) < 1 || len(args) > 2 {
+		return model.Type{}, fmt.Errorf("AGGREGATE_LIST expects 1 or 2 arguments, got %d", len(args))
+	}
+	item, _, err := baseType(args[0])
+	if err != nil || item.Kind == "Null" || item.Kind == "Void" {
+		return model.Type{}, fmt.Errorf("AGGREGATE_LIST argument 1 needs a concrete value type")
+	}
+	if len(args) == 2 {
+		limit, nullable, err := baseType(args[1])
+		if err != nil || nullable {
+			return model.Type{}, fmt.Errorf("AGGREGATE_LIST limit must be a non-optional integer convertible to Uint64")
+		}
+		switch limit.Kind {
+		case "Int8", "Int16", "Int32", "Uint8", "Uint16", "Uint32", "Uint64":
+		default:
+			return model.Type{}, fmt.Errorf("AGGREGATE_LIST limit must be a non-optional integer convertible to Uint64")
+		}
+	}
+	return model.Type{Kind: "List", Elem: &item}, nil
 }
 
 func resolveNanvl(args []model.Type) (model.Type, error) {

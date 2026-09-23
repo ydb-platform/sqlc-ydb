@@ -16,13 +16,7 @@ func SQL(q model.AnalyzedQuery) (string, []int) {
 	text := q.SQL
 	text = model.WithoutQueryAnnotation(text)
 	if HasDeclarations(q) {
-		var declarations strings.Builder
-		for _, p := range q.Parameters {
-			if !q.IsDeclaredParameter(p.Name) {
-				declarations.WriteString("DECLARE $" + declarationName(p.Name) + " AS " + p.Type.String() + ";\n")
-			}
-		}
-		return declarations.String() + text, nil
+		return NamedSQL(q), nil
 	}
 	parameters := map[string]int{}
 	for i, p := range q.Parameters {
@@ -60,6 +54,17 @@ func SQL(q model.AnalyzedQuery) (string, []int) {
 
 // HasDeclarations selects named driver binding without rewriting source declarations.
 func HasDeclarations(q model.AnalyzedQuery) bool { return len(q.DeclaredParameters) != 0 }
+
+// NamedSQL retains named parameters and declares those inferred by analysis.
+func NamedSQL(q model.AnalyzedQuery) string {
+	var declarations strings.Builder
+	for _, p := range q.Parameters {
+		if !q.IsDeclaredParameter(p.Name) {
+			declarations.WriteString("DECLARE $" + declarationName(p.Name) + " AS " + p.Type.String() + ";\n")
+		}
+	}
+	return declarations.String() + model.WithoutQueryAnnotation(q.SQL)
+}
 
 func declarationName(name string) string {
 	for i, r := range name {

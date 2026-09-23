@@ -58,6 +58,9 @@ func resolveExpression(expr parser.IExprContext, scope expressionScope) (model.T
 	if name, invoke, ok := directFunctionCall(expr); ok {
 		return resolveFunction(name, invoke, scope)
 	}
+	if name, invokes, ok := directCallChain(expr); ok {
+		return resolveCallChain(name, invokes, scope)
+	}
 	if typeValue, ok, err := concatenationType(expr, scope); ok {
 		return typeValue, err
 	}
@@ -218,6 +221,9 @@ func resolveScalarNode(root antlr.ParserRuleContext, scope expressionScope) (mod
 		if name, invoke, ok := functionCallFromUnary(functionUnary); ok {
 			return resolveFunction(name, invoke, scope)
 		}
+		if name, invokes, ok := callChainFromUnary(functionUnary); ok {
+			return resolveCallChain(name, invokes, scope)
+		}
 	}
 	return model.Type{}, fmt.Errorf("unsupported scalar expression %q", root.GetText())
 }
@@ -361,26 +367,131 @@ func directFunctionCall(expr parser.IExprContext) (string, *parser.Invoke_exprCo
 }
 
 func functionCallFromUnary(unary *parser.Unary_subexprContext) (string, *parser.Invoke_exprContext, bool) {
+	name, invokes, ok := callChainFromUnary(unary)
+	if !ok || len(invokes) != 1 || strings.HasPrefix(name, "$") {
+		return "", nil, false
+	}
+	return name, invokes[0], true
+}
+
+func directCallChain(expr parser.IExprContext) (string, []*parser.Invoke_exprContext, bool) {
+	var unary *parser.Unary_subexprContext
+	descendants(expr, func(node antlr.Tree) {
+		ctx, ok := node.(*parser.Unary_subexprContext)
+		if ok && sameSpan(expr, ctx) {
+			unary = ctx
+		}
+	})
+	if unary == nil {
+		return "", nil, false
+	}
+	return callChainFromUnary(unary)
+}
+
+func callChainFromUnary(unary *parser.Unary_subexprContext) (string, []*parser.Invoke_exprContext, bool) {
 	casual := unary.Unary_casual_subexpr()
 	if casual == nil {
 		return "", nil, false
 	}
 	suffix := casual.Unary_subexpr_suffix()
-	if suffix == nil || len(suffix.AllInvoke_expr()) != 1 {
+	if suffix == nil || len(suffix.AllInvoke_expr()) == 0 {
 		return "", nil, false
 	}
-	invoke, ok := suffix.Invoke_expr(0).(*parser.Invoke_exprContext)
-	if !ok || suffix.GetText() != invoke.GetText() {
+	invokes := make([]*parser.Invoke_exprContext, 0, len(suffix.AllInvoke_expr()))
+	var suffixText strings.Builder
+	for _, call := range suffix.AllInvoke_expr() {
+		invoke, ok := call.(*parser.Invoke_exprContext)
+		if !ok {
+			return "", nil, false
+		}
+		invokes = append(invokes, invoke)
+		suffixText.WriteString(invoke.GetText())
+	}
+	if suffix.GetText() != suffixText.String() {
 		return "", nil, false
 	}
 	if casual.Id_expr() != nil {
-		return identifier(casual.Id_expr().GetText()), invoke, true
+		return identifier(casual.Id_expr().GetText()), invokes, true
 	}
 	atom := casual.Atom_expr()
+	if atom != nil && atom.Bind_parameter() != nil {
+		return "$" + bindName(atom.Bind_parameter()), invokes, true
+	}
 	if atom != nil && atom.NAMESPACE() != nil && atom.An_id_or_type() != nil && atom.Id_or_type() != nil {
-		return identifier(atom.An_id_or_type().GetText()) + "::" + identifier(atom.Id_or_type().GetText()), invoke, true
+		return identifier(atom.An_id_or_type().GetText()) + "::" + identifier(atom.Id_or_type().GetText()), invokes, true
 	}
 	return "", nil, false
+}
+
+func resolveCallChain(name string, invokes []*parser.Invoke_exprContext, scope expressionScope) (model.Type, error) {
+	var result model.Type
+	var err error
+	if strings.HasPrefix(name, "$") {
+		var ok bool
+		result, ok = scope.bindings[strings.TrimPrefix(name, "$")]
+		if !ok {
+			return model.Type{}, fmt.Errorf("unknown callable binding %s", name)
+		}
+	} else {
+		result, err = resolveFunction(name, invokes[0], scope)
+		if err != nil {
+			return model.Type{}, err
+		}
+		invokes = invokes[1:]
+	}
+	for _, invoke := range invokes {
+		if result.Kind != "Callable" || result.Elem == nil {
+			return model.Type{}, fmt.Errorf("%s is not callable", result.String())
+		}
+		if invoke.ASTERISK() != nil || invoke.Opt_set_quantifier() != nil && invoke.Opt_set_quantifier().GetText() != "" {
+			return model.Type{}, fmt.Errorf("callable invocation requires positional arguments")
+		}
+		var provided []model.Type
+		if list := invoke.Named_expr_list(); list != nil {
+			for _, arg := range list.AllNamed_expr() {
+				if arg.AS() != nil {
+					return model.Type{}, fmt.Errorf("callable invocation does not support named arguments")
+				}
+				typ, err := resolveExpression(arg.Expr(), scope)
+				if err != nil {
+					return model.Type{}, err
+				}
+				provided = append(provided, typ)
+			}
+		}
+		if len(provided) != len(result.Items) {
+			return model.Type{}, fmt.Errorf("callable expects %d arguments, got %d", len(result.Items), len(provided))
+		}
+		nullableReturn := false
+		for i, actual := range provided {
+			expected := result.Items[i]
+			if expected.Equal(actual) || expected.IsOptional() && (expected.UnwrapOptional().Equal(actual) || actual.Kind == "Null") {
+				continue
+			}
+			if expected.Kind == "Resource<'DateTime2.TM64'>" && dateTimeFormatInput(actual.UnwrapOptional()) {
+				nullableReturn = nullableReturn || actual.IsOptional()
+				continue
+			}
+			if expected.Kind == "String" && actual.Equal(model.Optional(expected)) && result.Elem.IsOptional() && strings.HasPrefix(result.Elem.UnwrapOptional().Kind, "Resource<'DateTime2.TM") {
+				continue
+			}
+			return model.Type{}, fmt.Errorf("callable argument %d has type %s, want %s", i+1, actual.String(), expected.String())
+		}
+		result = *result.Elem
+		if nullableReturn && !result.IsOptional() {
+			result = model.Optional(result)
+		}
+	}
+	return result, nil
+}
+
+func dateTimeFormatInput(value model.Type) bool {
+	switch value.Kind {
+	case "Resource<'DateTime2.TM'>", "Resource<'DateTime2.TM64'>", "Date", "Datetime", "Timestamp", "TzDate", "TzDatetime", "TzTimestamp", "Date32", "Datetime64", "Timestamp64", "TzDate32", "TzDatetime64", "TzTimestamp64":
+		return true
+	default:
+		return false
+	}
 }
 
 func resolveFunction(name string, invoke *parser.Invoke_exprContext, scope expressionScope) (model.Type, error) {
@@ -390,17 +501,34 @@ func resolveFunction(name string, invoke *parser.Invoke_exprContext, scope expre
 	if invoke.Opt_set_quantifier() != nil && invoke.Opt_set_quantifier().GetText() != "" {
 		return model.Type{}, fmt.Errorf("set quantifiers in function %q are unsupported", name)
 	}
+	if strings.EqualFold(name, "ListCreate") {
+		return resolveListCreateType(invoke)
+	}
 	var callArgs []builtins.CallArgument
 	if list := invoke.Named_expr_list(); list != nil {
 		for _, named := range list.AllNamed_expr() {
 			if isAggregateFunction(name) && containsAggregate(named.Expr()) {
 				return model.Type{}, fmt.Errorf("aggregate function %q cannot contain another aggregate", name)
 			}
+			if name == "Yson::ConvertTo" && len(callArgs) == 1 {
+				if named.AS() != nil {
+					return model.Type{}, fmt.Errorf("Yson::ConvertTo target type must be positional")
+				}
+				target, err := parseType(named.Expr().GetText())
+				if err != nil {
+					return model.Type{}, fmt.Errorf("Yson::ConvertTo requires a literal YQL target type: %w", err)
+				}
+				callArgs = append(callArgs, builtins.CallArgument{TypeArgument: &target})
+				continue
+			}
 			typeValue, err := resolveExpression(named.Expr(), scope)
 			if err != nil {
 				return model.Type{}, fmt.Errorf("cannot resolve argument of %s: %w", name, err)
 			}
-			argument := builtins.CallArgument{Type: typeValue, IntegerLiteral: integerLiteralValue(named.Expr())}
+			argument := builtins.CallArgument{Type: typeValue, IntegerLiteral: integerLiteralValue(named.Expr()), StringLiteral: stringLiteralValue(named.Expr())}
+			if callName, _, ok := directFunctionCall(named.Expr()); ok && strings.EqualFold(callName, "ListCreate") {
+				argument.EmptyList = true
+			}
 			if named.AS() != nil {
 				argument.Name = identifier(named.An_id_or_type().GetText())
 			}
@@ -426,6 +554,22 @@ func resolveFunction(name string, invoke *parser.Invoke_exprContext, scope expre
 		result = result.UnwrapOptional()
 	}
 	return result, nil
+}
+
+func resolveListCreateType(invoke *parser.Invoke_exprContext) (model.Type, error) {
+	list := invoke.Named_expr_list()
+	if list == nil || len(list.AllNamed_expr()) != 1 {
+		return model.Type{}, fmt.Errorf("ListCreate expects one literal YQL element type")
+	}
+	arg := list.Named_expr(0)
+	if arg.AS() != nil || arg.Expr() == nil {
+		return model.Type{}, fmt.Errorf("ListCreate expects one literal YQL element type")
+	}
+	item, err := parseType(arg.Expr().GetText())
+	if err != nil {
+		return model.Type{}, fmt.Errorf("ListCreate requires a literal YQL element type: %w", err)
+	}
+	return builtins.Resolve("ListCreate", []model.Type{item})
 }
 
 func groupMakesAggregateNonOptional(name string) bool {
