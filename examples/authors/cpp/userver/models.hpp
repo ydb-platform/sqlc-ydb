@@ -3,6 +3,9 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
+#include <chrono>
+#include <userver/formats/json/value.hpp>
 
 #include <userver/ydb/types.hpp>
 
@@ -46,6 +49,31 @@ struct FindAuthorsByNameCoveringRow final {
     std::uint64_t id;
     ::userver::ydb::Utf8 name;
     std::optional<::userver::ydb::Utf8> bio;
+};
+
+struct FindAuthorsByNamePrefixRow final {
+    std::uint64_t id;
+    ::userver::ydb::Utf8 name;
+    std::optional<::userver::ydb::Utf8> bio;
+    bool has_bio;
+};
+
+struct GetAuthorStatisticsRow final {
+    std::uint64_t total;
+    std::uint64_t with_bio;
+    std::uint64_t with_nonempty_bio;
+    bool column3;
+};
+
+struct GetAuthorExportMetadataRow final {
+    std::uint64_t id;
+    std::string export_date;
+    std::string export_datetime;
+    std::chrono::system_clock::time_point export_timestamp;
+    std::string export_timestamp_text;
+    std::uint64_t export_timestamp_micros;
+    std::uint32_t column6;
+    std::optional<::userver::formats::json::Value> export_metadata;
 };
 
 }  // namespace authors::userver

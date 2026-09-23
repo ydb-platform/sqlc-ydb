@@ -92,7 +92,7 @@ func TestNamedInsertSelectDiagnostics(t *testing.T) {
 		{"duplicate alias", "SELECT id AS id, label AS `id` FROM records", `duplicate source column "id"`},
 		{"type mismatch", "SELECT label AS id FROM records", `source column "id" has type Optional<Utf8>`},
 		{"null key", "SELECT NULL AS id", `source column "id" has type Null`},
-		{"missing alias", "SELECT 1ul", `computed result expressions require an explicit AS alias`},
+		{"missing alias", "SELECT 1ul", `unknown target column "column0"`},
 		{"bad source", "SELECT id FROM missing", `unknown table "missing"`},
 		{"unknown qualifier", "SELECT absent.* FROM records", `unknown table or alias "absent"`},
 		{"qualified join", "SELECT r.id FROM records r JOIN records other ON r.id = other.id", `unknown target column "r.id"; use AS id`},

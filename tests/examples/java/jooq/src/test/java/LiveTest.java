@@ -102,6 +102,41 @@ class LiveTest {
     }
 
     @Test
+    void authorExpressionsKeepServerTypesAndResultNames() throws Exception {
+        try (Fixture fixture = new Fixture("authors")) {
+            fixture.create("authors", "id Uint64 NOT NULL, name Utf8 NOT NULL, bio Utf8, PRIMARY KEY(id)");
+            var queries = new authors.jooq.Queries(fixture.dsl);
+            var empty = queries.getAuthorStatistics().orElseThrow();
+            assertEquals(ULong.valueOf(0), empty.total());
+            assertEquals(ULong.valueOf(0), empty.withBio());
+            assertEquals(ULong.valueOf(0), empty.withNonemptyBio());
+            assertFalse(empty.column3());
+            queries.upsertAuthor(ULong.valueOf(1), "Alice", null);
+            queries.upsertAuthor(ULong.valueOf(2), "Alfred", "");
+            queries.upsertAuthor(ULong.MAX, "Bob", "biography");
+            var stats = queries.getAuthorStatistics().orElseThrow();
+            assertEquals(ULong.valueOf(3), stats.total());
+            assertEquals(ULong.valueOf(2), stats.withBio());
+            assertEquals(ULong.valueOf(1), stats.withNonemptyBio());
+            assertTrue(stats.column3());
+            var prefixRows = queries.findAuthorsByNamePrefix("Al");
+            assertEquals(2, prefixRows.size());
+            assertFalse(prefixRows.get(0).hasBio());
+            assertTrue(prefixRows.get(1).hasBio());
+            assertTrue(queries.findAuthorsByNamePrefix("missing").isEmpty());
+            var metadata = queries.getAuthorExportMetadata(ULong.MAX).orElseThrow();
+            assertEquals(UInteger.valueOf(0), metadata.column6());
+            assertEquals("{\"source\":\"authors\"}", metadata.exportMetadata().data());
+            assertNotNull(metadata.exportDate());
+            assertNotNull(metadata.exportDatetime());
+            assertNotNull(metadata.exportTimestamp());
+            assertNotNull(metadata.exportTimestampText());
+            assertTrue(metadata.exportTimestampMicros().compareTo(ULong.valueOf(0)) > 0);
+            assertEquals(UInteger.valueOf(1), queries.getAuthorExportMetadata(ULong.valueOf(1)).orElseThrow().column6());
+        }
+    }
+
+    @Test
     void batchJsonNullsAndAllDeleteVariants() throws Exception {
         try (Fixture fixture = new Fixture("authors", "books")) {
             fixture.create("authors", "author_id Uint64 NOT NULL, name Utf8 NOT NULL, biography Json, PRIMARY KEY(author_id)");

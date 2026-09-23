@@ -92,3 +92,65 @@ func TestPredicateINValidatesItsActualOperands(t *testing.T) {
 		})
 	}
 }
+
+func TestPredicateRejectsBareAndNegatedNonBooleanValues(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, label Utf8, flag Bool NOT NULL, PRIMARY KEY(id));`}}
+	for _, test := range []struct{ predicate, want string }{
+		{"id", "predicate expression has type Uint64, want Bool"},
+		{"label", "predicate expression has type Optional<Utf8>, want Bool"},
+		{"NOT id", "NOT operand has type Uint64, want Bool"},
+		{"NOT label", "NOT operand has type Optional<Utf8>, want Bool"},
+		{"flag AND id", "predicate expression has type Uint64, want Bool"},
+	} {
+		t.Run(test.predicate, func(t *testing.T) {
+			query := "-- name: Read :many\nSELECT id FROM records WHERE " + test.predicate + ";"
+			_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
+			if err == nil || !strings.Contains(err.Error(), "invalid predicate: "+test.want) {
+				t.Fatalf("error = %v, want Boolean requirement %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestPredicateINRejectsIncompatibleAndUnsupportedCollections(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));`}}
+	for _, test := range []struct{ declaration, predicate, want string }{
+		{`DECLARE $labels AS List<Utf8>;`, "id IN $labels", "predicate operands have incompatible types"},
+		{"", `id IN ("text"u)`, "predicate operands have incompatible types"},
+		{"", "id IN []", `unsupported IN operand "[]"`},
+	} {
+		t.Run(test.predicate, func(t *testing.T) {
+			query := "-- name: Read :many\n" + test.declaration + " SELECT id FROM records WHERE " + test.predicate + ";"
+			_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
+			if err == nil || !strings.Contains(err.Error(), "invalid predicate: "+test.want) {
+				t.Fatalf("error = %v, want collection diagnostic %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestPredicateComparisonFamiliesUseResolvedOperands(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, label Utf8, PRIMARY KEY(id));`}}
+	for _, predicate := range []string{
+		`label LIKE "a%"u`,
+		`label NOT LIKE "a%"u`,
+		"id BETWEEN 1u AND 10u",
+		"id NOT BETWEEN 1u AND 10u",
+		"id = 1u",
+		"label IS DISTINCT FROM NULL",
+		"label IS NOT DISTINCT FROM NULL",
+	} {
+		t.Run(predicate, func(t *testing.T) {
+			query := "-- name: Read :many\nSELECT id FROM records WHERE " + predicate + ";"
+			result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			analyzed := result.Queries[0]
+			columns := analyzed.ResultSets[0].Columns
+			if analyzed.SQL != query || len(columns) != 1 || columns[0].Name != "id" || columns[0].Type.String() != "Uint64" {
+				t.Fatalf("predicate changed result shape or SQL: %+v", analyzed)
+			}
+		})
+	}
+}

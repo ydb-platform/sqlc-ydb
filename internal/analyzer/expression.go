@@ -14,7 +14,6 @@ type expressionScope struct {
 	relations []relation
 	bindings  map[string]model.Type
 	grouped   bool
-	predicate bool
 	functions *builtins.Registry
 }
 
@@ -26,6 +25,9 @@ func resolveExpression(expr parser.IExprContext, scope expressionScope) (model.T
 		return literal, err
 	}
 	if typ, ok, err := resolveArithmetic(expr, scope); ok {
+		return typ, err
+	}
+	if typ, ok, err := resolveBoolean(expr, scope); ok {
 		return typ, err
 	}
 	if typ, ok, err := resolveMemberAccess(expr, scope); ok {
@@ -55,13 +57,11 @@ func resolveExpression(expr parser.IExprContext, scope expressionScope) (model.T
 	if name, invoke, ok := directFunctionCall(expr); ok {
 		return resolveFunction(name, invoke, scope)
 	}
-	if typeValue, ok, err := concatenationType(expr, scope.bindings); ok {
+	if typeValue, ok, err := concatenationType(expr, scope); ok {
 		return typeValue, err
 	}
-	if scope.predicate {
-		if typeValue, ok, err := resolveComparison(expr, scope); ok {
-			return typeValue, err
-		}
+	if typeValue, ok, err := resolveComparison(expr, scope); ok {
+		return typeValue, err
 	}
 	if len(columnRefs(expr)) != 0 {
 		return model.Type{}, fmt.Errorf("computed result expression %q is not supported", expr.GetText())
@@ -69,8 +69,9 @@ func resolveExpression(expr parser.IExprContext, scope expressionScope) (model.T
 	return model.Type{}, fmt.Errorf("unsupported result expression %q", expr.GetText())
 }
 
-func resolveComparison(expr parser.IExprContext, scope expressionScope) (model.Type, bool, error) {
+func resolveComparison(expr antlr.ParserRuleContext, scope expressionScope) (model.Type, bool, error) {
 	var operands []antlr.ParserRuleContext
+	nullSafe := false
 	descendants(expr, func(node antlr.Tree) {
 		ctx, ok := node.(*parser.Eq_subexprContext)
 		if !ok || !sameSpan(expr, ctx) || len(ctx.AllNeq_subexpr()) < 2 {
@@ -99,27 +100,37 @@ func resolveComparison(expr parser.IExprContext, scope expressionScope) (model.T
 			return model.Type{Kind: "Bool"}, true, nil
 		}
 		if condition.IN() != nil {
-			return model.Type{}, true, fmt.Errorf("typed IN predicates are not yet supported in CASE, IF, or HAVING")
+			return model.Type{}, true, fmt.Errorf("typed IN expressions are supported only in WHERE and JOIN predicates; they are not yet supported in projections, CASE, IF, or HAVING")
 		}
 		operands = append(operands, xor.Eq_subexpr())
 		for _, operand := range condition.AllEq_subexpr() {
 			operands = append(operands, operand)
 		}
+		nullSafe = len(condition.AllDistinct_from_op()) == len(operands)-1
 		if len(operands) < 2 {
 			return model.Type{}, false, nil
 		}
 	}
-	return comparisonBoolType(operands, scope)
+	typ, matched, err := comparisonBoolType(operands, scope)
+	if nullSafe && err == nil {
+		typ = model.Type{Kind: "Bool"}
+	}
+	return typ, matched, err
 }
 
 func comparisonBoolType(operands []antlr.ParserRuleContext, scope expressionScope) (model.Type, bool, error) {
 	types := make([]model.Type, 0, len(operands))
+	allNull := true
 	for _, operand := range operands {
 		typeValue, err := resolveScalarNode(operand, scope)
 		if err != nil {
 			return model.Type{}, true, fmt.Errorf("cannot resolve comparison operand %q: %w", operand.GetText(), err)
 		}
 		types = append(types, typeValue)
+		allNull = allNull && typeValue.Kind == "Null"
+	}
+	if allNull {
+		return model.Optional(model.Type{Kind: "Bool"}), true, nil
 	}
 	common, err := builtins.CommonType(types...)
 	if err != nil {
@@ -136,25 +147,17 @@ func resolveScalarNode(root antlr.ParserRuleContext, scope expressionScope) (mod
 	if typ, ok, err := resolveArithmetic(root, scope); ok {
 		return typ, err
 	}
-	if typ, ok, err := resolveMemberAccess(root, scope); ok {
+	if typ, ok, err := resolveBoolean(root, scope); ok {
 		return typ, err
 	}
-	var unaryNot *parser.Con_subexprContext
-	descendants(root, func(node antlr.Tree) {
-		ctx, ok := node.(*parser.Con_subexprContext)
-		if ok && sameSpan(root, ctx) && ctx.Unary_op() != nil && ctx.Unary_op().NOT() != nil {
-			unaryNot = ctx
-		}
-	})
-	if unaryNot != nil {
-		typeValue, err := resolveScalarNode(unaryNot.Unary_subexpr(), scope)
-		if err != nil {
-			return model.Type{}, fmt.Errorf("cannot resolve NOT operand: %w", err)
-		}
-		if typeValue.UnwrapOptional().Kind != "Bool" {
-			return model.Type{}, fmt.Errorf("NOT operand has type %s, want Bool", typeValue.String())
-		}
-		return typeValue, nil
+	if typ, ok, err := concatenationType(root, scope); ok {
+		return typ, err
+	}
+	if typ, ok, err := resolveComparison(root, scope); ok {
+		return typ, err
+	}
+	if typ, ok, err := resolveMemberAccess(root, scope); ok {
+		return typ, err
 	}
 	var literal parser.ILiteral_valueContext
 	descendants(root, func(node antlr.Tree) {
@@ -292,9 +295,7 @@ func resolveCase(caseExpr *parser.Case_exprContext, scope expressionScope) (mode
 		if len(parts) != 2 {
 			return model.Type{}, fmt.Errorf("invalid CASE WHEN branch")
 		}
-		conditionScope := scope
-		conditionScope.predicate = true
-		conditionType, err := resolveExpression(parts[0], conditionScope)
+		conditionType, err := resolveExpression(parts[0], scope)
 		if err != nil {
 			return model.Type{}, fmt.Errorf("cannot resolve CASE condition: %w", err)
 		}
@@ -391,13 +392,11 @@ func resolveFunction(name string, invoke *parser.Invoke_exprContext, scope expre
 			if isAggregateFunction(name) && containsAggregate(named.Expr()) {
 				return model.Type{}, fmt.Errorf("aggregate function %q cannot contain another aggregate", name)
 			}
-			argumentScope := scope
-			argumentScope.predicate = strings.EqualFold(name, "if") && len(callArgs) == 0
-			typeValue, err := resolveExpression(named.Expr(), argumentScope)
+			typeValue, err := resolveExpression(named.Expr(), scope)
 			if err != nil {
 				return model.Type{}, fmt.Errorf("cannot resolve argument of %s: %w", name, err)
 			}
-			argument := builtins.CallArgument{Type: typeValue}
+			argument := builtins.CallArgument{Type: typeValue, IntegerLiteral: integerLiteralValue(named.Expr())}
 			if named.AS() != nil {
 				argument.Name = identifier(named.An_id_or_type().GetText())
 			}

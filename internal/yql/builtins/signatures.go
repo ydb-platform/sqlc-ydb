@@ -2,6 +2,7 @@ package builtins
 
 import (
 	"fmt"
+	"math/big"
 	"regexp"
 	"strings"
 
@@ -12,6 +13,9 @@ import (
 type CallArgument struct {
 	Name string
 	Type model.Type
+	// IntegerLiteral retains the exact value needed for YQL's fitting-literal
+	// coercion. Nil means a value-dependent conversion cannot be proven.
+	IntegerLiteral *big.Int
 }
 
 // Parameter is one concrete function parameter. Optional means the argument
@@ -83,6 +87,9 @@ func (r *Registry) ResolveCall(name string, args []CallArgument) (model.Type, er
 			return model.Type{}, fmt.Errorf("%s does not support named argument %q in the offline resolver", name, argument.Name)
 		}
 		plain[i] = argument.Type
+	}
+	if isCoalesce(name) {
+		return resolveCoalesceArguments(name, args)
 	}
 	return resolveLegacy(name, plain)
 }
@@ -352,5 +359,5 @@ func standardSignatures(name string) []Signature {
 }
 
 func isKnownFunction(name string) bool {
-	return len(standardSignatures(name)) != 0 || lookupCore(name) != nil || lookupLibrary(name) != nil
+	return isCoalesce(name) || len(standardSignatures(name)) != 0 || lookupCore(name) != nil || lookupLibrary(name) != nil
 }

@@ -26,6 +26,7 @@ Read [decisions](decisions.md) before changing the analysis/generation boundary 
 
 - [README](../README.md): build and first generation.
 - [Compatibility](../docs/compatibility.md): supported config, queries, schema migrations, intentional exclusions and output ownership.
+- [YQL built-ins](../docs/yql-builtins.md): complete upstream reference-section inventory and remaining semantic/type prerequisites, distinct from the implemented function subset.
 - [Database-assisted analysis](../docs/database-analysis.md): live schema discovery, drift checks and connection settings.
 - [Targets](../docs/targets.md), [C++](../docs/cpp.md), [C#](../docs/csharp.md), [Java](../docs/java.md), [Kotlin](../docs/kotlin.md), [TypeScript](../docs/typescript.md), [Rust](../docs/rust.md), [PHP](../docs/php.md): generated API and runtime contracts.
 - [Installation](../docs/installation.md): release artifacts, checksum and version checks.

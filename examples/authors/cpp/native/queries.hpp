@@ -33,6 +33,9 @@ public:
     void DeleteAuthor(std::uint64_t author_id) const;
     std::vector<FindAuthorsByNameRow> FindAuthorsByName(const std::string& name) const;
     std::vector<FindAuthorsByNameCoveringRow> FindAuthorsByNameCovering(const std::string& name) const;
+    std::vector<FindAuthorsByNamePrefixRow> FindAuthorsByNamePrefix(const std::string& prefix) const;
+    std::optional<GetAuthorStatisticsRow> GetAuthorStatistics() const;
+    std::optional<GetAuthorExportMetadataRow> GetAuthorExportMetadata(std::uint64_t author_id) const;
 
 private:
     NYdb::NQuery::TQueryClient* client_;

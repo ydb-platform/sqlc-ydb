@@ -4,6 +4,7 @@ package authors
 import (
 	"context"
 	"github.com/ydb-platform/ydb-go-sdk/v3/query"
+	"time"
 )
 
 type GetAuthorRow struct {
@@ -63,6 +64,31 @@ type FindAuthorsByNameCoveringRow struct {
 	Bio  *string `json:"bio"`
 }
 
+type FindAuthorsByNamePrefixRow struct {
+	ID     uint64  `json:"id"`
+	Name   string  `json:"name"`
+	Bio    *string `json:"bio"`
+	HasBio bool    `json:"has_bio"`
+}
+
+type GetAuthorStatisticsRow struct {
+	Total           uint64 `json:"total"`
+	WithBio         uint64 `json:"with_bio"`
+	WithNonemptyBio uint64 `json:"with_nonempty_bio"`
+	Column3         bool   `json:"column3"`
+}
+
+type GetAuthorExportMetadataRow struct {
+	ID                    uint64    `json:"id"`
+	ExportDate            []byte    `json:"export_date"`
+	ExportDatetime        []byte    `json:"export_datetime"`
+	ExportTimestamp       time.Time `json:"export_timestamp"`
+	ExportTimestampText   []byte    `json:"export_timestamp_text"`
+	ExportTimestampMicros uint64    `json:"export_timestamp_micros"`
+	Column6               uint32    `json:"column6"`
+	ExportMetadata        *string   `json:"export_metadata"`
+}
+
 type Querier interface {
 	GetAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorRow, error)
 	ListAuthors(ctx context.Context, opts ...query.ExecuteOption) ([]ListAuthorsRow, error)
@@ -73,4 +99,7 @@ type Querier interface {
 	DeleteAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error
 	FindAuthorsByName(ctx context.Context, arg string, opts ...query.ExecuteOption) ([]FindAuthorsByNameRow, error)
 	FindAuthorsByNameCovering(ctx context.Context, arg string, opts ...query.ExecuteOption) ([]FindAuthorsByNameCoveringRow, error)
+	FindAuthorsByNamePrefix(ctx context.Context, arg string, opts ...query.ExecuteOption) ([]FindAuthorsByNamePrefixRow, error)
+	GetAuthorStatistics(ctx context.Context, opts ...query.ExecuteOption) (GetAuthorStatisticsRow, error)
+	GetAuthorExportMetadata(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorExportMetadataRow, error)
 }

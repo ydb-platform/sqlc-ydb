@@ -74,6 +74,9 @@ func analyzeSelectCore(catalog model.Catalog, block queryBlock, core *parser.Sel
 	if len(ds) != 0 {
 		return nil, diagnostics
 	}
+	if len(relations) == 0 && containsAggregate(core) {
+		return nil, []model.Diagnostic{diagnosticAt(block.file, block.line-1, core, "aggregate functions require a FROM source")}
+	}
 	recordColumnBindings(syntax, core, relations)
 	tree := collectQueryTree(core)
 	inferFromComparisons(tree, relations, inferred)
@@ -90,7 +93,10 @@ func analyzeSelectCore(catalog model.Catalog, block queryBlock, core *parser.Sel
 	diagnostics = append(diagnostics, validateLimitOffset(block, partial, bindings)...)
 	columns, ds := projection(block, core, relations, bindings)
 	diagnostics = append(diagnostics, ds...)
-	diagnostics = append(diagnostics, validateColumnReferences(block, core, relations)...)
+	if len(ds) == 0 {
+		diagnostics = append(diagnostics, resolveOrderByProjections(block, core, relations, columns, syntax)...)
+	}
+	diagnostics = append(diagnostics, validateColumnReferences(block, core, relations, columns)...)
 	diagnostics = append(diagnostics, validatePredicateContexts(block, core, relations, bindings)...)
 	diagnostics = append(diagnostics, validateGrouping(block, core, relations, bindings)...)
 	return columns, diagnostics

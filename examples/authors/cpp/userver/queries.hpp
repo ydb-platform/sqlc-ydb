@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <optional>
 #include <vector>
+#include <string>
 
 #include <userver/ydb/table.hpp>
 #include <userver/ydb/transaction.hpp>
@@ -30,6 +31,9 @@ public:
     void DeleteAuthor(std::uint64_t author_id) const;
     std::vector<FindAuthorsByNameRow> FindAuthorsByName(const ::userver::ydb::Utf8& name) const;
     std::vector<FindAuthorsByNameCoveringRow> FindAuthorsByNameCovering(const ::userver::ydb::Utf8& name) const;
+    std::vector<FindAuthorsByNamePrefixRow> FindAuthorsByNamePrefix(const ::userver::ydb::Utf8& prefix) const;
+    std::optional<GetAuthorStatisticsRow> GetAuthorStatistics() const;
+    std::optional<GetAuthorExportMetadataRow> GetAuthorExportMetadata(std::uint64_t author_id) const;
 
 private:
     ::userver::ydb::TableClient* client_;

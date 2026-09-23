@@ -21,7 +21,6 @@ func validateDMLValue(expr parser.IExprContext, column model.Column, scope expre
 	if containsAggregate(expr) {
 		return fmt.Errorf("aggregate functions are not allowed in DML values")
 	}
-	scope.predicate = true
 	typ, err := resolveExpression(expr, scope)
 	if err != nil {
 		return err

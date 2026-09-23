@@ -335,3 +335,131 @@ func (q *Queries) FindAuthorsByNameCovering(ctx context.Context, arg string, opt
 
 	return items, nil
 }
+
+// -- name: FindAuthorsByNamePrefix :many
+func (q *Queries) FindAuthorsByNamePrefix(ctx context.Context, arg string, opts ...query.ExecuteOption) ([]FindAuthorsByNamePrefixRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$prefix").Text(arg)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	result, err := q.db.Query(ctx, ""+
+		"DECLARE $prefix AS Utf8;\n"+
+		"SELECT id, name, bio, bio IS NOT NULL AS has_bio\n"+
+		"FROM authors\n"+
+		"WHERE name LIKE $prefix || \"%\"u\n"+
+		"ORDER BY id;",
+		callOptions...,
+	)
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
+	}
+	defer result.Close(ctx)
+
+	resultSet, err := result.NextResultSet(ctx)
+	if errors.Is(err, io.EOF) {
+		return nil, xerrors.WithStackTrace(query.ErrNoResultSets)
+	}
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
+	}
+
+	items := make([]FindAuthorsByNamePrefixRow, 0)
+	for r, err := range resultSet.Rows(ctx) {
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+		var row FindAuthorsByNamePrefixRow
+		if err := r.ScanNamed(
+			query.Named("id", &row.ID),
+			query.Named("name", &row.Name),
+			query.Named("bio", &row.Bio),
+			query.Named("has_bio", &row.HasBio),
+		); err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+		items = append(items, row)
+	}
+
+	_, err = result.NextResultSet(ctx)
+	if err == nil {
+		return nil, xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+	} else if !errors.Is(err, io.EOF) {
+		return nil, xerrors.WithStackTrace(err)
+	}
+
+	return items, nil
+}
+
+// -- name: GetAuthorStatistics :one
+func (q *Queries) GetAuthorStatistics(ctx context.Context, opts ...query.ExecuteOption) (GetAuthorStatisticsRow, error) {
+	result, err := q.db.QueryRow(ctx, ""+
+		"SELECT\n"+
+		"    COUNT(*) AS total,\n"+
+		"    COUNT_IF(bio IS NOT NULL) AS with_bio,\n"+
+		"    COUNT_IF(bio != \"\"u) AS with_nonempty_bio,\n"+
+		"    CAST(COUNT(*) AS Bool)\n"+
+		"FROM authors;",
+		opts...,
+	)
+	if err != nil {
+		return GetAuthorStatisticsRow{}, xerrors.WithStackTrace(err)
+	}
+
+	var row GetAuthorStatisticsRow
+	if err := result.ScanNamed(
+		query.Named("total", &row.Total),
+		query.Named("with_bio", &row.WithBio),
+		query.Named("with_nonempty_bio", &row.WithNonemptyBio),
+		query.Named("column3", &row.Column3),
+	); err != nil {
+		return GetAuthorStatisticsRow{}, xerrors.WithStackTrace(err)
+	}
+
+	return row, nil
+}
+
+// -- name: GetAuthorExportMetadata :one
+func (q *Queries) GetAuthorExportMetadata(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorExportMetadataRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$author_id").Uint64(arg)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	result, err := q.db.QueryRow(ctx, ""+
+		"DECLARE $author_id AS Uint64;\n"+
+		"SELECT\n"+
+		"    id,\n"+
+		"    CAST(CurrentUtcDate() AS String) AS export_date,\n"+
+		"    CAST(CurrentUtcDatetime() AS String) AS export_datetime,\n"+
+		"    CurrentUtcTimestamp() AS export_timestamp,\n"+
+		"    CAST(CurrentUtcTimestamp() AS String) AS export_timestamp_text,\n"+
+		"    CAST(CurrentUtcTimestamp() AS Uint64) AS export_timestamp_micros,\n"+
+		"    COALESCE(CAST(id AS Uint32), 0),\n"+
+		"    CAST('{\"source\":\"authors\"}' AS Json) AS export_metadata\n"+
+		"FROM authors\n"+
+		"WHERE id = $author_id;",
+		callOptions...,
+	)
+	if err != nil {
+		return GetAuthorExportMetadataRow{}, xerrors.WithStackTrace(err)
+	}
+
+	var row GetAuthorExportMetadataRow
+	if err := result.ScanNamed(
+		query.Named("id", &row.ID),
+		query.Named("export_date", &row.ExportDate),
+		query.Named("export_datetime", &row.ExportDatetime),
+		query.Named("export_timestamp", &row.ExportTimestamp),
+		query.Named("export_timestamp_text", &row.ExportTimestampText),
+		query.Named("export_timestamp_micros", &row.ExportTimestampMicros),
+		query.Named("column6", &row.Column6),
+		query.Named("export_metadata", &row.ExportMetadata),
+	); err != nil {
+		return GetAuthorExportMetadataRow{}, xerrors.WithStackTrace(err)
+	}
+
+	return row, nil
+}

@@ -152,7 +152,7 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 
 	if selectStatement == nil && len(relations) != 0 && !(len(tree.insert) == 1 && insertSelect(tree.insert[0]) != nil) && !(len(tree.updates) == 1 && updateSelect(tree.updates[0]) != nil) && !(len(tree.deletes) == 1 && deleteSelect(tree.deletes[0]) != nil) {
 		recordColumnBindings(query.Syntax, parsed.tree, relations)
-		diagnostics = append(diagnostics, validateColumnReferences(block, parsed.tree, relations)...)
+		diagnostics = append(diagnostics, validateColumnReferences(block, parsed.tree, relations, nil)...)
 		inferFromComparisons(tree, relations, inferred)
 		inferFromInLists(tree.conds, relations, inferred)
 		for name, typeValue := range inferred {
@@ -380,6 +380,10 @@ func localBindings(block queryBlock, tree queryTree, declared map[string]model.T
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, "only single scalar local assignments are supported"))
 			continue
 		}
+		if containsAggregate(statement.Expr()) {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement.Expr(), "aggregate functions are not allowed in scalar local assignments"))
+			continue
+		}
 		name := bindName(lhs[0])
 		if _, exists := types[name]; exists {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, fmt.Sprintf("local $%s is assigned more than once", name)))
@@ -530,14 +534,17 @@ func selectDMLProjection(block queryBlock, selectCore *parser.Select_coreContext
 	return selectProjectionMode(block, selectCore, relations, declared, false)
 }
 
-func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContext, relations []relation, declared map[string]model.Type, requireComputedAlias bool) ([]model.Column, []model.Diagnostic) {
+func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContext, relations []relation, declared map[string]model.Type, namedResult bool) ([]model.Column, []model.Diagnostic) {
 	var columns []model.Column
 	var diagnostics []model.Diagnostic
+	var unnamed []implicitProjection
+	hasWildcard := false
 	if selectCore.Without_column_list() != nil {
 		return nil, []model.Diagnostic{diagnosticAt(block.file, block.line-1, selectCore.Without_column_list(), "SELECT WITHOUT is not yet supported")}
 	}
-	for _, result := range selectCore.AllResult_column() {
+	for ordinal, result := range selectCore.AllResult_column() {
 		if result.ASTERISK() != nil {
+			hasWildcard = true
 			prefix := identifier(strings.TrimSuffix(result.Opt_id_prefix().GetText(), "."))
 			matched := false
 			var expressions []string
@@ -585,9 +592,8 @@ func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContex
 			column.Name = alias
 			column.WireName = ""
 		}
-		if alias == "" && !pure && requireComputedAlias {
-			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, result, "computed result expressions require an explicit AS alias"))
-			continue
+		if alias == "" && !pure && namedResult {
+			unnamed = append(unnamed, implicitProjection{column: len(columns), ordinal: ordinal, expression: expr})
 		}
 		if alias == "" && pure && len(relations) > 1 {
 			refs := columnRefs(expr)
@@ -597,10 +603,16 @@ func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContex
 		}
 		columns = append(columns, column)
 	}
+	if namedResult {
+		nameImplicitProjections(columns, unnamed, hasWildcard, block.wildcards)
+	}
 	return columns, diagnostics
 }
 
 func expressionColumn(expr parser.IExprContext, relations []relation, declared map[string]model.Type, grouped bool, functions *builtins.Registry) (model.Column, bool, error) {
+	for inner := parenthesizedExpression(expr); inner != nil; inner = parenthesizedExpression(expr) {
+		expr = inner
+	}
 	scope := expressionScope{relations: relations, bindings: declared, grouped: grouped, functions: functions}
 	if typeValue, ok, err := resolveMemberAccess(expr, scope); ok {
 		return model.Column{Type: typeValue}, false, err
@@ -617,28 +629,24 @@ func expressionColumn(expr parser.IExprContext, relations []relation, declared m
 	return model.Column{Type: typeValue}, false, err
 }
 
-func concatenationType(expr parser.IExprContext, declared map[string]model.Type) (model.Type, bool, error) {
-	var concatenations []*parser.Mul_subexprContext
-	descendants(expr, func(node antlr.Tree) {
-		ctx, ok := node.(*parser.Mul_subexprContext)
-		if ok && len(ctx.AllDOUBLE_PIPE()) != 0 {
-			concatenations = append(concatenations, ctx)
-		}
-	})
-	if len(concatenations) == 0 {
+func concatenationType(root antlr.ParserRuleContext, scope expressionScope) (model.Type, bool, error) {
+	operation, ok := coveringExpressionContext(root).(*parser.Mul_subexprContext)
+	if !ok || len(operation.AllDOUBLE_PIPE()) == 0 {
 		return model.Type{}, false, nil
 	}
-	if len(concatenations) != 1 || concatenations[0].GetStart() != expr.GetStart() || concatenations[0].GetStop() != expr.GetStop() {
-		return model.Type{}, true, fmt.Errorf("nested concatenation result expressions are not supported")
-	}
 
-	operands := concatenations[0].AllCon_subexpr()
+	operands := operation.AllCon_subexpr()
 	var result model.Type
 	optional := false
+	null := false
 	for _, operand := range operands {
-		typeValue, err := concatenationOperandType(operand, declared)
+		typeValue, err := resolveScalarNode(operand, scope)
 		if err != nil {
 			return model.Type{}, true, err
+		}
+		if typeValue.Kind == "Null" {
+			null = true
+			continue
 		}
 		optional = optional || typeValue.IsOptional()
 		base := typeValue.UnwrapOptional()
@@ -651,35 +659,13 @@ func concatenationType(expr parser.IExprContext, declared map[string]model.Type)
 			return model.Type{}, true, fmt.Errorf("concatenation operands must both be String or both be Utf8")
 		}
 	}
+	if null {
+		return model.Type{Kind: "Null"}, true, nil
+	}
 	if optional {
 		result = model.Optional(result)
 	}
 	return result, true, nil
-}
-
-func concatenationOperandType(operand parser.ICon_subexprContext, declared map[string]model.Type) (model.Type, error) {
-	var binds []parser.IBind_parameterContext
-	var literals []parser.ILiteral_valueContext
-	descendants(operand, func(node antlr.Tree) {
-		switch ctx := node.(type) {
-		case *parser.Bind_parameterContext:
-			binds = append(binds, ctx)
-		case parser.ILiteral_valueContext:
-			literals = append(literals, ctx)
-		}
-	})
-	if len(binds) == 1 && len(literals) == 0 && operand.GetText() == binds[0].GetText() {
-		name := bindName(binds[0])
-		typeValue, ok := declared[name]
-		if !ok {
-			return model.Type{}, fmt.Errorf("cannot resolve type of parameter $%s in concatenation", name)
-		}
-		return typeValue, nil
-	}
-	if len(literals) == 1 && len(binds) == 0 && operand.GetText() == literals[0].GetText() && literals[0].STRING_VALUE() != nil {
-		return stringLiteralType(literals[0].GetText())
-	}
-	return model.Type{}, fmt.Errorf("unsupported concatenation operand %q; only string literals and declared parameters are supported", operand.GetText())
 }
 
 type columnRef struct {
@@ -729,7 +715,7 @@ func qualifiedName(ref columnRef) string {
 	return ref.qualifier + "." + ref.name
 }
 
-func validateColumnReferences(block queryBlock, root antlr.Tree, relations []relation) []model.Diagnostic {
+func validateColumnReferences(block queryBlock, root antlr.Tree, relations []relation, projection []model.Column) []model.Diagnostic {
 	var diagnostics []model.Diagnostic
 	seen := map[int]bool{}
 	for _, ref := range columnRefs(root) {
@@ -738,11 +724,32 @@ func validateColumnReferences(block queryBlock, root antlr.Tree, relations []rel
 			continue
 		}
 		seen[position] = true
+		if ref.qualifier == "" && isOrderByReference(ref.ctx) {
+			found := false
+			for _, column := range projection {
+				found = found || column.ResultName() == ref.name
+			}
+			if found {
+				continue
+			}
+		}
 		if _, err := resolveColumn(relations, ref); err != nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, ref.ctx, err.Error()))
 		}
 	}
 	return diagnostics
+}
+
+func isOrderByReference(root antlr.Tree) bool {
+	for node := root.GetParent(); node != nil; node = node.GetParent() {
+		switch node.(type) {
+		case *parser.Order_by_clauseContext:
+			return true
+		case *parser.Select_coreContext:
+			return false
+		}
+	}
+	return false
 }
 
 func resolveColumn(relations []relation, ref columnRef) (model.Column, error) {

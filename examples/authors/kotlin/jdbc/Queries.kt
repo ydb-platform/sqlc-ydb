@@ -152,4 +152,78 @@ class Queries(private val client: java.sql.Connection) {
             }
         }
     }
+
+    // -- name: FindAuthorsByNamePrefix :many
+    fun findAuthorsByNamePrefix(prefix: String): List<FindAuthorsByNamePrefixRow> {
+        client.unwrap(tech.ydb.jdbc.YdbConnection::class.java).prepareStatement(
+            "DECLARE \$prefix AS Utf8;\n" +
+            "SELECT id, name, bio, bio IS NOT NULL AS has_bio\n" +
+            "FROM authors\n" +
+            "WHERE name LIKE \$prefix || \"%\"u\n" +
+            "ORDER BY id;", tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY).use { _prepared ->
+            _prepared.setString("prefix", prefix)
+            _prepared.executeQuery().use { _rows ->
+                val _items = ArrayList<FindAuthorsByNamePrefixRow>()
+                while (_rows.next()) {
+                    val _value0: Long = _rows.getLong(1)
+                    val _value1: String = _rows.getString(2)
+                    val _value2: String? = _rows.getString(3)
+                    val _value3: Boolean = _rows.getBoolean(4)
+                    _items.add(FindAuthorsByNamePrefixRow(_value0, _value1, _value2, _value3))
+                }
+                return _items
+            }
+        }
+    }
+
+    // -- name: GetAuthorStatistics :one
+    fun getAuthorStatistics(): GetAuthorStatisticsRow? {
+        client.prepareStatement(
+            "SELECT\n" +
+            "    COUNT(*) AS total,\n" +
+            "    COUNT_IF(bio IS NOT NULL) AS with_bio,\n" +
+            "    COUNT_IF(bio != \"\"u) AS with_nonempty_bio,\n" +
+            "    CAST(COUNT(*) AS Bool)\n" +
+            "FROM authors;").use { _prepared ->
+            _prepared.executeQuery().use { _rows ->
+                if (!_rows.next()) return null
+                val _value0: Long = _rows.getLong(1)
+                val _value1: Long = _rows.getLong(2)
+                val _value2: Long = _rows.getLong(3)
+                val _value3: Boolean = _rows.getBoolean(4)
+                return GetAuthorStatisticsRow(_value0, _value1, _value2, _value3)
+            }
+        }
+    }
+
+    // -- name: GetAuthorExportMetadata :one
+    fun getAuthorExportMetadata(authorId: Long): GetAuthorExportMetadataRow? {
+        client.unwrap(tech.ydb.jdbc.YdbConnection::class.java).prepareStatement(
+            "DECLARE \$author_id AS Uint64;\n" +
+            "SELECT\n" +
+            "    id,\n" +
+            "    CAST(CurrentUtcDate() AS String) AS export_date,\n" +
+            "    CAST(CurrentUtcDatetime() AS String) AS export_datetime,\n" +
+            "    CurrentUtcTimestamp() AS export_timestamp,\n" +
+            "    CAST(CurrentUtcTimestamp() AS String) AS export_timestamp_text,\n" +
+            "    CAST(CurrentUtcTimestamp() AS Uint64) AS export_timestamp_micros,\n" +
+            "    COALESCE(CAST(id AS Uint32), 0),\n" +
+            "    CAST('{\"source\":\"authors\"}' AS Json) AS export_metadata\n" +
+            "FROM authors\n" +
+            "WHERE id = \$author_id;", tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY).use { _prepared ->
+            _prepared.setObject("author_id", PrimitiveValue.newUint64(authorId))
+            _prepared.executeQuery().use { _rows ->
+                if (!_rows.next()) return null
+                val _value0: Long = _rows.getLong(1)
+                val _value1: ByteArray = _rows.getBytes(2)
+                val _value2: ByteArray = _rows.getBytes(3)
+                val _value3: java.time.Instant = _rows.getTimestamp(4).toInstant()
+                val _value4: ByteArray = _rows.getBytes(5)
+                val _value5: Long = _rows.getLong(6)
+                val _value6: Long = _rows.getLong(7)
+                val _value7: String? = _rows.getString(8)
+                return GetAuthorExportMetadataRow(_value0, _value1, _value2, _value3, _value4, _value5, _value6, _value7)
+            }
+        }
+    }
 }

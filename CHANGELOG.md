@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Added
+
+- Resolve Boolean expressions and string concatenation consistently in projections, function arguments, local bindings and supported DML values. Add conditional `COUNT_IF` aggregates, fitting integer-literal fallbacks in COALESCE/NVL, and verified Boolean, timestamp and JSON casts.
+- Support the UTC clock family and additional scalar built-ins, with a documented inventory of the upstream YQL builtin catalog and explicit prerequisites for remaining families.
+- Infer YDB result names for computed SELECT columns without AS, including typed jOOQ ORDER BY references to computed aliases and implicit result names. Add authors reporting, prefix-search and export-metadata examples for every language/runtime profile.
+
+### Fixed
+
+- Emit only supported Rust comparison and hashing derives for rows containing YDB byte strings, including optional and list fields.
+
 ## v0.2.5
 
 ### Added

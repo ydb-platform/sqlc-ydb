@@ -185,4 +185,90 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
             })
             .collect()
     }
+
+    // -- name: FindAuthorsByNamePrefix :many
+    #[builder(on(String, into))]
+    pub async fn find_authors_by_name_prefix(
+        &mut self,
+        prefix: String,
+    ) -> ydb::YdbResult<Vec<FindAuthorsByNamePrefixRow>> {
+        self.client
+            .query_result_set(concat!(
+                "DECLARE $prefix AS Utf8;\n",
+                "SELECT id, name, bio, bio IS NOT NULL AS has_bio\n",
+                "FROM authors\n",
+                "WHERE name LIKE $prefix || \"%\"u\n",
+                "ORDER BY id;",
+            ))
+            .param("$prefix", prefix)
+            .await?
+            .rows()
+            .map(|mut row| {
+                Ok(FindAuthorsByNamePrefixRow {
+                    id: row.remove_field(0)?.try_into()?,
+                    name: row.remove_field(1)?.try_into()?,
+                    bio: row.remove_field(2)?.try_into()?,
+                    has_bio: row.remove_field(3)?.try_into()?,
+                })
+            })
+            .collect()
+    }
+
+    // -- name: GetAuthorStatistics :one
+    #[builder(on(String, into))]
+    pub async fn author_statistics(&mut self) -> ydb::YdbResult<GetAuthorStatisticsRow> {
+        let mut row = self
+            .client
+            .query_row(concat!(
+                "SELECT\n",
+                "    COUNT(*) AS total,\n",
+                "    COUNT_IF(bio IS NOT NULL) AS with_bio,\n",
+                "    COUNT_IF(bio != \"\"u) AS with_nonempty_bio,\n",
+                "    CAST(COUNT(*) AS Bool)\n",
+                "FROM authors;",
+            ))
+            .await?;
+        Ok(GetAuthorStatisticsRow {
+            total: row.remove_field(0)?.try_into()?,
+            with_bio: row.remove_field(1)?.try_into()?,
+            with_nonempty_bio: row.remove_field(2)?.try_into()?,
+            column3: row.remove_field(3)?.try_into()?,
+        })
+    }
+
+    // -- name: GetAuthorExportMetadata :one
+    #[builder(on(String, into))]
+    pub async fn author_export_metadata(
+        &mut self,
+        author_id: u64,
+    ) -> ydb::YdbResult<GetAuthorExportMetadataRow> {
+        let mut row = self
+            .client
+            .query_row(concat!(
+                "DECLARE $author_id AS Uint64;\n",
+                "SELECT\n",
+                "    id,\n",
+                "    CAST(CurrentUtcDate() AS String) AS export_date,\n",
+                "    CAST(CurrentUtcDatetime() AS String) AS export_datetime,\n",
+                "    CurrentUtcTimestamp() AS export_timestamp,\n",
+                "    CAST(CurrentUtcTimestamp() AS String) AS export_timestamp_text,\n",
+                "    CAST(CurrentUtcTimestamp() AS Uint64) AS export_timestamp_micros,\n",
+                "    COALESCE(CAST(id AS Uint32), 0),\n",
+                "    CAST('{\"source\":\"authors\"}' AS Json) AS export_metadata\n",
+                "FROM authors\n",
+                "WHERE id = $author_id;",
+            ))
+            .param("$author_id", author_id)
+            .await?;
+        Ok(GetAuthorExportMetadataRow {
+            id: row.remove_field(0)?.try_into()?,
+            export_date: row.remove_field(1)?.try_into()?,
+            export_datetime: row.remove_field(2)?.try_into()?,
+            export_timestamp: row.remove_field(3)?.try_into()?,
+            export_timestamp_text: row.remove_field(4)?.try_into()?,
+            export_timestamp_micros: row.remove_field(5)?.try_into()?,
+            column6: row.remove_field(6)?.try_into()?,
+            export_metadata: row.remove_field(7)?.try_into()?,
+        })
+    }
 }

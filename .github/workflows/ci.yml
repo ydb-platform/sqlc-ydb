@@ -210,6 +210,11 @@ jobs:
       - name: Verify streaming callbacks with YDB
         timeout-minutes: 5
         run: go test -p 1 -count=1 -timeout=240s -covermode=atomic -coverpkg=./... -coverprofile=coverage-each-live.out ./internal/endtoend -run '^TestLiveYDBEach$' -v
+      - name: Verify shared expressions and implicit result names with YDB
+        timeout-minutes: 5
+        env:
+          SQLC_YDB_TEST_MAVEN: mvn
+        run: go test -p 1 -count=1 -timeout=240s -covermode=atomic -coverpkg=./... -coverprofile=coverage-shared-expressions-live.out ./internal/endtoend -run '^TestLiveYDBSharedExpressions$' -v
       - name: Verify public query metadata and EXPLAIN contracts
         run: go test -p 1 -count=1 -timeout=120s ./internal/database -run '^TestLiveYDBQueryMetadata$' -v
       - name: Run Go generator runtime tests
@@ -263,12 +268,13 @@ jobs:
             coverage-go-live.out
             coverage-python-live.out
             coverage-each-live.out
+            coverage-shared-expressions-live.out
           if-no-files-found: error
       - name: Upload integration coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage-semantic.out,./coverage-integer-limits-live.out,./coverage-table-path-prefix-live.out,./coverage-go-live.out,./coverage-python-live.out,./coverage-each-live.out
+          files: ./coverage-semantic.out,./coverage-integer-limits-live.out,./coverage-table-path-prefix-live.out,./coverage-go-live.out,./coverage-python-live.out,./coverage-each-live.out,./coverage-shared-expressions-live.out
           flags: integration
           disable_search: true
           fail_ci_if_error: true
@@ -319,6 +325,9 @@ jobs:
       - name: Verify streaming callbacks with nightly YDB
         timeout-minutes: 5
         run: go test -p 1 -count=1 -timeout=240s ./internal/endtoend -run '^TestLiveYDBEach$' -v
+      - name: Verify shared expressions and implicit result names with nightly YDB
+        timeout-minutes: 5
+        run: go test -p 1 -count=1 -timeout=240s ./internal/endtoend -run '^TestLiveYDBSharedExpressions$' -v
 
   cpp-acceptance:
     runs-on: ubuntu-24.04

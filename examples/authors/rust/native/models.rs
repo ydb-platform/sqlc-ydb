@@ -46,3 +46,31 @@ pub struct FindAuthorsByNameCoveringRow {
     pub name: String,
     pub bio: Option<String>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct FindAuthorsByNamePrefixRow {
+    pub id: u64,
+    pub name: String,
+    pub bio: Option<String>,
+    pub has_bio: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct GetAuthorStatisticsRow {
+    pub total: u64,
+    pub with_bio: u64,
+    pub with_nonempty_bio: u64,
+    pub column3: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GetAuthorExportMetadataRow {
+    pub id: u64,
+    pub export_date: ydb::Bytes,
+    pub export_datetime: ydb::Bytes,
+    pub export_timestamp: std::time::SystemTime,
+    pub export_timestamp_text: ydb::Bytes,
+    pub export_timestamp_micros: u64,
+    pub column6: u32,
+    pub export_metadata: Option<String>,
+}

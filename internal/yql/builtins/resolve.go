@@ -33,10 +33,35 @@ type functionResolver func([]model.Type) (model.Type, error)
 
 func lookupCore(name string) functionResolver {
 	switch strings.ToUpper(name) {
-	case "COALESCE", "NVL":
-		return func(args []model.Type) (model.Type, error) { return resolveCoalesce(name, args) }
 	case "IF":
 		return resolveIf
+	case "NANVL":
+		return resolveNanvl
+	case "CURRENTUTCDATE":
+		return func(args []model.Type) (model.Type, error) { return resolveDependencyValue(name, "Date", 0, args) }
+	case "CURRENTUTCDATETIME":
+		return func(args []model.Type) (model.Type, error) { return resolveDependencyValue(name, "Datetime", 0, args) }
+	case "CURRENTUTCTIMESTAMP":
+		return func(args []model.Type) (model.Type, error) { return resolveDependencyValue(name, "Timestamp", 0, args) }
+	case "CURRENTTZDATE":
+		return func(args []model.Type) (model.Type, error) { return resolveCurrentTimezone(name, "TzDate", args) }
+	case "CURRENTTZDATETIME":
+		return func(args []model.Type) (model.Type, error) { return resolveCurrentTimezone(name, "TzDatetime", args) }
+	case "CURRENTTZTIMESTAMP":
+		return func(args []model.Type) (model.Type, error) { return resolveCurrentTimezone(name, "TzTimestamp", args) }
+	case "RANDOM":
+		return func(args []model.Type) (model.Type, error) { return resolveDependencyValue(name, "Double", 1, args) }
+	case "RANDOMNUMBER":
+		return func(args []model.Type) (model.Type, error) { return resolveDependencyValue(name, "Uint64", 1, args) }
+	case "RANDOMUUID":
+		return func(args []model.Type) (model.Type, error) { return resolveDependencyValue(name, "Uuid", 1, args) }
+	case "VERSION":
+		return func(args []model.Type) (model.Type, error) {
+			if err := arity(name, args, 0); err != nil {
+				return model.Type{}, err
+			}
+			return model.Type{Kind: "String"}, nil
+		}
 	case "LENGTH", "LEN":
 		return func(args []model.Type) (model.Type, error) { return resolveLength(name, args) }
 	case "SUBSTRING":
@@ -53,6 +78,8 @@ func lookupCore(name string) functionResolver {
 		return resolveSetIsDisjoint
 	case "COUNT":
 		return resolveCount
+	case "COUNT_IF":
+		return resolveCountIf
 	case "MIN", "MAX":
 		return func(args []model.Type) (model.Type, error) { return resolveMinMax(name, args) }
 	case "SUM":
@@ -64,33 +91,58 @@ func lookupCore(name string) functionResolver {
 	}
 }
 
-func resolveCoalesce(name string, args []model.Type) (model.Type, error) {
-	if len(args) == 0 {
-		return model.Type{}, fmt.Errorf("%s expects at least 1 argument", name)
+// Clock and random arguments control evaluation dependencies, not result
+// nullability. Their types must still be resolved before generation.
+func resolveDependencyValue(name, kind string, minimum int, args []model.Type) (model.Type, error) {
+	if len(args) < minimum {
+		return model.Type{}, fmt.Errorf("%s requires at least %d dependency argument", name, minimum)
 	}
-	var result model.Type
-	nullable := true
 	for _, arg := range args {
-		base, isOptional, err := baseType(arg)
-		if err != nil {
-			return model.Type{}, fmt.Errorf("%s: %w", name, err)
-		}
-		if base.Kind == "Null" {
-			continue
-		}
-		if result.Kind == "" {
-			result = base
-		} else if !result.Equal(base) {
-			return model.Type{}, fmt.Errorf("%s arguments must have the same non-Null base type; use CAST to convert them to the same YQL type", name)
-		}
-		if !isOptional {
-			nullable = false
+		if err := validateConcreteOrNull(arg); err != nil {
+			return model.Type{}, err
 		}
 	}
-	if result.Kind == "" {
-		return model.Type{}, fmt.Errorf("%s cannot infer a concrete type from only Null arguments", name)
+	return model.Type{Kind: kind}, nil
+}
+
+func resolveCurrentTimezone(name, kind string, args []model.Type) (model.Type, error) {
+	if len(args) == 0 {
+		return model.Type{}, fmt.Errorf("%s requires a String timezone argument", name)
 	}
-	return withOptional(result, nullable), nil
+	zone, _, err := baseType(args[0])
+	if err != nil || (zone.Kind != "String" && zone.Kind != "Null") {
+		return model.Type{}, fmt.Errorf("%s timezone must be String or Optional<String>", name)
+	}
+	result, err := resolveDependencyValue(name, kind, 0, args[1:])
+	if err != nil {
+		return model.Type{}, err
+	}
+	// Zone names are evaluated by YDB; an unknown zone produces NULL.
+	return model.Optional(result), nil
+}
+
+func resolveCountIf(args []model.Type) (model.Type, error) {
+	if err := arity("COUNT_IF", args, 1); err != nil {
+		return model.Type{}, err
+	}
+	base, _, err := baseType(args[0])
+	if err != nil || (base.Kind != "Bool" && base.Kind != "Null") {
+		return model.Type{}, fmt.Errorf("COUNT_IF argument must be Bool or Optional<Bool>")
+	}
+	return model.Type{Kind: "Uint64"}, nil
+}
+
+func resolveNanvl(args []model.Type) (model.Type, error) {
+	if err := arity("NANVL", args, 2); err != nil {
+		return model.Type{}, err
+	}
+	for _, arg := range args {
+		base, _, err := baseType(arg)
+		if err != nil || (base.Kind != "Float" && base.Kind != "Double") {
+			return model.Type{}, fmt.Errorf("NANVL arguments must be Float or Double, including Optional forms")
+		}
+	}
+	return CommonType(args...)
 }
 
 func resolveIf(args []model.Type) (model.Type, error) {

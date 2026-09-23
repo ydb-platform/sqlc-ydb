@@ -29,6 +29,7 @@ public final class Queries {
         return dsl.select(CITY.SLUG, CITY.NAME)
                 .from(CITY)
                 .orderBy(CITY.NAME)
+                .coerce(field(name("slug"), YdbTypes.UTF8), field(name("name"), YdbTypes.UTF8))
                 .fetch(mapping(ListCitiesRow::new));
     }
 
@@ -37,6 +38,7 @@ public final class Queries {
         return dsl.select(CITY.SLUG, CITY.NAME)
                 .from(CITY)
                 .where(CITY.SLUG.eq(val(slug, YdbTypes.UTF8)))
+                .coerce(field(name("slug"), YdbTypes.UTF8), field(name("name"), YdbTypes.UTF8))
                 .fetchOptional(mapping(GetCityRow::new));
     }
 
@@ -77,6 +79,7 @@ public final class Queries {
                 .from(VENUE)
                 .where(VENUE.CITY.eq(val(city, YdbTypes.UTF8)))
                 .orderBy(VENUE.NAME)
+                .coerce(field(name("id"), YdbTypes.UINT64), field(name("slug"), YdbTypes.UTF8), field(name("name"), YdbTypes.UTF8), field(name("city"), YdbTypes.UTF8), field(name("status"), YdbTypes.UTF8), field(name("statuses"), YdbTypes.JSON), field(name("spotify_playlist"), YdbTypes.UTF8), field(name("songkick_id"), YdbTypes.UTF8), field(name("tags"), YdbTypes.JSON), field(name("created_at"), YdbTypes.TIMESTAMP))
                 .fetch(mapping(ListVenuesRow::new));
     }
 
@@ -103,6 +106,7 @@ public final class Queries {
         )
                 .from(VENUE)
                 .where(VENUE.SLUG.eq(val(slug, YdbTypes.UTF8)).and(VENUE.CITY.eq(val(city, YdbTypes.UTF8))))
+                .coerce(field(name("id"), YdbTypes.UINT64), field(name("slug"), YdbTypes.UTF8), field(name("name"), YdbTypes.UTF8), field(name("city"), YdbTypes.UTF8), field(name("status"), YdbTypes.UTF8), field(name("statuses"), YdbTypes.JSON), field(name("spotify_playlist"), YdbTypes.UTF8), field(name("songkick_id"), YdbTypes.UTF8), field(name("tags"), YdbTypes.JSON), field(name("created_at"), YdbTypes.TIMESTAMP))
                 .fetchOptional(mapping(GetVenueRow::new));
     }
 
@@ -168,6 +172,7 @@ public final class Queries {
                 .from(VENUE)
                 .groupBy(VENUE.CITY)
                 .orderBy(VENUE.CITY)
+                .coerce(field(name("city"), YdbTypes.UTF8), field(name("venue_count"), YdbTypes.UINT64))
                 .fetch(mapping(VenueCountByCityRow::new));
     }
 }

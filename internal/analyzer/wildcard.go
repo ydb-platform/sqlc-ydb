@@ -53,7 +53,7 @@ func (r *wildcardRewrites) apply() (string, error) {
 	var sql strings.Builder
 	cursor := 0
 	for _, replacement := range r.replacements {
-		if replacement.start < cursor || replacement.end > len(r.source) || replacement.start >= replacement.end {
+		if replacement.start < cursor || replacement.end > len(r.source) || replacement.start > replacement.end {
 			return "", fmt.Errorf("invalid or overlapping wildcard source span")
 		}
 		sql.WriteString(r.source[cursor:replacement.start])

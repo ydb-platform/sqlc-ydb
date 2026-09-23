@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 
@@ -9,6 +10,28 @@ import (
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 	parser "github.com/ydb-platform/yql-parsers/go"
 )
+
+// Preserve only a direct literal's value for value-dependent builtin coercion.
+// Arbitrary arithmetic and local bindings require their own static type rules.
+func integerLiteralValue(root antlr.ParserRuleContext) *big.Int {
+	for inner := parenthesizedExpression(root); inner != nil; inner = parenthesizedExpression(root) {
+		root = inner
+	}
+	integer, ok := coveringExpressionContext(root).(*parser.IntegerContext)
+	if !ok {
+		return nil
+	}
+	text := strings.ToLower(integer.GetText())
+	for _, suffix := range []string{"ul", "us", "ut", "l", "s", "t", "u"} {
+		if strings.HasSuffix(text, suffix) {
+			text = strings.TrimSuffix(text, suffix)
+			break
+		}
+	}
+	number, base := integerDigits(text)
+	value, _ := new(big.Int).SetString(number, base)
+	return value
+}
 
 func literalType(expr parser.IExprContext) (model.Type, bool, error) {
 	var literals []parser.ILiteral_valueContext
@@ -48,7 +71,7 @@ func literalValueType(literal parser.ILiteral_valueContext) (model.Type, error) 
 }
 
 func stringLiteralType(text string) (model.Type, error) {
-	if len(text) < 2 {
+	if len(text) < 2 || strings.HasSuffix(text, "'") || strings.HasSuffix(text, "\"") || strings.HasSuffix(text, "@@") {
 		return model.Type{Kind: "String"}, nil
 	}
 	prefix, suffix := text[:len(text)-1], text[len(text)-1]

@@ -223,6 +223,12 @@ func TestJooqDeclaredSQLBytesThroughJava(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		expression = indentExpression(expression, "    ")
+		for _, line := range strings.Split(expression, "\n") {
+			if line != "" && strings.TrimSpace(line) == "" {
+				t.Fatalf("mapped SQL has a whitespace-only source line: %q", line)
+			}
+		}
 		want := "DECLARE $id AS Uint64;\n\n-- Автор 🚀\n" + tc.want
 		if i == 0 {
 			want = "DECLARE $title AS Utf8;\n" + want

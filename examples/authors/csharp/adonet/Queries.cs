@@ -199,4 +199,91 @@ public sealed class Queries
         reader.GetFieldValue<string>(1),
         reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)
     );
+
+    // -- name: FindAuthorsByNamePrefix :many
+    public async Task<IReadOnlyList<FindAuthorsByNamePrefixRow>> FindAuthorsByNamePrefixAsync(string prefix, CancellationToken cancellationToken = default)
+    {
+        await using var command = new YdbCommand(
+            "DECLARE $prefix AS Utf8;\n" +
+            "SELECT id, name, bio, bio IS NOT NULL AS has_bio\n" +
+            "FROM authors\n" +
+            "WHERE name LIKE $prefix || \"%\"u\n" +
+            "ORDER BY id;", _connection) { Transaction = _transaction };
+        command.Parameters.Add(new YdbParameter("$prefix", DbType.String, prefix));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        var rows = new List<FindAuthorsByNamePrefixRow>();
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            rows.Add(FindAuthorsByNamePrefixRowFrom(reader));
+        }
+        return rows;
+    }
+
+    private static FindAuthorsByNamePrefixRow FindAuthorsByNamePrefixRowFrom(DbDataReader reader) => new(
+        reader.GetFieldValue<ulong>(0),
+        reader.GetFieldValue<string>(1),
+        reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2),
+        reader.GetFieldValue<bool>(3)
+    );
+
+    // -- name: GetAuthorStatistics :one
+    public async Task<GetAuthorStatisticsRow> GetAuthorStatisticsAsync(CancellationToken cancellationToken = default)
+    {
+        await using var command = new YdbCommand(
+            "SELECT\n" +
+            "    COUNT(*) AS total,\n" +
+            "    COUNT_IF(bio IS NOT NULL) AS with_bio,\n" +
+            "    COUNT_IF(bio != \"\"u) AS with_nonempty_bio,\n" +
+            "    CAST(COUNT(*) AS Bool)\n" +
+            "FROM authors;", _connection) { Transaction = _transaction };
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException("query returned no rows");
+        }
+        return GetAuthorStatisticsRowFrom(reader);
+    }
+
+    private static GetAuthorStatisticsRow GetAuthorStatisticsRowFrom(DbDataReader reader) => new(
+        reader.GetFieldValue<ulong>(0),
+        reader.GetFieldValue<ulong>(1),
+        reader.GetFieldValue<ulong>(2),
+        reader.GetFieldValue<bool>(3)
+    );
+
+    // -- name: GetAuthorExportMetadata :one
+    public async Task<GetAuthorExportMetadataRow> GetAuthorExportMetadataAsync(ulong authorId, CancellationToken cancellationToken = default)
+    {
+        await using var command = new YdbCommand(
+            "DECLARE $author_id AS Uint64;\n" +
+            "SELECT\n" +
+            "    id,\n" +
+            "    CAST(CurrentUtcDate() AS String) AS export_date,\n" +
+            "    CAST(CurrentUtcDatetime() AS String) AS export_datetime,\n" +
+            "    CurrentUtcTimestamp() AS export_timestamp,\n" +
+            "    CAST(CurrentUtcTimestamp() AS String) AS export_timestamp_text,\n" +
+            "    CAST(CurrentUtcTimestamp() AS Uint64) AS export_timestamp_micros,\n" +
+            "    COALESCE(CAST(id AS Uint32), 0),\n" +
+            "    CAST('{\"source\":\"authors\"}' AS Json) AS export_metadata\n" +
+            "FROM authors\n" +
+            "WHERE id = $author_id;", _connection) { Transaction = _transaction };
+        command.Parameters.Add(new YdbParameter("$author_id", DbType.UInt64, authorId));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException("query returned no rows");
+        }
+        return GetAuthorExportMetadataRowFrom(reader);
+    }
+
+    private static GetAuthorExportMetadataRow GetAuthorExportMetadataRowFrom(DbDataReader reader) => new(
+        reader.GetFieldValue<ulong>(0),
+        reader.GetFieldValue<byte[]>(1),
+        reader.GetFieldValue<byte[]>(2),
+        reader.GetFieldValue<DateTime>(3),
+        reader.GetFieldValue<byte[]>(4),
+        reader.GetFieldValue<ulong>(5),
+        reader.GetFieldValue<uint>(6),
+        reader.IsDBNull(7) ? null : reader.GetFieldValue<string>(7)
+    );
 }

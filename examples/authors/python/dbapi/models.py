@@ -13,3 +13,28 @@ class Authors:
 @dataclass
 class GetAuthorNameRow:
     name: str
+
+@dataclass
+class FindAuthorsByNamePrefixRow:
+    id: int
+    name: str
+    bio: Optional[str]
+    has_bio: bool
+
+@dataclass
+class GetAuthorStatisticsRow:
+    total: int
+    with_bio: int
+    with_nonempty_bio: int
+    column3: bool
+
+@dataclass
+class GetAuthorExportMetadataRow:
+    id: int
+    export_date: bytes
+    export_datetime: bytes
+    export_timestamp: datetime
+    export_timestamp_text: bytes
+    export_timestamp_micros: int
+    column6: int
+    export_metadata: Optional[str]
