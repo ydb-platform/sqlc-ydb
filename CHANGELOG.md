@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.2.8
+
 ### Added
 
 - Support named query scripts with multiple DML statements and at most one typed SELECT or RETURNING result, using shared parameter types and one execution of the complete script. Add deletion and mixed read/write examples for every booktest runtime profile.
