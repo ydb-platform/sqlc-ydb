@@ -109,6 +109,9 @@ func validate(in *model.AnalysisResult) error {
 					return fmt.Errorf("rust generator: query %q column name collision at %q (%q and %q)", q.Name, name, previous, c.Name)
 				}
 				columnNames[name] = c.Name
+				if c.Type.IsOptional() && c.Type.Elem != nil && c.Type.Elem.IsOptional() {
+					return fmt.Errorf("rust generator: query %q column %q: nested optional result decoding is unsupported by ydb 0.18.2", q.Name, c.Name)
+				}
 				if _, err := rustType(c.Type); err != nil {
 					return fmt.Errorf("rust generator: query %q column %q: %w", q.Name, c.Name, err)
 				}
@@ -131,15 +134,25 @@ func renderModels(in *model.AnalysisResult) string {
 			continue
 		}
 		copyDerive := ", Copy"
-		comparisonDerives := ", PartialEq, Eq, Hash, PartialOrd, Ord"
+		floating, binary := false, false
 		for _, c := range q.ResultSets[0].Columns {
-			if hasFloat(c.Type) {
-				comparisonDerives = ", PartialEq, PartialOrd"
-			}
+			floating = floating || typeContains(c.Type, "Float", false) || typeContains(c.Type, "Double", false)
+			binary = binary || typeContains(c.Type, "String", false) || typeContains(c.Type, "Yson", false)
 			switch strings.ToLower(c.Type.UnwrapOptional().Kind) {
 			case "utf8", "json", "jsondocument", "string", "yson", "list":
 				copyDerive = ""
 			}
+		}
+		// ydb::Bytes supports equality, but not hashing or ordering. Floats
+		// retain only partial comparisons; wrappers require the same traits.
+		comparisonDerives := ", PartialEq, Eq, Hash, PartialOrd, Ord"
+		switch {
+		case binary && floating:
+			comparisonDerives = ", PartialEq"
+		case binary:
+			comparisonDerives = ", PartialEq, Eq"
+		case floating:
+			comparisonDerives = ", PartialEq, PartialOrd"
 		}
 		fmt.Fprintf(&b, "#[derive(Debug, Clone%s%s)]\npub struct %sRow {\n", copyDerive, comparisonDerives, pascalName(q.Name))
 		for _, c := range q.ResultSets[0].Columns {
@@ -149,15 +162,6 @@ func renderModels(in *model.AnalysisResult) string {
 		b.WriteString("}\n\n")
 	}
 	return strings.TrimSuffix(b.String(), "\n")
-}
-
-// Rust floats have partial comparison because NaN is neither equal nor ordered.
-// Optional and collection wrappers retain the element's trait requirements.
-func hasFloat(t model.Type) bool {
-	if strings.EqualFold(t.Kind, "Float") || strings.EqualFold(t.Kind, "Double") {
-		return true
-	}
-	return t.Elem != nil && hasFloat(*t.Elem)
 }
 
 func renderQueries(in *model.AnalysisResult) string {

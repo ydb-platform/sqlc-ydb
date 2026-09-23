@@ -63,7 +63,7 @@ pub struct GetAuthorStatisticsRow {
     pub column3: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GetAuthorExportMetadataRow {
     pub id: u64,
     pub export_date: ydb::Bytes,

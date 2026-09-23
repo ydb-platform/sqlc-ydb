@@ -8,6 +8,10 @@
 - Support the UTC clock family and additional scalar built-ins, with a documented inventory of the upstream YQL builtin catalog and explicit prerequisites for remaining families.
 - Infer YDB result names for computed SELECT columns without AS. Add authors reporting, prefix-search and export-metadata examples for every language/runtime profile.
 
+### Fixed
+
+- Emit only supported Rust comparison and hashing derives for rows containing YDB byte strings, including optional and list fields.
+
 ## v0.2.5
 
 ### Added
