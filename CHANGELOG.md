@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.2.6
+
 ### Added
 
 - Resolve Boolean expressions and string concatenation consistently in projections, function arguments, local bindings and supported DML values. Add conditional `COUNT_IF` aggregates, fitting integer-literal fallbacks in COALESCE/NVL, and verified Boolean, timestamp and JSON casts.
