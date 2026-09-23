@@ -8,4 +8,8 @@ Compared with [upstream](../README.md), IDs are explicit `Uint64` inputs rather 
 
 `ListAuthorsPage` declares `$page_size AS Int` and `$offset AS Uint32`. `Int` resolves to YDB `Int32`, and the generated bindings preserve the declared `Int32` and `Uint32` parameter types. The query orders by the primary key for deterministic pages. Use nonnegative page sizes for ordinary pagination. Signed values are bound unchanged, leaving `LIMIT`/`OFFSET` evaluation to YDB.
 
+`FindAuthorsByNamePrefix` constructs a `LIKE` pattern in YQL and returns a Boolean `has_bio` projection. `GetAuthorStatistics` counts all authors, authors with a biography, and authors whose biography is nonempty. `COUNT_IF` ignores NULL predicates; its counts remain zero on empty input. The final `CAST(COUNT(*) AS Bool)` deliberately omits `AS` to demonstrate YDB's generated result-column name.
+
+`GetAuthorExportMetadata` obtains the current UTC date, datetime and timestamp in YDB, exports the date/datetime as text and the timestamp as native, text and integer-microsecond values, and returns JSON export metadata. Its unaliased `COALESCE(CAST(id AS Uint32), 0)` demonstrates a fitting integer fallback: an ID outside the Uint32 range produces zero. These values are computed by YDB inside the request, without client-side clock substitution or conversion. The explicit date/datetime text conversion keeps this example within the scalar result types supported by every runtime profile.
+
 This example covers every built-in language/runtime. Each language's build files and executable smoke tests live in its own directory. See [development](../../.agents/development.md) for generation and sequential live acceptance commands.

@@ -174,4 +174,84 @@ public final class Queries {
         }
         return _items;
     }
+
+    // -- name: FindAuthorsByNamePrefix :many
+    public java.util.List<FindAuthorsByNamePrefixRow> findAuthorsByNamePrefix(String prefix) {
+        var _params = Params.create();
+        _params.put("$prefix", PrimitiveValue.newText(prefix));
+        var _query = QueryReader.readFrom(
+                client.createQuery("""
+                    DECLARE $prefix AS Utf8;
+                    SELECT id, name, bio, bio IS NOT NULL AS has_bio
+                    FROM authors
+                    WHERE name LIKE $prefix || \"%\"u
+                    ORDER BY id;\
+                    """, _params)).join().getValue();
+        if (_query.getResultSetCount() != 1) throw new IllegalStateException("Expected one result set");
+        var _rows = _query.getResultSet(0);
+        var _items = new java.util.ArrayList<FindAuthorsByNamePrefixRow>();
+        while (_rows.next()) {
+            long _value0 = _rows.getColumn(0).getUint64();
+            String _value1 = _rows.getColumn(1).getText();
+            String _value2 = _rows.getColumn(2).getText();
+            boolean _value3 = _rows.getColumn(3).getBool();
+            _items.add(new FindAuthorsByNamePrefixRow(_value0, _value1, _value2, _value3));
+        }
+        return _items;
+    }
+
+    // -- name: GetAuthorStatistics :one
+    public java.util.Optional<GetAuthorStatisticsRow> getAuthorStatistics() {
+        var _params = Params.create();
+        var _query = QueryReader.readFrom(
+                client.createQuery("""
+                    SELECT
+                        COUNT(*) AS total,
+                        COUNT_IF(bio IS NOT NULL) AS with_bio,
+                        COUNT_IF(bio != \"\"u) AS with_nonempty_bio,
+                        CAST(COUNT(*) AS Bool)
+                    FROM authors;\
+                    """, _params)).join().getValue();
+        if (_query.getResultSetCount() != 1) throw new IllegalStateException("Expected one result set");
+        var _rows = _query.getResultSet(0);
+        if (!_rows.next()) return java.util.Optional.empty();
+        long _value0 = _rows.getColumn(0).getUint64();
+        long _value1 = _rows.getColumn(1).getUint64();
+        long _value2 = _rows.getColumn(2).getUint64();
+        boolean _value3 = _rows.getColumn(3).getBool();
+        return java.util.Optional.of(new GetAuthorStatisticsRow(_value0, _value1, _value2, _value3));
+    }
+
+    // -- name: GetAuthorExportMetadata :one
+    public java.util.Optional<GetAuthorExportMetadataRow> getAuthorExportMetadata(long authorId) {
+        var _params = Params.create();
+        _params.put("$author_id", PrimitiveValue.newUint64(authorId));
+        var _query = QueryReader.readFrom(
+                client.createQuery("""
+                    DECLARE $author_id AS Uint64;
+                    SELECT
+                        id,
+                        CAST(CurrentUtcDate() AS String) AS export_date,
+                        CAST(CurrentUtcDatetime() AS String) AS export_datetime,
+                        CurrentUtcTimestamp() AS export_timestamp,
+                        CAST(CurrentUtcTimestamp() AS String) AS export_timestamp_text,
+                        CAST(CurrentUtcTimestamp() AS Uint64) AS export_timestamp_micros,
+                        COALESCE(CAST(id AS Uint32), 0),
+                        CAST('{\"source\":\"authors\"}' AS Json) AS export_metadata
+                    FROM authors
+                    WHERE id = $author_id;\
+                    """, _params)).join().getValue();
+        if (_query.getResultSetCount() != 1) throw new IllegalStateException("Expected one result set");
+        var _rows = _query.getResultSet(0);
+        if (!_rows.next()) return java.util.Optional.empty();
+        long _value0 = _rows.getColumn(0).getUint64();
+        byte[] _value1 = _rows.getColumn(1).getBytes();
+        byte[] _value2 = _rows.getColumn(2).getBytes();
+        java.time.Instant _value3 = _rows.getColumn(3).getTimestamp();
+        byte[] _value4 = _rows.getColumn(4).getBytes();
+        long _value5 = _rows.getColumn(5).getUint64();
+        long _value6 = _rows.getColumn(6).getUint32();
+        String _value7 = _rows.getColumn(7).getJson();
+        return java.util.Optional.of(new GetAuthorExportMetadataRow(_value0, _value1, _value2, _value3, _value4, _value5, _value6, _value7));
+    }
 }

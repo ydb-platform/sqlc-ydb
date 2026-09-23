@@ -64,7 +64,6 @@ func TestAnalyzeRejectsUnsupportedQueryForms(t *testing.T) {
 		{"join using", ":many", "SELECT a.id FROM records a JOIN records b USING (id);", "JOIN USING is not yet supported; use an explicit ON condition"},
 		{"derived table", ":many", "SELECT id FROM (SELECT id FROM records) r;", "only named catalog tables are supported in FROM and JOIN"},
 		{"table function", ":many", "SELECT id FROM AS_TABLE($rows);", "requires DECLARE $rows AS List<Struct<...>>"},
-		{"order by result alias", ":many", "SELECT id AS result FROM records ORDER BY result;", "unknown column \"result\""},
 		{"in subquery", ":many", "SELECT id FROM records WHERE id IN (SELECT r.id FROM records r UNION SELECT r.id FROM records r);", "unknown column \"r.id\""},
 		{"delete subquery", ":exec", "DELETE FROM records WHERE id NOT IN (SELECT r.id FROM records r);", "unknown column \"r.id\""},
 		{"array expression", ":one", "SELECT [1, 2] AS values;", "unsupported result expression"},

@@ -297,22 +297,23 @@ func TestResolveRejectsUnknownOrInvalidCalls(t *testing.T) {
 	}
 }
 
-func TestResolveCoalesceRejectsMixedBaseTypes(t *testing.T) {
+func TestResolveCoalesceNumericCommonTypes(t *testing.T) {
 	tests := []struct {
 		name     string
 		function string
 		args     []model.Type
+		want     model.Type
 	}{
-		{name: "coalesce non-optional numeric", function: "COALESCE", args: []model.Type{scalar("Int32"), scalar("Int64")}},
-		{name: "coalesce optional numeric", function: "coalesce", args: []model.Type{model.Optional(scalar("Int32")), scalar("Int64")}},
-		{name: "NVL numeric", function: "NVL", args: []model.Type{model.Optional(scalar("Uint16")), scalar("Uint32")}},
+		{name: "coalesce non-optional numeric", function: "COALESCE", args: []model.Type{scalar("Int32"), scalar("Int64")}, want: scalar("Int64")},
+		{name: "coalesce optional numeric", function: "coalesce", args: []model.Type{model.Optional(scalar("Int32")), scalar("Int64")}, want: scalar("Int64")},
+		{name: "NVL numeric", function: "NVL", args: []model.Type{model.Optional(scalar("Uint16")), scalar("Uint32")}, want: scalar("Uint32")},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := Resolve(tt.function, tt.args)
-			if err == nil || !strings.Contains(err.Error(), "CAST") || !strings.Contains(err.Error(), "same YQL type") {
-				t.Fatalf("Resolve(%q) = %#v, error %v; want mixed-type CAST error", tt.function, got, err)
+			if err != nil || !got.Equal(tt.want) {
+				t.Fatalf("Resolve(%q) = %#v, error %v; want %s", tt.function, got, err, tt.want.String())
 			}
 		})
 	}
@@ -379,7 +380,7 @@ func TestCast(t *testing.T) {
 		{name: "utf8 to string is total", source: scalar("Utf8"), target: scalar("String"), want: scalar("String")},
 		{name: "string to utf8 may fail validation", source: scalar("String"), target: scalar("Utf8"), want: model.Optional(scalar("Utf8"))},
 		{name: "unsupported composite", source: model.Type{Kind: "List", Elem: typePointer(scalar("Int32"))}, target: model.Type{Kind: "List", Elem: typePointer(scalar("Int64"))}, error: "unsupported CAST"},
-		{name: "boolean to integer", source: scalar("Bool"), target: scalar("Int32"), error: "unsupported CAST"},
+		{name: "boolean to integer", source: scalar("Bool"), target: scalar("Int32"), want: scalar("Int32")},
 		{name: "invalid target null", source: scalar("Int32"), target: scalar("Null"), error: "target"},
 	}
 

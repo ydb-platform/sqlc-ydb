@@ -24,6 +24,7 @@ public final class Queries {
     public Optional<CountPilotsRow> countPilots() {
         return dsl.select(count().coerce(YdbTypes.UINT64).as("pilot_count"))
                 .from(PILOTS)
+                .coerce(field(name("pilot_count"), YdbTypes.UINT64))
                 .fetchOptional(mapping(CountPilotsRow::new));
     }
 
@@ -33,6 +34,7 @@ public final class Queries {
                 .from(PILOTS)
                 .orderBy(PILOTS.ID)
                 .limit(inline(5))
+                .coerce(field(name("id"), YdbTypes.INT32), field(name("name"), YdbTypes.UTF8))
                 .fetch(mapping(ListPilotsRow::new));
     }
 

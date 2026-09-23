@@ -33,6 +33,7 @@ public final class Queries {
         return dsl.select(AUTHORS.AUTHOR_ID, AUTHORS.NAME, AUTHORS.BIOGRAPHY)
                 .from(AUTHORS)
                 .where(AUTHORS.AUTHOR_ID.eq(val(authorId, YdbTypes.UINT64)))
+                .coerce(field(name("author_id"), YdbTypes.UINT64), field(name("name"), YdbTypes.UTF8), field(name("biography"), YdbTypes.JSON))
                 .fetchOptional(mapping(GetAuthorRow::new));
     }
 
@@ -78,6 +79,7 @@ public final class Queries {
         )
                 .from(BOOKS)
                 .where(BOOKS.YEAR.eq(val(year, YdbTypes.INT32)))
+                .coerce(field(name("book_id"), YdbTypes.UINT64), field(name("author_id"), YdbTypes.UINT64), field(name("isbn"), YdbTypes.UTF8), field(name("book_type"), YdbTypes.UTF8), field(name("title"), YdbTypes.UTF8), field(name("year"), YdbTypes.INT32), field(name("available"), YdbTypes.TIMESTAMP), field(name("tags"), YdbTypes.JSON))
                 .fetch(mapping(BooksByYearRow::new));
     }
 
@@ -160,6 +162,7 @@ public final class Queries {
         return dsl.select(AUTHORS.BIOGRAPHY)
                 .from(AUTHORS)
                 .where(AUTHORS.AUTHOR_ID.eq(val(authorId, YdbTypes.UINT64)))
+                .coerce(field(name("biography"), YdbTypes.JSON))
                 .fetchOptional(mapping(GetBiographyRow::new));
     }
 

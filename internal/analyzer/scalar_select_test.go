@@ -86,13 +86,13 @@ func TestAnalyzeRejectsUnsupportedConcatenationOperands(t *testing.T) {
 }
 
 func TestAnalyzeRejectsColumnReferencesWithoutTable(t *testing.T) {
-	for _, query := range []string{
-		"SELECT COUNT(missing) AS n;",
-		"SELECT 1 AS n WHERE missing = 1;",
+	for _, test := range []struct{ query, want string }{
+		{"SELECT COUNT(missing) AS n;", "aggregate functions require a FROM source"},
+		{"SELECT 1 AS n WHERE missing = 1;", `unknown column "missing"`},
 	} {
-		_, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: "-- name: Invalid :one\n" + query}})
-		if err == nil || !strings.Contains(err.Error(), `unknown column "missing"`) {
-			t.Errorf("query %q error = %v", query, err)
+		_, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: "-- name: Invalid :one\n" + test.query}})
+		if err == nil || !strings.Contains(err.Error(), test.want) {
+			t.Errorf("query %q error = %v, want %q", test.query, err, test.want)
 		}
 	}
 }

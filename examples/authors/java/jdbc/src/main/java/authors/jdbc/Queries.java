@@ -164,4 +164,82 @@ public final class Queries {
             }
         }
     }
+
+    // -- name: FindAuthorsByNamePrefix :many
+    public java.util.List<FindAuthorsByNamePrefixRow> findAuthorsByNamePrefix(String prefix) throws java.sql.SQLException {
+        try (var _prepared = client.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+            DECLARE $prefix AS Utf8;
+            SELECT id, name, bio, bio IS NOT NULL AS has_bio
+            FROM authors
+            WHERE name LIKE $prefix || \"%\"u
+            ORDER BY id;\
+            """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+            _prepared.setString("prefix", prefix);
+            try (var _rows = _prepared.executeQuery()) {
+                var _items = new java.util.ArrayList<FindAuthorsByNamePrefixRow>();
+                while (_rows.next()) {
+                    long _value0 = _rows.getLong(1);
+                    String _value1 = _rows.getString(2);
+                    String _value2 = _rows.getString(3);
+                    boolean _value3 = _rows.getBoolean(4);
+                    _items.add(new FindAuthorsByNamePrefixRow(_value0, _value1, _value2, _value3));
+                }
+                return _items;
+            }
+        }
+    }
+
+    // -- name: GetAuthorStatistics :one
+    public java.util.Optional<GetAuthorStatisticsRow> getAuthorStatistics() throws java.sql.SQLException {
+        try (var _prepared = client.prepareStatement("""
+            SELECT
+                COUNT(*) AS total,
+                COUNT_IF(bio IS NOT NULL) AS with_bio,
+                COUNT_IF(bio != \"\"u) AS with_nonempty_bio,
+                CAST(COUNT(*) AS Bool)
+            FROM authors;\
+            """)) {
+            try (var _rows = _prepared.executeQuery()) {
+                if (!_rows.next()) return java.util.Optional.empty();
+                long _value0 = _rows.getLong(1);
+                long _value1 = _rows.getLong(2);
+                long _value2 = _rows.getLong(3);
+                boolean _value3 = _rows.getBoolean(4);
+                return java.util.Optional.of(new GetAuthorStatisticsRow(_value0, _value1, _value2, _value3));
+            }
+        }
+    }
+
+    // -- name: GetAuthorExportMetadata :one
+    public java.util.Optional<GetAuthorExportMetadataRow> getAuthorExportMetadata(long authorId) throws java.sql.SQLException {
+        try (var _prepared = client.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+            DECLARE $author_id AS Uint64;
+            SELECT
+                id,
+                CAST(CurrentUtcDate() AS String) AS export_date,
+                CAST(CurrentUtcDatetime() AS String) AS export_datetime,
+                CurrentUtcTimestamp() AS export_timestamp,
+                CAST(CurrentUtcTimestamp() AS String) AS export_timestamp_text,
+                CAST(CurrentUtcTimestamp() AS Uint64) AS export_timestamp_micros,
+                COALESCE(CAST(id AS Uint32), 0),
+                CAST('{\"source\":\"authors\"}' AS Json) AS export_metadata
+            FROM authors
+            WHERE id = $author_id;\
+            """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+            _prepared.setObject("author_id", PrimitiveValue.newUint64(authorId));
+            try (var _rows = _prepared.executeQuery()) {
+                if (!_rows.next()) return java.util.Optional.empty();
+                long _value0 = _rows.getLong(1);
+                byte[] _value1 = _rows.getBytes(2);
+                byte[] _value2 = _rows.getBytes(3);
+                var _value3Raw = _rows.getTimestamp(4);
+                java.time.Instant _value3 = _value3Raw == null ? null : _value3Raw.toInstant();
+                byte[] _value4 = _rows.getBytes(5);
+                long _value5 = _rows.getLong(6);
+                long _value6 = _rows.getLong(7);
+                String _value7 = _rows.getString(8);
+                return java.util.Optional.of(new GetAuthorExportMetadataRow(_value0, _value1, _value2, _value3, _value4, _value5, _value6, _value7));
+            }
+        }
+    }
 }

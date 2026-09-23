@@ -110,6 +110,21 @@ final class YdbValueCodec
         return self::typedOptional($value === null ? null : self::typedUtf8($value, $where), PrimitiveTypeId::UTF8);
     }
 
+    public static function bool(Value $value, string $where): bool
+    {
+        $raw = self::read($value, 'bool_value', 'getBoolValue', $where);
+        if (!is_bool($raw)) {
+            throw new UnexpectedValueException($where . ': invalid Bool value');
+        }
+
+        return $raw;
+    }
+
+    public static function uint32(Value $value, string $where): int
+    {
+        return self::decodedInt($value, 'uint32_value', 'getUint32Value', 0, 4294967295, $where);
+    }
+
     public static function uint64(Value $value, string $where): string
     {
         $raw = self::read($value, 'uint64_value', 'getUint64Value', $where);
@@ -128,9 +143,34 @@ final class YdbValueCodec
         return $raw;
     }
 
+    public static function bytes(Value $value, string $where): string
+    {
+        return self::decodedString($value, 'bytes_value', 'getBytesValue', $where);
+    }
+
+    public static function json(Value $value, string $where): string
+    {
+        $raw = self::decodedString($value, 'text_value', 'getTextValue', $where);
+        self::validJson($raw, $where);
+
+        return $raw;
+    }
+
+    public static function timestamp(Value $value, string $where): int
+    {
+        $raw = self::uint64($value, $where);
+        if (bccomp($raw, self::TIMESTAMP_MAX_MICROSECONDS, 0) > 0) throw new UnexpectedValueException($where . ': value is outside YQL Timestamp range');
+        return (int) $raw;
+    }
+
     public static function optionalUtf8(Value $value, string $where): ?string
     {
         return self::isNull($value) ? null : self::utf8($value, $where);
+    }
+
+    public static function optionalJson(Value $value, string $where): ?string
+    {
+        return self::isNull($value) ? null : self::json($value, $where);
     }
 
     private static function typed(int $typeId, string $case, mixed $value): TypedValue
@@ -172,6 +212,11 @@ final class YdbValueCodec
         }
     }
 
+    private static function validJson(string $value, string $where): void
+    {
+        try { json_decode($value, false, 512, JSON_THROW_ON_ERROR); }
+        catch (\JsonException $error) { throw new \InvalidArgumentException($where . ': value is not valid JSON', 0, $error); }
+    }
     private static function validateUint64(string $value, string $where): void
     {
         if (!preg_match('/^(0|[1-9][0-9]*)$/D', $value) || bccomp($value, self::UINT64_MAX, 0) > 0) {
@@ -194,6 +239,12 @@ final class YdbValueCodec
         return $value->getValue() === 'null_flag_value';
     }
 
+    private static function decodedInt(Value $value, string $case, string $getter, int $min, int $max, string $where): int
+    {
+        $raw = self::read($value, $case, $getter, $where);
+        if (!is_int($raw) || $raw < $min || $raw > $max) throw new UnexpectedValueException($where . ': invalid integer value');
+        return $raw;
+    }
     private static function decodedString(Value $value, string $case, string $getter, string $where): string
     {
         $raw = self::read($value, $case, $getter, $where);

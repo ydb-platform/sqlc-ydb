@@ -36,6 +36,21 @@ func castRule(source, target model.Type) (mayFail, supported bool) {
 	if source.Equal(target) {
 		return false, true
 	}
+	if (isInteger(source.Kind) && target.Kind == "Bool") || (source.Kind == "Bool" && isInteger(target.Kind)) {
+		return false, true
+	}
+	if (source.Kind == "Date" || source.Kind == "Datetime" || source.Kind == "Timestamp") && target.Kind == "String" {
+		return false, true
+	}
+	if source.Kind == "Timestamp" && target.Kind == "Uint64" {
+		return false, true
+	}
+	if source.Kind == "Uint64" && target.Kind == "Timestamp" {
+		return true, true
+	}
+	if (source.Kind == "String" || source.Kind == "Utf8") && target.Kind == "Json" {
+		return true, true
+	}
 	if isInteger(source.Kind) && isInteger(target.Kind) {
 		return !totalIntegerCast(source.Kind, target.Kind), true
 	}

@@ -385,4 +385,163 @@ std::vector<FindAuthorsByNameCoveringRow> Queries::FindAuthorsByNameCovering(con
     return sqlc_rows;
 }
 
+// -- name: FindAuthorsByNamePrefix :many
+std::vector<FindAuthorsByNamePrefixRow> Queries::FindAuthorsByNamePrefix(const std::string& prefix) const {
+    std::optional<NYdb::TResultSet> sqlc_result_set;
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_params = NYdb::TParamsBuilder()
+            .AddParam("$prefix").Utf8(prefix).Build()
+            .Build();
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            "DECLARE $prefix AS Utf8;\n"
+            "SELECT id, name, bio, bio IS NOT NULL AS has_bio\n"
+            "FROM authors\n"
+            "WHERE name LIKE $prefix || \"%\"u\n"
+            "ORDER BY id;",
+            sqlc_tx,
+            sqlc_params,
+            this->execute_settings_
+        ).GetValueSync();
+        if (sqlc_result.IsSuccess()) {
+            if (sqlc_result.GetResultSets().size() != 1) {
+                throw std::runtime_error("expected exactly one result set");
+            }
+            sqlc_result_set = sqlc_result.GetResultSet(0);
+        }
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+    if (!sqlc_result_set) {
+        throw std::runtime_error("FindAuthorsByNamePrefix: successful query returned no result set");
+    }
+    NYdb::TResultSetParser sqlc_parser(*sqlc_result_set);
+    std::vector<FindAuthorsByNamePrefixRow> sqlc_rows;
+    sqlc_rows.reserve(sqlc_result_set->RowsCount());
+    while (sqlc_parser.TryNextRow()) {
+        sqlc_rows.push_back(FindAuthorsByNamePrefixRow{
+            sqlc_parser.ColumnParser("id").GetUint64(),
+            sqlc_parser.ColumnParser("name").GetUtf8(),
+            sqlc_parser.ColumnParser("bio").GetOptionalUtf8(),
+            sqlc_parser.ColumnParser("has_bio").GetBool(),
+        });
+    }
+    return sqlc_rows;
+}
+
+// -- name: GetAuthorStatistics :one
+std::optional<GetAuthorStatisticsRow> Queries::GetAuthorStatistics() const {
+    std::optional<NYdb::TResultSet> sqlc_result_set;
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            "SELECT\n"
+            "    COUNT(*) AS total,\n"
+            "    COUNT_IF(bio IS NOT NULL) AS with_bio,\n"
+            "    COUNT_IF(bio != \"\"u) AS with_nonempty_bio,\n"
+            "    CAST(COUNT(*) AS Bool)\n"
+            "FROM authors;",
+            sqlc_tx,
+            this->execute_settings_
+        ).GetValueSync();
+        if (sqlc_result.IsSuccess()) {
+            if (sqlc_result.GetResultSets().size() != 1) {
+                throw std::runtime_error("expected exactly one result set");
+            }
+            sqlc_result_set = sqlc_result.GetResultSet(0);
+        }
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+    if (!sqlc_result_set) {
+        throw std::runtime_error("GetAuthorStatistics: successful query returned no result set");
+    }
+    NYdb::TResultSetParser sqlc_parser(*sqlc_result_set);
+    if (!sqlc_parser.TryNextRow()) {
+        return std::nullopt;
+    }
+    GetAuthorStatisticsRow sqlc_row{
+        sqlc_parser.ColumnParser("total").GetUint64(),
+        sqlc_parser.ColumnParser("with_bio").GetUint64(),
+        sqlc_parser.ColumnParser("with_nonempty_bio").GetUint64(),
+        sqlc_parser.ColumnParser("column3").GetBool(),
+    };
+    return sqlc_row;
+}
+
+// -- name: GetAuthorExportMetadata :one
+std::optional<GetAuthorExportMetadataRow> Queries::GetAuthorExportMetadata(std::uint64_t author_id) const {
+    std::optional<NYdb::TResultSet> sqlc_result_set;
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_params = NYdb::TParamsBuilder()
+            .AddParam("$author_id").Uint64(author_id).Build()
+            .Build();
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            "DECLARE $author_id AS Uint64;\n"
+            "SELECT\n"
+            "    id,\n"
+            "    CAST(CurrentUtcDate() AS String) AS export_date,\n"
+            "    CAST(CurrentUtcDatetime() AS String) AS export_datetime,\n"
+            "    CurrentUtcTimestamp() AS export_timestamp,\n"
+            "    CAST(CurrentUtcTimestamp() AS String) AS export_timestamp_text,\n"
+            "    CAST(CurrentUtcTimestamp() AS Uint64) AS export_timestamp_micros,\n"
+            "    COALESCE(CAST(id AS Uint32), 0),\n"
+            "    CAST('{\"source\":\"authors\"}' AS Json) AS export_metadata\n"
+            "FROM authors\n"
+            "WHERE id = $author_id;",
+            sqlc_tx,
+            sqlc_params,
+            this->execute_settings_
+        ).GetValueSync();
+        if (sqlc_result.IsSuccess()) {
+            if (sqlc_result.GetResultSets().size() != 1) {
+                throw std::runtime_error("expected exactly one result set");
+            }
+            sqlc_result_set = sqlc_result.GetResultSet(0);
+        }
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+    if (!sqlc_result_set) {
+        throw std::runtime_error("GetAuthorExportMetadata: successful query returned no result set");
+    }
+    NYdb::TResultSetParser sqlc_parser(*sqlc_result_set);
+    if (!sqlc_parser.TryNextRow()) {
+        return std::nullopt;
+    }
+    GetAuthorExportMetadataRow sqlc_row{
+        sqlc_parser.ColumnParser("id").GetUint64(),
+        sqlc_parser.ColumnParser("export_date").GetString(),
+        sqlc_parser.ColumnParser("export_datetime").GetString(),
+        sqlc_parser.ColumnParser("export_timestamp").GetTimestamp(),
+        sqlc_parser.ColumnParser("export_timestamp_text").GetString(),
+        sqlc_parser.ColumnParser("export_timestamp_micros").GetUint64(),
+        sqlc_parser.ColumnParser("column6").GetUint32(),
+        sqlc_parser.ColumnParser("export_metadata").GetOptionalJson(),
+    };
+    return sqlc_row;
+}
+
 }  // namespace authors::native

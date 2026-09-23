@@ -156,6 +156,7 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			return nil, err
 		}
 		ret := "void"
+		var resultFields []string
 		if q.Command == model.One || q.Command == model.Many {
 			if len(q.ResultSets) != 1 || len(q.ResultSets[0].Columns) == 0 {
 				return nil, fmt.Errorf("%s: jOOQ requires one result set", q.Name)
@@ -171,11 +172,12 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 					return nil, fmt.Errorf("%s: Java field collision: %s", q.Name, fn)
 				}
 				seen[fn] = true
-				typ, _, e := jooqType(c.Type)
+				typ, dataType, e := jooqType(c.Type)
 				if e != nil {
 					return nil, e
 				}
 				fields = append(fields, typ+" "+fn)
+				resultFields = append(resultFields, "field(name("+quoted(c.ResultName())+"), "+dataType+")")
 			}
 			files = append(files, model.File{Name: row + ".java", Content: []byte(header + "public record " + row + "(" + strings.Join(fields, ", ") + ") {}\n")})
 			ret = "Optional<" + row + ">"
@@ -265,16 +267,11 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			if q.Command == model.Exec {
 				fmt.Fprintf(&b, "        dsl.query(\"{0};\\n{1}\", sql(%s), stmt).execute();\n", sqlLiteral(text))
 			} else {
-				var fields []string
-				for _, c := range q.ResultSets[0].Columns {
-					_, dataType, _ := jooqType(c.Type)
-					fields = append(fields, "field(name("+quoted(c.ResultName())+"), "+dataType+")")
-				}
 				fetch := "fetchOptional"
 				if q.Command == model.Many {
 					fetch = "fetch"
 				}
-				fmt.Fprintf(&b, "        return dsl.resultQuery(\"{0};\\n{1}\", sql(%s), stmt)\n                .coerce(%s)\n                .%s(mapping(%s::new));\n", sqlLiteral(text), strings.Join(fields, ", "), fetch, row)
+				fmt.Fprintf(&b, "        return dsl.resultQuery(\"{0};\\n{1}\", sql(%s), stmt)\n                .coerce(%s)\n                .%s(mapping(%s::new));\n", sqlLiteral(text), strings.Join(resultFields, ", "), fetch, row)
 			}
 		} else if q.Command == model.Exec {
 			b.WriteString("        " + body + "\n                .execute();\n")
@@ -293,7 +290,7 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 				// executeUpdate/getGeneratedKeys. YDB returns an ordinary result set.
 				fmt.Fprintf(&b, "        var stmt = %s;\n\n        // YDB RETURNING produces a result set, not JDBC generated keys.\n        return dsl.resultQuery(\"{0}\", stmt)\n                .coerce(%s)\n                .%s(mapping(%s::new));\n", body, strings.Join(fields, ", "), fetch, row)
 			} else {
-				fmt.Fprintf(&b, "        return %s\n                .%s(mapping(%s::new));\n", body, fetch, row)
+				fmt.Fprintf(&b, "        return %s\n                .coerce(%s)\n                .%s(mapping(%s::new));\n", body, strings.Join(resultFields, ", "), fetch, row)
 			}
 		}
 		b.WriteString("    }\n")
@@ -353,6 +350,11 @@ func (r *jooqRenderer) expr(n antlr.Tree) string {
 		}
 	}
 	switch node := n.(type) {
+	case *parser.Cast_exprContext:
+		if node.Type_name_or_bind() == nil || !strings.EqualFold(node.Type_name_or_bind().GetText(), "Bool") {
+			return r.fail(n)
+		}
+		return r.expr(node.Expr()) + ".cast(YdbTypes.BOOL)"
 	case *parser.Bind_parameterContext:
 		key := strings.TrimPrefix(node.GetText(), "$")
 		pn, ok := r.parameters[key]
@@ -408,6 +410,8 @@ func (r *jooqRenderer) expr(n antlr.Tree) string {
 				}
 			}
 			switch strings.ToLower(function) {
+			case "count_if":
+				return jooqCall("function", append([]string{"systemName(\"COUNT_IF\")", "YdbTypes.UINT64"}, args...))
 			case "count":
 				if inv.GetText() == "(*)" {
 					return "count().coerce(YdbTypes.UINT64)"
@@ -434,6 +438,13 @@ func (r *jooqRenderer) expr(n antlr.Tree) string {
 			return r.expr(children[1]) + ".not()"
 		}
 		if cond, ok := children[1].(*parser.Cond_exprContext); ok {
+			if cond.NULL() != nil || cond.ISNULL() != nil || cond.NOTNULL() != nil {
+				method := "isNull"
+				if cond.NOT() != nil || cond.NOTNULL() != nil {
+					method = "isNotNull"
+				}
+				return r.expr(children[0]) + "." + method + "()"
+			}
 			parts := cond.GetChildren()
 			if len(parts) == 2 {
 				op := parts[0].(antlr.ParseTree).GetText()

@@ -30,6 +30,46 @@ public sealed class Queries
 
     public Queries WithTransaction(YdbTransaction transaction) => new(_connection, transaction ?? throw new ArgumentNullException(nameof(transaction)));
 
+    static Queries()
+    {
+        SqlMapper.SetTypeMap(typeof(FindAuthorsByNamePrefixRow), new ColumnTypeMap(typeof(FindAuthorsByNamePrefixRow), new Dictionary<string, string>
+        {
+            ["has_bio"] = nameof(FindAuthorsByNamePrefixRow.HasBio),
+        }));
+        SqlMapper.SetTypeMap(typeof(GetAuthorStatisticsRow), new ColumnTypeMap(typeof(GetAuthorStatisticsRow), new Dictionary<string, string>
+        {
+            ["with_bio"] = nameof(GetAuthorStatisticsRow.WithBio),
+            ["with_nonempty_bio"] = nameof(GetAuthorStatisticsRow.WithNonemptyBio),
+        }));
+        SqlMapper.SetTypeMap(typeof(GetAuthorExportMetadataRow), new ColumnTypeMap(typeof(GetAuthorExportMetadataRow), new Dictionary<string, string>
+        {
+            ["export_date"] = nameof(GetAuthorExportMetadataRow.ExportDate),
+            ["export_datetime"] = nameof(GetAuthorExportMetadataRow.ExportDatetime),
+            ["export_timestamp"] = nameof(GetAuthorExportMetadataRow.ExportTimestamp),
+            ["export_timestamp_text"] = nameof(GetAuthorExportMetadataRow.ExportTimestampText),
+            ["export_timestamp_micros"] = nameof(GetAuthorExportMetadataRow.ExportTimestampMicros),
+            ["export_metadata"] = nameof(GetAuthorExportMetadataRow.ExportMetadata),
+        }));
+    }
+
+    private sealed class ColumnTypeMap : SqlMapper.ITypeMap
+    {
+        private readonly DefaultTypeMap _default;
+        private readonly IReadOnlyDictionary<string, string> _columns;
+
+        public ColumnTypeMap(Type type, IReadOnlyDictionary<string, string> columns)
+        {
+            _default = new DefaultTypeMap(type);
+            _columns = columns;
+        }
+
+        private string MemberName(string column) => _columns.TryGetValue(column, out var member) ? member : column;
+        public ConstructorInfo? FindConstructor(string[] names, Type[] types) => _default.FindConstructor(names.Select(MemberName).ToArray(), types);
+        public ConstructorInfo? FindExplicitConstructor() => _default.FindExplicitConstructor();
+        public SqlMapper.IMemberMap? GetConstructorParameter(ConstructorInfo constructor, string columnName) => _default.GetConstructorParameter(constructor, MemberName(columnName));
+        public SqlMapper.IMemberMap? GetMember(string columnName) => _default.GetMember(MemberName(columnName));
+    }
+
     // -- name: GetAuthor :one
     public async Task<GetAuthorRow> GetAuthorAsync(ulong authorId, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {
@@ -207,6 +247,79 @@ public sealed class Queries
             cancellationToken: cancellationToken);
 
         return (await _connection.QueryAsync<FindAuthorsByNameCoveringRow>(command).ConfigureAwait(false)).AsList();
+    }
+
+    // -- name: FindAuthorsByNamePrefix :many
+    public async Task<IReadOnlyList<FindAuthorsByNamePrefixRow>> FindAuthorsByNamePrefixAsync(string prefix, CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var parameters = new YdbParameters(
+            new YdbParameter("$prefix", DbType.String, prefix)
+        );
+
+        var command = new CommandDefinition(
+            commandText: """
+            DECLARE $prefix AS Utf8;
+            SELECT id, name, bio, bio IS NOT NULL AS has_bio
+            FROM authors
+            WHERE name LIKE $prefix || "%"u
+            ORDER BY id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        return (await _connection.QueryAsync<FindAuthorsByNamePrefixRow>(command).ConfigureAwait(false)).AsList();
+    }
+
+    // -- name: GetAuthorStatistics :one
+    public async Task<GetAuthorStatisticsRow> GetAuthorStatisticsAsync(CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var command = new CommandDefinition(
+            commandText: """
+            SELECT
+                COUNT(*) AS total,
+                COUNT_IF(bio IS NOT NULL) AS with_bio,
+                COUNT_IF(bio != ""u) AS with_nonempty_bio,
+                CAST(COUNT(*) AS Bool)
+            FROM authors;
+            """,
+            parameters: null,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        return await _connection.QueryFirstAsync<GetAuthorStatisticsRow>(command).ConfigureAwait(false);
+    }
+
+    // -- name: GetAuthorExportMetadata :one
+    public async Task<GetAuthorExportMetadataRow> GetAuthorExportMetadataAsync(ulong authorId, CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var parameters = new YdbParameters(
+            new YdbParameter("$author_id", DbType.UInt64, authorId)
+        );
+
+        var command = new CommandDefinition(
+            commandText: """
+            DECLARE $author_id AS Uint64;
+            SELECT
+                id,
+                CAST(CurrentUtcDate() AS String) AS export_date,
+                CAST(CurrentUtcDatetime() AS String) AS export_datetime,
+                CurrentUtcTimestamp() AS export_timestamp,
+                CAST(CurrentUtcTimestamp() AS String) AS export_timestamp_text,
+                CAST(CurrentUtcTimestamp() AS Uint64) AS export_timestamp_micros,
+                COALESCE(CAST(id AS Uint32), 0),
+                CAST('{"source":"authors"}' AS Json) AS export_metadata
+            FROM authors
+            WHERE id = $author_id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        return await _connection.QueryFirstAsync<GetAuthorExportMetadataRow>(command).ConfigureAwait(false);
     }
 
     private sealed class YdbParameters : SqlMapper.IDynamicParameters

@@ -29,6 +29,7 @@ public final class Queries {
         return dsl.select(AUTHORS.AUTHOR_ID, AUTHORS.NAME)
                 .from(AUTHORS)
                 .where(AUTHORS.AUTHOR_ID.eq(val(authorId, YdbTypes.UINT64)))
+                .coerce(field(name("author_id"), YdbTypes.UINT64), field(name("name"), YdbTypes.UTF8))
                 .fetchOptional(mapping(GetAuthorRow::new));
     }
 
@@ -46,6 +47,7 @@ public final class Queries {
         )
                 .from(BOOKS)
                 .where(BOOKS.BOOK_ID.eq(val(bookId, YdbTypes.UINT64)))
+                .coerce(field(name("book_id"), YdbTypes.UINT64), field(name("author_id"), YdbTypes.UINT64), field(name("isbn"), YdbTypes.UTF8), field(name("book_type"), YdbTypes.UTF8), field(name("title"), YdbTypes.UTF8), field(name("publication_year"), YdbTypes.INT32), field(name("available"), YdbTypes.TIMESTAMP), field(name("tags"), YdbTypes.JSON))
                 .fetchOptional(mapping(GetBookRow::new));
     }
 
@@ -72,6 +74,7 @@ public final class Queries {
                 .where(
                     BOOKS.TITLE.eq(val(title, YdbTypes.UTF8)).and(BOOKS.PUBLICATION_YEAR.eq(val(publicationYear, YdbTypes.INT32)))
                 )
+                .coerce(field(name("book_id"), YdbTypes.UINT64), field(name("author_id"), YdbTypes.UINT64), field(name("isbn"), YdbTypes.UTF8), field(name("book_type"), YdbTypes.UTF8), field(name("title"), YdbTypes.UTF8), field(name("publication_year"), YdbTypes.INT32), field(name("available"), YdbTypes.TIMESTAMP), field(name("tags"), YdbTypes.JSON))
                 .fetch(mapping(BooksByTitleYearRow::new));
     }
 
@@ -201,6 +204,7 @@ public final class Queries {
     // -- name: SayHello :one
     public Optional<SayHelloRow> sayHello(String name) {
         return dsl.select(inline("hello ", YdbTypes.UTF8).concat(val(name, YdbTypes.UTF8)).as("greeting"))
+                .coerce(field(name("greeting"), YdbTypes.UTF8))
                 .fetchOptional(mapping(SayHelloRow::new));
     }
 }

@@ -55,7 +55,7 @@ class GeneratedQueriesTest {
                     if ((method.getName().startsWith("create") && method.getReturnType() != void.class) || method.getName().equals("updateVenueName")) {
                         assertTrue(sql.toLowerCase().contains("returning"), sql);
                     }
-                    if (method.getName().startsWith("findAuthorsByName")) {
+                    if (method.getName().equals("findAuthorsByName") || method.getName().equals("findAuthorsByNameCovering")) {
                         assertTrue(sql.replace("`", "").contains("VIEW by_name"), sql);
                     }
                     if (method.getName().equals("booksByTags")) {
@@ -65,7 +65,7 @@ class GeneratedQueriesTest {
                 }
             }
         }
-        assertEquals(52, statements.size());
+        assertEquals(55, statements.size());
     }
     @Test
     void declaredQueryReadsDialectCarriers() throws Exception {

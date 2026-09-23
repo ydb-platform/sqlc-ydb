@@ -184,3 +184,89 @@ class Querier:
             name=row["name"],
             bio=row["bio"],
         ) for row in rows]
+
+    # -- name: FindAuthorsByNamePrefix :many
+    def find_authors_by_name_prefix(self, prefix: str) -> list[_models.FindAuthorsByNamePrefixRow]:
+        parameters = {
+            "$prefix": _ydb.TypedValue(prefix, _ydb.PrimitiveType.Utf8),
+        }
+        result_sets = self._execute(
+            ("DECLARE $prefix AS Utf8;\n"
+             "SELECT id, name, bio, bio IS NOT NULL AS has_bio\n"
+             "FROM authors\n"
+             "WHERE name LIKE $prefix || \"%\"u\n"
+             "ORDER BY id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.FindAuthorsByNamePrefixRow(
+            id=row["id"],
+            name=row["name"],
+            bio=row["bio"],
+            has_bio=row["has_bio"],
+        ) for row in rows]
+
+    # -- name: GetAuthorStatistics :one
+    def get_author_statistics(self) -> Optional[_models.GetAuthorStatisticsRow]:
+        parameters = {
+        }
+        result_sets = self._execute(
+            ("SELECT\n"
+             "    COUNT(*) AS total,\n"
+             "    COUNT_IF(bio IS NOT NULL) AS with_bio,\n"
+             "    COUNT_IF(bio != \"\"u) AS with_nonempty_bio,\n"
+             "    CAST(COUNT(*) AS Bool)\n"
+             "FROM authors;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        row = rows[0] if rows else None
+        if row is None:
+            return None
+        return _models.GetAuthorStatisticsRow(
+            total=row["total"],
+            with_bio=row["with_bio"],
+            with_nonempty_bio=row["with_nonempty_bio"],
+            column3=row["column3"],
+        )
+
+    # -- name: GetAuthorExportMetadata :one
+    def get_author_export_metadata(self, author_id: int) -> Optional[_models.GetAuthorExportMetadataRow]:
+        parameters = {
+            "$author_id": _ydb.TypedValue(author_id, _ydb.PrimitiveType.Uint64),
+        }
+        result_sets = self._execute(
+            ("DECLARE $author_id AS Uint64;\n"
+             "SELECT\n"
+             "    id,\n"
+             "    CAST(CurrentUtcDate() AS String) AS export_date,\n"
+             "    CAST(CurrentUtcDatetime() AS String) AS export_datetime,\n"
+             "    CurrentUtcTimestamp() AS export_timestamp,\n"
+             "    CAST(CurrentUtcTimestamp() AS String) AS export_timestamp_text,\n"
+             "    CAST(CurrentUtcTimestamp() AS Uint64) AS export_timestamp_micros,\n"
+             "    COALESCE(CAST(id AS Uint32), 0),\n"
+             "    CAST('{\"source\":\"authors\"}' AS Json) AS export_metadata\n"
+             "FROM authors\n"
+             "WHERE id = $author_id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        row = rows[0] if rows else None
+        if row is None:
+            return None
+        return _models.GetAuthorExportMetadataRow(
+            id=row["id"],
+            export_date=row["export_date"],
+            export_datetime=row["export_datetime"],
+            export_timestamp=row["export_timestamp"],
+            export_timestamp_text=row["export_timestamp_text"],
+            export_timestamp_micros=row["export_timestamp_micros"],
+            column6=row["column6"],
+            export_metadata=row["export_metadata"],
+        )

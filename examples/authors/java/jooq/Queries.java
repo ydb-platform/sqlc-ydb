@@ -28,6 +28,7 @@ public final class Queries {
         return dsl.select(AUTHORS.ID, AUTHORS.NAME, AUTHORS.BIO)
                 .from(AUTHORS)
                 .where(AUTHORS.ID.eq(val(authorId, YdbTypes.UINT64)))
+                .coerce(field(name("id"), YdbTypes.UINT64), field(name("name"), YdbTypes.UTF8), field(name("bio"), YdbTypes.UTF8))
                 .fetchOptional(mapping(GetAuthorRow::new));
     }
 
@@ -36,6 +37,7 @@ public final class Queries {
         return dsl.select(AUTHORS.ID, AUTHORS.NAME, AUTHORS.BIO)
                 .from(AUTHORS)
                 .orderBy(AUTHORS.NAME)
+                .coerce(field(name("id"), YdbTypes.UINT64), field(name("name"), YdbTypes.UTF8), field(name("bio"), YdbTypes.UTF8))
                 .fetch(mapping(ListAuthorsRow::new));
     }
 
@@ -64,6 +66,7 @@ public final class Queries {
         return dsl.select(AUTHORS.NAME)
                 .from(AUTHORS)
                 .where(AUTHORS.ID.eq(val(authorId, YdbTypes.UINT64)))
+                .coerce(field(name("name"), YdbTypes.UTF8))
                 .fetchOptional(mapping(GetAuthorNameRow::new));
     }
 
@@ -112,6 +115,7 @@ public final class Queries {
                 .from(table("{0} VIEW {1}", AUTHORS, name("by_name")).as("a"))
                 .where(a.NAME.eq(val(name, YdbTypes.UTF8)))
                 .orderBy(a.ID)
+                .coerce(field(name("id"), YdbTypes.UINT64), field(name("name"), YdbTypes.UTF8), field(name("bio"), YdbTypes.UTF8))
                 .fetch(mapping(FindAuthorsByNameRow::new));
     }
 
@@ -130,6 +134,69 @@ public final class Queries {
                 try (var _rows = _prepared.executeQuery()) {
                     var _result = dsl.fetch(_rows, YdbTypes.UINT64, YdbTypes.UTF8, YdbTypes.UTF8).map(_row -> new FindAuthorsByNameCoveringRow(_row.get(0, org.jooq.types.ULong.class), _row.get(1, String.class), _row.get(2, String.class)));
                     return _result;
+                }
+            }
+        });
+    }
+
+    // -- name: FindAuthorsByNamePrefix :many
+    public List<FindAuthorsByNamePrefixRow> findAuthorsByNamePrefix(String prefix) {
+        return dsl.connectionResult(_connection -> {
+            try (var _prepared = _connection.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+                DECLARE $prefix AS Utf8;
+                SELECT id, name, bio, bio IS NOT NULL AS has_bio
+                FROM\s\
+                """ + dsl.render(AUTHORS) + " AS `authors`" + """
+
+                WHERE name LIKE $prefix || \"%\"u
+                ORDER BY id;\
+                """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+                _prepared.setString("prefix", prefix);
+                try (var _rows = _prepared.executeQuery()) {
+                    var _result = dsl.fetch(_rows, YdbTypes.UINT64, YdbTypes.UTF8, YdbTypes.UTF8, YdbTypes.BOOL).map(_row -> new FindAuthorsByNamePrefixRow(_row.get(0, org.jooq.types.ULong.class), _row.get(1, String.class), _row.get(2, String.class), _row.get(3, Boolean.class)));
+                    return _result;
+                }
+            }
+        });
+    }
+
+    // -- name: GetAuthorStatistics :one
+    public Optional<GetAuthorStatisticsRow> getAuthorStatistics() {
+        return dsl.select(
+            count().coerce(YdbTypes.UINT64).as("total"),
+            function(systemName("COUNT_IF"), YdbTypes.UINT64, AUTHORS.BIO.isNotNull()).as("with_bio"),
+            function(systemName("COUNT_IF"), YdbTypes.UINT64, AUTHORS.BIO.ne(inline("", YdbTypes.UTF8))).as("with_nonempty_bio"),
+            count().coerce(YdbTypes.UINT64).cast(YdbTypes.BOOL)
+        )
+                .from(AUTHORS)
+                .coerce(field(name("total"), YdbTypes.UINT64), field(name("with_bio"), YdbTypes.UINT64), field(name("with_nonempty_bio"), YdbTypes.UINT64), field(name("column3"), YdbTypes.BOOL))
+                .fetchOptional(mapping(GetAuthorStatisticsRow::new));
+    }
+
+    // -- name: GetAuthorExportMetadata :one
+    public Optional<GetAuthorExportMetadataRow> getAuthorExportMetadata(ULong authorId) {
+        return dsl.connectionResult(_connection -> {
+            try (var _prepared = _connection.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+                DECLARE $author_id AS Uint64;
+                SELECT
+                    id,
+                    CAST(CurrentUtcDate() AS String) AS export_date,
+                    CAST(CurrentUtcDatetime() AS String) AS export_datetime,
+                    CurrentUtcTimestamp() AS export_timestamp,
+                    CAST(CurrentUtcTimestamp() AS String) AS export_timestamp_text,
+                    CAST(CurrentUtcTimestamp() AS Uint64) AS export_timestamp_micros,
+                    COALESCE(CAST(id AS Uint32), 0),
+                    CAST('{\"source\":\"authors\"}' AS Json) AS export_metadata
+                FROM\s\
+                """ + dsl.render(AUTHORS) + " AS `authors`" + """
+
+                WHERE id = $author_id;\
+                """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+                _prepared.setObject("author_id", tech.ydb.table.values.PrimitiveValue.newUint64(authorId.longValue()));
+                try (var _rows = _prepared.executeQuery()) {
+                    var _result = dsl.fetch(_rows, YdbTypes.UINT64, YdbTypes.STRING, YdbTypes.STRING, YdbTypes.TIMESTAMP, YdbTypes.STRING, YdbTypes.UINT64, YdbTypes.UINT32, YdbTypes.JSON).map(_row -> new GetAuthorExportMetadataRow(_row.get(0, org.jooq.types.ULong.class), _row.get(1, byte[].class), _row.get(2, byte[].class), _row.get(3, java.time.Instant.class), _row.get(4, byte[].class), _row.get(5, org.jooq.types.ULong.class), _row.get(6, org.jooq.types.UInteger.class), _row.get(7, org.jooq.JSON.class)));
+                    if (_result.size() > 1) throw new org.jooq.exception.TooManyRowsException("Expected at most one row");
+                    return _result.stream().findFirst();
                 }
             }
         });

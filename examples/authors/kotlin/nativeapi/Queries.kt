@@ -237,4 +237,119 @@ class Queries {
         }
         return _items
     }
+
+    // -- name: FindAuthorsByNamePrefix :many
+    fun findAuthorsByNamePrefix(prefix: String): List<FindAuthorsByNamePrefixRow> {
+        val _params = Params.create()
+        _params.put("\$prefix", PrimitiveValue.newText(prefix))
+        val _query = if (transaction != null) {
+            QueryReader.readFrom(transaction.createQuery(
+                "DECLARE \$prefix AS Utf8;\n" +
+                "SELECT id, name, bio, bio IS NOT NULL AS has_bio\n" +
+                "FROM authors\n" +
+                "WHERE name LIKE \$prefix || \"%\"u\n" +
+                "ORDER BY id;", _params)).join().getValue()
+        } else {
+            client!!.supplyResult { _session ->
+                QueryReader.readFrom(_session.createQuery(
+                    "DECLARE \$prefix AS Utf8;\n" +
+                    "SELECT id, name, bio, bio IS NOT NULL AS has_bio\n" +
+                    "FROM authors\n" +
+                    "WHERE name LIKE \$prefix || \"%\"u\n" +
+                    "ORDER BY id;", TxMode.SERIALIZABLE_RW, _params))
+            }.join().getValue()
+        }
+        kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
+        val _rows = _query.getResultSet(0)
+        val _items = ArrayList<FindAuthorsByNamePrefixRow>()
+        while (_rows.next()) {
+            val _value0: Long = _rows.getColumn(0).getUint64()
+            val _value1: String = _rows.getColumn(1).getText()
+            val _value2: String? = _rows.getColumn(2).getText()
+            val _value3: Boolean = _rows.getColumn(3).getBool()
+            _items.add(FindAuthorsByNamePrefixRow(_value0, _value1, _value2, _value3))
+        }
+        return _items
+    }
+
+    // -- name: GetAuthorStatistics :one
+    fun getAuthorStatistics(): GetAuthorStatisticsRow? {
+        val _params = Params.create()
+        val _query = if (transaction != null) {
+            QueryReader.readFrom(transaction.createQuery(
+                "SELECT\n" +
+                "    COUNT(*) AS total,\n" +
+                "    COUNT_IF(bio IS NOT NULL) AS with_bio,\n" +
+                "    COUNT_IF(bio != \"\"u) AS with_nonempty_bio,\n" +
+                "    CAST(COUNT(*) AS Bool)\n" +
+                "FROM authors;", _params)).join().getValue()
+        } else {
+            client!!.supplyResult { _session ->
+                QueryReader.readFrom(_session.createQuery(
+                    "SELECT\n" +
+                    "    COUNT(*) AS total,\n" +
+                    "    COUNT_IF(bio IS NOT NULL) AS with_bio,\n" +
+                    "    COUNT_IF(bio != \"\"u) AS with_nonempty_bio,\n" +
+                    "    CAST(COUNT(*) AS Bool)\n" +
+                    "FROM authors;", TxMode.SERIALIZABLE_RW, _params))
+            }.join().getValue()
+        }
+        kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
+        val _rows = _query.getResultSet(0)
+        if (!_rows.next()) return null
+        val _value0: Long = _rows.getColumn(0).getUint64()
+        val _value1: Long = _rows.getColumn(1).getUint64()
+        val _value2: Long = _rows.getColumn(2).getUint64()
+        val _value3: Boolean = _rows.getColumn(3).getBool()
+        return GetAuthorStatisticsRow(_value0, _value1, _value2, _value3)
+    }
+
+    // -- name: GetAuthorExportMetadata :one
+    fun getAuthorExportMetadata(authorId: Long): GetAuthorExportMetadataRow? {
+        val _params = Params.create()
+        _params.put("\$author_id", PrimitiveValue.newUint64(authorId))
+        val _query = if (transaction != null) {
+            QueryReader.readFrom(transaction.createQuery(
+                "DECLARE \$author_id AS Uint64;\n" +
+                "SELECT\n" +
+                "    id,\n" +
+                "    CAST(CurrentUtcDate() AS String) AS export_date,\n" +
+                "    CAST(CurrentUtcDatetime() AS String) AS export_datetime,\n" +
+                "    CurrentUtcTimestamp() AS export_timestamp,\n" +
+                "    CAST(CurrentUtcTimestamp() AS String) AS export_timestamp_text,\n" +
+                "    CAST(CurrentUtcTimestamp() AS Uint64) AS export_timestamp_micros,\n" +
+                "    COALESCE(CAST(id AS Uint32), 0),\n" +
+                "    CAST('{\"source\":\"authors\"}' AS Json) AS export_metadata\n" +
+                "FROM authors\n" +
+                "WHERE id = \$author_id;", _params)).join().getValue()
+        } else {
+            client!!.supplyResult { _session ->
+                QueryReader.readFrom(_session.createQuery(
+                    "DECLARE \$author_id AS Uint64;\n" +
+                    "SELECT\n" +
+                    "    id,\n" +
+                    "    CAST(CurrentUtcDate() AS String) AS export_date,\n" +
+                    "    CAST(CurrentUtcDatetime() AS String) AS export_datetime,\n" +
+                    "    CurrentUtcTimestamp() AS export_timestamp,\n" +
+                    "    CAST(CurrentUtcTimestamp() AS String) AS export_timestamp_text,\n" +
+                    "    CAST(CurrentUtcTimestamp() AS Uint64) AS export_timestamp_micros,\n" +
+                    "    COALESCE(CAST(id AS Uint32), 0),\n" +
+                    "    CAST('{\"source\":\"authors\"}' AS Json) AS export_metadata\n" +
+                    "FROM authors\n" +
+                    "WHERE id = \$author_id;", TxMode.SERIALIZABLE_RW, _params))
+            }.join().getValue()
+        }
+        kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
+        val _rows = _query.getResultSet(0)
+        if (!_rows.next()) return null
+        val _value0: Long = _rows.getColumn(0).getUint64()
+        val _value1: ByteArray = _rows.getColumn(1).getBytes()
+        val _value2: ByteArray = _rows.getColumn(2).getBytes()
+        val _value3: java.time.Instant = _rows.getColumn(3).getTimestamp()
+        val _value4: ByteArray = _rows.getColumn(4).getBytes()
+        val _value5: Long = _rows.getColumn(5).getUint64()
+        val _value6: Long = _rows.getColumn(6).getUint32()
+        val _value7: String? = _rows.getColumn(7).getJson()
+        return GetAuthorExportMetadataRow(_value0, _value1, _value2, _value3, _value4, _value5, _value6, _value7)
+    }
 }

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <util/datetime/base.h>
 
 namespace authors::native {
 
@@ -45,6 +46,31 @@ struct FindAuthorsByNameCoveringRow final {
     std::uint64_t id;
     std::string name;
     std::optional<std::string> bio;
+};
+
+struct FindAuthorsByNamePrefixRow final {
+    std::uint64_t id;
+    std::string name;
+    std::optional<std::string> bio;
+    bool has_bio;
+};
+
+struct GetAuthorStatisticsRow final {
+    std::uint64_t total;
+    std::uint64_t with_bio;
+    std::uint64_t with_nonempty_bio;
+    bool column3;
+};
+
+struct GetAuthorExportMetadataRow final {
+    std::uint64_t id;
+    std::string export_date;
+    std::string export_datetime;
+    TInstant export_timestamp;
+    std::string export_timestamp_text;
+    std::uint64_t export_timestamp_micros;
+    std::uint32_t column6;
+    std::optional<std::string> export_metadata;
 };
 
 }  // namespace authors::native

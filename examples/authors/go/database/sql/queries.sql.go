@@ -204,3 +204,90 @@ func (q *Queries) FindAuthorsByNameCovering(ctx context.Context, arg string) ([]
 
 	return items, nil
 }
+
+// -- name: FindAuthorsByNamePrefix :many
+func (q *Queries) FindAuthorsByNamePrefix(ctx context.Context, arg string) ([]FindAuthorsByNamePrefixRow, error) {
+	rows, err := q.db.QueryContext(ctx, ""+
+		"DECLARE $prefix AS Utf8;\n"+
+		"SELECT id, name, bio, bio IS NOT NULL AS has_bio\n"+
+		"FROM authors\n"+
+		"WHERE name LIKE $prefix || \"%\"u\n"+
+		"ORDER BY id;",
+		sql.Named("prefix", arg),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []FindAuthorsByNamePrefixRow(nil)
+	for rows.Next() {
+		var row FindAuthorsByNamePrefixRow
+		if err := rows.Scan(
+			&row.ID,
+			&row.Name,
+			&row.Bio,
+			&row.HasBio,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, row)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
+// -- name: GetAuthorStatistics :one
+func (q *Queries) GetAuthorStatistics(ctx context.Context) (GetAuthorStatisticsRow, error) {
+	var row GetAuthorStatisticsRow
+	err := q.db.QueryRowContext(ctx, ""+
+		"SELECT\n"+
+		"    COUNT(*) AS total,\n"+
+		"    COUNT_IF(bio IS NOT NULL) AS with_bio,\n"+
+		"    COUNT_IF(bio != \"\"u) AS with_nonempty_bio,\n"+
+		"    CAST(COUNT(*) AS Bool)\n"+
+		"FROM authors;",
+	).Scan(
+		&row.Total,
+		&row.WithBio,
+		&row.WithNonemptyBio,
+		&row.Column3,
+	)
+
+	return row, err
+}
+
+// -- name: GetAuthorExportMetadata :one
+func (q *Queries) GetAuthorExportMetadata(ctx context.Context, arg uint64) (GetAuthorExportMetadataRow, error) {
+	var row GetAuthorExportMetadataRow
+	err := q.db.QueryRowContext(ctx, ""+
+		"DECLARE $author_id AS Uint64;\n"+
+		"SELECT\n"+
+		"    id,\n"+
+		"    CAST(CurrentUtcDate() AS String) AS export_date,\n"+
+		"    CAST(CurrentUtcDatetime() AS String) AS export_datetime,\n"+
+		"    CurrentUtcTimestamp() AS export_timestamp,\n"+
+		"    CAST(CurrentUtcTimestamp() AS String) AS export_timestamp_text,\n"+
+		"    CAST(CurrentUtcTimestamp() AS Uint64) AS export_timestamp_micros,\n"+
+		"    COALESCE(CAST(id AS Uint32), 0),\n"+
+		"    CAST('{\"source\":\"authors\"}' AS Json) AS export_metadata\n"+
+		"FROM authors\n"+
+		"WHERE id = $author_id;",
+		sql.Named("author_id", arg),
+	).Scan(
+		&row.ID,
+		&row.ExportDate,
+		&row.ExportDatetime,
+		&row.ExportTimestamp,
+		&row.ExportTimestampText,
+		&row.ExportTimestampMicros,
+		&row.Column6,
+		&row.ExportMetadata,
+	)
+
+	return row, err
+}

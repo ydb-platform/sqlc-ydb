@@ -469,7 +469,13 @@ func emitRows(b *strings.Builder, q model.AnalyzedQuery, row, indent string, nat
 }
 
 func indentExpression(s, indent string) string {
-	return strings.ReplaceAll(s, "\n", "\n"+indent)
+	lines := strings.Split(s, "\n")
+	for i := 1; i < len(lines); i++ {
+		if lines[i] != "" {
+			lines[i] = indent + lines[i]
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func emitJDBCNamedParameter(b *strings.Builder, p model.Parameter, n, indent string) {

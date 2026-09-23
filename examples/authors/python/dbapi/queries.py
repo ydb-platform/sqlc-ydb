@@ -193,3 +193,93 @@ class Querier:
             ) for row in rows]
         finally:
             cursor.close()
+
+    # -- name: FindAuthorsByNamePrefix :many
+    def find_authors_by_name_prefix(self, prefix: str) -> list[_models.FindAuthorsByNamePrefixRow]:
+        parameters = {
+            "$prefix": (prefix, _ydb.PrimitiveType.Utf8),
+        }
+        cursor = self._connection.cursor()
+        try:
+            cursor.execute(
+                ("DECLARE $prefix AS Utf8;\n"
+                 "SELECT id, name, bio, bio IS NOT NULL AS has_bio\n"
+                 "FROM authors\n"
+                 "WHERE name LIKE $prefix || \"%\"u\n"
+                 "ORDER BY id;"),
+                parameters,
+            )
+            rows = cursor.fetchall()
+            return [_models.FindAuthorsByNamePrefixRow(
+                id=row[0],
+                name=row[1],
+                bio=row[2],
+                has_bio=row[3],
+            ) for row in rows]
+        finally:
+            cursor.close()
+
+    # -- name: GetAuthorStatistics :one
+    def get_author_statistics(self) -> Optional[_models.GetAuthorStatisticsRow]:
+        parameters = {
+        }
+        cursor = self._connection.cursor()
+        try:
+            cursor.execute(
+                ("SELECT\n"
+                 "    COUNT(*) AS total,\n"
+                 "    COUNT_IF(bio IS NOT NULL) AS with_bio,\n"
+                 "    COUNT_IF(bio != \"\"u) AS with_nonempty_bio,\n"
+                 "    CAST(COUNT(*) AS Bool)\n"
+                 "FROM authors;"),
+                parameters,
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return _models.GetAuthorStatisticsRow(
+                total=row[0],
+                with_bio=row[1],
+                with_nonempty_bio=row[2],
+                column3=row[3],
+            )
+        finally:
+            cursor.close()
+
+    # -- name: GetAuthorExportMetadata :one
+    def get_author_export_metadata(self, author_id: int) -> Optional[_models.GetAuthorExportMetadataRow]:
+        parameters = {
+            "$author_id": (author_id, _ydb.PrimitiveType.Uint64),
+        }
+        cursor = self._connection.cursor()
+        try:
+            cursor.execute(
+                ("DECLARE $author_id AS Uint64;\n"
+                 "SELECT\n"
+                 "    id,\n"
+                 "    CAST(CurrentUtcDate() AS String) AS export_date,\n"
+                 "    CAST(CurrentUtcDatetime() AS String) AS export_datetime,\n"
+                 "    CurrentUtcTimestamp() AS export_timestamp,\n"
+                 "    CAST(CurrentUtcTimestamp() AS String) AS export_timestamp_text,\n"
+                 "    CAST(CurrentUtcTimestamp() AS Uint64) AS export_timestamp_micros,\n"
+                 "    COALESCE(CAST(id AS Uint32), 0),\n"
+                 "    CAST('{\"source\":\"authors\"}' AS Json) AS export_metadata\n"
+                 "FROM authors\n"
+                 "WHERE id = $author_id;"),
+                parameters,
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return _models.GetAuthorExportMetadataRow(
+                id=row[0],
+                export_date=row[1],
+                export_datetime=row[2],
+                export_timestamp=row[3],
+                export_timestamp_text=row[4],
+                export_timestamp_micros=row[5],
+                column6=row[6],
+                export_metadata=row[7],
+            )
+        finally:
+            cursor.close()

@@ -201,4 +201,101 @@ std::vector<FindAuthorsByNameCoveringRow> Queries::FindAuthorsByNameCovering(con
     return sqlc_rows;
 }
 
+// -- name: FindAuthorsByNamePrefix :many
+std::vector<FindAuthorsByNamePrefixRow> Queries::FindAuthorsByNamePrefix(const ::userver::ydb::Utf8& prefix) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "DECLARE $prefix AS Utf8;\n"
+        "SELECT id, name, bio, bio IS NOT NULL AS has_bio\n"
+        "FROM authors\n"
+        "WHERE name LIKE $prefix || \"%\"u\n"
+        "ORDER BY id;",
+        ::userver::ydb::Query::Name{"FindAuthorsByNamePrefix"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    auto sqlc_response =
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$prefix", prefix)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$prefix", prefix);
+    auto sqlc_cursor = sqlc_response.GetSingleCursor();
+    std::vector<FindAuthorsByNamePrefixRow> sqlc_rows;
+    sqlc_rows.reserve(sqlc_cursor.size());
+    for (auto sqlc_row : sqlc_cursor) {
+        sqlc_rows.push_back(FindAuthorsByNamePrefixRow{
+            sqlc_row.Get<std::uint64_t>("id"),
+            sqlc_row.Get<::userver::ydb::Utf8>("name"),
+            sqlc_row.Get<std::optional<::userver::ydb::Utf8>>("bio"),
+            sqlc_row.Get<bool>("has_bio"),
+        });
+    }
+    return sqlc_rows;
+}
+
+// -- name: GetAuthorStatistics :one
+std::optional<GetAuthorStatisticsRow> Queries::GetAuthorStatistics() const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "SELECT\n"
+        "    COUNT(*) AS total,\n"
+        "    COUNT_IF(bio IS NOT NULL) AS with_bio,\n"
+        "    COUNT_IF(bio != \"\"u) AS with_nonempty_bio,\n"
+        "    CAST(COUNT(*) AS Bool)\n"
+        "FROM authors;",
+        ::userver::ydb::Query::Name{"GetAuthorStatistics"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    auto sqlc_response =
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query);
+    auto sqlc_cursor = sqlc_response.GetSingleCursor();
+    if (sqlc_cursor.empty()) {
+        return std::nullopt;
+    }
+    auto sqlc_row = sqlc_cursor.GetFirstRow();
+    return GetAuthorStatisticsRow{
+        sqlc_row.Get<std::uint64_t>("total"),
+        sqlc_row.Get<std::uint64_t>("with_bio"),
+        sqlc_row.Get<std::uint64_t>("with_nonempty_bio"),
+        sqlc_row.Get<bool>("column3"),
+    };
+}
+
+// -- name: GetAuthorExportMetadata :one
+std::optional<GetAuthorExportMetadataRow> Queries::GetAuthorExportMetadata(std::uint64_t author_id) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "DECLARE $author_id AS Uint64;\n"
+        "SELECT\n"
+        "    id,\n"
+        "    CAST(CurrentUtcDate() AS String) AS export_date,\n"
+        "    CAST(CurrentUtcDatetime() AS String) AS export_datetime,\n"
+        "    CurrentUtcTimestamp() AS export_timestamp,\n"
+        "    CAST(CurrentUtcTimestamp() AS String) AS export_timestamp_text,\n"
+        "    CAST(CurrentUtcTimestamp() AS Uint64) AS export_timestamp_micros,\n"
+        "    COALESCE(CAST(id AS Uint32), 0),\n"
+        "    CAST('{\"source\":\"authors\"}' AS Json) AS export_metadata\n"
+        "FROM authors\n"
+        "WHERE id = $author_id;",
+        ::userver::ydb::Query::Name{"GetAuthorExportMetadata"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    auto sqlc_response =
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$author_id", author_id)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$author_id", author_id);
+    auto sqlc_cursor = sqlc_response.GetSingleCursor();
+    if (sqlc_cursor.empty()) {
+        return std::nullopt;
+    }
+    auto sqlc_row = sqlc_cursor.GetFirstRow();
+    return GetAuthorExportMetadataRow{
+        sqlc_row.Get<std::uint64_t>("id"),
+        sqlc_row.Get<std::string>("export_date"),
+        sqlc_row.Get<std::string>("export_datetime"),
+        sqlc_row.Get<std::chrono::system_clock::time_point>("export_timestamp"),
+        sqlc_row.Get<std::string>("export_timestamp_text"),
+        sqlc_row.Get<std::uint64_t>("export_timestamp_micros"),
+        sqlc_row.Get<std::uint32_t>("column6"),
+        sqlc_row.Get<std::optional<::userver::formats::json::Value>>("export_metadata"),
+    };
+}
+
 }  // namespace authors::userver

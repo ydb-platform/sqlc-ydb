@@ -38,7 +38,11 @@ func validatePredicateContexts(block queryBlock, root antlr.Tree, relations []re
 			continue
 		}
 		seen[predicate.GetStart().GetStart()] = true
-		if err := validatePredicate(predicate, expressionScope{relations: relations, bindings: bindings, predicate: true, functions: block.functions}); err != nil {
+		if containsAggregate(predicate) {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, predicate, "aggregate functions are not allowed in WHERE or JOIN predicates; use HAVING after aggregation"))
+			continue
+		}
+		if err := validatePredicate(predicate, expressionScope{relations: relations, bindings: bindings, functions: block.functions}); err != nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, predicate, fmt.Sprintf("invalid predicate: %v", err)))
 		}
 	}
@@ -118,25 +122,11 @@ func validatePredicateAtom(atom *parser.Xor_subexprContext, scope expressionScop
 			}
 			return nil
 		}
-		var types []model.Type
-		types = append(types, left)
-		for _, operand := range condition.AllEq_subexpr() {
-			typeValue, err := resolveScalarNode(operand, scope)
-			if err != nil {
-				return fmt.Errorf("cannot resolve predicate operand %q: %w", operand.GetText(), err)
-			}
-			if condition.IN() != nil && typeValue.Kind == "List" && typeValue.Elem != nil {
-				typeValue = *typeValue.Elem
-			}
-			types = append(types, typeValue)
-		}
-		if len(types) < 2 {
+		_, matched, err := resolveComparison(atom, scope)
+		if !matched {
 			return fmt.Errorf("unsupported predicate %q", atom.GetText())
 		}
-		if _, err := builtins.CommonType(types...); err != nil {
-			return fmt.Errorf("predicate operands have incompatible types: %w", err)
-		}
-		return nil
+		return err
 	}
 
 	eq := atom.Eq_subexpr()
@@ -163,7 +153,7 @@ func validatePredicateAtom(atom *parser.Xor_subexprContext, scope expressionScop
 		if err != nil {
 			return fmt.Errorf("cannot resolve NOT operand: %w", err)
 		}
-		if typeValue.UnwrapOptional().Kind != "Bool" {
+		if typeValue.Kind != "Null" && typeValue.UnwrapOptional().Kind != "Bool" {
 			return fmt.Errorf("NOT operand has type %s, want Bool", typeValue.String())
 		}
 		return nil
@@ -175,7 +165,7 @@ func validatePredicateAtom(atom *parser.Xor_subexprContext, scope expressionScop
 		}
 		return fmt.Errorf("cannot resolve predicate operand %q: %w", eq.GetText(), err)
 	}
-	if typeValue.UnwrapOptional().Kind != "Bool" {
+	if typeValue.Kind != "Null" && typeValue.UnwrapOptional().Kind != "Bool" {
 		return fmt.Errorf("predicate expression has type %s, want Bool", typeValue.String())
 	}
 	return nil

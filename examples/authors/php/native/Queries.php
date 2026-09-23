@@ -455,6 +455,181 @@ final class Queries
         return $rows;
     }
 
+    /** @return list<FindAuthorsByNamePrefixRow> */
+    // -- name: FindAuthorsByNamePrefix :many
+    public function findAuthorsByNamePrefix(string $prefix): array
+    {
+        $parameters = [
+            '$prefix' => YdbValueCodec::typedUtf8($prefix, 'prefix'),
+        ];
+
+        $result = $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                DECLARE $prefix AS Utf8;
+                SELECT id, name, bio, bio IS NOT NULL AS has_bio
+                FROM authors
+                WHERE name LIKE $prefix || "%"u
+                ORDER BY id;
+                SQLC_YDB_YQL)
+                ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0);
+            if ($this->txId !== null) {
+                $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
+            } else {
+                $query->beginTx('serializable_read_write');
+            }
+            if ($this->configure !== null) {
+                ($this->configure)($query);
+            }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
+
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
+        });
+
+        $rows = $this->decodeRows(
+            $result,
+            'FindAuthorsByNamePrefix',
+            [
+                ['id', PrimitiveTypeId::UINT64, false],
+                ['name', PrimitiveTypeId::UTF8, false],
+                ['bio', PrimitiveTypeId::UTF8, true],
+                ['has_bio', PrimitiveTypeId::BOOL, false],
+            ],
+            static fn($items): FindAuthorsByNamePrefixRow => new FindAuthorsByNamePrefixRow(
+                YdbValueCodec::uint64($items->offsetGet(0), 'FindAuthorsByNamePrefix.id'),
+                YdbValueCodec::utf8($items->offsetGet(1), 'FindAuthorsByNamePrefix.name'),
+                YdbValueCodec::optionalUtf8($items->offsetGet(2), 'FindAuthorsByNamePrefix.bio'),
+                YdbValueCodec::bool($items->offsetGet(3), 'FindAuthorsByNamePrefix.has_bio'),
+            ),
+        );
+
+        return $rows;
+    }
+
+    // -- name: GetAuthorStatistics :one
+    public function getAuthorStatistics(): ?GetAuthorStatisticsRow
+    {
+        $parameters = [
+        ];
+
+        $result = $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                SELECT
+                    COUNT(*) AS total,
+                    COUNT_IF(bio IS NOT NULL) AS with_bio,
+                    COUNT_IF(bio != ""u) AS with_nonempty_bio,
+                    CAST(COUNT(*) AS Bool)
+                FROM authors;
+                SQLC_YDB_YQL)
+                ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0);
+            if ($this->txId !== null) {
+                $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
+            } else {
+                $query->beginTx('serializable_read_write');
+            }
+            if ($this->configure !== null) {
+                ($this->configure)($query);
+            }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
+
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
+        });
+
+        $rows = $this->decodeRows(
+            $result,
+            'GetAuthorStatistics',
+            [
+                ['total', PrimitiveTypeId::UINT64, false],
+                ['with_bio', PrimitiveTypeId::UINT64, false],
+                ['with_nonempty_bio', PrimitiveTypeId::UINT64, false],
+                ['column3', PrimitiveTypeId::BOOL, false],
+            ],
+            static fn($items): GetAuthorStatisticsRow => new GetAuthorStatisticsRow(
+                YdbValueCodec::uint64($items->offsetGet(0), 'GetAuthorStatistics.total'),
+                YdbValueCodec::uint64($items->offsetGet(1), 'GetAuthorStatistics.with_bio'),
+                YdbValueCodec::uint64($items->offsetGet(2), 'GetAuthorStatistics.with_nonempty_bio'),
+                YdbValueCodec::bool($items->offsetGet(3), 'GetAuthorStatistics.column3'),
+            ),
+        );
+
+        return $rows[0] ?? null;
+    }
+
+    // -- name: GetAuthorExportMetadata :one
+    public function getAuthorExportMetadata(string $authorId): ?GetAuthorExportMetadataRow
+    {
+        $parameters = [
+            '$author_id' => YdbValueCodec::typedUint64($authorId, 'author_id'),
+        ];
+
+        $result = $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                DECLARE $author_id AS Uint64;
+                SELECT
+                    id,
+                    CAST(CurrentUtcDate() AS String) AS export_date,
+                    CAST(CurrentUtcDatetime() AS String) AS export_datetime,
+                    CurrentUtcTimestamp() AS export_timestamp,
+                    CAST(CurrentUtcTimestamp() AS String) AS export_timestamp_text,
+                    CAST(CurrentUtcTimestamp() AS Uint64) AS export_timestamp_micros,
+                    COALESCE(CAST(id AS Uint32), 0),
+                    CAST('{"source":"authors"}' AS Json) AS export_metadata
+                FROM authors
+                WHERE id = $author_id;
+                SQLC_YDB_YQL)
+                ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0);
+            if ($this->txId !== null) {
+                $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
+            } else {
+                $query->beginTx('serializable_read_write');
+            }
+            if ($this->configure !== null) {
+                ($this->configure)($query);
+            }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
+
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
+        });
+
+        $rows = $this->decodeRows(
+            $result,
+            'GetAuthorExportMetadata',
+            [
+                ['id', PrimitiveTypeId::UINT64, false],
+                ['export_date', PrimitiveTypeId::STRING, false],
+                ['export_datetime', PrimitiveTypeId::STRING, false],
+                ['export_timestamp', PrimitiveTypeId::TIMESTAMP, false],
+                ['export_timestamp_text', PrimitiveTypeId::STRING, false],
+                ['export_timestamp_micros', PrimitiveTypeId::UINT64, false],
+                ['column6', PrimitiveTypeId::UINT32, false],
+                ['export_metadata', PrimitiveTypeId::JSON, true],
+            ],
+            static fn($items): GetAuthorExportMetadataRow => new GetAuthorExportMetadataRow(
+                YdbValueCodec::uint64($items->offsetGet(0), 'GetAuthorExportMetadata.id'),
+                YdbValueCodec::bytes($items->offsetGet(1), 'GetAuthorExportMetadata.export_date'),
+                YdbValueCodec::bytes($items->offsetGet(2), 'GetAuthorExportMetadata.export_datetime'),
+                YdbValueCodec::timestamp($items->offsetGet(3), 'GetAuthorExportMetadata.export_timestamp'),
+                YdbValueCodec::bytes($items->offsetGet(4), 'GetAuthorExportMetadata.export_timestamp_text'),
+                YdbValueCodec::uint64($items->offsetGet(5), 'GetAuthorExportMetadata.export_timestamp_micros'),
+                YdbValueCodec::uint32($items->offsetGet(6), 'GetAuthorExportMetadata.column6'),
+                YdbValueCodec::optionalJson($items->offsetGet(7), 'GetAuthorExportMetadata.export_metadata'),
+            ),
+        );
+
+        return $rows[0] ?? null;
+    }
+
     /**
      * @param array<int, array{0: string, 1: int, 2: bool}> $expectedColumns
      * @return list<object>

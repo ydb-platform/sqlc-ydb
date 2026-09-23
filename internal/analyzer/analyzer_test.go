@@ -258,26 +258,32 @@ UPSERT INTO authors (id) VALUES (1);`}}, nil)
 	}
 }
 
-func TestAnalyzeRejectsComputedExpressionInsteadOfGuessingType(t *testing.T) {
-	_, err := Analyze(
+func TestAnalyzeResolvesComparisonProjectionAsBool(t *testing.T) {
+	result, err := Analyze(
 		[]model.Source{{Name: "schema.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, PRIMARY KEY (id));`}},
 		[]model.Source{{Name: "query.sql", Text: `-- name: Matches :many
 SELECT id = 1 AS matches FROM authors;`}},
 	)
-	if err == nil || !strings.Contains(err.Error(), `computed result expression "id=1" is not supported`) {
+	if err != nil {
 		t.Fatalf("error = %v", err)
+	}
+	if typ := result.Queries[0].ResultSets[0].Columns[0].Type; typ.Kind != "Bool" {
+		t.Fatalf("comparison type = %s, want Bool", typ.String())
 	}
 }
 
-func TestAnalyzeRejectsCompositeParameterProjectionInsteadOfUsingBindType(t *testing.T) {
-	_, err := Analyze(
+func TestAnalyzeComparisonProjectionDiffersFromParameterType(t *testing.T) {
+	result, err := Analyze(
 		[]model.Source{{Name: "schema.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, PRIMARY KEY (id));`}},
 		[]model.Source{{Name: "query.sql", Text: `-- name: Matches :many
 DECLARE $value AS Uint64;
 SELECT $value = 1ul AS matches FROM authors;`}},
 	)
-	if err == nil || !strings.Contains(err.Error(), `unsupported result expression "$value=1ul"`) {
+	if err != nil {
 		t.Fatalf("error = %v", err)
+	}
+	if typ := result.Queries[0].ResultSets[0].Columns[0].Type; typ.Kind != "Bool" {
+		t.Fatalf("comparison type = %s, want Bool", typ.String())
 	}
 }
 
@@ -586,13 +592,16 @@ SELECT id FROM authors WHERE id = $local_id;`}},
 	}
 }
 
-func TestAnalyzeRejectsCountComparisonInsteadOfCallingItCount(t *testing.T) {
-	_, err := Analyze(
+func TestAnalyzeCountComparisonReturnsBool(t *testing.T) {
+	result, err := Analyze(
 		[]model.Source{{Name: "schema.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, PRIMARY KEY (id));`}},
 		[]model.Source{{Name: "query.sql", Text: "-- name: HasAuthors :one\nSELECT COUNT(*) > 0 AS has_authors FROM authors;"}},
 	)
-	if err == nil || !strings.Contains(err.Error(), "unsupported result expression") {
+	if err != nil {
 		t.Fatalf("error = %v", err)
+	}
+	if typ := result.Queries[0].ResultSets[0].Columns[0].Type; typ.Kind != "Bool" {
+		t.Fatalf("comparison type = %s, want Bool", typ.String())
 	}
 }
 

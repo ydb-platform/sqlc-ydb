@@ -65,3 +65,28 @@ public sealed record FindAuthorsByNameCoveringRow(
     string Name,
     string? Bio
 );
+
+public sealed record FindAuthorsByNamePrefixRow(
+    ulong ID,
+    string Name,
+    string? Bio,
+    bool HasBio
+);
+
+public sealed record GetAuthorStatisticsRow(
+    ulong Total,
+    ulong WithBio,
+    ulong WithNonemptyBio,
+    bool Column3
+);
+
+public sealed record GetAuthorExportMetadataRow(
+    ulong ID,
+    byte[] ExportDate,
+    byte[] ExportDatetime,
+    DateTime ExportTimestamp,
+    byte[] ExportTimestampText,
+    ulong ExportTimestampMicros,
+    uint Column6,
+    string? ExportMetadata
+);
