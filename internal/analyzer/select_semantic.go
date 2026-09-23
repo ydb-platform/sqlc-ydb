@@ -209,7 +209,7 @@ func resolvedColumnKey(relations []relation, ref columnRef) (string, error) {
 	var key string
 	matches := 0
 	for _, rel := range relations {
-		if ref.qualifier != "" && ref.qualifier != rel.alias && ref.qualifier != rel.table.Name {
+		if ref.qualifier != "" && ref.qualifier != rel.alias {
 			continue
 		}
 		if tableColumn(rel.table, ref.name) != nil {

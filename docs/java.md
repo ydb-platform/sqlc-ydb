@@ -64,6 +64,8 @@ Each output contains `Tables.java` (typed fields derived from the local schema),
 
 Secondary-index sources retain `VIEW index` in both DSL and explicitly declared SQL. The base table remains a mapped table reference, and aliases follow the index selection. The [authors example](../examples/authors/README.md) includes ordinary and covering index reads through both paths.
 
+For a supported static TablePathPrefix, table constants contain the analyzer's resolved absolute paths. Full path components distinguish generated Java table/model identifiers; paths that normalize to the same Java symbol produce a collision diagnostic. RenderMapping matches these full physical table names. Both the typed DSL and declared SQL paths retain the pragma's execution context: absolute mapped outputs bypass the prefix, while relative mapped outputs resolve under it. The [namespaces example](../examples/namespaces) demonstrates duplicate table basenames, indexed reads and a cross-catalog join. Parameter and column naming rules are unchanged.
+
 For jOOQ callback transactions, wrap the callback's transaction-local configuration with `YDB.using(configuration)` and pass that `YdbDSLContext` to `Queries`. A cast from `configuration.dsl()` is invalid because jOOQ returns a plain `DefaultDSLContext` there.
 
 The shared [Maven project](../tests/examples/java/jooq/pom.xml) records the Java, jOOQ, YDB dialect and JDBC dependencies used for verification. DSL value carriers follow that dialect: Uint64 uses ULong, Json uses JSON, Timestamp uses Instant, Utf8 uses String. DTO members use reference types, including nullable values. Structured batch records use the JDBC carriers described above: `long` for `Uint64`, `String` for `Json`, and `Instant` for `Timestamp`.

@@ -165,9 +165,11 @@ const (
 // QuerySyntax retains the original ANTLR contexts with resolved column bindings.
 // DSL renderers consume these contexts without reparsing SQL or constructing an AST.
 type QuerySyntax struct {
-	Root      antlr.ParserRuleContext
-	Columns   map[int]ColumnBinding
-	Relations []TableBinding
+	Root            antlr.ParserRuleContext
+	Columns         map[int]ColumnBinding
+	Relations       []TableBinding
+	Tables          map[int]string // physical table token index to resolved catalog path
+	TablePathPrefix string         // validated static absolute prefix, or empty when absent
 }
 type TableBinding struct{ Table, Alias string }
 type ColumnBinding struct {

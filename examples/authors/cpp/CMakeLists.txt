@@ -13,7 +13,7 @@ add_subdirectory(native)
 add_subdirectory(userver)
 
 # Compile every generated C++ example in the same pinned SDK environment.
-foreach(example batch booktest jets ondeck)
+foreach(example batch booktest jets ondeck namespaces)
   foreach(runtime native userver)
     set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}/../../${example}/cpp/${runtime}")
     add_library(${example}_${runtime} STATIC "${source_dir}/queries.cpp")

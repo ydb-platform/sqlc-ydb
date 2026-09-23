@@ -149,14 +149,15 @@ func parseYQL(file, text string, lineOffset int) (parsedYQL, []model.Diagnostic)
 }
 
 type queryBlock struct {
-	name      string
-	command   model.Command
-	file      string
-	line      int
-	text      string
-	functions *builtins.Registry
-	parsed    *parsedYQL
-	wildcards *wildcardRewrites
+	name            string
+	command         model.Command
+	file            string
+	line            int
+	text            string
+	functions       *builtins.Registry
+	parsed          *parsedYQL
+	wildcards       *wildcardRewrites
+	tablePathPrefix string
 }
 
 func queryBlocks(source model.Source) ([]queryBlock, []model.Diagnostic) {

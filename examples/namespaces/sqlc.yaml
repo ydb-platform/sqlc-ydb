@@ -1,0 +1,107 @@
+version: "2"
+sql:
+  - name: native
+    engine: ydb
+    schema: schema
+    queries: queries.sql
+    gen:
+      kotlin:
+        package: namespaces.nativeapi
+        out: kotlin/nativeapi
+        runtime: ydb
+      php:
+        out: php/native
+        namespace: Namespaces\Native
+        runtime: ydb
+      typescript:
+        out: typescript/native
+        runtime: ydb
+      rust:
+        out: rust/native
+        runtime: ydb
+      go:
+        package: namespaces
+        out: go/native
+        sql_package: ydb
+        emit_json_tags: true
+        emit_interface: true
+        emit_empty_slices: true
+      python:
+        out: python/native
+        runtime: ydb
+      csharp:
+        namespace: Namespaces.AdoNet
+        out: csharp/adonet
+      cpp:
+        namespace: namespaces::native
+        out: cpp/native
+        runtime: ydb
+      java:
+        package: namespaces.nativeapi
+        out: java/native/src/main/java/namespaces/nativeapi
+        runtime: ydb
+  - name: portable
+    engine: ydb
+    schema: schema
+    queries: queries.sql
+    gen:
+      kotlin:
+        package: namespaces.jdbc
+        out: kotlin/jdbc
+        runtime: jdbc
+      go:
+        package: namespaces
+        out: go/database/sql
+        sql_package: database/sql
+      python:
+        out: python/dbapi
+        runtime: dbapi
+      java:
+        package: namespaces.jdbc
+        out: java/jdbc/src/main/java/namespaces/jdbc
+        runtime: jdbc
+  - name: exposed
+    engine: ydb
+    schema: schema
+    queries: queries.sql
+    gen:
+      kotlin:
+        package: namespaces.exposed
+        out: kotlin/exposed
+        runtime: exposed
+  - name: sqlalchemy
+    engine: ydb
+    schema: schema
+    queries: queries.sql
+    gen:
+      python:
+        out: python/sqlalchemy
+        runtime: sqlalchemy
+        emit_sync_querier: true
+  - name: userver
+    engine: ydb
+    schema: schema
+    queries: queries.sql
+    gen:
+      cpp:
+        namespace: namespaces::userver
+        out: cpp/userver
+        runtime: userver
+  - name: dapper
+    engine: ydb
+    schema: schema
+    queries: queries.sql
+    gen:
+      csharp:
+        namespace: Namespaces.Dapper
+        out: csharp/dapper
+        runtime: dapper
+  - name: jooq
+    engine: ydb
+    schema: schema
+    queries: queries.sql
+    gen:
+      java:
+        package: namespaces.jooq
+        out: java/jooq
+        runtime: jooq

@@ -6,6 +6,7 @@ const modules = await Promise.all([
   import("./.typescript-build/booktest/typescript/native/queries.js"),
   import("./.typescript-build/jets/typescript/native/queries.js"),
   import("./.typescript-build/ondeck/typescript/native/queries.js"),
+  import("./.typescript-build/namespaces/typescript/native/queries.js"),
 ]);
 
 for (const generated of modules) {
@@ -88,4 +89,4 @@ for (const books of [[], [batchInput], [batchInput, { ...batchInput, bookId: 3n 
   }
 }
 
-console.log("Imported generated TypeScript for all five examples against the pinned YDB SDK.");
+console.log("Imported generated TypeScript for all six examples against the pinned YDB SDK.");

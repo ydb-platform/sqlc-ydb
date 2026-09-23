@@ -12,3 +12,6 @@ pub mod jets;
 
 #[path = "../../../../examples/ondeck/rust/native/lib.rs"]
 pub mod ondeck;
+
+#[path = "../../../../examples/namespaces/rust/native/lib.rs"]
+pub mod namespaces;

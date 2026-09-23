@@ -27,7 +27,11 @@ func jooqDeclaredSQL(q model.AnalyzedQuery, sql string) (string, error) {
 			return nil
 		}
 		original := jooqID(ctx.GetText())
-		constant, err := jooqConstant(original)
+		table, ok := q.Syntax.Tables[ctx.GetStart().GetTokenIndex()]
+		if !ok {
+			return fmt.Errorf("%s: missing resolved jOOQ table %q", q.Name, original)
+		}
+		constant, err := jooqTableConstant(table)
 		if err != nil {
 			return err
 		}
@@ -58,22 +62,28 @@ func jooqDeclaredSQL(q model.AnalyzedQuery, sql string) (string, error) {
 			}
 		}
 	}
-	targets := map[string]bool{}
+	targets := map[model.TableBinding]bool{}
 	for _, ref := range jooqNodes[*parser.Simple_table_ref_coreContext](q.Syntax.Root) {
 		if err := add(ref, false); err != nil {
 			return "", err
 		}
-		targets[jooqID(ref.GetText())] = true
+		targets[model.TableBinding{Table: q.Syntax.Tables[ref.GetStart().GetTokenIndex()], Alias: jooqID(ref.GetText())}] = true
 	}
 	// DML targets have no SELECT alias to retain the original qualifier after mapping.
 	terminals := jooqNodes[antlr.TerminalNode](q.Syntax.Root)
+columns:
 	for i, ref := range terminals {
 		token := ref.GetSymbol()
 		binding, ok := q.Syntax.Columns[token.GetTokenIndex()]
-		if !ok || !targets[binding.Table] || binding.Alias != binding.Table || i+1 == len(terminals) || terminals[i+1].GetText() != "." || seen[token.GetStart()] {
+		if !ok || !targets[binding.TableBinding] || i+1 == len(terminals) || terminals[i+1].GetText() != "." || seen[token.GetStart()] {
 			continue
 		}
-		constant, err := jooqConstant(binding.Table)
+		for parent := ref.GetParent(); parent != nil; parent = parent.GetParent() {
+			if _, ok := parent.(*parser.Select_coreContext); ok {
+				continue columns
+			}
+		}
+		constant, err := jooqTableConstant(binding.Table)
 		if err != nil {
 			return "", err
 		}

@@ -27,6 +27,7 @@ $namespaces = [
     'Booktest\\Native',
     'Jets\\Native',
     'Ondeck\\Native',
+    'Namespaces\\Native',
 ];
 
 foreach ($namespaces as $namespace) {
@@ -452,4 +453,4 @@ foreach ([[], [new Batch\Native\CreateBooksBooksItem('18446744073709551615', '2'
     check($checked, 'batch: configure callback was not called');
 }
 
-echo "Imported and checked generated PHP for all five examples against YDB PHP SDK 1.16.1.\n";
+echo "Imported and checked generated PHP for all six examples against YDB PHP SDK 1.16.1.\n";

@@ -50,7 +50,7 @@ check-examples: generate
 	fi
 	cd examples && go test -p 1 ./...
 	cd tests/examples/go && go test -p 1 ./...
-	python3 -m compileall -q examples/authors/python
+	python3 -m compileall -q $(wildcard examples/*/python)
 
 clean:
 	rm -f bin/sqlc-ydb

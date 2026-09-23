@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Added
+
+- Support static absolute TablePathPrefix pragmas in named queries and schema sources, with consistent offline and connected table resolution, preserved SQL execution context and namespaced models. Add a namespaces example for every language/runtime profile.
+
+### Changed
+
+- An explicit table alias is now the only qualifier accepted for that source's columns and wildcards, including queries without TablePathPrefix. Queries such as `SELECT records.id FROM records AS r`, accepted by v0.2.4, must use `r.id` to match YDB's name resolution.
+
+### Fixed
+
+- Preserve case-sensitive table aliases in resolved column bindings, so a JOIN using distinct aliases such as `r` and `R` cannot bind one source's column to the other source.
+
 ## v0.2.4
 
 ### Added

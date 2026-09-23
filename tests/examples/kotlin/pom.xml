@@ -66,7 +66,13 @@
                         <phase>generate-sources</phase>
                         <goals><goal>add-source</goal></goals>
                         <configuration>
-                            <sources><source>${project.basedir}/../../../examples/batch/kotlin/jdbc</source><source>${project.basedir}/../../../examples/batch/kotlin/exposed</source></sources>
+                            <sources>
+                                <source>${project.basedir}/../../../examples/batch/kotlin/jdbc</source>
+                                <source>${project.basedir}/../../../examples/batch/kotlin/exposed</source>
+                                <source>${project.basedir}/../../../examples/namespaces/kotlin/nativeapi</source>
+                                <source>${project.basedir}/../../../examples/namespaces/kotlin/jdbc</source>
+                                <source>${project.basedir}/../../../examples/namespaces/kotlin/exposed</source>
+                            </sources>
                         </configuration>
                     </execution>
                 </executions>

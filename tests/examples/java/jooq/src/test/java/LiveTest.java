@@ -167,6 +167,40 @@ class LiveTest {
         }
     }
 
+    @Test
+    void namespacesKeepIndependentUsers() throws Exception {
+        String database = java.net.URI.create(System.getenv("YDB_CONNECTION_STRING")).getPath();
+        String prefix = database + "/sqlc_jooq_namespaces_" + UUID.randomUUID().toString().replace("-", "");
+        String primary = prefix + "_a", secondary = prefix + "_b";
+        List<String> created = new ArrayList<>();
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:" + System.getenv("YDB_CONNECTION_STRING"))) {
+            var settings = new Settings().withRenderMapping(new RenderMapping().withSchemata(
+                    new MappedSchema().withInput("").withTables(
+                            new MappedTable().withInput("/local/sqlc_namespaces/a/users").withOutput(primary),
+                            new MappedTable().withInput("/local/sqlc_namespaces/b/users").withOutput(secondary))));
+            var queries = new namespaces.jooq.Queries(YDB.using(connection, settings));
+            try {
+                create(connection, created, primary, "id Uint64 NOT NULL, name Utf8 NOT NULL, PRIMARY KEY(id), INDEX by_name GLOBAL SYNC ON(name)");
+                create(connection, created, secondary, "id Uint64 NOT NULL, name Utf8 NOT NULL, PRIMARY KEY(id)");
+                queries.upsertPrimaryUser(ULong.MAX, "Primary");
+                queries.upsertSecondaryUser(ULong.MAX, "Secondary");
+                queries.upsertPrimaryUser(ULong.valueOf(1), "Only primary");
+                assertEquals("Primary", queries.getPrimaryUser(ULong.MAX).orElseThrow().name());
+                assertEquals("Secondary", queries.getSecondaryUser(ULong.MAX).orElseThrow().name());
+                assertEquals(ULong.MAX, queries.findPrimaryUsersByName("Primary").get(0).id());
+                var joined = queries.compareUserNames();
+                assertEquals(2, joined.size());
+                assertNull(joined.get(0).secondaryName());
+                assertEquals("Primary", joined.get(1).primaryName());
+                assertEquals("Secondary", joined.get(1).secondaryName());
+            } finally {
+                for (String table : created.reversed()) {
+                    try (var statement = connection.createStatement()) { statement.execute("DROP TABLE `" + table + "`"); }
+                }
+            }
+        }
+    }
+
     private static final class Fixture implements AutoCloseable {
         final String prefix = "sqlc_jooq_" + UUID.randomUUID().toString().replace("-", "") + "_";
         final Connection connection;

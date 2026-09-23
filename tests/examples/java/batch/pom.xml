@@ -11,6 +11,8 @@
     <executions><execution><id>batch-sources</id><phase>generate-sources</phase><goals><goal>add-source</goal></goals><configuration><sources>
       <source>${project.basedir}/../../../../examples/batch/java/native</source>
       <source>${project.basedir}/../../../../examples/batch/java/jdbc</source>
+      <source>${project.basedir}/../../../../examples/namespaces/java/native/src/main/java</source>
+      <source>${project.basedir}/../../../../examples/namespaces/java/jdbc/src/main/java</source>
     </sources></configuration></execution></executions>
   </plugin></plugins></build>
 </project>

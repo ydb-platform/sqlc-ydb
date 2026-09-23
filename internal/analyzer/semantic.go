@@ -68,7 +68,11 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	if len(diagnostics) != 0 {
 		return query, diagnostics
 	}
-	query.Syntax = &model.QuerySyntax{Root: parsed.tree, Columns: map[int]model.ColumnBinding{}}
+	block.tablePathPrefix, diagnostics = tablePathPrefix(block.file, block.line-1, parsed.tree)
+	if len(diagnostics) != 0 {
+		return query, diagnostics
+	}
+	query.Syntax = &model.QuerySyntax{Root: parsed.tree, Columns: map[int]model.ColumnBinding{}, Tables: resolvedTableReferences(parsed.tree, block.tablePathPrefix), TablePathPrefix: block.tablePathPrefix}
 	tree := collectQueryTree(parsed.tree)
 	if diagnostics = unsupportedSQLCMacroDiagnostics(block, parsed.tokens); len(diagnostics) != 0 {
 		return query, diagnostics
@@ -132,17 +136,17 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	case len(tree.insert) == 1:
 		target, diagnostics = targetTable(catalog, block, intoTableName(tree.insert[0]), tree.insert[0], diagnostics)
 		if target != nil {
-			relations = []relation{{table: target, alias: target.Name}}
+			relations = []relation{{table: target, alias: intoTableName(tree.insert[0])}}
 		}
 	case len(tree.updates) == 1:
 		target, diagnostics = targetTable(catalog, block, simpleTableName(tree.updates[0].Simple_table_ref()), tree.updates[0], diagnostics)
 		if target != nil {
-			relations = []relation{{table: target, alias: target.Name}}
+			relations = []relation{{table: target, alias: simpleTableName(tree.updates[0].Simple_table_ref())}}
 		}
 	case len(tree.deletes) == 1:
 		target, diagnostics = targetTable(catalog, block, simpleTableName(tree.deletes[0].Simple_table_ref()), tree.deletes[0], diagnostics)
 		if target != nil {
-			relations = []relation{{table: target, alias: target.Name}}
+			relations = []relation{{table: target, alias: simpleTableName(tree.deletes[0].Simple_table_ref())}}
 		}
 	}
 
@@ -317,7 +321,7 @@ func validateQueryStatements(block queryBlock, tree queryTree) []model.Diagnosti
 			continue
 		}
 		switch {
-		case core.Declare_stmt() != nil:
+		case core.Declare_stmt() != nil, core.Pragma_stmt() != nil:
 		case core.Named_nodes_stmt() != nil:
 		case core.Select_stmt() != nil, core.Into_table_stmt() != nil, core.Update_stmt() != nil, core.Delete_stmt() != nil:
 			mainStatements++
@@ -457,7 +461,7 @@ func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser
 				}
 			} else {
 				key := tableRef.Table_key()
-				name := tableKeyName(key)
+				name := resolveTablePath(block.tablePathPrefix, tableKeyName(key))
 				table = findTable(catalog, name)
 				if table == nil {
 					diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, fmt.Sprintf("unknown table %q", name)))
@@ -476,6 +480,9 @@ func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser
 				}
 			}
 			alias := table.Name
+			if tableRef.Table_key() != nil {
+				alias = tableKeyName(tableRef.Table_key())
+			}
 			if named.An_id() != nil {
 				alias = identifier(named.An_id().GetText())
 			}
@@ -535,7 +542,7 @@ func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContex
 			matched := false
 			var expressions []string
 			for _, rel := range relations {
-				if prefix != "" && prefix != rel.alias && prefix != rel.table.Name {
+				if prefix != "" && prefix != rel.alias {
 					continue
 				}
 				matched = true
@@ -741,7 +748,7 @@ func validateColumnReferences(block queryBlock, root antlr.Tree, relations []rel
 func resolveColumn(relations []relation, ref columnRef) (model.Column, error) {
 	var matches []model.Column
 	for _, rel := range relations {
-		if ref.qualifier != "" && ref.qualifier != rel.alias && ref.qualifier != rel.table.Name {
+		if ref.qualifier != "" && ref.qualifier != rel.alias {
 			continue
 		}
 		for _, column := range rel.table.Columns {
@@ -869,7 +876,7 @@ func inferUpdate(block queryBlock, statement *parser.Update_stmtContext, table *
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, clause, fmt.Sprintf("unknown column %q", name)))
 			continue
 		}
-		if err := validateDMLValue(clause.Expr(), *column, expressionScope{relations: []relation{{table: table, alias: table.Name}}, bindings: bindings, functions: block.functions}, inferred); err != nil {
+		if err := validateDMLValue(clause.Expr(), *column, expressionScope{relations: []relation{{table: table, alias: simpleTableName(statement.Simple_table_ref())}}, bindings: bindings, functions: block.functions}, inferred); err != nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, clause.Expr(), err.Error()))
 		}
 	}
@@ -975,6 +982,7 @@ func returningProjection(block queryBlock, returning parser.IReturning_columns_l
 }
 
 func targetTable(catalog model.Catalog, block queryBlock, name string, ctx antlr.ParserRuleContext, diagnostics []model.Diagnostic) (*model.Table, []model.Diagnostic) {
+	name = resolveTablePath(block.tablePathPrefix, name)
 	table := findTable(catalog, name)
 	if table == nil {
 		diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, ctx, fmt.Sprintf("unknown table %q", name)))
@@ -1024,7 +1032,7 @@ func recordColumnBindings(syntax *model.QuerySyntax, root antlr.Tree, relations 
 	}
 	for _, ref := range columnRefs(root) {
 		for _, relation := range relations {
-			if ref.qualifier != "" && !strings.EqualFold(ref.qualifier, relation.alias) {
+			if ref.qualifier != "" && ref.qualifier != relation.alias {
 				continue
 			}
 			if column := tableColumn(relation.table, ref.name); column != nil {

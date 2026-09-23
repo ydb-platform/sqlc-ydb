@@ -557,9 +557,9 @@ func TestAnalyzeRejectsDuplicateQueryNamesAcrossFiles(t *testing.T) {
 func TestAnalyzeRejectsMixedUnsupportedQueryStatement(t *testing.T) {
 	_, err := Analyze(
 		[]model.Source{{Name: "schema.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, PRIMARY KEY (id));`}},
-		[]model.Source{{Name: "query.sql", Text: "-- name: GetAuthor :one\nPRAGMA TablePathPrefix('/Root');\nSELECT id FROM authors;"}},
+		[]model.Source{{Name: "query.sql", Text: "-- name: GetAuthor :one\nPRAGMA AnsiInForEmptyOrNullableItemsCollections;\nSELECT id FROM authors;"}},
 	)
-	if err == nil || !strings.Contains(err.Error(), "unsupported statement in named query") {
+	if err == nil || !strings.Contains(err.Error(), "unsupported PRAGMA") {
 		t.Fatalf("error = %v", err)
 	}
 }

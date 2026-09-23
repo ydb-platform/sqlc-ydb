@@ -4,11 +4,10 @@ Current behavior is in [compatibility](../docs/compatibility.md), stage ownershi
 
 ## Query compatibility priorities
 
-The following issues track planned work; their examples and acceptance criteria define the scope. Name-mapped INSERT/UPSERT SELECT, trailing Struct commas, verified integer aliases and compatible LIMIT/OFFSET types, and secondary-index metadata with VIEW selection are implemented; their original scope is in [#25](https://github.com/ydb-platform/sqlc-ydb/issues/25), [#26](https://github.com/ydb-platform/sqlc-ydb/issues/26), [#27](https://github.com/ydb-platform/sqlc-ydb/issues/27), and [#28](https://github.com/ydb-platform/sqlc-ydb/issues/28). The [compatibility contract](../docs/compatibility.md#current-analyzer-coverage) records their boundaries. Subsequent changes should remain separate, reviewable PRs.
+The following issues track planned work; their examples and acceptance criteria define the scope. Name-mapped INSERT/UPSERT SELECT, trailing Struct commas, verified integer aliases and compatible LIMIT/OFFSET types, secondary-index metadata with VIEW selection, and static absolute TablePathPrefix resolution are implemented; their original scope is in [#25](https://github.com/ydb-platform/sqlc-ydb/issues/25), [#26](https://github.com/ydb-platform/sqlc-ydb/issues/26), [#27](https://github.com/ydb-platform/sqlc-ydb/issues/27), [#28](https://github.com/ydb-platform/sqlc-ydb/issues/28), and [#29](https://github.com/ydb-platform/sqlc-ydb/issues/29). The [compatibility contract](../docs/compatibility.md#current-analyzer-coverage) records their boundaries. Subsequent changes should remain separate, reviewable PRs.
 
 | Order | Planned capability | Tracking |
 | --- | --- | --- |
-| 2 | TablePathPrefix and consistent table resolution | [#29](https://github.com/ydb-platform/sqlc-ydb/issues/29) |
 | 2 | ALTER COLUMN DROP NOT NULL | [#30](https://github.com/ydb-platform/sqlc-ydb/issues/30) |
 | 3 | Shared Boolean expressions, conditional aggregates and scalar conversions | [#31](https://github.com/ydb-platform/sqlc-ydb/issues/31) |
 | 4 | Scoped tabular expressions, IN subqueries and collection aggregation | [#32](https://github.com/ydb-platform/sqlc-ydb/issues/32) |

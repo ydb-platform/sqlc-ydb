@@ -59,7 +59,7 @@ func resolveMemberAccess(root antlr.ParserRuleContext, scope expressionScope) (m
 		base := identifier(casual.Id_expr().GetText())
 		qualified := false
 		for _, rel := range scope.relations {
-			if rel.alias == base || rel.table.Name == base {
+			if rel.alias == base {
 				qualified = true
 				break
 			}
