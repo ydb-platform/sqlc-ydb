@@ -111,3 +111,14 @@ func TestJooqSubqueryPrefixAndAliases(t *testing.T) {
 		}
 	}
 }
+
+func TestJooqSubqueryReportsUnsupportedInnerExpression(t *testing.T) {
+	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqSubquerySchema}}, []model.Source{{Name: "queries.sql", Text: "-- name: Read :many\nSELECT id FROM records WHERE id IN (SELECT COALESCE(id, 0) FROM selected);"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := Generate(analysis, Options{Package: "subqueries", Runtime: "jooq"})
+	if files != nil || err == nil || err.Error() != `Read: unsupported jOOQ syntax "COALESCE(id,0)"` {
+		t.Fatalf("files = %v, error = %v; want query-specific inner expression diagnostic and no output", files, err)
+	}
+}
