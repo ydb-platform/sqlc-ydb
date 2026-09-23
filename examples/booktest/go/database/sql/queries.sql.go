@@ -258,3 +258,93 @@ func (q *Queries) SayHello(ctx context.Context, arg string) (SayHelloRow, error)
 
 	return row, err
 }
+
+// -- name: ListAuthorsWithRecentBooks :many
+func (q *Queries) ListAuthorsWithRecentBooks(ctx context.Context, arg int32) ([]ListAuthorsWithRecentBooksRow, error) {
+	rows, err := q.db.QueryContext(ctx, ""+
+		"SELECT a.author_id, a.name\n"+
+		"FROM authors AS a\n"+
+		"WHERE a.author_id IN (\n"+
+		"    SELECT b.author_id FROM books AS b WHERE b.publication_year >= $since_year\n"+
+		")\n"+
+		"ORDER BY a.author_id;",
+		sql.Named("since_year", arg),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []ListAuthorsWithRecentBooksRow(nil)
+	for rows.Next() {
+		var row ListAuthorsWithRecentBooksRow
+		if err := rows.Scan(
+			&row.AuthorID,
+			&row.Name,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, row)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
+// -- name: ListBooksWithRecentEditions :many
+func (q *Queries) ListBooksWithRecentEditions(ctx context.Context, arg int32) ([]ListBooksWithRecentEditionsRow, error) {
+	rows, err := q.db.QueryContext(ctx, ""+
+		"DECLARE $since_year AS Int32;\n"+
+		"SELECT b.book_id, b.author_id, b.isbn, b.book_type, b.title, b.publication_year, b.available, b.tags\n"+
+		"FROM books AS b\n"+
+		"WHERE (b.author_id, b.book_type) IN (\n"+
+		"    SELECT (recent.author_id, recent.book_type)\n"+
+		"    FROM books AS recent\n"+
+		"    WHERE recent.publication_year >= $since_year\n"+
+		")\n"+
+		"ORDER BY b.book_id;",
+		sql.Named("since_year", arg),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []ListBooksWithRecentEditionsRow(nil)
+	for rows.Next() {
+		var row ListBooksWithRecentEditionsRow
+		if err := rows.Scan(
+			&row.BookID,
+			&row.AuthorID,
+			&row.Isbn,
+			&row.BookType,
+			&row.Title,
+			&row.PublicationYear,
+			&row.Available,
+			&row.Tags,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, row)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
+// -- name: DeleteBooksByAuthorName :exec
+func (q *Queries) DeleteBooksByAuthorName(ctx context.Context, arg string) error {
+	_, err := q.db.ExecContext(ctx, ""+
+		"DELETE FROM books\n"+
+		"WHERE author_id IN (SELECT author_id FROM authors WHERE name = $author_name);",
+		sql.Named("author_name", arg),
+	)
+
+	return err
+}

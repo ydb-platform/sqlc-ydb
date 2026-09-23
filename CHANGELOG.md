@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Support noncorrelated scalar and tuple-key IN/NOT IN subqueries in SELECT and DML WHERE predicates, resolving inner aliases and parameters independently from the outer relation. Add read and mutation examples across generated runtime profiles.
+
 ## v0.2.6
 
 ### Added

@@ -101,6 +101,22 @@ type SayHelloRow struct {
 	Greeting string `json:"greeting"`
 }
 
+type ListAuthorsWithRecentBooksRow struct {
+	AuthorID uint64 `json:"author_id"`
+	Name     string `json:"name"`
+}
+
+type ListBooksWithRecentEditionsRow struct {
+	BookID          uint64    `json:"book_id"`
+	AuthorID        uint64    `json:"author_id"`
+	Isbn            string    `json:"isbn"`
+	BookType        string    `json:"book_type"`
+	Title           string    `json:"title"`
+	PublicationYear int32     `json:"publication_year"`
+	Available       time.Time `json:"available"`
+	Tags            string    `json:"tags"`
+}
+
 type Querier interface {
 	GetAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorRow, error)
 	GetBook(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetBookRow, error)
@@ -113,4 +129,7 @@ type Querier interface {
 	UpdateBookISBN(ctx context.Context, arg UpdateBookISBNParams, opts ...query.ExecuteOption) error
 	DeleteAuthorBeforeYear(ctx context.Context, arg DeleteAuthorBeforeYearParams, opts ...query.ExecuteOption) error
 	SayHello(ctx context.Context, arg string, opts ...query.ExecuteOption) (SayHelloRow, error)
+	ListAuthorsWithRecentBooks(ctx context.Context, arg int32, opts ...query.ExecuteOption) ([]ListAuthorsWithRecentBooksRow, error)
+	ListBooksWithRecentEditions(ctx context.Context, arg int32, opts ...query.ExecuteOption) ([]ListBooksWithRecentEditionsRow, error)
+	DeleteBooksByAuthorName(ctx context.Context, arg string, opts ...query.ExecuteOption) error
 }

@@ -8,7 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/antlr4-go/antlr/v4"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
+	parser "github.com/ydb-platform/yql-parsers/go"
 )
 
 func TestTablePathPrefixResolvesDistinctNamespaces(t *testing.T) {
@@ -362,8 +364,14 @@ func TestColumnBindingsPreserveAliasCase(t *testing.T) {
 			if query.ResultSets[0].Columns[0].Type.Kind != "Uint32" || query.ResultSets[0].Columns[1].Type.Kind != "Uint64" || !reflect.DeepEqual(query.Parameters, []model.Parameter{{Name: "id", Type: model.Type{Kind: "Uint64"}}}) {
 				t.Fatalf("query types = %#v, parameters = %#v", query.ResultSets, query.Parameters)
 			}
+			var core *parser.Select_coreContext
+			descendants(query.Syntax.Root, func(node antlr.Tree) {
+				if selectCore, ok := node.(*parser.Select_coreContext); ok {
+					core = selectCore
+				}
+			})
 			bindings := 0
-			for _, ref := range columnRefs(query.Syntax.Root) {
+			for _, ref := range columnRefs(core) {
 				wantTable, wantType := "records", "Uint32"
 				if ref.qualifier == "R" {
 					wantTable, wantType = "other_records", "Uint64"

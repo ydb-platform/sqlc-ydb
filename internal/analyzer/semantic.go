@@ -19,9 +19,6 @@ type queryTree struct {
 	updates    []*parser.Update_stmtContext
 	deletes    []*parser.Delete_stmtContext
 	binds      []parser.IBind_parameterContext
-	conds      []*parser.Cond_exprContext
-	eqs        []*parser.Eq_subexprContext
-	xors       []*parser.Xor_subexprContext
 }
 
 func collectQueryTree(tree antlr.Tree) queryTree {
@@ -42,12 +39,6 @@ func collectQueryTree(tree antlr.Tree) queryTree {
 			out.deletes = append(out.deletes, ctx)
 		case *parser.Bind_parameterContext:
 			out.binds = append(out.binds, ctx)
-		case *parser.Cond_exprContext:
-			out.conds = append(out.conds, ctx)
-		case *parser.Eq_subexprContext:
-			out.eqs = append(out.eqs, ctx)
-		case *parser.Xor_subexprContext:
-			out.xors = append(out.xors, ctx)
 		}
 	})
 	return out
@@ -72,7 +63,7 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	if len(diagnostics) != 0 {
 		return query, diagnostics
 	}
-	query.Syntax = &model.QuerySyntax{Root: parsed.tree, Columns: map[int]model.ColumnBinding{}, Tables: resolvedTableReferences(parsed.tree, block.tablePathPrefix), TablePathPrefix: block.tablePathPrefix}
+	query.Syntax = &model.QuerySyntax{Root: parsed.tree, Columns: map[int]model.ColumnBinding{}, Selects: map[int]model.SelectBinding{}, Tables: resolvedTableReferences(parsed.tree, block.tablePathPrefix), TablePathPrefix: block.tablePathPrefix}
 	tree := collectQueryTree(parsed.tree)
 	if diagnostics = unsupportedSQLCMacroDiagnostics(block, parsed.tokens); len(diagnostics) != 0 {
 		return query, diagnostics
@@ -153,14 +144,16 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	if selectStatement == nil && len(relations) != 0 && !(len(tree.insert) == 1 && insertSelect(tree.insert[0]) != nil) && !(len(tree.updates) == 1 && updateSelect(tree.updates[0]) != nil) && !(len(tree.deletes) == 1 && deleteSelect(tree.deletes[0]) != nil) {
 		recordColumnBindings(query.Syntax, parsed.tree, relations)
 		diagnostics = append(diagnostics, validateColumnReferences(block, parsed.tree, relations, nil)...)
-		inferFromComparisons(tree, relations, inferred)
-		inferFromInLists(tree.conds, relations, inferred)
+		inferFromComparisons(parsed.tree, relations, inferred)
+		inferFromInLists(parsed.tree, relations, inferred)
 		for name, typeValue := range inferred {
 			if _, exists := bindings[name]; !exists && typeValue.Kind != "" {
 				bindings[name] = typeValue
 			}
 		}
-		diagnostics = append(diagnostics, validatePredicateContexts(block, parsed.tree, relations, bindings)...)
+		subqueries, ds := analyzeINSubqueries(catalog, block, parsed.tree, relations, bindings, inferred, query.Syntax)
+		diagnostics = append(diagnostics, ds...)
+		diagnostics = append(diagnostics, validatePredicateContexts(block, parsed.tree, relations, bindings, subqueries)...)
 	}
 	if target != nil && len(tree.insert) == 1 {
 		if stmt := insertSelect(tree.insert[0]); stmt != nil {
@@ -248,7 +241,7 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 }
 
 func inferFromExpressionContexts(root antlr.Tree, declared, inferred map[string]model.Type) {
-	descendants(root, func(node antlr.Tree) {
+	scopeDescendants(root, func(node antlr.Tree) {
 		if ctx, ok := node.(*parser.Mul_subexprContext); ok {
 			inferFromConcatenation(ctx, declared, inferred)
 		}
@@ -675,7 +668,7 @@ type columnRef struct {
 
 func columnRefs(root antlr.Tree) []columnRef {
 	var refs []columnRef
-	descendants(root, func(node antlr.Tree) {
+	scopeDescendants(root, func(node antlr.Tree) {
 		ctx, ok := node.(*parser.Unary_subexprContext)
 		if !ok {
 			return
@@ -780,27 +773,32 @@ func joinedColumn(column model.Column, optional bool) model.Column {
 	return column
 }
 
-func inferFromComparisons(tree queryTree, relations []relation, inferred map[string]model.Type) {
-	for _, root := range comparisonContexts(tree) {
+func inferFromComparisons(root antlr.Tree, relations []relation, inferred map[string]model.Type) {
+	scopeDescendants(root, func(root antlr.Tree) {
+		switch root.(type) {
+		case *parser.Xor_subexprContext, *parser.Eq_subexprContext:
+		default:
+			return
+		}
 		refs := columnRefs(root)
 		if len(refs) != 1 {
-			continue
+			return
 		}
 		var binds []parser.IBind_parameterContext
-		descendants(root, func(node antlr.Tree) {
+		scopeDescendants(root, func(node antlr.Tree) {
 			if bind, ok := node.(*parser.Bind_parameterContext); ok {
 				binds = append(binds, bind)
 			}
 		})
 		if len(binds) != 1 || !isDirectComparison(root, refs[0], binds[0]) {
-			continue
+			return
 		}
 		column, err := resolveColumn(relations, refs[0])
 		if err != nil {
-			continue
+			return
 		}
 		inferParameter(inferred, bindName(binds[0]), column.Type)
-	}
+	})
 }
 
 func isDirectComparison(root antlr.Tree, ref columnRef, bind parser.IBind_parameterContext) bool {
@@ -812,17 +810,6 @@ func isDirectComparison(root antlr.Tree, ref columnRef, bind parser.IBind_parame
 		}
 	}
 	return false
-}
-
-func comparisonContexts(tree queryTree) []antlr.Tree {
-	out := make([]antlr.Tree, 0, len(tree.xors)+len(tree.eqs))
-	for _, ctx := range tree.xors {
-		out = append(out, ctx)
-	}
-	for _, ctx := range tree.eqs {
-		out = append(out, ctx)
-	}
-	return out
 }
 
 func inferInsert(block queryBlock, statement *parser.Into_table_stmtContext, table *model.Table, bindings, inferred map[string]model.Type) []model.Diagnostic {
@@ -1034,8 +1021,22 @@ func compatibleTypes(left, right model.Type) bool {
 }
 
 func recordColumnBindings(syntax *model.QuerySyntax, root antlr.Tree, relations []relation) {
+	var bindings []model.TableBinding
 	for _, relation := range relations {
-		syntax.Relations = append(syntax.Relations, model.TableBinding{Table: relation.table.Name, Alias: relation.alias})
+		bindings = append(bindings, model.TableBinding{Table: relation.table.Name, Alias: relation.alias})
+	}
+	if core, ok := root.(*parser.Select_coreContext); ok {
+		syntax.Selects[core.GetStart().GetTokenIndex()] = model.SelectBinding{Relations: bindings}
+	}
+	nested := false
+	for parent := root.GetParent(); parent != nil; parent = parent.GetParent() {
+		if _, ok := parent.(*parser.In_exprContext); ok {
+			nested = true
+			break
+		}
+	}
+	if !nested {
+		syntax.Relations = append(syntax.Relations, bindings...)
 	}
 	for _, ref := range columnRefs(root) {
 		for _, relation := range relations {

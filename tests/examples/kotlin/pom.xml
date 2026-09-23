@@ -72,6 +72,9 @@
                                 <source>${project.basedir}/../../../examples/namespaces/kotlin/nativeapi</source>
                                 <source>${project.basedir}/../../../examples/namespaces/kotlin/jdbc</source>
                                 <source>${project.basedir}/../../../examples/namespaces/kotlin/exposed</source>
+                                <source>${project.basedir}/../../../examples/booktest/kotlin/nativeapi</source>
+                                <source>${project.basedir}/../../../examples/booktest/kotlin/jdbc</source>
+                                <source>${project.basedir}/../../../examples/booktest/kotlin/exposed</source>
                             </sources>
                         </configuration>
                     </execution>

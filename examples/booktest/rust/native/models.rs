@@ -61,3 +61,21 @@ pub struct CreateBookRow {
 pub struct SayHelloRow {
     pub greeting: String,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ListAuthorsWithRecentBooksRow {
+    pub author_id: u64,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ListBooksWithRecentEditionsRow {
+    pub book_id: u64,
+    pub author_id: u64,
+    pub isbn: String,
+    pub book_type: String,
+    pub title: String,
+    pub publication_year: i32,
+    pub available: std::time::SystemTime,
+    pub tags: String,
+}

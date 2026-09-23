@@ -32,6 +32,9 @@ public:
     void UpdateBookISBN(const ::userver::ydb::Utf8& title, const ::userver::formats::json::Value& tags, const ::userver::ydb::Utf8& isbn, std::uint64_t book_id) const;
     void DeleteAuthorBeforeYear(std::int32_t publication_year, std::uint64_t author_id) const;
     std::optional<SayHelloRow> SayHello(const ::userver::ydb::Utf8& name) const;
+    std::vector<ListAuthorsWithRecentBooksRow> ListAuthorsWithRecentBooks(std::int32_t since_year) const;
+    std::vector<ListBooksWithRecentEditionsRow> ListBooksWithRecentEditions(std::int32_t since_year) const;
+    void DeleteBooksByAuthorName(const ::userver::ydb::Utf8& author_name) const;
 
 private:
     ::userver::ydb::TableClient* client_;

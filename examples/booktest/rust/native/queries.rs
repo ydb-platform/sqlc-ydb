@@ -293,4 +293,79 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
             greeting: row.remove_field(0)?.try_into()?,
         })
     }
+
+    // -- name: ListAuthorsWithRecentBooks :many
+    #[builder(on(String, into))]
+    pub async fn list_authors_with_recent_books(
+        &mut self,
+        since_year: i32,
+    ) -> ydb::YdbResult<Vec<ListAuthorsWithRecentBooksRow>> {
+        self.client
+            .query_result_set(concat!(
+                "SELECT a.author_id, a.name\n",
+                "FROM authors AS a\n",
+                "WHERE a.author_id IN (\n",
+                "    SELECT b.author_id FROM books AS b WHERE b.publication_year >= $since_year\n",
+                ")\n",
+                "ORDER BY a.author_id;",
+            ))
+            .param("$since_year", since_year)
+            .await?
+            .rows()
+            .map(|mut row| {
+                Ok(ListAuthorsWithRecentBooksRow {
+                    author_id: row.remove_field(0)?.try_into()?,
+                    name: row.remove_field(1)?.try_into()?,
+                })
+            })
+            .collect()
+    }
+
+    // -- name: ListBooksWithRecentEditions :many
+    #[builder(on(String, into))]
+    pub async fn list_books_with_recent_editions(
+        &mut self,
+        since_year: i32,
+    ) -> ydb::YdbResult<Vec<ListBooksWithRecentEditionsRow>> {
+        self.client
+            .query_result_set(concat!(
+                "DECLARE $since_year AS Int32;\n",
+                "SELECT b.book_id, b.author_id, b.isbn, b.book_type, b.title, b.publication_year, b.available, b.tags\n",
+                "FROM books AS b\n",
+                "WHERE (b.author_id, b.book_type) IN (\n",
+                "    SELECT (recent.author_id, recent.book_type)\n",
+                "    FROM books AS recent\n",
+                "    WHERE recent.publication_year >= $since_year\n",
+                ")\n",
+                "ORDER BY b.book_id;",
+            ))
+            .param("$since_year", since_year)
+            .await?
+            .rows()
+            .map(|mut row| {
+                Ok(ListBooksWithRecentEditionsRow {
+                    book_id: row.remove_field(0)?.try_into()?,
+                    author_id: row.remove_field(1)?.try_into()?,
+                    isbn: row.remove_field(2)?.try_into()?,
+                    book_type: row.remove_field(3)?.try_into()?,
+                    title: row.remove_field(4)?.try_into()?,
+                    publication_year: row.remove_field(5)?.try_into()?,
+                    available: row.remove_field(6)?.try_into()?,
+                    tags: row.remove_field(7)?.try_into()?,
+                })
+            })
+            .collect()
+    }
+
+    // -- name: DeleteBooksByAuthorName :exec
+    #[builder(on(String, into))]
+    pub async fn delete_books_by_author_name(&mut self, author_name: String) -> ydb::YdbResult<()> {
+        self.client
+            .exec(concat!(
+                "DELETE FROM books\n",
+                "WHERE author_id IN (SELECT author_id FROM authors WHERE name = $author_name);",
+            ))
+            .param("$author_name", author_name)
+            .await
+    }
 }

@@ -58,6 +58,14 @@ class GeneratedQueriesTest {
                     if (method.getName().equals("findAuthorsByName") || method.getName().equals("findAuthorsByNameCovering")) {
                         assertTrue(sql.replace("`", "").contains("VIEW by_name"), sql);
                     }
+                    if (List.of("listAuthorsWithRecentBooks", "listBooksWithRecentEditions", "deleteBooksByAuthorName").contains(method.getName())) {
+                        assertTrue(sql.toLowerCase().contains(" in ("), sql);
+                        assertTrue(sql.toLowerCase().contains("select"), sql);
+                        if (method.getName().equals("listBooksWithRecentEditions")) {
+                            assertTrue(sql.contains("DECLARE $since_year AS Int32;"), sql);
+                            assertTrue(sql.contains("SELECT (recent.author_id, recent.book_type)"), sql);
+                        }
+                    }
                     if (method.getName().equals("booksByTags")) {
                         assertTrue(sql.contains("Yson::ConvertToStringList"), sql);
                         assertTrue(sql.toLowerCase().contains("left outer join") || sql.toLowerCase().contains("left join"), sql);
@@ -65,7 +73,7 @@ class GeneratedQueriesTest {
                 }
             }
         }
-        assertEquals(55, statements.size());
+        assertEquals(58, statements.size());
     }
     @Test
     void declaredQueryReadsDialectCarriers() throws Exception {

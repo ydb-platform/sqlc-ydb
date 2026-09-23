@@ -168,8 +168,13 @@ type QuerySyntax struct {
 	Root            antlr.ParserRuleContext
 	Columns         map[int]ColumnBinding
 	Relations       []TableBinding
-	Tables          map[int]string // physical table token index to resolved catalog path
-	TablePathPrefix string         // validated static absolute prefix, or empty when absent
+	Selects         map[int]SelectBinding // SELECT core token index to its independent resolved scope
+	Tables          map[int]string        // physical table token index to resolved catalog path
+	TablePathPrefix string                // validated static absolute prefix, or empty when absent
+}
+type SelectBinding struct {
+	Relations []TableBinding
+	Columns   []Column
 }
 type TableBinding struct{ Table, Alias string }
 type ColumnBinding struct {

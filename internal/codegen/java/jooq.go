@@ -229,7 +229,7 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			b.WriteString("    }\n")
 			continue
 		}
-		isSelect := len(jooqNodes[*parser.Select_coreContext](q.Syntax.Root)) != 0
+		isSelect := jooqIsSelect(q.Syntax.Root)
 		for _, rel := range q.Syntax.Relations {
 			tn, e := jooqTableConstant(rel.Table)
 			if e != nil {
@@ -280,7 +280,7 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			if q.Command == model.Many {
 				fetch = "fetch"
 			}
-			if len(jooqNodes[*parser.Select_coreContext](q.Syntax.Root)) == 0 {
+			if !isSelect {
 				var fields []string
 				table := r.aliases[q.Syntax.Relations[0].Alias]
 				for _, c := range q.ResultSets[0].Columns {
@@ -353,16 +353,24 @@ func (r *jooqRenderer) expr(n antlr.Tree) string {
 			if strings.HasPrefix(identifier, "`") {
 				identifier = strings.ReplaceAll(identifier[1:len(identifier)-1], "``", "`")
 			}
+			ordering := false
 			for parent := node.GetParent(); parent != nil; parent = parent.GetParent() {
 				if _, ok := parent.(*parser.Order_by_clauseContext); ok {
-					for _, result := range r.query.ResultSets {
-						for _, column := range result.Columns {
+					ordering = true
+				}
+				if core, ok := parent.(*parser.Select_coreContext); ok {
+					if ordering {
+						for _, column := range r.query.Syntax.Selects[core.GetStart().GetTokenIndex()].Columns {
 							if identifier == column.ResultName() {
-								// Result types were validated before rendering the statement.
-								return "field(name(" + quoted(column.ResultName()) + "), YdbTypes." + strings.ToUpper(column.Type.UnwrapOptional().Kind) + ")"
+								_, dataType, err := jooqType(column.Type)
+								if err != nil {
+									r.err = err
+								}
+								return "field(name(" + quoted(column.ResultName()) + "), " + dataType + ")"
 							}
 						}
 					}
+					break
 				}
 			}
 		}
@@ -456,6 +464,12 @@ func (r *jooqRenderer) expr(n antlr.Tree) string {
 			return r.expr(children[1]) + ".not()"
 		}
 		if cond, ok := children[1].(*parser.Cond_exprContext); ok {
+			if cond.IN() != nil {
+				selects := jooqNodes[*parser.Select_coreContext](cond.In_expr())
+				if len(selects) == 1 {
+					return r.inSubquery(children[0], cond, selects[0])
+				}
+			}
 			if cond.NULL() != nil || cond.ISNULL() != nil || cond.NOTNULL() != nil {
 				method := "isNull"
 				if cond.NOT() != nil || cond.NOTNULL() != nil {
@@ -487,6 +501,48 @@ func jooqOperator(op string) string {
 	return map[string]string{"=": "eq", "==": "eq", "!=": "ne", "<>": "ne", "<": "lt", ">": "gt", "<=": "le", ">=": "ge", "AND": "and", "OR": "or", "||": "concat"}[strings.ToUpper(op)]
 }
 
+func jooqIsSelect(root antlr.Tree) bool {
+	for _, stmt := range jooqNodes[*parser.Sql_stmtContext](root) {
+		if stmt.Sql_stmt_core().Select_stmt() != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *jooqRenderer) inSubquery(left antlr.Tree, condition *parser.Cond_exprContext, core *parser.Select_coreContext) string {
+	scope := r.query.Syntax.Selects[core.GetStart().GetTokenIndex()]
+	if len(scope.Columns) == 1 && scope.Columns[0].Type.UnwrapOptional().Kind == "Tuple" {
+		r.err = fmt.Errorf("tuple IN subqueries require explicit DECLARE parameters or runtime: jdbc or ydb; the jOOQ DSL cannot preserve YQL's single tuple projection")
+		return ""
+	}
+	inner := *r
+	inner.aliases = map[string]string{}
+	for _, relation := range scope.Relations {
+		table, err := jooqTableConstant(relation.Table)
+		if err != nil {
+			r.err = err
+			return ""
+		}
+		if relation.Alias != relation.Table {
+			table += ".as(" + quoted(relation.Alias) + ")"
+		}
+		inner.aliases[relation.Alias] = table
+	}
+	selectSQL := inner.selectQuery(core)
+	if inner.err != nil {
+		r.err = inner.err
+		return ""
+	}
+	operator := "IN"
+	if condition.NOT() != nil {
+		operator = "NOT IN"
+	}
+	// YQL permits comparable operands with different scalar types; Java's
+	// Field<T>.in(Select<Record1<T>>) would reject those typed query parts.
+	return jooqCall("condition", []string{quoted("{0} " + operator + " ({1})"), r.expr(left), selectSQL})
+}
+
 func (r *jooqRenderer) statement() string {
 	root := r.query.Syntax.Root
 	for _, stmt := range jooqNodes[*parser.Sql_stmtContext](root) {
@@ -494,22 +550,30 @@ func (r *jooqRenderer) statement() string {
 		if core.Pragma_stmt() != nil && r.query.Syntax.TablePathPrefix != "" {
 			continue
 		}
-		isDML := core.Into_table_stmt() != nil || core.Update_stmt() != nil || core.Delete_stmt() != nil
-		if isDML && len(jooqNodes[*parser.Select_coreContext](core)) > 0 {
+		var source parser.IInto_values_sourceContext
+		if into := core.Into_table_stmt(); into != nil {
+			source = into.Into_values_source()
+		} else if update := core.Update_stmt(); update != nil {
+			source = update.Into_values_source()
+		} else if del := core.Delete_stmt(); del != nil {
+			source = del.Into_values_source()
+		}
+		if source != nil && len(jooqNodes[*parser.Select_coreContext](source)) > 0 {
 			r.err = fmt.Errorf("SELECT-backed DML is unsupported by the jOOQ DSL; use runtime: jdbc or ydb")
 			return ""
 		}
-		if core.Declare_stmt() == nil && core.Select_stmt() == nil && core.Into_table_stmt() == nil && core.Update_stmt() == nil && core.Delete_stmt() == nil {
+		if selectStmt := core.Select_stmt(); selectStmt != nil {
+			selects := jooqNodes[*parser.Select_coreContext](selectStmt)
+			if len(selects) != 1 || len(jooqNodes[*parser.Union_opContext](selectStmt)) > 0 {
+				return r.fail(selectStmt)
+			}
+			return r.selectQuery(selects[0])
+		}
+		if core.Declare_stmt() == nil && core.Into_table_stmt() == nil && core.Update_stmt() == nil && core.Delete_stmt() == nil {
 			return r.fail(core)
 		}
 	}
-	selects := jooqNodes[*parser.Select_coreContext](root)
-	if len(selects) > 0 {
-		if len(selects) != 1 || len(jooqNodes[*parser.Union_opContext](root)) > 0 {
-			return r.fail(root)
-		}
-		return r.selectQuery(selects[0])
-	}
+
 	rel := r.query.Syntax.Relations
 	if len(rel) != 1 {
 		return r.fail(root)
@@ -546,12 +610,12 @@ func (r *jooqRenderer) statement() string {
 			body += "\n        .set(" + r.col(table, jooqID(set.Set_target().Column_name().An_id().GetText())) + ", " + r.expr(set.Expr()) + ")"
 		}
 		if stmt.Expr() != nil {
-			body += "\n        .where(" + r.expr(stmt.Expr()) + ")"
+			body += "\n        " + strings.ReplaceAll(jooqCall(".where", []string{r.expr(stmt.Expr())}), "\n", "\n        ")
 		}
 	} else if nodes := jooqNodes[*parser.Delete_stmtContext](root); len(nodes) == 1 {
 		body = "dsl.deleteFrom(" + table + ")"
 		if nodes[0].Expr() != nil {
-			body += "\n        .where(" + r.expr(nodes[0].Expr()) + ")"
+			body += "\n        " + strings.ReplaceAll(jooqCall(".where", []string{r.expr(nodes[0].Expr())}), "\n", "\n        ")
 		}
 	} else {
 		return r.fail(root)
@@ -619,7 +683,7 @@ func (r *jooqRenderer) selectQuery(core *parser.Select_coreContext) string {
 		}
 	}
 	body := jooqCall("dsl."+method, cols)
-	rel := r.query.Syntax.Relations
+	rel := r.query.Syntax.Selects[core.GetStart().GetTokenIndex()].Relations
 	if len(rel) > 0 {
 		if len(core.AllJoin_source()) != 1 {
 			return r.fail(core)
@@ -656,7 +720,7 @@ func (r *jooqRenderer) selectQuery(core *parser.Select_coreContext) string {
 		body += "\n        .groupBy(" + strings.Join(items, ", ") + ")"
 	}
 	var ordering []string
-	for _, order := range jooqNodes[*parser.Sort_specificationContext](r.query.Syntax.Root) {
+	for _, order := range jooqNodes[*parser.Sort_specificationContext](core.Ext_order_by_clause()) {
 		expr := r.expr(order.Expr())
 		if strings.HasSuffix(strings.ToUpper(order.GetText()), "DESC") {
 			expr += ".desc()"
@@ -666,15 +730,20 @@ func (r *jooqRenderer) selectQuery(core *parser.Select_coreContext) string {
 	if len(ordering) != 0 {
 		body += "\n        " + strings.ReplaceAll(jooqCall(".orderBy", ordering), "\n", "\n        ")
 	}
-	for _, limit := range jooqNodes[*parser.Select_kind_partialContext](r.query.Syntax.Root) {
-		if limit.LIMIT() == nil {
+	for parent := core.GetParent(); parent != nil; parent = parent.GetParent() {
+		limit, ok := parent.(*parser.Select_kind_partialContext)
+		if !ok {
 			continue
+		}
+		if limit.LIMIT() == nil {
+			break
 		}
 		xs := limit.AllExpr()
 		if len(xs) != 1 {
 			return r.fail(limit)
 		}
 		body += "\n        .limit(" + r.expr(xs[0]) + ")"
+		break
 	}
 	return body
 }

@@ -65,4 +65,20 @@ struct SayHelloRow final {
     ::userver::ydb::Utf8 greeting;
 };
 
+struct ListAuthorsWithRecentBooksRow final {
+    std::uint64_t author_id;
+    ::userver::ydb::Utf8 name;
+};
+
+struct ListBooksWithRecentEditionsRow final {
+    std::uint64_t book_id;
+    std::uint64_t author_id;
+    ::userver::ydb::Utf8 isbn;
+    ::userver::ydb::Utf8 book_type;
+    ::userver::ydb::Utf8 title;
+    std::int32_t publication_year;
+    std::chrono::system_clock::time_point available;
+    ::userver::formats::json::Value tags;
+};
+
 }  // namespace booktest::userver

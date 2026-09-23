@@ -69,6 +69,17 @@ public sealed class Queries
             ["book_type"] = nameof(CreateBookRow.BookType),
             ["publication_year"] = nameof(CreateBookRow.PublicationYear),
         }));
+        SqlMapper.SetTypeMap(typeof(ListAuthorsWithRecentBooksRow), new ColumnTypeMap(typeof(ListAuthorsWithRecentBooksRow), new Dictionary<string, string>
+        {
+            ["author_id"] = nameof(ListAuthorsWithRecentBooksRow.AuthorID),
+        }));
+        SqlMapper.SetTypeMap(typeof(ListBooksWithRecentEditionsRow), new ColumnTypeMap(typeof(ListBooksWithRecentEditionsRow), new Dictionary<string, string>
+        {
+            ["book_id"] = nameof(ListBooksWithRecentEditionsRow.BookID),
+            ["author_id"] = nameof(ListBooksWithRecentEditionsRow.AuthorID),
+            ["book_type"] = nameof(ListBooksWithRecentEditionsRow.BookType),
+            ["publication_year"] = nameof(ListBooksWithRecentEditionsRow.PublicationYear),
+        }));
     }
 
     private sealed class ColumnTypeMap : SqlMapper.ITypeMap
@@ -362,6 +373,77 @@ public sealed class Queries
             cancellationToken: cancellationToken);
 
         return await _connection.QueryFirstAsync<SayHelloRow>(command).ConfigureAwait(false);
+    }
+
+    // -- name: ListAuthorsWithRecentBooks :many
+    public async Task<IReadOnlyList<ListAuthorsWithRecentBooksRow>> ListAuthorsWithRecentBooksAsync(int sinceYear, CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var parameters = new YdbParameters(
+            new YdbParameter("$since_year", DbType.Int32, sinceYear)
+        );
+
+        var command = new CommandDefinition(
+            commandText: """
+            SELECT a.author_id, a.name
+            FROM authors AS a
+            WHERE a.author_id IN (
+                SELECT b.author_id FROM books AS b WHERE b.publication_year >= $since_year
+            )
+            ORDER BY a.author_id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        return (await _connection.QueryAsync<ListAuthorsWithRecentBooksRow>(command).ConfigureAwait(false)).AsList();
+    }
+
+    // -- name: ListBooksWithRecentEditions :many
+    public async Task<IReadOnlyList<ListBooksWithRecentEditionsRow>> ListBooksWithRecentEditionsAsync(int sinceYear, CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var parameters = new YdbParameters(
+            new YdbParameter("$since_year", DbType.Int32, sinceYear)
+        );
+
+        var command = new CommandDefinition(
+            commandText: """
+            DECLARE $since_year AS Int32;
+            SELECT b.book_id, b.author_id, b.isbn, b.book_type, b.title, b.publication_year, b.available, b.tags
+            FROM books AS b
+            WHERE (b.author_id, b.book_type) IN (
+                SELECT (recent.author_id, recent.book_type)
+                FROM books AS recent
+                WHERE recent.publication_year >= $since_year
+            )
+            ORDER BY b.book_id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        return (await _connection.QueryAsync<ListBooksWithRecentEditionsRow>(command).ConfigureAwait(false)).AsList();
+    }
+
+    // -- name: DeleteBooksByAuthorName :exec
+    public async Task DeleteBooksByAuthorNameAsync(string authorName, CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var parameters = new YdbParameters(
+            new YdbParameter("$author_name", DbType.String, authorName)
+        );
+
+        var command = new CommandDefinition(
+            commandText: """
+            DELETE FROM books
+            WHERE author_id IN (SELECT author_id FROM authors WHERE name = $author_name);
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
 
     private sealed class YdbParameters : SqlMapper.IDynamicParameters

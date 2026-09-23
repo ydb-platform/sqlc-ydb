@@ -63,4 +63,20 @@ struct SayHelloRow final {
     std::string greeting;
 };
 
+struct ListAuthorsWithRecentBooksRow final {
+    std::uint64_t author_id;
+    std::string name;
+};
+
+struct ListBooksWithRecentEditionsRow final {
+    std::uint64_t book_id;
+    std::uint64_t author_id;
+    std::string isbn;
+    std::string book_type;
+    std::string title;
+    std::int32_t publication_year;
+    TInstant available;
+    std::string tags;
+};
+
 }  // namespace booktest::native

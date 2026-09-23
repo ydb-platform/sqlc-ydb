@@ -75,3 +75,26 @@ WHERE publication_year < $publication_year AND author_id = $author_id;
 
 -- name: SayHello :one
 SELECT "hello "u || $name AS greeting;
+
+-- name: ListAuthorsWithRecentBooks :many
+SELECT a.author_id, a.name
+FROM authors AS a
+WHERE a.author_id IN (
+    SELECT b.author_id FROM books AS b WHERE b.publication_year >= $since_year
+)
+ORDER BY a.author_id;
+
+-- name: ListBooksWithRecentEditions :many
+DECLARE $since_year AS Int32;
+SELECT b.book_id, b.author_id, b.isbn, b.book_type, b.title, b.publication_year, b.available, b.tags
+FROM books AS b
+WHERE (b.author_id, b.book_type) IN (
+    SELECT (recent.author_id, recent.book_type)
+    FROM books AS recent
+    WHERE recent.publication_year >= $since_year
+)
+ORDER BY b.book_id;
+
+-- name: DeleteBooksByAuthorName :exec
+DELETE FROM books
+WHERE author_id IN (SELECT author_id FROM authors WHERE name = $author_name);

@@ -35,6 +35,9 @@ public:
     void UpdateBookISBN(const std::string& title, const std::string& tags, const std::string& isbn, std::uint64_t book_id) const;
     void DeleteAuthorBeforeYear(std::int32_t publication_year, std::uint64_t author_id) const;
     std::optional<SayHelloRow> SayHello(const std::string& name) const;
+    std::vector<ListAuthorsWithRecentBooksRow> ListAuthorsWithRecentBooks(std::int32_t since_year) const;
+    std::vector<ListBooksWithRecentEditionsRow> ListBooksWithRecentEditions(std::int32_t since_year) const;
+    void DeleteBooksByAuthorName(const std::string& author_name) const;
 
 private:
     NYdb::NQuery::TQueryClient* client_;
