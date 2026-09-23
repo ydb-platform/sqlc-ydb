@@ -197,7 +197,9 @@ public final class Queries {
     // -- name: DeleteAuthorBeforeYear :exec
     public void deleteAuthorBeforeYear(Integer publicationYear, ULong authorId) {
         dsl.deleteFrom(BOOKS)
-                .where(BOOKS.PUBLICATION_YEAR.lt(val(publicationYear, YdbTypes.INT32)).and(BOOKS.AUTHOR_ID.eq(val(authorId, YdbTypes.UINT64))))
+                .where(
+                    BOOKS.PUBLICATION_YEAR.lt(val(publicationYear, YdbTypes.INT32)).and(BOOKS.AUTHOR_ID.eq(val(authorId, YdbTypes.UINT64)))
+                )
                 .execute();
     }
 
@@ -206,5 +208,66 @@ public final class Queries {
         return dsl.select(inline("hello ", YdbTypes.UTF8).concat(val(name, YdbTypes.UTF8)).as("greeting"))
                 .coerce(field(name("greeting"), YdbTypes.UTF8))
                 .fetchOptional(mapping(SayHelloRow::new));
+    }
+
+    // -- name: ListAuthorsWithRecentBooks :many
+    public List<ListAuthorsWithRecentBooksRow> listAuthorsWithRecentBooks(Integer sinceYear) {
+        var a = AUTHORS.as("a");
+        return dsl.select(a.AUTHOR_ID, a.NAME)
+                .from(a)
+                .where(
+                    condition(
+                        "{0} IN ({1})",
+                        a.AUTHOR_ID,
+                        dsl.select(BOOKS.as("b").AUTHOR_ID)
+                                .from(BOOKS.as("b"))
+                                .where(BOOKS.as("b").PUBLICATION_YEAR.ge(val(sinceYear, YdbTypes.INT32)))
+                    )
+                )
+                .orderBy(a.AUTHOR_ID)
+                .coerce(field(name("author_id"), YdbTypes.UINT64), field(name("name"), YdbTypes.UTF8))
+                .fetch(mapping(ListAuthorsWithRecentBooksRow::new));
+    }
+
+    // -- name: ListBooksWithRecentEditions :many
+    public List<ListBooksWithRecentEditionsRow> listBooksWithRecentEditions(Integer sinceYear) {
+        return dsl.connectionResult(_connection -> {
+            try (var _prepared = _connection.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+                DECLARE $since_year AS Int32;
+                SELECT b.book_id, b.author_id, b.isbn, b.book_type, b.title, b.publication_year, b.available, b.tags
+                FROM\s\
+                """ + dsl.render(BOOKS) + """
+                 AS b
+                WHERE (b.author_id, b.book_type) IN (
+                    SELECT (recent.author_id, recent.book_type)
+                    FROM\s\
+                """ + dsl.render(BOOKS) + """
+                 AS recent
+                    WHERE recent.publication_year >= $since_year
+                )
+                ORDER BY b.book_id;\
+                """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+                _prepared.setInt("since_year", sinceYear);
+                try (var _rows = _prepared.executeQuery()) {
+                    var _result = dsl.fetch(_rows, YdbTypes.UINT64, YdbTypes.UINT64, YdbTypes.UTF8, YdbTypes.UTF8, YdbTypes.UTF8, YdbTypes.INT32, YdbTypes.TIMESTAMP, YdbTypes.JSON).map(_row -> new ListBooksWithRecentEditionsRow(_row.get(0, org.jooq.types.ULong.class), _row.get(1, org.jooq.types.ULong.class), _row.get(2, String.class), _row.get(3, String.class), _row.get(4, String.class), _row.get(5, Integer.class), _row.get(6, java.time.Instant.class), _row.get(7, org.jooq.JSON.class)));
+                    return _result;
+                }
+            }
+        });
+    }
+
+    // -- name: DeleteBooksByAuthorName :exec
+    public void deleteBooksByAuthorName(String authorName) {
+        dsl.deleteFrom(BOOKS)
+                .where(
+                    condition(
+                        "{0} IN ({1})",
+                        BOOKS.AUTHOR_ID,
+                        dsl.select(AUTHORS.AUTHOR_ID)
+                                .from(AUTHORS)
+                                .where(AUTHORS.NAME.eq(val(authorName, YdbTypes.UTF8)))
+                    )
+                )
+                .execute();
     }
 }

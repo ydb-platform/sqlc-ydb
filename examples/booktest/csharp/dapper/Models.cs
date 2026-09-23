@@ -112,3 +112,19 @@ public sealed record DeleteAuthorBeforeYearParams(
 public sealed record SayHelloRow(
     string Greeting
 );
+
+public sealed record ListAuthorsWithRecentBooksRow(
+    ulong AuthorID,
+    string Name
+);
+
+public sealed record ListBooksWithRecentEditionsRow(
+    ulong BookID,
+    ulong AuthorID,
+    string Isbn,
+    string BookType,
+    string Title,
+    int PublicationYear,
+    DateTime Available,
+    string Tags
+);

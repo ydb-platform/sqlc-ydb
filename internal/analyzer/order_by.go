@@ -46,7 +46,7 @@ func resolveOrderByProjections(block queryBlock, core *parser.Select_coreContext
 		outputs[name] = syntax.Columns[ref.ctx.GetStart().GetTokenIndex()]
 	}
 	var diagnostics []model.Diagnostic
-	descendants(core, func(node antlr.Tree) {
+	scopeDescendants(core, func(node antlr.Tree) {
 		order, ok := node.(*parser.Sort_specificationContext)
 		if !ok {
 			return

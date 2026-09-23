@@ -11,6 +11,7 @@
     <Compile Include="Program.cs" />
     <Compile Include="../../../examples/*/csharp/dapper/*.cs" />
     <Compile Include="../../../examples/batch/csharp/adonet/*.cs" />
+    <Compile Include="../../../examples/booktest/csharp/adonet/*.cs" />
     <Compile Include="../../../examples/namespaces/csharp/adonet/*.cs" />
   </ItemGroup>
   <ItemGroup>

@@ -362,4 +362,101 @@ class Queries {
         val _value0: String = _rows.getColumn(0).getText()
         return SayHelloRow(_value0)
     }
+
+    // -- name: ListAuthorsWithRecentBooks :many
+    fun listAuthorsWithRecentBooks(sinceYear: Int): List<ListAuthorsWithRecentBooksRow> {
+        val _params = Params.create()
+        _params.put("\$since_year", PrimitiveValue.newInt32(sinceYear))
+        val _query = if (transaction != null) {
+            QueryReader.readFrom(transaction.createQuery(
+                "SELECT a.author_id, a.name\n" +
+                "FROM authors AS a\n" +
+                "WHERE a.author_id IN (\n" +
+                "    SELECT b.author_id FROM books AS b WHERE b.publication_year >= \$since_year\n" +
+                ")\n" +
+                "ORDER BY a.author_id;", _params)).join().getValue()
+        } else {
+            client!!.supplyResult { _session ->
+                QueryReader.readFrom(_session.createQuery(
+                    "SELECT a.author_id, a.name\n" +
+                    "FROM authors AS a\n" +
+                    "WHERE a.author_id IN (\n" +
+                    "    SELECT b.author_id FROM books AS b WHERE b.publication_year >= \$since_year\n" +
+                    ")\n" +
+                    "ORDER BY a.author_id;", TxMode.SERIALIZABLE_RW, _params))
+            }.join().getValue()
+        }
+        kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
+        val _rows = _query.getResultSet(0)
+        val _items = ArrayList<ListAuthorsWithRecentBooksRow>()
+        while (_rows.next()) {
+            val _value0: Long = _rows.getColumn(0).getUint64()
+            val _value1: String = _rows.getColumn(1).getText()
+            _items.add(ListAuthorsWithRecentBooksRow(_value0, _value1))
+        }
+        return _items
+    }
+
+    // -- name: ListBooksWithRecentEditions :many
+    fun listBooksWithRecentEditions(sinceYear: Int): List<ListBooksWithRecentEditionsRow> {
+        val _params = Params.create()
+        _params.put("\$since_year", PrimitiveValue.newInt32(sinceYear))
+        val _query = if (transaction != null) {
+            QueryReader.readFrom(transaction.createQuery(
+                "DECLARE \$since_year AS Int32;\n" +
+                "SELECT b.book_id, b.author_id, b.isbn, b.book_type, b.title, b.publication_year, b.available, b.tags\n" +
+                "FROM books AS b\n" +
+                "WHERE (b.author_id, b.book_type) IN (\n" +
+                "    SELECT (recent.author_id, recent.book_type)\n" +
+                "    FROM books AS recent\n" +
+                "    WHERE recent.publication_year >= \$since_year\n" +
+                ")\n" +
+                "ORDER BY b.book_id;", _params)).join().getValue()
+        } else {
+            client!!.supplyResult { _session ->
+                QueryReader.readFrom(_session.createQuery(
+                    "DECLARE \$since_year AS Int32;\n" +
+                    "SELECT b.book_id, b.author_id, b.isbn, b.book_type, b.title, b.publication_year, b.available, b.tags\n" +
+                    "FROM books AS b\n" +
+                    "WHERE (b.author_id, b.book_type) IN (\n" +
+                    "    SELECT (recent.author_id, recent.book_type)\n" +
+                    "    FROM books AS recent\n" +
+                    "    WHERE recent.publication_year >= \$since_year\n" +
+                    ")\n" +
+                    "ORDER BY b.book_id;", TxMode.SERIALIZABLE_RW, _params))
+            }.join().getValue()
+        }
+        kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
+        val _rows = _query.getResultSet(0)
+        val _items = ArrayList<ListBooksWithRecentEditionsRow>()
+        while (_rows.next()) {
+            val _value0: Long = _rows.getColumn(0).getUint64()
+            val _value1: Long = _rows.getColumn(1).getUint64()
+            val _value2: String = _rows.getColumn(2).getText()
+            val _value3: String = _rows.getColumn(3).getText()
+            val _value4: String = _rows.getColumn(4).getText()
+            val _value5: Int = _rows.getColumn(5).getInt32()
+            val _value6: java.time.Instant = _rows.getColumn(6).getTimestamp()
+            val _value7: String = _rows.getColumn(7).getJson()
+            _items.add(ListBooksWithRecentEditionsRow(_value0, _value1, _value2, _value3, _value4, _value5, _value6, _value7))
+        }
+        return _items
+    }
+
+    // -- name: DeleteBooksByAuthorName :exec
+    fun deleteBooksByAuthorName(authorName: String): Unit {
+        val _params = Params.create()
+        _params.put("\$author_name", PrimitiveValue.newText(authorName))
+        if (transaction != null) {
+            transaction.createQuery(
+                "DELETE FROM books\n" +
+                "WHERE author_id IN (SELECT author_id FROM authors WHERE name = \$author_name);", _params).execute().join().getStatus().expectSuccess()
+        } else {
+            client!!.supplyResult { _session ->
+                _session.createQuery(
+                    "DELETE FROM books\n" +
+                    "WHERE author_id IN (SELECT author_id FROM authors WHERE name = \$author_name);", TxMode.SERIALIZABLE_RW, _params).execute()
+            }.join().getStatus().expectSuccess()
+        }
+    }
 }

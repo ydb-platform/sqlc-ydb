@@ -500,4 +500,139 @@ std::optional<SayHelloRow> Queries::SayHello(const std::string& name) const {
     return sqlc_row;
 }
 
+// -- name: ListAuthorsWithRecentBooks :many
+std::vector<ListAuthorsWithRecentBooksRow> Queries::ListAuthorsWithRecentBooks(std::int32_t since_year) const {
+    std::optional<NYdb::TResultSet> sqlc_result_set;
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_params = NYdb::TParamsBuilder()
+            .AddParam("$since_year").Int32(since_year).Build()
+            .Build();
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            "SELECT a.author_id, a.name\n"
+            "FROM authors AS a\n"
+            "WHERE a.author_id IN (\n"
+            "    SELECT b.author_id FROM books AS b WHERE b.publication_year >= $since_year\n"
+            ")\n"
+            "ORDER BY a.author_id;",
+            sqlc_tx,
+            sqlc_params,
+            this->execute_settings_
+        ).GetValueSync();
+        if (sqlc_result.IsSuccess()) {
+            if (sqlc_result.GetResultSets().size() != 1) {
+                throw std::runtime_error("expected exactly one result set");
+            }
+            sqlc_result_set = sqlc_result.GetResultSet(0);
+        }
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+    if (!sqlc_result_set) {
+        throw std::runtime_error("ListAuthorsWithRecentBooks: successful query returned no result set");
+    }
+    NYdb::TResultSetParser sqlc_parser(*sqlc_result_set);
+    std::vector<ListAuthorsWithRecentBooksRow> sqlc_rows;
+    sqlc_rows.reserve(sqlc_result_set->RowsCount());
+    while (sqlc_parser.TryNextRow()) {
+        sqlc_rows.push_back(ListAuthorsWithRecentBooksRow{
+            sqlc_parser.ColumnParser("author_id").GetUint64(),
+            sqlc_parser.ColumnParser("name").GetUtf8(),
+        });
+    }
+    return sqlc_rows;
+}
+
+// -- name: ListBooksWithRecentEditions :many
+std::vector<ListBooksWithRecentEditionsRow> Queries::ListBooksWithRecentEditions(std::int32_t since_year) const {
+    std::optional<NYdb::TResultSet> sqlc_result_set;
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_params = NYdb::TParamsBuilder()
+            .AddParam("$since_year").Int32(since_year).Build()
+            .Build();
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            "DECLARE $since_year AS Int32;\n"
+            "SELECT b.book_id, b.author_id, b.isbn, b.book_type, b.title, b.publication_year, b.available, b.tags\n"
+            "FROM books AS b\n"
+            "WHERE (b.author_id, b.book_type) IN (\n"
+            "    SELECT (recent.author_id, recent.book_type)\n"
+            "    FROM books AS recent\n"
+            "    WHERE recent.publication_year >= $since_year\n"
+            ")\n"
+            "ORDER BY b.book_id;",
+            sqlc_tx,
+            sqlc_params,
+            this->execute_settings_
+        ).GetValueSync();
+        if (sqlc_result.IsSuccess()) {
+            if (sqlc_result.GetResultSets().size() != 1) {
+                throw std::runtime_error("expected exactly one result set");
+            }
+            sqlc_result_set = sqlc_result.GetResultSet(0);
+        }
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+    if (!sqlc_result_set) {
+        throw std::runtime_error("ListBooksWithRecentEditions: successful query returned no result set");
+    }
+    NYdb::TResultSetParser sqlc_parser(*sqlc_result_set);
+    std::vector<ListBooksWithRecentEditionsRow> sqlc_rows;
+    sqlc_rows.reserve(sqlc_result_set->RowsCount());
+    while (sqlc_parser.TryNextRow()) {
+        sqlc_rows.push_back(ListBooksWithRecentEditionsRow{
+            sqlc_parser.ColumnParser("book_id").GetUint64(),
+            sqlc_parser.ColumnParser("author_id").GetUint64(),
+            sqlc_parser.ColumnParser("isbn").GetUtf8(),
+            sqlc_parser.ColumnParser("book_type").GetUtf8(),
+            sqlc_parser.ColumnParser("title").GetUtf8(),
+            sqlc_parser.ColumnParser("publication_year").GetInt32(),
+            sqlc_parser.ColumnParser("available").GetTimestamp(),
+            sqlc_parser.ColumnParser("tags").GetJson(),
+        });
+    }
+    return sqlc_rows;
+}
+
+// -- name: DeleteBooksByAuthorName :exec
+void Queries::DeleteBooksByAuthorName(const std::string& author_name) const {
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_params = NYdb::TParamsBuilder()
+            .AddParam("$author_name").Utf8(author_name).Build()
+            .Build();
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            "DELETE FROM books\n"
+            "WHERE author_id IN (SELECT author_id FROM authors WHERE name = $author_name);",
+            sqlc_tx,
+            sqlc_params,
+            this->execute_settings_
+        ).GetValueSync();
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+}
+
 }  // namespace booktest::native

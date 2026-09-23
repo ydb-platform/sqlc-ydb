@@ -592,6 +592,154 @@ final class Queries
         return $rows[0] ?? null;
     }
 
+    /** @return list<ListAuthorsWithRecentBooksRow> */
+    // -- name: ListAuthorsWithRecentBooks :many
+    public function listAuthorsWithRecentBooks(int $sinceYear): array
+    {
+        $parameters = [
+            '$since_year' => YdbValueCodec::typedInt32($sinceYear, 'since_year'),
+        ];
+
+        $result = $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                SELECT a.author_id, a.name
+                FROM authors AS a
+                WHERE a.author_id IN (
+                    SELECT b.author_id FROM books AS b WHERE b.publication_year >= $since_year
+                )
+                ORDER BY a.author_id;
+                SQLC_YDB_YQL)
+                ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0);
+            if ($this->txId !== null) {
+                $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
+            } else {
+                $query->beginTx('serializable_read_write');
+            }
+            if ($this->configure !== null) {
+                ($this->configure)($query);
+            }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
+
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
+        });
+
+        $rows = $this->decodeRows(
+            $result,
+            'ListAuthorsWithRecentBooks',
+            [
+                ['author_id', PrimitiveTypeId::UINT64, false],
+                ['name', PrimitiveTypeId::UTF8, false],
+            ],
+            static fn($items): ListAuthorsWithRecentBooksRow => new ListAuthorsWithRecentBooksRow(
+                YdbValueCodec::uint64($items->offsetGet(0), 'ListAuthorsWithRecentBooks.author_id'),
+                YdbValueCodec::utf8($items->offsetGet(1), 'ListAuthorsWithRecentBooks.name'),
+            ),
+        );
+
+        return $rows;
+    }
+
+    /** @return list<ListBooksWithRecentEditionsRow> */
+    // -- name: ListBooksWithRecentEditions :many
+    public function listBooksWithRecentEditions(int $sinceYear): array
+    {
+        $parameters = [
+            '$since_year' => YdbValueCodec::typedInt32($sinceYear, 'since_year'),
+        ];
+
+        $result = $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                DECLARE $since_year AS Int32;
+                SELECT b.book_id, b.author_id, b.isbn, b.book_type, b.title, b.publication_year, b.available, b.tags
+                FROM books AS b
+                WHERE (b.author_id, b.book_type) IN (
+                    SELECT (recent.author_id, recent.book_type)
+                    FROM books AS recent
+                    WHERE recent.publication_year >= $since_year
+                )
+                ORDER BY b.book_id;
+                SQLC_YDB_YQL)
+                ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0);
+            if ($this->txId !== null) {
+                $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
+            } else {
+                $query->beginTx('serializable_read_write');
+            }
+            if ($this->configure !== null) {
+                ($this->configure)($query);
+            }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
+
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
+        });
+
+        $rows = $this->decodeRows(
+            $result,
+            'ListBooksWithRecentEditions',
+            [
+                ['book_id', PrimitiveTypeId::UINT64, false],
+                ['author_id', PrimitiveTypeId::UINT64, false],
+                ['isbn', PrimitiveTypeId::UTF8, false],
+                ['book_type', PrimitiveTypeId::UTF8, false],
+                ['title', PrimitiveTypeId::UTF8, false],
+                ['publication_year', PrimitiveTypeId::INT32, false],
+                ['available', PrimitiveTypeId::TIMESTAMP, false],
+                ['tags', PrimitiveTypeId::JSON, false],
+            ],
+            static fn($items): ListBooksWithRecentEditionsRow => new ListBooksWithRecentEditionsRow(
+                YdbValueCodec::uint64($items->offsetGet(0), 'ListBooksWithRecentEditions.book_id'),
+                YdbValueCodec::uint64($items->offsetGet(1), 'ListBooksWithRecentEditions.author_id'),
+                YdbValueCodec::utf8($items->offsetGet(2), 'ListBooksWithRecentEditions.isbn'),
+                YdbValueCodec::utf8($items->offsetGet(3), 'ListBooksWithRecentEditions.book_type'),
+                YdbValueCodec::utf8($items->offsetGet(4), 'ListBooksWithRecentEditions.title'),
+                YdbValueCodec::int32($items->offsetGet(5), 'ListBooksWithRecentEditions.publication_year'),
+                YdbValueCodec::timestamp($items->offsetGet(6), 'ListBooksWithRecentEditions.available'),
+                YdbValueCodec::json($items->offsetGet(7), 'ListBooksWithRecentEditions.tags'),
+            ),
+        );
+
+        return $rows;
+    }
+
+    // -- name: DeleteBooksByAuthorName :exec
+    public function deleteBooksByAuthorName(string $authorName): void
+    {
+        $parameters = [
+            '$author_name' => YdbValueCodec::typedUtf8($authorName, 'author_name'),
+        ];
+
+        $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                DELETE FROM books
+                WHERE author_id IN (SELECT author_id FROM authors WHERE name = $author_name);
+                SQLC_YDB_YQL)
+                ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0);
+            if ($this->txId !== null) {
+                $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
+            } else {
+                $query->beginTx('serializable_read_write');
+            }
+            if ($this->configure !== null) {
+                ($this->configure)($query);
+            }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
+
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
+        });
+    }
+
     /**
      * @param array<int, array{0: string, 1: int, 2: bool}> $expectedColumns
      * @return list<object>

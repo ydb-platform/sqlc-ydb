@@ -96,3 +96,19 @@ type DeleteAuthorBeforeYearParams struct {
 type SayHelloRow struct {
 	Greeting string
 }
+
+type ListAuthorsWithRecentBooksRow struct {
+	AuthorID uint64
+	Name     string
+}
+
+type ListBooksWithRecentEditionsRow struct {
+	BookID          uint64
+	AuthorID        uint64
+	Isbn            string
+	BookType        string
+	Title           string
+	PublicationYear int32
+	Available       time.Time
+	Tags            string
+}

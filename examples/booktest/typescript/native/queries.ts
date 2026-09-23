@@ -99,6 +99,22 @@ export type SayHelloRow = {
   readonly greeting: string;
 };
 
+export type ListAuthorsWithRecentBooksRow = {
+  readonly author_id: bigint;
+  readonly name: string;
+};
+
+export type ListBooksWithRecentEditionsRow = {
+  readonly book_id: bigint;
+  readonly author_id: bigint;
+  readonly isbn: string;
+  readonly book_type: string;
+  readonly title: string;
+  readonly publication_year: number;
+  readonly available: Date;
+  readonly tags: JSValue;
+};
+
 export class Queries {
   readonly #sql: SQL;
 
@@ -292,5 +308,56 @@ export class Queries {
     const [rows] = await stmt;
 
     return rows[0] ?? null;
+  }
+
+  // -- name: ListAuthorsWithRecentBooks :many
+  async listAuthorsWithRecentBooks(sinceYear: number, configure?: ConfigureQuery): Promise<ListAuthorsWithRecentBooksRow[]> {
+    const stmt = this.#sql<[ListAuthorsWithRecentBooksRow]>(
+      "SELECT a.author_id, a.name\n" +
+      "FROM authors AS a\n" +
+      "WHERE a.author_id IN (\n" +
+      "    SELECT b.author_id FROM books AS b WHERE b.publication_year >= $since_year\n" +
+      ")\n" +
+      "ORDER BY a.author_id;"
+    )
+      .parameter("since_year", new Int32(sinceYear));
+    configure?.(stmt);
+    const [rows] = await stmt;
+
+    return rows;
+  }
+
+  // -- name: ListBooksWithRecentEditions :many
+  async listBooksWithRecentEditions(sinceYear: number, configure?: ConfigureQuery): Promise<ListBooksWithRecentEditionsRow[]> {
+    const stmt = this.#sql<[ListBooksWithRecentEditionsRow]>(
+      "DECLARE $since_year AS Int32;\n" +
+      "SELECT b.book_id, b.author_id, b.isbn, b.book_type, b.title, b.publication_year, b.available, b.tags\n" +
+      "FROM books AS b\n" +
+      "WHERE (b.author_id, b.book_type) IN (\n" +
+      "    SELECT (recent.author_id, recent.book_type)\n" +
+      "    FROM books AS recent\n" +
+      "    WHERE recent.publication_year >= $since_year\n" +
+      ")\n" +
+      "ORDER BY b.book_id;"
+    );
+    // Keep explicit DECLARE statements; the SDK otherwise prepends duplicates.
+    Object.defineProperty(stmt, "text", { value: stmt.text, writable: false });
+    stmt
+      .parameter("since_year", new Int32(sinceYear));
+    configure?.(stmt);
+    const [rows] = await stmt;
+
+    return rows;
+  }
+
+  // -- name: DeleteBooksByAuthorName :exec
+  async deleteBooksByAuthorName(authorName: string, configure?: ConfigureQuery): Promise<void> {
+    const stmt = this.#sql(
+      "DELETE FROM books\n" +
+      "WHERE author_id IN (SELECT author_id FROM authors WHERE name = $author_name);"
+    )
+      .parameter("author_name", new Utf8(authorName));
+    configure?.(stmt);
+    await stmt;
   }
 }

@@ -5,6 +5,17 @@ sql:
     schema: schema.sql
     queries: queries.sql
     gen:
+      python:
+        out: python/native
+        runtime: ydb
+      csharp:
+        namespace: Booktest.AdoNet
+        out: csharp/adonet
+        runtime: adonet
+      java:
+        package: booktest.nativeapi
+        out: java/native
+        runtime: ydb
       kotlin:
         package: booktest.nativeapi
         out: kotlin/nativeapi
@@ -31,6 +42,17 @@ sql:
     schema: schema.sql
     queries: queries.sql
     gen:
+      python:
+        out: python/dbapi
+        runtime: dbapi
+      java:
+        package: booktest.jdbc
+        out: java/jdbc
+        runtime: jdbc
+      kotlin:
+        package: booktest.jdbc
+        out: kotlin/jdbc
+        runtime: jdbc
       go:
         package: booktest
         out: go/database/sql
@@ -71,3 +93,21 @@ sql:
         namespace: booktest::userver
         out: cpp/userver
         runtime: userver
+  - name: exposed
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      kotlin:
+        package: booktest.exposed
+        out: kotlin/exposed
+        runtime: exposed
+  - name: sqlalchemy
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      python:
+        out: python/sqlalchemy
+        runtime: sqlalchemy
+        emit_sync_querier: true

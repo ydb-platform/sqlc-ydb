@@ -280,4 +280,84 @@ std::optional<SayHelloRow> Queries::SayHello(const ::userver::ydb::Utf8& name) c
     };
 }
 
+// -- name: ListAuthorsWithRecentBooks :many
+std::vector<ListAuthorsWithRecentBooksRow> Queries::ListAuthorsWithRecentBooks(std::int32_t since_year) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "SELECT a.author_id, a.name\n"
+        "FROM authors AS a\n"
+        "WHERE a.author_id IN (\n"
+        "    SELECT b.author_id FROM books AS b WHERE b.publication_year >= $since_year\n"
+        ")\n"
+        "ORDER BY a.author_id;",
+        ::userver::ydb::Query::Name{"ListAuthorsWithRecentBooks"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    auto sqlc_response =
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$since_year", since_year)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$since_year", since_year);
+    auto sqlc_cursor = sqlc_response.GetSingleCursor();
+    std::vector<ListAuthorsWithRecentBooksRow> sqlc_rows;
+    sqlc_rows.reserve(sqlc_cursor.size());
+    for (auto sqlc_row : sqlc_cursor) {
+        sqlc_rows.push_back(ListAuthorsWithRecentBooksRow{
+            sqlc_row.Get<std::uint64_t>("author_id"),
+            sqlc_row.Get<::userver::ydb::Utf8>("name"),
+        });
+    }
+    return sqlc_rows;
+}
+
+// -- name: ListBooksWithRecentEditions :many
+std::vector<ListBooksWithRecentEditionsRow> Queries::ListBooksWithRecentEditions(std::int32_t since_year) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "DECLARE $since_year AS Int32;\n"
+        "SELECT b.book_id, b.author_id, b.isbn, b.book_type, b.title, b.publication_year, b.available, b.tags\n"
+        "FROM books AS b\n"
+        "WHERE (b.author_id, b.book_type) IN (\n"
+        "    SELECT (recent.author_id, recent.book_type)\n"
+        "    FROM books AS recent\n"
+        "    WHERE recent.publication_year >= $since_year\n"
+        ")\n"
+        "ORDER BY b.book_id;",
+        ::userver::ydb::Query::Name{"ListBooksWithRecentEditions"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    auto sqlc_response =
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$since_year", since_year)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$since_year", since_year);
+    auto sqlc_cursor = sqlc_response.GetSingleCursor();
+    std::vector<ListBooksWithRecentEditionsRow> sqlc_rows;
+    sqlc_rows.reserve(sqlc_cursor.size());
+    for (auto sqlc_row : sqlc_cursor) {
+        sqlc_rows.push_back(ListBooksWithRecentEditionsRow{
+            sqlc_row.Get<std::uint64_t>("book_id"),
+            sqlc_row.Get<std::uint64_t>("author_id"),
+            sqlc_row.Get<::userver::ydb::Utf8>("isbn"),
+            sqlc_row.Get<::userver::ydb::Utf8>("book_type"),
+            sqlc_row.Get<::userver::ydb::Utf8>("title"),
+            sqlc_row.Get<std::int32_t>("publication_year"),
+            sqlc_row.Get<std::chrono::system_clock::time_point>("available"),
+            sqlc_row.Get<::userver::formats::json::Value>("tags"),
+        });
+    }
+    return sqlc_rows;
+}
+
+// -- name: DeleteBooksByAuthorName :exec
+void Queries::DeleteBooksByAuthorName(const ::userver::ydb::Utf8& author_name) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "DELETE FROM books\n"
+        "WHERE author_id IN (SELECT author_id FROM authors WHERE name = $author_name);",
+        ::userver::ydb::Query::Name{"DeleteBooksByAuthorName"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    static_cast<void>(
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$author_name", author_name)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$author_name", author_name)
+    );
+}
+
 }  // namespace booktest::userver

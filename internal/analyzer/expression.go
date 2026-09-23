@@ -11,10 +11,11 @@ import (
 )
 
 type expressionScope struct {
-	relations []relation
-	bindings  map[string]model.Type
-	grouped   bool
-	functions *builtins.Registry
+	relations    []relation
+	bindings     map[string]model.Type
+	grouped      bool
+	functions    *builtins.Registry
+	inSubqueries map[int]model.Type
 }
 
 func resolveExpression(expr parser.IExprContext, scope expressionScope) (model.Type, error) {
@@ -100,6 +101,9 @@ func resolveComparison(expr antlr.ParserRuleContext, scope expressionScope) (mod
 			return model.Type{Kind: "Bool"}, true, nil
 		}
 		if condition.IN() != nil {
+			if inSubquery(condition.In_expr()) != nil {
+				return model.Type{}, true, fmt.Errorf("IN subqueries are supported only in WHERE predicates; they are not yet supported in projections, CASE, IF, or HAVING")
+			}
 			return model.Type{}, true, fmt.Errorf("typed IN expressions are supported only in WHERE and JOIN predicates; they are not yet supported in projections, CASE, IF, or HAVING")
 		}
 		operands = append(operands, xor.Eq_subexpr())

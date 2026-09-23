@@ -390,3 +390,139 @@ func (q *Queries) SayHello(ctx context.Context, arg string, opts ...query.Execut
 
 	return row, nil
 }
+
+// -- name: ListAuthorsWithRecentBooks :many
+func (q *Queries) ListAuthorsWithRecentBooks(ctx context.Context, arg int32, opts ...query.ExecuteOption) ([]ListAuthorsWithRecentBooksRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$since_year").Int32(arg)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	result, err := q.db.Query(ctx, ""+
+		"SELECT a.author_id, a.name\n"+
+		"FROM authors AS a\n"+
+		"WHERE a.author_id IN (\n"+
+		"    SELECT b.author_id FROM books AS b WHERE b.publication_year >= $since_year\n"+
+		")\n"+
+		"ORDER BY a.author_id;",
+		callOptions...,
+	)
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
+	}
+	defer result.Close(ctx)
+
+	resultSet, err := result.NextResultSet(ctx)
+	if errors.Is(err, io.EOF) {
+		return nil, xerrors.WithStackTrace(query.ErrNoResultSets)
+	}
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
+	}
+
+	items := make([]ListAuthorsWithRecentBooksRow, 0)
+	for r, err := range resultSet.Rows(ctx) {
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+		var row ListAuthorsWithRecentBooksRow
+		if err := r.ScanNamed(
+			query.Named("author_id", &row.AuthorID),
+			query.Named("name", &row.Name),
+		); err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+		items = append(items, row)
+	}
+
+	_, err = result.NextResultSet(ctx)
+	if err == nil {
+		return nil, xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+	} else if !errors.Is(err, io.EOF) {
+		return nil, xerrors.WithStackTrace(err)
+	}
+
+	return items, nil
+}
+
+// -- name: ListBooksWithRecentEditions :many
+func (q *Queries) ListBooksWithRecentEditions(ctx context.Context, arg int32, opts ...query.ExecuteOption) ([]ListBooksWithRecentEditionsRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$since_year").Int32(arg)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	result, err := q.db.Query(ctx, ""+
+		"DECLARE $since_year AS Int32;\n"+
+		"SELECT b.book_id, b.author_id, b.isbn, b.book_type, b.title, b.publication_year, b.available, b.tags\n"+
+		"FROM books AS b\n"+
+		"WHERE (b.author_id, b.book_type) IN (\n"+
+		"    SELECT (recent.author_id, recent.book_type)\n"+
+		"    FROM books AS recent\n"+
+		"    WHERE recent.publication_year >= $since_year\n"+
+		")\n"+
+		"ORDER BY b.book_id;",
+		callOptions...,
+	)
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
+	}
+	defer result.Close(ctx)
+
+	resultSet, err := result.NextResultSet(ctx)
+	if errors.Is(err, io.EOF) {
+		return nil, xerrors.WithStackTrace(query.ErrNoResultSets)
+	}
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
+	}
+
+	items := make([]ListBooksWithRecentEditionsRow, 0)
+	for r, err := range resultSet.Rows(ctx) {
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+		var row ListBooksWithRecentEditionsRow
+		if err := r.ScanNamed(
+			query.Named("book_id", &row.BookID),
+			query.Named("author_id", &row.AuthorID),
+			query.Named("isbn", &row.Isbn),
+			query.Named("book_type", &row.BookType),
+			query.Named("title", &row.Title),
+			query.Named("publication_year", &row.PublicationYear),
+			query.Named("available", &row.Available),
+			query.Named("tags", &row.Tags),
+		); err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+		items = append(items, row)
+	}
+
+	_, err = result.NextResultSet(ctx)
+	if err == nil {
+		return nil, xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+	} else if !errors.Is(err, io.EOF) {
+		return nil, xerrors.WithStackTrace(err)
+	}
+
+	return items, nil
+}
+
+// -- name: DeleteBooksByAuthorName :exec
+func (q *Queries) DeleteBooksByAuthorName(ctx context.Context, arg string, opts ...query.ExecuteOption) error {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$author_name").Text(arg)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	err := q.db.Exec(ctx, ""+
+		"DELETE FROM books\n"+
+		"WHERE author_id IN (SELECT author_id FROM authors WHERE name = $author_name);",
+		callOptions...,
+	)
+
+	return xerrors.WithStackTrace(err)
+}

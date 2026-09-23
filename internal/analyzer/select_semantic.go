@@ -239,7 +239,7 @@ func selectHavingExpression(core *parser.Select_coreContext) parser.IExprContext
 
 func containsAggregate(root antlr.Tree) bool {
 	found := false
-	descendants(root, func(node antlr.Tree) {
+	scopeDescendants(root, func(node antlr.Tree) {
 		unary, ok := node.(*parser.Unary_subexprContext)
 		if !ok {
 			return
@@ -252,7 +252,7 @@ func containsAggregate(root antlr.Tree) bool {
 
 func unaggregatedColumnRefs(root antlr.Tree) []columnRef {
 	var aggregateSpans [][2]int
-	descendants(root, func(node antlr.Tree) {
+	scopeDescendants(root, func(node antlr.Tree) {
 		unary, ok := node.(*parser.Unary_subexprContext)
 		if !ok {
 			return
@@ -344,23 +344,27 @@ func validateLimitOffset(block queryBlock, partial parser.ISelect_kind_partialCo
 	return diagnostics
 }
 
-func inferFromInLists(conditions []*parser.Cond_exprContext, relations []relation, inferred map[string]model.Type) {
-	for _, condition := range conditions {
+func inferFromInLists(root antlr.Tree, relations []relation, inferred map[string]model.Type) {
+	scopeDescendants(root, func(node antlr.Tree) {
+		condition, ok := node.(*parser.Cond_exprContext)
+		if !ok {
+			return
+		}
 		if condition.IN() == nil || condition.In_expr() == nil {
-			continue
+			return
 		}
 		text := condition.In_expr().GetText()
 		refs := columnRefs(condition.GetParent())
 		if len(refs) != 1 {
-			continue
+			return
 		}
 		column, err := resolveColumn(relations, refs[0])
 		if err != nil {
-			continue
+			return
 		}
 		if strings.HasPrefix(text, "$") {
 			var direct parser.IBind_parameterContext
-			descendants(condition.In_expr(), func(node antlr.Tree) {
+			scopeDescendants(condition.In_expr(), func(node antlr.Tree) {
 				if bind, ok := node.(parser.IBind_parameterContext); ok && bind.GetText() == text {
 					direct = bind
 				}
@@ -369,14 +373,14 @@ func inferFromInLists(conditions []*parser.Cond_exprContext, relations []relatio
 				elem := column.Type.UnwrapOptional()
 				inferParameter(inferred, bindName(direct), model.Type{Kind: "List", Elem: &elem})
 			}
-			continue
+			return
 		}
 		if !strings.HasPrefix(text, "(") || !strings.HasSuffix(text, ")") {
-			continue
+			return
 		}
 		var binds []parser.IBind_parameterContext
 		var directPositions = map[int]bool{}
-		descendants(condition.In_expr(), func(node antlr.Tree) {
+		scopeDescendants(condition.In_expr(), func(node antlr.Tree) {
 			switch ctx := node.(type) {
 			case parser.IBind_parameterContext:
 				binds = append(binds, ctx)
@@ -387,12 +391,12 @@ func inferFromInLists(conditions []*parser.Cond_exprContext, relations []relatio
 			}
 		})
 		if len(binds) == 0 || len(binds) != len(directPositions) {
-			continue
+			return
 		}
 		for _, bind := range binds {
 			if directPositions[bind.GetStart().GetStart()] {
 				inferParameter(inferred, bindName(bind), column.Type)
 			}
 		}
-	}
+	})
 }

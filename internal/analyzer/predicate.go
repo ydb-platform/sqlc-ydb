@@ -9,9 +9,9 @@ import (
 	parser "github.com/ydb-platform/yql-parsers/go"
 )
 
-func validatePredicateContexts(block queryBlock, root antlr.Tree, relations []relation, bindings map[string]model.Type) []model.Diagnostic {
+func validatePredicateContexts(block queryBlock, root antlr.Tree, relations []relation, bindings map[string]model.Type, subqueries map[int]model.Type) []model.Diagnostic {
 	var predicates []parser.IExprContext
-	descendants(root, func(node antlr.Tree) {
+	scopeDescendants(root, func(node antlr.Tree) {
 		switch ctx := node.(type) {
 		case *parser.Select_coreContext:
 			if ctx.WHERE() != nil {
@@ -42,7 +42,7 @@ func validatePredicateContexts(block queryBlock, root antlr.Tree, relations []re
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, predicate, "aggregate functions are not allowed in WHERE or JOIN predicates; use HAVING after aggregation"))
 			continue
 		}
-		if err := validatePredicate(predicate, expressionScope{relations: relations, bindings: bindings, functions: block.functions}); err != nil {
+		if err := validatePredicate(predicate, expressionScope{relations: relations, bindings: bindings, functions: block.functions, inSubqueries: subqueries}); err != nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, predicate, fmt.Sprintf("invalid predicate: %v", err)))
 		}
 	}
@@ -71,7 +71,13 @@ func validatePredicate(expr parser.IExprContext, scope expressionScope) error {
 
 func validatePredicateAtom(atom *parser.Xor_subexprContext, scope expressionScope) error {
 	if condition := atom.Cond_expr(); condition != nil {
-		left, err := resolveScalarNode(atom.Eq_subexpr(), scope)
+		var left model.Type
+		var err error
+		if condition.IN() != nil {
+			left, err = resolveINOperand(atom.Eq_subexpr(), scope)
+		} else {
+			left, err = resolveScalarNode(atom.Eq_subexpr(), scope)
+		}
 		if err != nil {
 			return fmt.Errorf("cannot resolve predicate operand %q: %w", atom.Eq_subexpr().GetText(), err)
 		}
@@ -81,6 +87,12 @@ func validatePredicateAtom(atom *parser.Xor_subexprContext, scope expressionScop
 		if condition.IN() != nil && condition.In_expr() != nil {
 			types := []model.Type{left}
 			inExpr := condition.In_expr()
+			if subquery, ok := scope.inSubqueries[inExpr.GetStart().GetTokenIndex()]; ok {
+				if err := validateINSubqueryTypes(left, subquery); err != nil {
+					return fmt.Errorf("IN subquery key types are incompatible: %s and %s: %w", left.String(), subquery.String(), err)
+				}
+				return nil
+			}
 			if bind := directBind(inExpr); bind != nil && inExpr.GetText() == bind.GetText() {
 				typeValue, ok := scope.bindings[bindName(bind)]
 				if !ok || typeValue.Kind != "List" || typeValue.Elem == nil {

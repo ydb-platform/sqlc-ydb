@@ -91,6 +91,31 @@ func TestGeneratedExample(t *testing.T) {
 		t.Fatalf("native BooksByTags() = %#v, %v", rows, err)
 	}
 
+	if rows, err := n.ListAuthorsWithRecentBooks(ctx, 2000); err != nil || len(rows) != 1 || rows[0].AuthorID != 100 || rows[0].Name != author.Name {
+		t.Fatalf("native ListAuthorsWithRecentBooks() = %#v, %v", rows, err)
+	}
+	if rows, err := s.ListAuthorsWithRecentBooks(ctx, 2000); err != nil || len(rows) != 1 || rows[0].AuthorID != 100 || rows[0].Name != author.Name {
+		t.Fatalf("database/sql ListAuthorsWithRecentBooks() = %#v, %v", rows, err)
+	}
+	if rows, err := n.ListAuthorsWithRecentBooks(ctx, 2021); err != nil || len(rows) != 0 {
+		t.Fatalf("native empty author subquery = %#v, %v", rows, err)
+	}
+	if rows, err := s.ListAuthorsWithRecentBooks(ctx, 2021); err != nil || len(rows) != 0 {
+		t.Fatalf("database/sql empty author subquery = %#v, %v", rows, err)
+	}
+	if rows, err := n.ListBooksWithRecentEditions(ctx, 2000); err != nil || len(rows) != 2 || rows[0].BookID != 201 || rows[1].BookID != 202 {
+		t.Fatalf("native tuple subquery must compare author and type: %#v, %v", rows, err)
+	}
+	if rows, err := s.ListBooksWithRecentEditions(ctx, 2000); err != nil || len(rows) != 2 || rows[0].BookID != 201 || rows[1].BookID != 202 {
+		t.Fatalf("database/sql tuple subquery must compare author and type: %#v, %v", rows, err)
+	}
+	if rows, err := n.ListBooksWithRecentEditions(ctx, 2021); err != nil || len(rows) != 0 {
+		t.Fatalf("native empty tuple subquery = %#v, %v", rows, err)
+	}
+	if rows, err := s.ListBooksWithRecentEditions(ctx, 2021); err != nil || len(rows) != 0 {
+		t.Fatalf("database/sql empty tuple subquery = %#v, %v", rows, err)
+	}
+
 	tx, err := db.SQL.BeginTx(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -124,6 +149,35 @@ func TestGeneratedExample(t *testing.T) {
 	}
 	if _, err := s.GetBook(ctx, 101); err == nil {
 		t.Fatal("DeleteAuthorBeforeYear left an old book")
+	}
+	if err := s.DeleteBook(ctx, 102); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := n.GetBook(ctx, 102); err == nil {
+		t.Fatal("DeleteBook left an existing row")
+	}
+	if err := n.DeleteBooksByAuthorName(ctx, "absent"); err != nil {
+		t.Fatal(err)
+	}
+	if err := n.DeleteBooksByAuthorName(ctx, author.Name); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []uint64{102, 201} {
+		if _, err := s.GetBook(ctx, id); err == nil {
+			t.Fatalf("native DeleteBooksByAuthorName left book %d", id)
+		}
+	}
+	if _, err := n.GetBook(ctx, 202); err != nil {
+		t.Fatalf("DeleteBooksByAuthorName removed unmatched author: %v", err)
+	}
+	if _, err := s.CreateAuthor(ctx, sq.CreateAuthorParams{AuthorID: 999, Name: "Second author"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteBooksByAuthorName(ctx, "Second author"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := n.GetBook(ctx, 202); err == nil {
+		t.Fatal("database/sql DeleteBooksByAuthorName left book 202")
 	}
 	for _, id := range []uint64{102, 201, 202} {
 		if err := s.DeleteBook(ctx, id); err != nil {

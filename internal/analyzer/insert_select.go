@@ -78,9 +78,18 @@ func analyzeSelectCore(catalog model.Catalog, block queryBlock, core *parser.Sel
 		return nil, []model.Diagnostic{diagnosticAt(block.file, block.line-1, core, "aggregate functions require a FROM source")}
 	}
 	recordColumnBindings(syntax, core, relations)
-	tree := collectQueryTree(core)
-	inferFromComparisons(tree, relations, inferred)
-	inferFromInLists(tree.conds, relations, inferred)
+	inferFromComparisons(core, relations, inferred)
+	inferFromInLists(core, relations, inferred)
+	for name, typ := range inferred {
+		if _, ok := bindings[name]; !ok && typ.Kind != "" {
+			bindings[name] = typ
+		}
+	}
+	subqueries, ds := analyzeINSubqueries(catalog, block, core, relations, bindings, inferred, syntax)
+	diagnostics = append(diagnostics, ds...)
+	if len(ds) != 0 {
+		return nil, diagnostics
+	}
 	inferFromExpressionContexts(core, bindings, inferred)
 	if partial != nil {
 		inferLimitOffset(partial, bindings, inferred)
@@ -97,8 +106,11 @@ func analyzeSelectCore(catalog model.Catalog, block queryBlock, core *parser.Sel
 		diagnostics = append(diagnostics, resolveOrderByProjections(block, core, relations, columns, syntax)...)
 	}
 	diagnostics = append(diagnostics, validateColumnReferences(block, core, relations, columns)...)
-	diagnostics = append(diagnostics, validatePredicateContexts(block, core, relations, bindings)...)
+	diagnostics = append(diagnostics, validatePredicateContexts(block, core, relations, bindings, subqueries)...)
 	diagnostics = append(diagnostics, validateGrouping(block, core, relations, bindings)...)
+	resolved := syntax.Selects[core.GetStart().GetTokenIndex()]
+	resolved.Columns = columns
+	syntax.Selects[core.GetStart().GetTokenIndex()] = resolved
 	return columns, diagnostics
 }
 
