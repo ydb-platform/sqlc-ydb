@@ -311,6 +311,7 @@ func validateLimitOffset(block queryBlock, partial parser.ISelect_kind_partialCo
 	var diagnostics []model.Diagnostic
 	for i, expr := range partial.AllExpr() {
 		clause := "LIMIT"
+		// LIMIT count OFFSET offset puts the offset second; LIMIT offset, count puts it first.
 		if (i == 1 && partial.OFFSET() != nil) || (i == 0 && partial.COMMA() != nil) {
 			clause = "OFFSET"
 		}

@@ -119,6 +119,26 @@ func TestLimitOffsetPreservesInferredTypes(t *testing.T) {
 	}
 }
 
+func TestLimitOffsetAcrossUnionArmsNeedsDeclare(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint32 NOT NULL, PRIMARY KEY(id));"}}
+	statement := "SELECT id FROM records LIMIT $n UNION ALL SELECT id FROM records WHERE id = $n;"
+	_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Page :many\n" + statement}})
+	if err == nil || !strings.Contains(err.Error(), "external parameter $n has incompatible inferred types; add DECLARE") {
+		t.Fatalf("error = %v, want an explicit declaration remedy for conflicting inference", err)
+	}
+
+	sql := "-- name: Page :many\nDECLARE $n AS Uint32;\n" + statement
+	result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	query := result.Queries[0]
+	want := []model.Parameter{{Name: "n", Type: model.Type{Kind: "Uint32"}}}
+	if query.SQL != sql || !query.IsDeclaredParameter("n") || !reflect.DeepEqual(query.Parameters, want) {
+		t.Fatalf("DECLARE did not preserve the intended type and query: %#v", query)
+	}
+}
+
 func TestLimitOffsetDiagnostics(t *testing.T) {
 	for _, tc := range []struct{ sql, want string }{
 		{"DECLARE $n AS Int64; SELECT id FROM records LIMIT $n;", "LIMIT expression has unsupported type Int64"},
@@ -127,7 +147,7 @@ func TestLimitOffsetDiagnostics(t *testing.T) {
 		{"DECLARE $n AS Optional<Optional<Int32>>; SELECT id FROM records LIMIT $n;", "LIMIT expression has unsupported type Optional<Optional<Int32>>"},
 		{"DECLARE $n AS List<Uint32>; SELECT id FROM records LIMIT $n;", "LIMIT expression has unsupported type List<Uint32>"},
 		{"SELECT id FROM records WHERE label = $n LIMIT $n;", "LIMIT expression has unsupported type Optional<Utf8>"},
-		{"SELECT id FROM records WHERE id = $n AND label = $n LIMIT $n;", "incompatible column types"},
+		{"SELECT id FROM records WHERE id = $n AND label = $n LIMIT $n;", "incompatible inferred types"},
 		{"DECLARE $n AS Uint32; SELECT id FROM records LIMIT 0, $n / 2u;", "unsupported arithmetic operator"},
 		{"SELECT id FROM records LIMIT CAST(1 AS Int64);", "LIMIT expression has unsupported type Int64"},
 		{"$n = 1l; SELECT id FROM records LIMIT $n;", "LIMIT expression has unsupported type Int64"},
@@ -144,7 +164,7 @@ func TestLimitOffsetDiagnostics(t *testing.T) {
 		{"SELECT id FROM records LIMIT 9223372036854775808l;", "out of range for Int64"},
 		{"SELECT id FROM records LIMIT Unsupported(2);", "unsupported YQL function"},
 		{"SELECT id FROM records UNION ALL SELECT id FROM records LIMIT FALSE;", "LIMIT expression has unsupported type Bool"},
-		{"SELECT id FROM records LIMIT $n UNION ALL SELECT id FROM records WHERE id = $n;", "incompatible column types"},
+		{"SELECT id FROM records LIMIT $n UNION ALL SELECT id FROM records WHERE id = $n;", "incompatible inferred types"},
 	} {
 		t.Run(tc.sql, func(t *testing.T) {
 			_, err := Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint32 NOT NULL, label Utf8, PRIMARY KEY(id));"}}, []model.Source{{Name: "query.sql", Text: "-- name: Page :many\n" + tc.sql}})

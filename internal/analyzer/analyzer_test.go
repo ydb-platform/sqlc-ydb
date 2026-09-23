@@ -474,7 +474,7 @@ func TestAnalyzeRejectsParameterConstrainedByDifferentColumnTypes(t *testing.T) 
 		[]model.Source{{Name: "query.sql", Text: `-- name: FindAuthor :many
 SELECT id FROM authors WHERE id = $value OR name = $value;`}},
 	)
-	if err == nil || !strings.Contains(err.Error(), "constrained by incompatible column types") {
+	if err == nil || !strings.Contains(err.Error(), "incompatible inferred types") {
 		t.Fatalf("error = %v", err)
 	}
 }

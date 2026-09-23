@@ -86,7 +86,7 @@ UNION ALL
 SELECT CASE WHEN value = $wanted THEN 1 ELSE 0 END AS matched FROM labels;`}}
 
 	_, err := Analyze(schema, queries)
-	if err == nil || !strings.Contains(err.Error(), "external parameter $wanted is constrained by incompatible column types") {
+	if err == nil || !strings.Contains(err.Error(), "external parameter $wanted has incompatible inferred types") {
 		t.Fatalf("error = %v", err)
 	}
 }
