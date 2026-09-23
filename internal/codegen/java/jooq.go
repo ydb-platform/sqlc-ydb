@@ -511,9 +511,6 @@ func (r *jooqRenderer) statement() string {
 // Keep VIEW as a table query part so the dialect still maps the base table.
 func (r *jooqRenderer) tableSource(source parser.IFlatten_sourceContext, rel model.TableBinding) string {
 	named := source.Named_single_source()
-	if named == nil || named.Hinted_single_source() == nil || named.Hinted_single_source().Single_source() == nil {
-		return r.fail(source)
-	}
 	ref := named.Hinted_single_source().Single_source().Table_ref()
 	if ref == nil || ref.Table_key() == nil {
 		return r.fail(source)
