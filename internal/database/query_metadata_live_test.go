@@ -113,7 +113,7 @@ SELECT $id + 1ul AS incremented, CAST(NULL AS Utf8?) AS label,
 	t.Run("declared_explain_without_values", func(t *testing.T) {
 		for _, part := range run(t, declaredSQL, Ydb_Query.ExecMode_EXEC_MODE_EXPLAIN, nil) {
 			require.NoError(t, statusError(part.GetStatus(), part.GetIssues()))
-			require.Equal(t, nil, part.GetResultSet(), "EXPLAIN returned result metadata; reassess compile-only type discovery: %v", part.GetResultSet())
+			require.Nil(t, part.GetResultSet(), "EXPLAIN returned result metadata; reassess compile-only type discovery")
 		}
 	})
 	t.Run("undeclared_explain_error", func(t *testing.T) {
