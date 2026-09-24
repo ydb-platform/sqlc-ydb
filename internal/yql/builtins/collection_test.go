@@ -151,6 +151,81 @@ func TestResolveListHasRejectsNonEquatableDocumentElements(t *testing.T) {
 	}
 }
 
+func TestResolveCollectionOperationArity(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		arity int
+	}{
+		{"ListLength", 1},
+		{"ListHas", 2},
+		{"ListMap", 2},
+		{"ListFilter", 2},
+		{"ToDict", 1},
+		{"DictContains", 2},
+		{"DictLookup", 2},
+		{"SetIsDisjoint", 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, count := range []int{0, tc.arity + 1} {
+				args := make([]model.Type, count)
+				for i := range args {
+					args[i] = model.Type{Kind: "Uint64"}
+				}
+				got, err := Resolve(tc.name, args)
+				require.ErrorContains(t, err, tc.name+" expects")
+				require.Empty(t, got.Kind)
+			}
+		})
+	}
+}
+
+func TestResolveCollectionPreservesOptionalElementsAndPayloads(t *testing.T) {
+	key := model.Optional(model.Type{Kind: "String"})
+	value := model.Optional(model.Type{Kind: "Json"})
+	list := model.Type{Kind: "List", Elem: &key}
+	callback := model.Type{Kind: "Callable", Items: []model.Type{key}, Elem: &value}
+	mapped := model.Type{Kind: "List", Elem: &value}
+	got, err := Resolve("ListMap", []model.Type{model.Optional(list), callback})
+	require.NoError(t, err)
+	require.True(t, got.Equal(model.Optional(mapped)), "got %s", got.String())
+
+	pair := model.Type{Kind: "Tuple", Items: []model.Type{key, value}}
+	got, err = Resolve("ToDict", []model.Type{{Kind: "List", Elem: &pair}})
+	require.NoError(t, err)
+	require.True(t, got.Equal(model.Type{Kind: "Dict", Key: &key, Elem: &value}))
+	payload, err := Resolve("DictLookup", []model.Type{got, {Kind: "Null"}})
+	require.NoError(t, err)
+	require.True(t, payload.Equal(model.Optional(value)), "got %s", payload.String())
+}
+
+func TestResolveCollectionRejectsUnresolvedNestedTypes(t *testing.T) {
+	key := model.Type{Kind: "String"}
+	unresolved := model.Type{Kind: "Any"}
+	record := model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "value", Type: unresolved}}}
+	list := model.Type{Kind: "List", Elem: &key}
+	for _, tc := range []struct {
+		name string
+		args []model.Type
+		want string
+	}{
+		{"ListLength", []model.Type{{Kind: "List", Elem: &record}}, "ListLength argument 1"},
+		{"ListMap", []model.Type{list, {Kind: "Callable", Items: []model.Type{key}, Elem: &record}}, "ListMap callback result"},
+		{"DictLookup", []model.Type{{Kind: "Dict", Key: &key, Elem: &record}, key}, "DictLookup argument 1"},
+		{"ListHas", []model.Type{list, record}, "ListHas argument 2"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := Resolve(tc.name, tc.args)
+			require.ErrorContains(t, err, tc.want)
+			require.ErrorContains(t, err, "unsupported type")
+			require.Empty(t, got.Kind)
+		})
+	}
+	got, err := defaultRegistry.ResolveCall("AsStruct", []CallArgument{{Name: "details", Type: record}})
+	require.ErrorContains(t, err, `AsStruct field "details"`)
+	require.ErrorContains(t, err, "unsupported type")
+	require.Empty(t, got.Kind)
+}
+
 func TestResolveCollectionOperationsRejectInvalidCalls(t *testing.T) {
 	key := model.Type{Kind: "String"}
 	value := model.Type{Kind: "Uint64"}
@@ -168,10 +243,20 @@ func TestResolveCollectionOperationsRejectInvalidCalls(t *testing.T) {
 		{"AsList", []model.Type{key, value}, "common type"},
 		{"ListLength", []model.Type{key}, "List"},
 		{"ListHas", []model.Type{list, value}, "element type"},
+		{"ListHas", []model.Type{key, key}, "ListHas argument 1 must be List"},
+		{"ListMap", []model.Type{key, boolean}, "ListMap argument 1 must be List"},
 		{"ListMap", []model.Type{list, boolean}, "Callable"},
 		{"ListMap", []model.Type{list, {Kind: "Callable", Items: []model.Type{value}, Elem: &value}}, "callback argument"},
 		{"ListFilter", []model.Type{list, {Kind: "Callable", Items: []model.Type{key}, Elem: &value}}, "Bool"},
+		{"ListMap", []model.Type{list, {Kind: "Callable", Items: []model.Type{key, key}, Elem: &value}}, "one-argument Callable"},
+		{"ListMap", []model.Type{list, {Kind: "Callable", Items: []model.Type{key}, Elem: &model.Type{Kind: "Null"}}}, "concrete value type"},
+		{"ListMap", []model.Type{list, {Kind: "Callable", Items: []model.Type{key}, Elem: &model.Type{Kind: "Void"}}}, "concrete value type"},
 		{"ToDict", []model.Type{list}, "Tuple"},
+		{"ToDict", []model.Type{key}, "ToDict argument 1 must be List"},
+		{"ToDict", []model.Type{{Kind: "List", Elem: &model.Type{Kind: "Tuple", Items: []model.Type{key, value, value}}}}, "List<Tuple<K,V>>"},
+		{"ToDict", []model.Type{{Kind: "List", Elem: &model.Type{Kind: "Tuple", Items: []model.Type{{Kind: "Json"}, value}}}}, "unsupported dictionary key type Json"},
+		{"DictContains", []model.Type{list, key}, "Dict<K,V>"},
+		{"DictLookup", []model.Type{{Kind: "Dict", Key: &model.Type{Kind: "Json"}, Elem: &value}, key}, "unsupported dictionary key type Json"},
 		{"DictContains", []model.Type{dict, value}, "key type"},
 		{"DictLookup", []model.Type{dict, value}, "key type"},
 	} {
@@ -188,6 +273,8 @@ func TestResolveAsStructFields(t *testing.T) {
 		{Name: "count", Type: model.Type{Kind: "Uint64"}},
 	}
 	want := model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "name", Type: args[0].Type}, {Name: "count", Type: args[1].Type}}}
+	_, err := defaultRegistry.ResolveCall("AsStruct", nil)
+	require.ErrorContains(t, err, "empty Struct")
 	got, err := defaultRegistry.ResolveCall("AsStruct", args)
 	require.NoError(t, err)
 	require.True(t, got.Equal(want))

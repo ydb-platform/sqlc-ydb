@@ -99,6 +99,7 @@ func TestStructLiteralDiagnostics(t *testing.T) {
 	for _, tc := range []struct{ sql, want string }{
 		{`SELECT <| status: 1ul, status: 2ul |> AS value;`, `duplicate field name "status"`},
 		{`SELECT <| 1ul: "ready" |> AS value;`, `field name "1ul" must be an identifier`},
+		{`SELECT <| status: $missing |> AS value;`, `struct literal field "status": cannot resolve type of parameter $missing`},
 	} {
 		_, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\n" + tc.sql}})
 		require.ErrorContains(t, err, tc.want)

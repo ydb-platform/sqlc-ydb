@@ -39,10 +39,18 @@ func TestListLambdaScopes(t *testing.T) {
 func TestListLambdaDiagnostics(t *testing.T) {
 	for _, tc := range []struct{ sql, want string }{
 		{`SELECT ListMap(ListCreate(Uint64), ($x, $y) -> ($x)) AS values;`, "expects 1 parameter"},
+		{`$f = ($x, $x) -> ($x); SELECT $f(1ul, 2ul) AS value;`, "lambda parameter $x is repeated"},
 		{`SELECT ListMap(ListCreate(Uint64), ($x + 1ul) -> ($x)) AS values;`, "parameters must be plain"},
 		{`SELECT ListMap(ListCreate(Uint64), ($x) -> ($missing)) AS values;`, "cannot resolve type of parameter $missing"},
+		{`SELECT ListMap(ListCreate(Uint64), ($x) -> { $y = $missing; RETURN $x; }) AS values;`, "cannot resolve lambda local $y: cannot resolve type of parameter $missing"},
 		{`SELECT ListMap(ListCreate(Uint64), ($x) -> { $y = $x; $y = $x; RETURN $y; }) AS values;`, "assigned more than once"},
+		{`SELECT ListMap(ListCreate(Uint64), ($x) -> { $y = COUNT($x); RETURN $y; }) AS values;`, "aggregate functions are not allowed in lambda local assignments"},
+		{`SELECT ListMap(ListCreate(Uint64), ($x) -> { RETURN COUNT($x); }) AS values;`, "aggregate functions are not allowed in lambda RETURN"},
 		{`SELECT ListMap(ListCreate(Uint64), ($x) -> (COUNT($x))) AS values;`, "aggregate functions are not allowed in lambda"},
+		{`SELECT ListMap(1ul, ($x) -> ($x)) AS values;`, "ListMap first argument must be a typed List"},
+		{`$f = ($x) -> ($x); SELECT ListMap(1ul, $f) AS values;`, "ListMap first argument must be a typed List"},
+		{`$f = ($x) -> ($x); SELECT $f(1ul AS value) AS value;`, "callable invocation does not support named arguments"},
+		{`$f = ($x) -> ($x); SELECT $f($missing) AS value;`, "cannot resolve type of parameter $missing"},
 		{`$f = ($x) -> ($x); SELECT $f AS value;`, "nonpersistable type Lambda"},
 		{`$f = ($x) -> ($x); SELECT ListMap(ListCreate(Uint64), ($f) -> (ListMap(ListCreate(Uint64), $f))) AS value;`, "argument 2 must be a one-argument Callable"},
 		{`$f = ($x) -> ($x); SELECT ListMap(ListCreate(Uint64), ($x) -> { $f = 1ul; RETURN ListMap(ListCreate(Uint64), $f); }) AS value;`, "argument 2 must be a one-argument Callable"},
@@ -57,6 +65,8 @@ func TestLambdaRejectsTableColumnCapture(t *testing.T) {
 	for _, sql := range []string{
 		`$f = ($x) -> (id + $x); SELECT $f(1ul) AS value FROM t;`,
 		`SELECT ListMap(ListCreate(Uint64), ($x) -> (id + $x)) AS value FROM t;`,
+		`SELECT ListMap(ListCreate(Uint64), ($x) -> { $y = id + $x; RETURN $y; }) AS value FROM t;`,
+		`SELECT ListMap(ListCreate(Uint64), ($x) -> { RETURN id + $x; }) AS value FROM t;`,
 		`SELECT ListMap(ListCreate(Uint64), ($x) -> (<| value: id + $x |>)) AS value FROM t;`,
 	} {
 		_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Value :one\n" + sql}})
