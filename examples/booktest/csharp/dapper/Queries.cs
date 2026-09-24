@@ -88,6 +88,18 @@ public sealed class Queries
         {
             ["author_id"] = nameof(SelectAuthorAndDeleteBooksRow.AuthorID),
         }));
+        SqlMapper.SetTypeMap(typeof(ListAuthorBookTitlesRow), new ColumnTypeMap(typeof(ListAuthorBookTitlesRow), new Dictionary<string, string>
+        {
+            ["a.author_id"] = nameof(ListAuthorBookTitlesRow.AuthorID),
+            ["a.name"] = nameof(ListAuthorBookTitlesRow.Name),
+            ["titles_json"] = nameof(ListAuthorBookTitlesRow.TitlesJson),
+        }));
+        SqlMapper.SetTypeMap(typeof(InspectBookTextRow), new ColumnTypeMap(typeof(InspectBookTextRow), new Dictionary<string, string>
+        {
+            ["square_root"] = nameof(InspectBookTextRow.SquareRoot),
+            ["yson_string"] = nameof(InspectBookTextRow.YsonString),
+            ["pattern_found"] = nameof(InspectBookTextRow.PatternFound),
+        }));
     }
 
     private sealed class ColumnTypeMap : SqlMapper.ITypeMap
@@ -517,6 +529,61 @@ public sealed class Queries
             cancellationToken: cancellationToken);
 
         return await _connection.QueryFirstAsync<SelectAuthorAndDeleteBooksRow>(command).ConfigureAwait(false);
+    }
+
+    // -- name: ListAuthorBookTitles :many
+    public async Task<IReadOnlyList<ListAuthorBookTitlesRow>> ListAuthorBookTitlesAsync(int sinceYear, CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var parameters = new YdbParameters(
+            new YdbParameter("$since_year", DbType.Int32, sinceYear)
+        );
+
+        var command = new CommandDefinition(
+            commandText: """
+            DECLARE $since_year AS Int32;
+            $recent = (SELECT author_id, title FROM books WHERE publication_year >= $since_year);
+            $grouped = (
+                SELECT author_id, AGGREGATE_LIST(title, 100u) AS titles
+                FROM $recent
+                GROUP BY author_id
+            );
+            SELECT a.author_id, a.name, Yson::SerializeJson(Json::From(g.titles)) AS titles_json
+            FROM (SELECT author_id, name FROM authors) AS a
+            JOIN $grouped AS g ON a.author_id = g.author_id
+            ORDER BY a.author_id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        return (await _connection.QueryAsync<ListAuthorBookTitlesRow>(command).ConfigureAwait(false)).AsList();
+    }
+
+    // -- name: InspectBookText :one
+    public async Task<InspectBookTextRow> InspectBookTextAsync(byte[] text, CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var parameters = new YdbParameters(
+            new YdbParameter("$text", DbType.Binary, text)
+        );
+
+        var command = new CommandDefinition(
+            commandText: """
+            DECLARE $text AS String;
+            SELECT
+                String::Base32Encode($text) AS base32,
+                Unicode::IsAlpha("Book"u) AS alphabetic,
+                Url::GetHost("https://example.org/books") AS host,
+                Math::Sqrt(9.0) AS square_root,
+                Yson::IsString(Yson::From($text)) AS yson_string,
+                Pire::Grep("book")($text) AS pattern_found;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        return await _connection.QueryFirstAsync<InspectBookTextRow>(command).ConfigureAwait(false);
     }
 
     private sealed class YdbParameters : SqlMapper.IDynamicParameters

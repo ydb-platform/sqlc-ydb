@@ -143,3 +143,18 @@ public sealed record SelectAuthorAndDeleteBooksRow(
     ulong AuthorID,
     string Name
 );
+
+public sealed record ListAuthorBookTitlesRow(
+    ulong AuthorID,
+    string Name,
+    string? TitlesJson
+);
+
+public sealed record InspectBookTextRow(
+    byte[] Base32,
+    bool Alphabetic,
+    byte[]? Host,
+    double SquareRoot,
+    bool YsonString,
+    bool PatternFound
+);

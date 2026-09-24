@@ -429,4 +429,67 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
             name: row.remove_field(1)?.try_into()?,
         })
     }
+
+    // -- name: ListAuthorBookTitles :many
+    #[builder(on(String, into))]
+    pub async fn list_author_book_titles(
+        &mut self,
+        since_year: i32,
+    ) -> ydb::YdbResult<Vec<ListAuthorBookTitlesRow>> {
+        self.client
+            .query_result_set(concat!(
+                "DECLARE $since_year AS Int32;\n",
+                "$recent = (SELECT author_id, title FROM books WHERE publication_year >= $since_year);\n",
+                "$grouped = (\n",
+                "    SELECT author_id, AGGREGATE_LIST(title, 100u) AS titles\n",
+                "    FROM $recent\n",
+                "    GROUP BY author_id\n",
+                ");\n",
+                "SELECT a.author_id, a.name, Yson::SerializeJson(Json::From(g.titles)) AS titles_json\n",
+                "FROM (SELECT author_id, name FROM authors) AS a\n",
+                "JOIN $grouped AS g ON a.author_id = g.author_id\n",
+                "ORDER BY a.author_id;",
+            ))
+            .param("$since_year", since_year)
+            .await?
+            .rows()
+            .map(|mut row| {
+                Ok(ListAuthorBookTitlesRow {
+                    author_id: row.remove_field(0)?.try_into()?,
+                    name: row.remove_field(1)?.try_into()?,
+                    titles_json: row.remove_field(2)?.try_into()?,
+                })
+            })
+            .collect()
+    }
+
+    // -- name: InspectBookText :one
+    #[builder(on(String, into))]
+    pub async fn inspect_book_text(
+        &mut self,
+        text: ydb::Bytes,
+    ) -> ydb::YdbResult<InspectBookTextRow> {
+        let mut row = self
+            .client
+            .query_row(concat!(
+                "DECLARE $text AS String;\n",
+                "SELECT\n",
+                "    String::Base32Encode($text) AS base32,\n",
+                "    Unicode::IsAlpha(\"Book\"u) AS alphabetic,\n",
+                "    Url::GetHost(\"https://example.org/books\") AS host,\n",
+                "    Math::Sqrt(9.0) AS square_root,\n",
+                "    Yson::IsString(Yson::From($text)) AS yson_string,\n",
+                "    Pire::Grep(\"book\")($text) AS pattern_found;",
+            ))
+            .param("$text", ydb::Bytes::from(text))
+            .await?;
+        Ok(InspectBookTextRow {
+            base32: row.remove_field(0)?.try_into()?,
+            alphabetic: row.remove_field(1)?.try_into()?,
+            host: row.remove_field(2)?.try_into()?,
+            square_root: row.remove_field(3)?.try_into()?,
+            yson_string: row.remove_field(4)?.try_into()?,
+            pattern_found: row.remove_field(5)?.try_into()?,
+        })
+    }
 }

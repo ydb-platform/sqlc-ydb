@@ -158,6 +158,7 @@ type queryBlock struct {
 	parsed          *parsedYQL
 	wildcards       *wildcardRewrites
 	tablePathPrefix string
+	tabular         map[string]*model.Table
 }
 
 func queryBlocks(source model.Source) ([]queryBlock, []model.Diagnostic) {

@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -13,9 +14,13 @@ import (
 type CallArgument struct {
 	Name string
 	Type model.Type
+	// EmptyList marks a direct ListCreate call, whose empty result can take a contextual list type.
+	EmptyList bool
 	// IntegerLiteral retains the exact value needed for YQL's fitting-literal
 	// coercion. Nil means a value-dependent conversion cannot be proven.
 	IntegerLiteral *big.Int
+	StringLiteral  *string
+	TypeArgument   *model.Type
 }
 
 // Parameter is one concrete function parameter. Optional means the argument
@@ -73,8 +78,23 @@ func NewRegistry(custom []Signature) (*Registry, error) {
 // ResolveCall validates named/positional arguments and returns one concrete
 // result type. Library and user function names are case-sensitive.
 func (r *Registry) ResolveCall(name string, args []CallArgument) (model.Type, error) {
+	if result, handled, err := resolveYsonCall(name, args); handled {
+		return result, err
+	}
 	if signatures := standardSignatures(name); len(signatures) != 0 {
 		return resolveSignatures(name, args, signatures)
+	}
+	if signatures := stringUnicodeUrlSignatures(name); len(signatures) != 0 {
+		return resolveSignatures(name, args, signatures)
+	}
+	if name == "DateTime::Update" {
+		return resolveSignatures(name, args, dateTimeUpdateSignatures())
+	}
+	if name == "DateTime::Format" {
+		return resolveSignatures(name, args, []Signature{dateTimeFormatSignature(name)})
+	}
+	if result, handled, err := resolveSpecializedCall(name, args); handled {
+		return result, err
 	}
 	if r != nil {
 		if signatures := r.custom[name]; len(signatures) != 0 {
@@ -87,6 +107,9 @@ func (r *Registry) ResolveCall(name string, args []CallArgument) (model.Type, er
 			return model.Type{}, fmt.Errorf("%s does not support named argument %q in the offline resolver", name, argument.Name)
 		}
 		plain[i] = argument.Type
+		if strings.HasPrefix(name, "Unicode::") && name != "Unicode::IsUtf" && argument.Type.Kind == "String" && argument.StringLiteral != nil && utf8.ValidString(*argument.StringLiteral) {
+			plain[i] = model.Type{Kind: "Utf8"}
+		}
 	}
 	if isCoalesce(name) {
 		return resolveCoalesceArguments(name, args)
@@ -284,7 +307,7 @@ func matchSignature(args []CallArgument, signature Signature) (model.Type, error
 			}
 			continue
 		}
-		propagate, err := matchParameter(bound[i].Type, parameter)
+		propagate, err := matchParameter(bound[i], parameter)
 		if err != nil {
 			return model.Type{}, fmt.Errorf("argument %d%s: %w", i+1, parameterLabel(parameter), err)
 		}
@@ -296,7 +319,8 @@ func matchSignature(args []CallArgument, signature Signature) (model.Type, error
 	return signature.Returns, nil
 }
 
-func matchParameter(actual model.Type, parameter Parameter) (bool, error) {
+func matchParameter(argument *CallArgument, parameter Parameter) (bool, error) {
+	actual := argument.Type
 	expectedBase, expectedOptional, err := baseType(parameter.Type)
 	if err != nil {
 		return false, err
@@ -308,7 +332,7 @@ func matchParameter(actual model.Type, parameter Parameter) (bool, error) {
 	if actualBase.Kind == "Null" && (parameter.AutoMap || expectedOptional) {
 		return parameter.AutoMap, nil
 	}
-	if !actualBase.Equal(expectedBase) {
+	if !actualBase.Equal(expectedBase) && !(isInteger(actualBase.Kind) && isInteger(expectedBase.Kind) && integerLiteralFits(argument.IntegerLiteral, expectedBase.Kind)) && !(actualBase.Kind == "String" && expectedBase.Kind == "Utf8" && argument.StringLiteral != nil && utf8.ValidString(*argument.StringLiteral)) {
 		return false, fmt.Errorf("must be %s, got %s", parameter.Type.String(), actual.String())
 	}
 	if actualOptional && !parameter.AutoMap && !expectedOptional {
@@ -359,5 +383,5 @@ func standardSignatures(name string) []Signature {
 }
 
 func isKnownFunction(name string) bool {
-	return isCoalesce(name) || len(standardSignatures(name)) != 0 || lookupCore(name) != nil || lookupLibrary(name) != nil
+	return isCoalesce(name) || len(standardSignatures(name)) != 0 || isDocumentedYson(name) || len(stringUnicodeUrlSignatures(name)) != 0 || isSpecializedCallName(name) || IsHistogramAggregate(name) || lookupCore(name) != nil || lookupLibrary(name) != nil
 }

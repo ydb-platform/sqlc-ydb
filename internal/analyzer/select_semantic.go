@@ -280,8 +280,11 @@ func unaggregatedColumnRefs(root antlr.Tree) []columnRef {
 }
 
 func isAggregateFunction(name string) bool {
+	if builtins.IsHistogramAggregate(name) {
+		return true
+	}
 	switch strings.ToLower(name) {
-	case "count", "count_if", "sum", "avg", "min", "max", "some", "every":
+	case "count", "count_if", "sum", "avg", "min", "max", "some", "every", "aggregate_list", "agg_list", "aggregate_list_distinct", "agg_list_distinct":
 		return true
 	default:
 		return false

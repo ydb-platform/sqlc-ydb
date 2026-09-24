@@ -33,6 +33,47 @@ func integerLiteralValue(root antlr.ParserRuleContext) *big.Int {
 	return value
 }
 
+func stringLiteralValue(root antlr.ParserRuleContext) *string {
+	for inner := parenthesizedExpression(root); inner != nil; inner = parenthesizedExpression(root) {
+		root = inner
+	}
+	var literal parser.ILiteral_valueContext
+	descendants(root, func(node antlr.Tree) {
+		if ctx, ok := node.(parser.ILiteral_valueContext); ok && sameSpan(root, ctx) && ctx.STRING_VALUE() != nil {
+			literal = ctx
+		}
+	})
+	if literal == nil {
+		return nil
+	}
+	text := literal.GetText()
+	if len(text) > 2 && (text[len(text)-1] == 's' || text[len(text)-1] == 'S') {
+		text = text[:len(text)-1]
+	}
+	if strings.HasPrefix(text, "@@") && strings.HasSuffix(text, "@@") && len(text) >= 4 {
+		value := text[2 : len(text)-2]
+		return &value
+	}
+	if len(text) < 2 || text[0] != text[len(text)-1] || text[0] != '\'' && text[0] != '"' {
+		return nil
+	}
+	var value strings.Builder
+	for rest := text[1 : len(text)-1]; rest != ""; {
+		character, multibyte, tail, err := strconv.UnquoteChar(rest, text[0])
+		if err != nil {
+			return nil
+		}
+		if multibyte {
+			value.WriteRune(character)
+		} else {
+			value.WriteByte(byte(character))
+		}
+		rest = tail
+	}
+	decoded := value.String()
+	return &decoded
+}
+
 func literalType(expr parser.IExprContext) (model.Type, bool, error) {
 	var literals []parser.ILiteral_valueContext
 	descendants(expr, func(node antlr.Tree) {

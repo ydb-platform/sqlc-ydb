@@ -435,3 +435,67 @@ class Querier:
             author_id=row._mapping["author_id"],
             name=row._mapping["name"],
         )
+
+    # -- name: ListAuthorBookTitles :many
+    def list_author_book_titles(self, since_year: int) -> list[_models.ListAuthorBookTitlesRow]:
+        parameters = {
+            "since_year": (since_year, _ydb.PrimitiveType.Int32),
+        }
+        result = self._connection.execute(
+            _text(
+                ("DECLARE $since_year AS Int32;\n"
+                 "$recent = (SELECT author_id, title FROM books WHERE publication_year >= :since_year);\n"
+                 "$grouped = (\n"
+                 "    SELECT author_id, AGGREGATE_LIST(title, 100u) AS titles\n"
+                 "    FROM $recent\n"
+                 "    GROUP BY author_id\n"
+                 ");\n"
+                 "SELECT a.author_id, a.name, Yson\\:\\:SerializeJson(Json\\:\\:From(g.titles)) AS titles_json\n"
+                 "FROM (SELECT author_id, name FROM authors) AS a\n"
+                 "JOIN $grouped AS g ON a.author_id = g.author_id\n"
+                 "ORDER BY a.author_id;")
+            ),
+            parameters,
+        )
+        try:
+            rows = result.fetchall()
+        finally:
+            result.close()
+        return [_models.ListAuthorBookTitlesRow(
+            author_id=row._mapping["a.author_id"],
+            name=row._mapping["a.name"],
+            titles_json=row._mapping["titles_json"],
+        ) for row in rows]
+
+    # -- name: InspectBookText :one
+    def inspect_book_text(self, text: bytes) -> Optional[_models.InspectBookTextRow]:
+        parameters = {
+            "text": (text, _ydb.PrimitiveType.String),
+        }
+        result = self._connection.execute(
+            _text(
+                ("DECLARE $text AS String;\n"
+                 "SELECT\n"
+                 "    String\\:\\:Base32Encode(:text) AS base32,\n"
+                 "    Unicode\\:\\:IsAlpha(\"Book\"u) AS alphabetic,\n"
+                 "    Url\\:\\:GetHost(\"https\\://example.org/books\") AS host,\n"
+                 "    Math\\:\\:Sqrt(9.0) AS square_root,\n"
+                 "    Yson\\:\\:IsString(Yson\\:\\:From(:text)) AS yson_string,\n"
+                 "    Pire\\:\\:Grep(\"book\")(:text) AS pattern_found;")
+            ),
+            parameters,
+        )
+        try:
+            row = result.fetchone()
+        finally:
+            result.close()
+        if row is None:
+            return None
+        return _models.InspectBookTextRow(
+            base32=row._mapping["base32"],
+            alphabetic=row._mapping["alphabetic"],
+            host=row._mapping["host"],
+            square_root=row._mapping["square_root"],
+            yson_string=row._mapping["yson_string"],
+            pattern_found=row._mapping["pattern_found"],
+        )

@@ -69,7 +69,7 @@ func analyzeSelectRows(catalog model.Catalog, block queryBlock, stmt parser.ISel
 
 func analyzeSelectCore(catalog model.Catalog, block queryBlock, core *parser.Select_coreContext, partial parser.ISelect_kind_partialContext, bindings, inferred map[string]model.Type, syntax *model.QuerySyntax, projection func(queryBlock, *parser.Select_coreContext, []relation, map[string]model.Type) ([]model.Column, []model.Diagnostic)) ([]model.Column, []model.Diagnostic) {
 	var diagnostics []model.Diagnostic
-	relations, ds := selectRelations(catalog, block, core, bindings)
+	relations, ds := selectRelations(catalog, block, core, bindings, inferred, syntax)
 	diagnostics = append(diagnostics, ds...)
 	if len(ds) != 0 {
 		return nil, diagnostics

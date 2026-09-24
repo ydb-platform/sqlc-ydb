@@ -36,3 +36,18 @@ class SayHelloRow:
 class UpdateAuthorAndListBooksRow:
     book_id: int
     title: str
+
+@dataclass
+class ListAuthorBookTitlesRow:
+    author_id: int
+    name: str
+    titles_json: Optional[str]
+
+@dataclass
+class InspectBookTextRow:
+    base32: bytes
+    alphabetic: bool
+    host: Optional[bytes]
+    square_root: float
+    yson_string: bool
+    pattern_found: bool

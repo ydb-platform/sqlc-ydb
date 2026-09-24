@@ -89,8 +89,10 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		}
 	}
 	diagnostics = append(diagnostics, declarationDiagnostics...)
-	localPositions, localNames, localTypes, localDiagnostics := localBindings(block, tree, declared)
+	inferred := map[string]model.Type{}
+	localPositions, localNames, localTypes, tabular, localDiagnostics := localBindings(catalog, block, tree, declared, inferred, query.Syntax)
 	diagnostics = append(diagnostics, localDiagnostics...)
+	block.tabular = tabular
 
 	bindings := make(map[string]model.Type, len(declared)+len(localTypes))
 	for name, typeValue := range declared {
@@ -99,7 +101,6 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	for name, typeValue := range localTypes {
 		bindings[name] = typeValue
 	}
-	inferred := map[string]model.Type{}
 	var resultColumns []model.Column
 	resultParameters := map[string]model.Type{}
 	dataStatements := 0
@@ -156,6 +157,9 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		if column.Type.Kind == "Null" {
 			diagnostics = append(diagnostics, model.Diagnostic{Position: query.Source, Message: fmt.Sprintf("result column %q has unresolved Null type; cast it or combine it with a concrete compatible type", column.Name)})
 		}
+		if nonpersistableType(column.Type) {
+			diagnostics = append(diagnostics, model.Diagnostic{Position: query.Source, Message: fmt.Sprintf("result column %q has nonpersistable type %s; serialize it before returning it", column.Name, column.Type.String())})
+		}
 	}
 	returnsRows := len(resultColumns) != 0
 	if len(diagnostics) == 0 {
@@ -170,6 +174,29 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		query.ResultSets = []model.ResultSet{{Columns: resultColumns}}
 	}
 	return query, diagnostics
+}
+
+func nonpersistableType(value model.Type) bool {
+	if strings.HasPrefix(value.Kind, "Resource<") || value.Kind == "Callable" || value.Kind == "Tagged" {
+		return true
+	}
+	if value.Elem != nil && nonpersistableType(*value.Elem) {
+		return true
+	}
+	if value.Key != nil && nonpersistableType(*value.Key) {
+		return true
+	}
+	for _, item := range value.Items {
+		if nonpersistableType(item) {
+			return true
+		}
+	}
+	for _, field := range value.Fields {
+		if nonpersistableType(field.Type) {
+			return true
+		}
+	}
+	return false
 }
 
 func analyzeDataStatement(catalog model.Catalog, block queryBlock, statement *parser.Sql_stmtContext, bindings, inferred map[string]model.Type, syntax *model.QuerySyntax) ([]model.Column, []model.Diagnostic) {
@@ -392,6 +419,16 @@ func validateQueryStatements(block queryBlock, tree queryTree) []model.Diagnosti
 	if len(dataStatements) == 0 {
 		return []model.Diagnostic{{Position: model.Position{File: block.file, Line: block.line, Column: 1}, Message: "named query requires a SELECT, INSERT/UPSERT, UPDATE, or DELETE statement"}}
 	}
+	if lateBinding != nil {
+		return []model.Diagnostic{diagnosticAt(block.file, block.line-1, lateBinding, "DECLARE and local assignments must precede all data statements in a script")}
+	}
+	if len(tree.named) != 0 {
+		for _, declaration := range tree.declares {
+			if declaration.GetStart().GetTokenIndex() > tree.named[0].GetStart().GetTokenIndex() {
+				return []model.Diagnostic{diagnosticAt(block.file, block.line-1, declaration, "DECLARE statements must precede local assignments in a script")}
+			}
+		}
+	}
 	if len(dataStatements) == 1 {
 		return nil
 	}
@@ -421,16 +458,6 @@ func validateQueryStatements(block queryBlock, tree queryTree) []model.Diagnosti
 	if message != "" {
 		return []model.Diagnostic{diagnosticAt(block.file, block.line-1, dataStatements[0], message)}
 	}
-	if lateBinding != nil {
-		return []model.Diagnostic{diagnosticAt(block.file, block.line-1, lateBinding, "DECLARE and scalar local assignments must precede all data statements in a script")}
-	}
-	if len(tree.named) != 0 {
-		for _, declaration := range tree.declares {
-			if declaration.GetStart().GetTokenIndex() > tree.named[0].GetStart().GetTokenIndex() {
-				return []model.Diagnostic{diagnosticAt(block.file, block.line-1, declaration, "DECLARE statements must precede scalar local assignments in a script")}
-			}
-		}
-	}
 	return nil
 }
 
@@ -458,11 +485,13 @@ func declarations(block queryBlock, tree queryTree) (map[string]model.Type, map[
 	return declared, positions, diagnostics
 }
 
-func localBindings(block queryBlock, tree queryTree, declared map[string]model.Type) (map[int]bool, map[string]bool, map[string]model.Type, []model.Diagnostic) {
+func localBindings(catalog model.Catalog, block queryBlock, tree queryTree, declared, inferred map[string]model.Type, syntax *model.QuerySyntax) (map[int]bool, map[string]bool, map[string]model.Type, map[string]*model.Table, []model.Diagnostic) {
 	positions := map[int]bool{}
 	names := map[string]bool{}
 	types := map[string]model.Type{}
+	tabular := map[string]*model.Table{}
 	var diagnostics []model.Diagnostic
+	block.tabular = tabular
 	for _, statement := range tree.named {
 		if statement.Bind_parameter_list() == nil {
 			continue
@@ -475,17 +504,48 @@ func localBindings(block queryBlock, tree queryTree, declared map[string]model.T
 				names[bindName(bind)] = true
 			}
 		})
-		if len(lhs) != 1 || statement.Expr() == nil {
-			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, "only single scalar local assignments are supported"))
+		if len(lhs) != 1 {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, "only single local assignments are supported"))
+			continue
+		}
+		name := bindName(lhs[0])
+		if _, exists := declared[name]; exists {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, fmt.Sprintf("local $%s conflicts with a DECLARE parameter", name)))
+			continue
+		}
+		if _, exists := types[name]; exists || tabular[name] != nil {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, fmt.Sprintf("local $%s is assigned more than once", name)))
+			continue
+		}
+		if core, partial, tabularSource, err := localSelectCore(statement); tabularSource {
+			if err != nil {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, err.Error()))
+				continue
+			}
+			bindings := maps.Clone(declared)
+			maps.Copy(bindings, types)
+			for bindingName, typeValue := range inferred {
+				if _, exists := bindings[bindingName]; !exists && typeValue.Kind != "" {
+					bindings[bindingName] = typeValue
+				}
+			}
+			columns, ds := analyzeSelectCore(catalog, block, core, partial, bindings, inferred, syntax, selectProjection)
+			diagnostics = append(diagnostics, ds...)
+			if len(ds) == 0 {
+				var err error
+				tabular[name], err = tabularTable(name, columns)
+				if err != nil {
+					diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, err.Error()))
+				}
+			}
+			continue
+		}
+		if statement.Expr() == nil {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, "only scalar expressions or SELECT local assignments are supported"))
 			continue
 		}
 		if containsAggregate(statement.Expr()) {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement.Expr(), "aggregate functions are not allowed in scalar local assignments"))
-			continue
-		}
-		name := bindName(lhs[0])
-		if _, exists := types[name]; exists {
-			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, fmt.Sprintf("local $%s is assigned more than once", name)))
 			continue
 		}
 		var rhsBinds []parser.IBind_parameterContext
@@ -521,7 +581,67 @@ func localBindings(block queryBlock, tree queryTree, declared map[string]model.T
 		}
 		diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement.Expr(), fmt.Sprintf("cannot resolve type of local $%s: %v", name, err)))
 	}
-	return positions, names, types, diagnostics
+	return positions, names, types, tabular, diagnostics
+}
+
+func localSelectCore(statement *parser.Named_nodes_stmtContext) (*parser.Select_coreContext, parser.ISelect_kind_partialContext, bool, error) {
+	var partial parser.ISelect_kind_partialContext
+	if unparenthesized := statement.Select_unparenthesized_stmt(); unparenthesized != nil {
+		if unparenthesized.Cte_with_clause() != nil {
+			return nil, nil, true, fmt.Errorf("CTEs in tabular local assignments are not yet supported")
+		}
+		compound := unparenthesized.Select_unparenthesized_stmt_core()
+		if compound == nil || len(compound.AllSelect_stmt_intersect()) != 0 || len(compound.AllUnion_op()) != 0 || compound.Select_unparenthesized_stmt_intersect() == nil || len(compound.Select_unparenthesized_stmt_intersect().AllIntersect_op()) != 0 {
+			return nil, nil, true, fmt.Errorf("tabular local assignments support one SELECT input")
+		}
+		partial = compound.Select_unparenthesized_stmt_intersect().Select_kind_partial()
+	} else if statement.Expr() != nil {
+		var selected *parser.Select_subexprContext
+		descendants(statement.Expr(), func(node antlr.Tree) {
+			if sub, ok := node.(*parser.Select_subexprContext); ok && selected == nil {
+				selected = sub
+			}
+		})
+		if selected == nil {
+			return nil, nil, false, nil
+		}
+		text := statement.Expr().GetText()
+		for len(text) >= 2 && text[0] == '(' && text[len(text)-1] == ')' {
+			text = text[1 : len(text)-1]
+		}
+		if text != selected.GetText() {
+			return nil, nil, false, nil
+		}
+		compound := selected.Select_subexpr_core()
+		if selected.Cte_with_clause() != nil || compound == nil || len(compound.AllSelect_subexpr_intersect()) != 1 || len(compound.AllUnion_op()) != 0 || len(compound.Select_subexpr_intersect(0).AllIntersect_op()) != 0 || len(compound.Select_subexpr_intersect(0).AllSelect_or_expr()) != 1 {
+			return nil, nil, true, fmt.Errorf("tabular local assignments support one SELECT input without CTE, UNION, or INTERSECT")
+		}
+		partial = compound.Select_subexpr_intersect(0).Select_or_expr(0).Select_kind_partial()
+	} else {
+		return nil, nil, false, nil
+	}
+	if partial == nil || partial.Select_kind() == nil || partial.Select_kind().DISCARD() != nil || partial.Select_kind().INTO() != nil {
+		return nil, nil, true, fmt.Errorf("tabular local assignments require SELECT without DISCARD or INTO RESULT")
+	}
+	core, ok := partial.Select_kind().Select_core().(*parser.Select_coreContext)
+	if !ok || core == nil {
+		return nil, nil, true, fmt.Errorf("tabular local assignments require SELECT")
+	}
+	return core, partial, true, nil
+}
+
+func tabularTable(name string, columns []model.Column) (*model.Table, error) {
+	table := &model.Table{Name: "$" + name}
+	seen := map[string]bool{}
+	for _, column := range columns {
+		resultName := column.ResultName()
+		if resultName == "" || seen[resultName] {
+			return nil, fmt.Errorf("tabular binding $%s has duplicate or unnamed result column %q; use unique AS aliases", name, resultName)
+		}
+		seen[resultName] = true
+		table.Columns = append(table.Columns, model.Column{Name: resultName, Type: column.Type})
+	}
+	return table, nil
 }
 
 type relation struct {
@@ -530,7 +650,7 @@ type relation struct {
 	optional bool
 }
 
-func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser.Select_coreContext, bindings map[string]model.Type) ([]relation, []model.Diagnostic) {
+func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser.Select_coreContext, bindings, inferred map[string]model.Type, syntax *model.QuerySyntax) ([]relation, []model.Diagnostic) {
 	var relations []relation
 	var diagnostics []model.Diagnostic
 	for _, join := range selectCore.AllJoin_source() {
@@ -541,21 +661,47 @@ func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser
 				continue
 			}
 			named := source.Named_single_source()
-			if named == nil || named.Hinted_single_source() == nil || named.Hinted_single_source().Single_source() == nil || named.Hinted_single_source().Single_source().Table_ref() == nil {
-				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, "only named catalog tables are supported in FROM and JOIN"))
+			if named == nil || named.Hinted_single_source() == nil || named.Hinted_single_source().Single_source() == nil {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, "unsupported FROM or JOIN source"))
 				continue
 			}
-			tableRef := named.Hinted_single_source().Single_source().Table_ref()
-			if tableRef.Cluster_expr() != nil || tableRef.COMMAT() != nil {
-				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, tableRef, "cluster-qualified and temporary table references are unsupported"))
-				continue
-			}
+			single := named.Hinted_single_source().Single_source()
 			if named.Hinted_single_source().Table_hints() != nil || named.Sample_clause() != nil || named.Tablesample_clause() != nil {
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, "table hints and sampling are not yet supported"))
 				continue
 			}
 			var table *model.Table
-			if tableRef.Table_key() == nil {
+			tableRef := single.Table_ref()
+			if nested := single.Select_stmt(); nested != nil {
+				columns, ds := analyzeSelectRows(catalog, block, nested, bindings, inferred, syntax, selectProjection)
+				diagnostics = append(diagnostics, ds...)
+				if len(ds) != 0 {
+					continue
+				}
+				var err error
+				table, err = tabularTable("derived", columns)
+				if err != nil {
+					diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, single, err.Error()))
+					continue
+				}
+			} else if tableRef == nil {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, single, "unsupported FROM or JOIN source"))
+				continue
+			} else if tableRef.Cluster_expr() != nil || tableRef.COMMAT() != nil {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, tableRef, "cluster-qualified and temporary table references are unsupported"))
+				continue
+			} else if bind := tableRef.Bind_parameter(); bind != nil {
+				name := bindName(bind)
+				table = block.tabular[name]
+				if table == nil {
+					message := fmt.Sprintf("unknown tabular binding $%s; assign a SELECT before using it in FROM or JOIN", name)
+					if _, scalar := bindings[name]; scalar {
+						message = fmt.Sprintf("local $%s is scalar; FROM and JOIN require a SELECT binding", name)
+					}
+					diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, tableRef, message))
+					continue
+				}
+			} else if tableRef.Table_key() == nil {
 				var err error
 				table, err = asTableRelation(tableRef, bindings)
 				if err != nil {
@@ -583,7 +729,7 @@ func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser
 				}
 			}
 			alias := table.Name
-			if tableRef.Table_key() != nil {
+			if tableRef != nil && tableRef.Table_key() != nil {
 				alias = tableKeyName(tableRef.Table_key())
 			}
 			if named.An_id() != nil {
@@ -592,9 +738,18 @@ func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser
 			if named.An_id_as_compat() != nil {
 				alias = identifier(named.An_id_as_compat().GetText())
 			}
-			if tableRef.Table_key() == nil && named.An_id() == nil && named.An_id_as_compat() == nil && (len(join.AllFlatten_source()) > 1 || len(selectCore.AllJoin_source()) > 1) {
+			if single.Select_stmt() != nil && named.An_id() == nil && named.An_id_as_compat() == nil && (len(join.AllFlatten_source()) > 1 || len(selectCore.AllJoin_source()) > 1) {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, "derived SELECT requires an explicit alias"))
+				continue
+			}
+			if tableRef != nil && tableRef.Table_key() == nil && tableRef.Bind_parameter() == nil && named.An_id() == nil && named.An_id_as_compat() == nil && (len(join.AllFlatten_source()) > 1 || len(selectCore.AllJoin_source()) > 1) {
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, "AS_TABLE in a join requires an explicit alias; use AS_TABLE($parameter) AS rows"))
 				continue
+			}
+			for _, previous := range relations {
+				if previous.alias == alias && (strings.HasPrefix(table.Name, "$") || strings.HasPrefix(previous.table.Name, "$") || named.An_id() != nil || named.An_id_as_compat() != nil) {
+					diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, fmt.Sprintf("duplicate source alias %q", alias)))
+				}
 			}
 			relations = append(relations, relation{table: table, alias: alias})
 			if i > 0 {
@@ -619,7 +774,7 @@ func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser
 			}
 		}
 	}
-	if len(relations) == 0 && len(selectCore.AllJoin_source()) != 0 {
+	if len(relations) == 0 && len(selectCore.AllJoin_source()) != 0 && len(diagnostics) == 0 {
 		diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, selectCore, "SELECT without a catalog table is unsupported"))
 	}
 	return relations, diagnostics
@@ -791,12 +946,50 @@ func columnRefs(root antlr.Tree) []columnRef {
 		ids := suffix.AllAn_id_or_type()
 		switch len(ids) {
 		case 0:
+			if functionTypeArgument(ctx) {
+				return
+			}
 			refs = append(refs, columnRef{name: base, ctx: ctx})
 		case 1:
 			refs = append(refs, columnRef{qualifier: base, name: identifier(ids[0].GetText()), ctx: ctx})
 		}
 	})
 	return refs
+}
+
+func functionTypeArgument(ref *parser.Unary_subexprContext) bool {
+	for parent := ref.GetParent(); parent != nil; parent = parent.GetParent() {
+		named, ok := parent.(*parser.Named_exprContext)
+		if !ok {
+			continue
+		}
+		if named.Expr() == nil || !sameSpan(named.Expr(), ref) {
+			return false
+		}
+		if _, err := parseType(named.Expr().GetText()); err != nil {
+			return false
+		}
+		for call := named.GetParent(); call != nil; call = call.GetParent() {
+			unary, ok := call.(*parser.Unary_subexprContext)
+			if !ok {
+				continue
+			}
+			name, invoke, found := functionCallFromUnary(unary)
+			if !found {
+				return false
+			}
+			if strings.EqualFold(name, "ListCreate") {
+				return true
+			}
+			if name == "Yson::ConvertTo" && invoke.Named_expr_list() != nil {
+				arguments := invoke.Named_expr_list().AllNamed_expr()
+				return len(arguments) >= 2 && arguments[1] == named
+			}
+			return false
+		}
+		return false
+	}
+	return false
 }
 
 func isPureColumnExpression(expr parser.IExprContext) bool {

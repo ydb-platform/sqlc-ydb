@@ -4,6 +4,7 @@ package builtins
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -109,7 +110,25 @@ func validateConcreteOrNull(value model.Type) error {
 	if value.Kind != "Struct" && len(value.Fields) != 0 {
 		return fmt.Errorf("%s has unexpected Struct fields", value.Kind)
 	}
+	if value.Kind != "Tagged" && value.Tag != "" {
+		return fmt.Errorf("%s has unexpected tag", value.Kind)
+	}
 	switch value.Kind {
+	case "Tagged":
+		if value.Elem == nil || value.Tag == "" || value.Key != nil || len(value.Items) != 0 || value.Precision != 0 || value.Scale != 0 {
+			return fmt.Errorf("Tagged type requires an element type and tag")
+		}
+		return validateConcreteOrNull(*value.Elem)
+	case "Callable":
+		if value.Elem == nil || value.Key != nil || value.Precision != 0 || value.Scale != 0 {
+			return fmt.Errorf("Callable type requires a return type")
+		}
+		for _, argument := range value.Items {
+			if err := validateConcreteOrNull(argument); err != nil {
+				return err
+			}
+		}
+		return validateConcreteOrNull(*value.Elem)
 	case "Optional", "List", "Stream", "Flow", "Set":
 		if value.Elem == nil {
 			return fmt.Errorf("%s type has no element type", value.Kind)
@@ -172,6 +191,9 @@ func validateConcreteOrNull(value model.Type) error {
 		}
 		return nil
 	default:
+		if strings.HasPrefix(value.Kind, "Resource<") && strings.HasSuffix(value.Kind, ">") && value.Elem == nil && value.Key == nil && len(value.Items) == 0 && value.Precision == 0 && value.Scale == 0 {
+			return nil
+		}
 		if !supportedScalarKinds[value.Kind] {
 			return fmt.Errorf("unsupported type %q cannot participate in resolution", value.Kind)
 		}

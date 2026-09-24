@@ -68,3 +68,16 @@ func TestStructIdentityIncludesAllFields(t *testing.T) {
 		t.Fatal("different field counts must not compare equal")
 	}
 }
+
+func TestUDFIntermediateTypeIdentity(t *testing.T) {
+	stringType := Type{Kind: "String"}
+	boolType := Type{Kind: "Bool"}
+	tagged := Type{Kind: "Tagged", Elem: &stringType, Tag: "FloatVector"}
+	if tagged.String() != "Tagged<String,\"FloatVector\">" || tagged.Equal(Type{Kind: "Tagged", Elem: &stringType, Tag: "BitVector"}) {
+		t.Fatalf("tagged identity: %s", tagged.String())
+	}
+	callable := Type{Kind: "Callable", Items: []Type{Optional(stringType)}, Elem: &boolType}
+	if callable.String() != "Callable<(Optional<String>)->Bool>" || callable.Equal(Type{Kind: "Callable", Items: []Type{stringType}, Elem: &boolType}) {
+		t.Fatalf("callable identity: %s", callable.String())
+	}
+}

@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <chrono>
 #include <userver/formats/json/value.hpp>
 
@@ -89,6 +90,21 @@ struct UpdateAuthorAndListBooksRow final {
 struct SelectAuthorAndDeleteBooksRow final {
     std::uint64_t author_id;
     ::userver::ydb::Utf8 name;
+};
+
+struct ListAuthorBookTitlesRow final {
+    std::uint64_t author_id;
+    ::userver::ydb::Utf8 name;
+    std::optional<::userver::formats::json::Value> titles_json;
+};
+
+struct InspectBookTextRow final {
+    std::string base32;
+    bool alphabetic;
+    std::optional<std::string> host;
+    double square_root;
+    bool yson_string;
+    bool pattern_found;
 };
 
 }  // namespace booktest::userver

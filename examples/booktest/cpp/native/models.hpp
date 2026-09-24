@@ -89,4 +89,19 @@ struct SelectAuthorAndDeleteBooksRow final {
     std::string name;
 };
 
+struct ListAuthorBookTitlesRow final {
+    std::uint64_t author_id;
+    std::string name;
+    std::optional<std::string> titles_json;
+};
+
+struct InspectBookTextRow final {
+    std::string base32;
+    bool alphabetic;
+    std::optional<std::string> host;
+    double square_root;
+    bool yson_string;
+    bool pattern_found;
+};
+
 }  // namespace booktest::native

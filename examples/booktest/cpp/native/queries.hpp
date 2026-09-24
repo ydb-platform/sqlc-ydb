@@ -41,6 +41,8 @@ public:
     void DeleteAuthorWithBooks(std::uint64_t author_id) const;
     std::vector<UpdateAuthorAndListBooksRow> UpdateAuthorAndListBooks(std::uint64_t author_id, const std::string& name) const;
     std::optional<SelectAuthorAndDeleteBooksRow> SelectAuthorAndDeleteBooks(std::uint64_t author_id) const;
+    std::vector<ListAuthorBookTitlesRow> ListAuthorBookTitles(std::int32_t since_year) const;
+    std::optional<InspectBookTextRow> InspectBookText(const std::string& text) const;
 
 private:
     NYdb::NQuery::TQueryClient* client_;

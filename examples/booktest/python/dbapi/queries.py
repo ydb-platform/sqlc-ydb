@@ -428,3 +428,65 @@ class Querier:
             )
         finally:
             cursor.close()
+
+    # -- name: ListAuthorBookTitles :many
+    def list_author_book_titles(self, since_year: int) -> list[_models.ListAuthorBookTitlesRow]:
+        parameters = {
+            "$since_year": (since_year, _ydb.PrimitiveType.Int32),
+        }
+        cursor = self._connection.cursor()
+        try:
+            cursor.execute(
+                ("DECLARE $since_year AS Int32;\n"
+                 "$recent = (SELECT author_id, title FROM books WHERE publication_year >= $since_year);\n"
+                 "$grouped = (\n"
+                 "    SELECT author_id, AGGREGATE_LIST(title, 100u) AS titles\n"
+                 "    FROM $recent\n"
+                 "    GROUP BY author_id\n"
+                 ");\n"
+                 "SELECT a.author_id, a.name, Yson::SerializeJson(Json::From(g.titles)) AS titles_json\n"
+                 "FROM (SELECT author_id, name FROM authors) AS a\n"
+                 "JOIN $grouped AS g ON a.author_id = g.author_id\n"
+                 "ORDER BY a.author_id;"),
+                parameters,
+            )
+            rows = cursor.fetchall()
+            return [_models.ListAuthorBookTitlesRow(
+                author_id=row[0],
+                name=row[1],
+                titles_json=row[2],
+            ) for row in rows]
+        finally:
+            cursor.close()
+
+    # -- name: InspectBookText :one
+    def inspect_book_text(self, text: bytes) -> Optional[_models.InspectBookTextRow]:
+        parameters = {
+            "$text": (text, _ydb.PrimitiveType.String),
+        }
+        cursor = self._connection.cursor()
+        try:
+            cursor.execute(
+                ("DECLARE $text AS String;\n"
+                 "SELECT\n"
+                 "    String::Base32Encode($text) AS base32,\n"
+                 "    Unicode::IsAlpha(\"Book\"u) AS alphabetic,\n"
+                 "    Url::GetHost(\"https://example.org/books\") AS host,\n"
+                 "    Math::Sqrt(9.0) AS square_root,\n"
+                 "    Yson::IsString(Yson::From($text)) AS yson_string,\n"
+                 "    Pire::Grep(\"book\")($text) AS pattern_found;"),
+                parameters,
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return _models.InspectBookTextRow(
+                base32=row[0],
+                alphabetic=row[1],
+                host=row[2],
+                square_root=row[3],
+                yson_string=row[4],
+                pattern_found=row[5],
+            )
+        finally:
+            cursor.close()

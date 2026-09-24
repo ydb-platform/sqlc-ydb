@@ -127,3 +127,18 @@ type SelectAuthorAndDeleteBooksRow struct {
 	AuthorID uint64
 	Name     string
 }
+
+type ListAuthorBookTitlesRow struct {
+	AuthorID   uint64
+	Name       string
+	TitlesJson *string
+}
+
+type InspectBookTextRow struct {
+	Base32       []byte
+	Alphabetic   bool
+	Host         *[]byte
+	SquareRoot   float64
+	YsonString   bool
+	PatternFound bool
+}

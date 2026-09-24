@@ -534,4 +534,88 @@ class Queries {
         val _value1: String = _rows.getColumn(1).getText()
         return SelectAuthorAndDeleteBooksRow(_value0, _value1)
     }
+
+    // -- name: ListAuthorBookTitles :many
+    fun listAuthorBookTitles(sinceYear: Int): List<ListAuthorBookTitlesRow> {
+        val _params = Params.create()
+        _params.put("\$since_year", PrimitiveValue.newInt32(sinceYear))
+        val _query = if (transaction != null) {
+            QueryReader.readFrom(transaction.createQuery(
+                "DECLARE \$since_year AS Int32;\n" +
+                "\$recent = (SELECT author_id, title FROM books WHERE publication_year >= \$since_year);\n" +
+                "\$grouped = (\n" +
+                "    SELECT author_id, AGGREGATE_LIST(title, 100u) AS titles\n" +
+                "    FROM \$recent\n" +
+                "    GROUP BY author_id\n" +
+                ");\n" +
+                "SELECT a.author_id, a.name, Yson::SerializeJson(Json::From(g.titles)) AS titles_json\n" +
+                "FROM (SELECT author_id, name FROM authors) AS a\n" +
+                "JOIN \$grouped AS g ON a.author_id = g.author_id\n" +
+                "ORDER BY a.author_id;", _params)).join().getValue()
+        } else {
+            client!!.supplyResult { _session ->
+                QueryReader.readFrom(_session.createQuery(
+                    "DECLARE \$since_year AS Int32;\n" +
+                    "\$recent = (SELECT author_id, title FROM books WHERE publication_year >= \$since_year);\n" +
+                    "\$grouped = (\n" +
+                    "    SELECT author_id, AGGREGATE_LIST(title, 100u) AS titles\n" +
+                    "    FROM \$recent\n" +
+                    "    GROUP BY author_id\n" +
+                    ");\n" +
+                    "SELECT a.author_id, a.name, Yson::SerializeJson(Json::From(g.titles)) AS titles_json\n" +
+                    "FROM (SELECT author_id, name FROM authors) AS a\n" +
+                    "JOIN \$grouped AS g ON a.author_id = g.author_id\n" +
+                    "ORDER BY a.author_id;", TxMode.SERIALIZABLE_RW, _params))
+            }.join().getValue()
+        }
+        kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
+        val _rows = _query.getResultSet(0)
+        val _items = ArrayList<ListAuthorBookTitlesRow>()
+        while (_rows.next()) {
+            val _value0: Long = _rows.getColumn(0).getUint64()
+            val _value1: String = _rows.getColumn(1).getText()
+            val _value2: String? = _rows.getColumn(2).getJson()
+            _items.add(ListAuthorBookTitlesRow(_value0, _value1, _value2))
+        }
+        return _items
+    }
+
+    // -- name: InspectBookText :one
+    fun inspectBookText(text: ByteArray): InspectBookTextRow? {
+        val _params = Params.create()
+        _params.put("\$text", PrimitiveValue.newBytes(text))
+        val _query = if (transaction != null) {
+            QueryReader.readFrom(transaction.createQuery(
+                "DECLARE \$text AS String;\n" +
+                "SELECT\n" +
+                "    String::Base32Encode(\$text) AS base32,\n" +
+                "    Unicode::IsAlpha(\"Book\"u) AS alphabetic,\n" +
+                "    Url::GetHost(\"https://example.org/books\") AS host,\n" +
+                "    Math::Sqrt(9.0) AS square_root,\n" +
+                "    Yson::IsString(Yson::From(\$text)) AS yson_string,\n" +
+                "    Pire::Grep(\"book\")(\$text) AS pattern_found;", _params)).join().getValue()
+        } else {
+            client!!.supplyResult { _session ->
+                QueryReader.readFrom(_session.createQuery(
+                    "DECLARE \$text AS String;\n" +
+                    "SELECT\n" +
+                    "    String::Base32Encode(\$text) AS base32,\n" +
+                    "    Unicode::IsAlpha(\"Book\"u) AS alphabetic,\n" +
+                    "    Url::GetHost(\"https://example.org/books\") AS host,\n" +
+                    "    Math::Sqrt(9.0) AS square_root,\n" +
+                    "    Yson::IsString(Yson::From(\$text)) AS yson_string,\n" +
+                    "    Pire::Grep(\"book\")(\$text) AS pattern_found;", TxMode.SERIALIZABLE_RW, _params))
+            }.join().getValue()
+        }
+        kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
+        val _rows = _query.getResultSet(0)
+        if (!_rows.next()) return null
+        val _value0: ByteArray = _rows.getColumn(0).getBytes()
+        val _value1: Boolean = _rows.getColumn(1).getBool()
+        val _value2: ByteArray? = _rows.getColumn(2).getBytes()
+        val _value3: Double = _rows.getColumn(3).getDouble()
+        val _value4: Boolean = _rows.getColumn(4).getBool()
+        val _value5: Boolean = _rows.getColumn(5).getBool()
+        return InspectBookTextRow(_value0, _value1, _value2, _value3, _value4, _value5)
+    }
 }

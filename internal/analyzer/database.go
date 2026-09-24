@@ -94,6 +94,16 @@ func databaseTableReferences(blocks []queryBlock) ([]databaseTableReference, []m
 			continue
 		}
 		tree := collectQueryTree(parsed.tree)
+		localNames := map[string]bool{}
+		for _, assignment := range tree.named {
+			if assignment.Bind_parameter_list() != nil {
+				descendants(assignment.Bind_parameter_list(), func(node antlr.Tree) {
+					if bind, ok := node.(*parser.Bind_parameterContext); ok {
+						localNames[bindName(bind)] = true
+					}
+				})
+			}
+		}
 		diagnostics = append(diagnostics, validateQueryStatements(*block, tree)...)
 		diagnostics = append(diagnostics, unsupportedSQLCMacroDiagnostics(*block, parsed.tokens)...)
 		_, _, declarationDiagnostics := declarations(*block, tree)
@@ -115,14 +125,16 @@ func databaseTableReferences(blocks []queryBlock) ([]databaseTableReference, []m
 					reject(source.Cte_with_clause(), "CTEs are not yet supported")
 				}
 			case *parser.Named_single_sourceContext:
-				if source.Hinted_single_source() == nil || source.Hinted_single_source().Single_source() == nil || source.Hinted_single_source().Single_source().Table_ref() == nil {
-					reject(source, "only named catalog tables are supported in FROM and JOIN")
+				if source.Hinted_single_source() == nil || source.Hinted_single_source().Single_source() == nil || source.Hinted_single_source().Single_source().Table_ref() == nil && source.Hinted_single_source().Single_source().Select_stmt() == nil {
+					reject(source, "unsupported FROM or JOIN source")
 				}
 			case *parser.Table_refContext:
 				if source.Cluster_expr() != nil || source.COMMAT() != nil {
 					reject(source, "cluster-qualified and temporary table references are unsupported in database analysis")
 				} else if source.Table_key() != nil {
 					add(tableKeyName(source.Table_key()), source)
+				} else if source.Bind_parameter() != nil && localNames[bindName(source.Bind_parameter())] {
+					return
 				} else if source.An_id_expr() == nil || !strings.EqualFold(source.An_id_expr().GetText(), "AS_TABLE") {
 					reject(source, "dynamic table references are unsupported; use AS_TABLE($parameter) with DECLARE List<Struct<...>>")
 				}

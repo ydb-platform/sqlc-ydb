@@ -6,6 +6,17 @@ import (
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
+func resolveListCreate(args []model.Type) (model.Type, error) {
+	if err := arity("ListCreate", args, 1); err != nil {
+		return model.Type{}, err
+	}
+	if err := validateConcreteOrNull(args[0]); err != nil || args[0].Kind == "Null" || args[0].Kind == "Void" {
+		return model.Type{}, fmt.Errorf("ListCreate requires a concrete element type")
+	}
+	item := args[0]
+	return model.Type{Kind: "List", Elem: &item}, nil
+}
+
 func resolveToSet(args []model.Type) (model.Type, error) {
 	if err := arity("ToSet", args, 1); err != nil {
 		return model.Type{}, err
@@ -59,21 +70,6 @@ func resolveSetIsDisjoint(args []model.Type) (model.Type, error) {
 		return model.Type{}, fmt.Errorf("SetIsDisjoint arguments must have the same key type, got %s and %s", left.Key.String(), rightKey.String())
 	}
 	return withOptional(model.Type{Kind: "Bool"}, leftNullable || rightNullable), nil
-}
-
-func resolveYsonConvertToStringList(args []model.Type) (model.Type, error) {
-	if err := arity("Yson::ConvertToStringList", args, 1); err != nil {
-		return model.Type{}, err
-	}
-	base, _, err := baseType(args[0])
-	if err != nil {
-		return model.Type{}, fmt.Errorf("Yson::ConvertToStringList: %w", err)
-	}
-	if base.Kind != "Json" && base.Kind != "Yson" && base.Kind != "Null" {
-		return model.Type{}, fmt.Errorf("Yson::ConvertToStringList argument 1 must be Json or Yson, including an Optional form")
-	}
-	item := model.Type{Kind: "String"}
-	return model.Type{Kind: "List", Elem: &item}, nil
 }
 
 func collectionBase(value model.Type) (model.Type, bool, error) {

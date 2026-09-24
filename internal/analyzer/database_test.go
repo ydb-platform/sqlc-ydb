@@ -280,7 +280,6 @@ func TestDatabaseAnalysisChecksPrimaryKeyOrder(t *testing.T) {
 
 func TestDatabaseAnalysisRejectsUnsupportedSourcesBeforeDiscovery(t *testing.T) {
 	for _, sql := range []string{
-		"-- name: Read :one\nSELECT id FROM (SELECT id FROM records) AS r;",
 		"-- name: Read :one\nWITH r AS (SELECT id FROM records) SELECT id FROM r;",
 		"-- name: Read :one\nSELECT id FROM $table;",
 		"-- name: Read :one\nSELECT id FROM cluster.records;",
@@ -296,6 +295,15 @@ func TestDatabaseAnalysisRejectsUnsupportedSourcesBeforeDiscovery(t *testing.T) 
 				t.Fatalf("err=%v describes=%v validations=%v", err, database.described, database.validated)
 			}
 		})
+	}
+}
+
+func TestDatabaseAnalysisRejectsValuesSource(t *testing.T) {
+	const sql = "-- name: Read :one\nSELECT * FROM (VALUES (1u));"
+	database := &fakeAnalysisDatabase{}
+	_, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: sql}}, Options{}, database)
+	if err == nil || !strings.Contains(err.Error(), "unsupported FROM or JOIN source") || len(database.described) != 0 || !reflect.DeepEqual(database.validated, []string{sql}) {
+		t.Fatalf("err=%v describes=%v validations=%v", err, database.described, database.validated)
 	}
 }
 

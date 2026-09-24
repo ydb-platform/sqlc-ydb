@@ -62,7 +62,6 @@ func TestAnalyzeRejectsUnsupportedQueryForms(t *testing.T) {
 		{"two data statements with row count", ":execrows", "DELETE FROM records; DELETE FROM records;", "multi-statement :execrows is unsupported; use :exec, :one, or :many"},
 		{"query ddl", ":exec", "CREATE TABLE other (id Uint64, PRIMARY KEY (id));", "unsupported statement in named query"},
 		{"join using", ":many", "SELECT a.id FROM records a JOIN records b USING (id);", "JOIN USING is not yet supported; use an explicit ON condition"},
-		{"derived table", ":many", "SELECT id FROM (SELECT id FROM records) r;", "only named catalog tables are supported in FROM and JOIN"},
 		{"table function", ":many", "SELECT id FROM AS_TABLE($rows);", "requires DECLARE $rows AS List<Struct<...>>"},
 		{"in subquery", ":many", "SELECT id FROM records WHERE id IN (SELECT r.id FROM records r UNION SELECT r.id FROM records r);", "CTEs, UNION and INTERSECT are unsupported"},
 		{"array expression", ":one", "SELECT [1, 2] AS values;", "unsupported result expression"},

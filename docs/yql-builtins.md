@@ -14,7 +14,7 @@ Prerequisite labels below are work still required, not supported overloads: **S*
 
 | Reference section | Current coverage / prerequisite |
 | --- | --- |
-| COALESCE | Resolved subset: Pairwise numeric reconciliation; fitting right-hand integer literals preserve the left integer type; optionality follows fallback availability. |
+| COALESCE | Resolved subset: Pairwise numeric reconciliation; fitting right-hand integer literals preserve the left integer type; a direct `ListCreate` fallback can take the preceding List type; optionality follows fallback availability. |
 | LENGTH | Resolved subset: LENGTH/LEN; byte count. |
 | SUBSTRING | Resolved subset: String input; bounded unsigned positions through Uint32. |
 | FIND | Resolved subset: String/Utf8 input; bounded unsigned position. |
@@ -84,7 +84,7 @@ Prerequisite labels below are work still required, not supported overloads: **S*
 | SUM_IF and AVG_IF | Not implemented — A: argument/result types and empty/grouped behavior. |
 | SOME | Not implemented — A: argument/result types and empty/grouped behavior. |
 | CountDistinctEstimate, HyperLogLog, and HLL | Not implemented — A: argument/result types and empty/grouped behavior. |
-| AGGREGATE_LIST | Not implemented — A, C: aggregate collection/result structure and empty/grouped behavior. |
+| AGGREGATE_LIST | Resolved subset: List of the non-null input element type, optional checked integer limit, grouped and empty-input behavior. |
 | MAX_BY and MIN_BY | Not implemented — A, C: aggregate collection/result structure and empty/grouped behavior. |
 | TOP and BOTTOM | Not implemented — A, C: aggregate collection/result structure and empty/grouped behavior. |
 | TOP_BY and BOTTOM_BY | Not implemented — A, C: aggregate collection/result structure and empty/grouped behavior. |
@@ -92,9 +92,9 @@ Prerequisite labels below are work still required, not supported overloads: **S*
 | STDDEV and VARIANCE | Not implemented — A: argument/result types and empty/grouped behavior. |
 | CORRELATION and COVARIANCE | Not implemented — A: argument/result types and empty/grouped behavior. |
 | PERCENTILE and MEDIAN | Not implemented — A: argument/result types and empty/grouped behavior. |
-| HISTOGRAM | Not implemented — A, R: histogram state/resource and result operations. |
-| LinearHistogram, LogarithmicHistogram, and LogHistogram | Not implemented — A, R: histogram state/resource and result operations. |
-| CDF (cumulative distribution function) | Not implemented — A, R: histogram state/resource and result operations. |
+| HISTOGRAM | Resolved subset: Numeric input, optional weighted/bucket arguments and the documented nullable HistogramStruct result. |
+| LinearHistogram, LogarithmicHistogram, and LogHistogram | Resolved subset: Numeric input and the documented nullable HistogramStruct result. |
+| CDF (cumulative distribution function) | Resolved subset: Histogram CDF aggregate aliases return the nullable HistogramStruct type. |
 | BOOL_AND, BOOL_OR and BOOL_XOR | Not implemented — A: argument/result types and empty/grouped behavior. |
 | BIT_AND, BIT_OR and BIT_XOR | Not implemented — A: argument/result types and empty/grouped behavior. |
 | SessionStart | Not implemented — A, W: session grouping context. |
@@ -106,7 +106,7 @@ Prerequisite labels below are work still required, not supported overloads: **S*
 
 | Reference section | Current coverage / prerequisite |
 | --- | --- |
-| ListCreate | Not implemented — T, C: requested element type. |
+| ListCreate | Resolved subset: Literal element type and contextual empty-list fallback in COALESCE/NVL. |
 | AsList and AsListStrict | Not implemented — C: element types, Optional/empty behavior and operation-specific arguments. |
 | ListLength | Not implemented — C: element types, Optional/empty behavior and operation-specific arguments. |
 | ListHasItems | Not implemented — C: element types, Optional/empty behavior and operation-specific arguments. |

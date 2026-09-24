@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- Resolve named and derived SELECT sources, including joins and SELECT-backed DML, and grouped `AGGREGATE_LIST` results. Add an end-to-end booktest query across generated runtime profiles.
+- Add offline type rules for the documented YQL UDF modules, including named options, resource and tagged intermediate values, callable regex/date-time functions, literal-dependent regex results, and histogram aggregates. Add representative UDF examples across generated runtime profiles.
+
 ## v0.2.8
 
 ### Added

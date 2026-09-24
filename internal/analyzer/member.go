@@ -34,7 +34,7 @@ func resolveMemberAccess(root antlr.ParserRuleContext, scope expressionScope) (m
 	var err error
 	invokes := suffix.AllInvoke_expr()
 	if len(invokes) != 0 {
-		if len(invokes) != 1 || invokes[0].GetStart().GetTokenIndex() > fields[0].GetStart().GetTokenIndex() {
+		if invokes[len(invokes)-1].GetStart().GetTokenIndex() > fields[0].GetStart().GetTokenIndex() {
 			return model.Type{}, true, fmt.Errorf("unsupported member invocation %q", root.GetText())
 		}
 		name := ""
@@ -44,10 +44,17 @@ func resolveMemberAccess(root antlr.ParserRuleContext, scope expressionScope) (m
 		if atom := casual.Atom_expr(); atom != nil && atom.NAMESPACE() != nil {
 			name = identifier(atom.An_id_or_type().GetText()) + "::" + identifier(atom.Id_or_type().GetText())
 		}
+		if atom := casual.Atom_expr(); atom != nil && atom.Bind_parameter() != nil {
+			name = "$" + bindName(atom.Bind_parameter())
+		}
 		if name == "" {
 			return model.Type{}, true, fmt.Errorf("unsupported member base %q", casual.GetText())
 		}
-		typ, err = resolveFunction(name, invokes[0].(*parser.Invoke_exprContext), scope)
+		calls := make([]*parser.Invoke_exprContext, len(invokes))
+		for i, invoke := range invokes {
+			calls[i] = invoke.(*parser.Invoke_exprContext)
+		}
+		typ, err = resolveCallChain(name, calls, scope)
 	} else if atom := casual.Atom_expr(); atom != nil && atom.Bind_parameter() != nil {
 		name := bindName(atom.Bind_parameter())
 		var exists bool

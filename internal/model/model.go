@@ -37,6 +37,7 @@ type Type struct {
 	Key       *Type
 	Items     []Type
 	Fields    []StructField
+	Tag       string
 	Precision int
 	Scale     int
 }
@@ -57,7 +58,7 @@ func (t Type) UnwrapOptional() Type {
 
 // Equal compares type structure, including container elements and Decimal metadata.
 func (t Type) Equal(other Type) bool {
-	if t.Kind != other.Kind || t.Precision != other.Precision || t.Scale != other.Scale {
+	if t.Kind != other.Kind || t.Tag != other.Tag || t.Precision != other.Precision || t.Scale != other.Scale {
 		return false
 	}
 	if (t.Elem == nil) != (other.Elem == nil) || (t.Key == nil) != (other.Key == nil) || len(t.Items) != len(other.Items) || len(t.Fields) != len(other.Fields) {
@@ -112,6 +113,18 @@ func (t Type) String() string {
 			items[i] = t.Items[i].String()
 		}
 		return "Tuple<" + strings.Join(items, ",") + ">"
+	case "Tagged":
+		if t.Elem != nil {
+			return "Tagged<" + t.Elem.String() + "," + fmt.Sprintf("%q", t.Tag) + ">"
+		}
+	case "Callable":
+		if t.Elem != nil {
+			items := make([]string, len(t.Items))
+			for i := range t.Items {
+				items[i] = t.Items[i].String()
+			}
+			return "Callable<(" + strings.Join(items, ",") + ")->" + t.Elem.String() + ">"
+		}
 	case "Decimal":
 		return fmt.Sprintf("Decimal(%d,%d)", t.Precision, t.Scale)
 	}

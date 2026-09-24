@@ -190,7 +190,8 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		r := jooqRenderer{query: q, aliases: map[string]string{}, parameters: map[string]string{}}
 		var params []string
 		seen := map[string]bool{"dsl": true, "stmt": true}
-		if jdbc.HasDeclarations(q) {
+		fullSQL := jdbc.HasDeclarations(q) || jooqRequiresFullSQL(q)
+		if fullSQL {
 			seen["tech"] = true
 		}
 		for _, p := range q.Parameters {
@@ -214,8 +215,8 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			parameterList = "\n            " + strings.Join(params, ",\n            ") + "\n    "
 		}
 		fmt.Fprintf(&b, "\n    // %s\n    public %s %s(%s) {\n", model.QueryAnnotation(q), ret, method, parameterList)
-		if jdbc.HasDeclarations(q) {
-			text, _ := jdbc.SQL(q)
+		if fullSQL {
+			text := jdbc.NamedSQL(q)
 			sql, err := jooqDeclaredSQL(q, text)
 			if err != nil {
 				return nil, err
@@ -304,6 +305,37 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		files[i].Content = []byte(jooqImports(string(files[i].Content)))
 	}
 	return files, nil
+}
+
+func jooqRequiresFullSQL(q model.AnalyzedQuery) bool {
+	if q.Syntax == nil {
+		return false
+	}
+	for _, call := range jooqNodes[*parser.Unary_casual_subexprContext](q.Syntax.Root) {
+		atom, suffix := call.Atom_expr(), call.Unary_subexpr_suffix()
+		if atom == nil || suffix == nil || len(suffix.AllInvoke_expr()) == 0 {
+			continue
+		}
+		if atom.Bind_parameter() != nil || atom.NAMESPACE() != nil && atom.GetText() != "Yson::ConvertToStringList" {
+			return true
+		}
+	}
+	for _, named := range jooqNodes[*parser.Named_nodes_stmtContext](q.Syntax.Root) {
+		if named.Select_unparenthesized_stmt() != nil {
+			return true
+		}
+		if named.Expr() != nil && len(jooqNodes[*parser.Select_subexprContext](named.Expr())) != 0 {
+			return true
+		}
+	}
+	for _, selectBinding := range q.Syntax.Selects {
+		for _, relation := range selectBinding.Relations {
+			if relation.Table == "$derived" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 type jooqRenderer struct {

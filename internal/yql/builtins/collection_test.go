@@ -101,6 +101,10 @@ func TestResolveCollectionFunctionsRejectInvalidCalls(t *testing.T) {
 		args []model.Type
 		want string
 	}{
+		{"ListCreate", nil, "expects 1"},
+		{"ListCreate", []model.Type{{Kind: "Any"}}, "concrete element type"},
+		{"ListCreate", []model.Type{{Kind: "Null"}}, "concrete element type"},
+		{"ListCreate", []model.Type{{Kind: "Void"}}, "concrete element type"},
 		{"ToSet", []model.Type{stringType}, "List"},
 		{"ToSet", nil, "expects 1"},
 		{"ToSet", []model.Type{{Kind: "List"}}, "List"},
@@ -120,7 +124,7 @@ func TestResolveCollectionFunctionsRejectInvalidCalls(t *testing.T) {
 		{"SetIsDisjoint", []model.Type{set, {Kind: "List", Elem: &model.Type{Kind: "Yson"}}}, "argument 2"},
 		{"SetIsDisjoint", []model.Type{set, {Kind: "Dict", Key: &model.Type{Kind: "Json"}, Elem: &voidType}}, "argument 2"},
 		{"SetIsDisjoint", []model.Type{{Kind: "List", Elem: &stringType}, {Kind: "List", Elem: &stringType}}, "argument 1"},
-		{"Yson::ConvertToStringList", []model.Type{stringType}, "Json or Yson"},
+		{"Yson::ConvertToStringList", []model.Type{stringType}, "Yson node Resource, Yson, or Json"},
 		{"Yson::ConvertToStringList", nil, "expects 1"},
 	} {
 		_, err := Resolve(tc.name, tc.args)
