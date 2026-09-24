@@ -2,8 +2,10 @@ package analyzer
 
 import (
 	"reflect"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -42,17 +44,14 @@ func TestAnalyzeTablelessScalarSelect(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: "-- name: SayHello :one\n" + tt.query}})
-			if err != nil {
-				t.Fatalf("Analyze() error = %v", err)
-			}
-			if len(got.Queries) != 1 || len(got.Queries[0].ResultSets) != 1 || len(got.Queries[0].ResultSets[0].Columns) != 1 {
-				t.Fatalf("Queries = %#v", got.Queries)
-			}
-			if !reflect.DeepEqual(got.Queries[0].Parameters, tt.parameters) {
-				t.Errorf("Parameters = %#v, want %#v", got.Queries[0].Parameters, tt.parameters)
-			}
-			if result := got.Queries[0].ResultSets[0].Columns[0]; result.Name != "greeting" || !reflect.DeepEqual(result.Type, tt.result) {
-				t.Errorf("result = %#v, want greeting %#v", result, tt.result)
+			require.NoError(t, err)
+			require.Len(t, got.Queries, 1)
+			require.Len(t, got.Queries[0].ResultSets, 1)
+			require.Len(t, got.Queries[0].ResultSets[0].Columns, 1)
+			assert.Equal(t, tt.parameters, got.Queries[0].Parameters)
+			{
+				result := got.Queries[0].ResultSets[0].Columns[0]
+				assert.False(t, result.Name != "greeting" || !reflect.DeepEqual(result.Type, tt.result))
 			}
 		})
 	}
@@ -78,9 +77,7 @@ func TestAnalyzeRejectsUnsupportedConcatenationOperands(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: "-- name: Invalid :one\n" + tt.query}})
-			if err == nil || !strings.Contains(err.Error(), tt.want) {
-				t.Fatalf("error = %v, want %q", err, tt.want)
-			}
+			require.ErrorContains(t, err, tt.want)
 		})
 	}
 }
@@ -91,8 +88,6 @@ func TestAnalyzeRejectsColumnReferencesWithoutTable(t *testing.T) {
 		{"SELECT 1 AS n WHERE missing = 1;", `unknown column "missing"`},
 	} {
 		_, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: "-- name: Invalid :one\n" + test.query}})
-		if err == nil || !strings.Contains(err.Error(), test.want) {
-			t.Errorf("query %q error = %v, want %q", test.query, err, test.want)
-		}
+		assert.ErrorContains(t, err, test.want)
 	}
 }

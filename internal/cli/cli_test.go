@@ -7,9 +7,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/update"
 )
 
@@ -21,17 +22,13 @@ func TestCLIReportsOutputFailures(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "sqlc.yaml")
 	for _, args := range [][]string{{"--help"}, {"version"}, {"version", "--verbose"}, {"init", "-f", configPath}, {"init", "-f", configPath}} {
 		var stderr bytes.Buffer
-		if code := Run(args, brokenWriter{}, &stderr); code != 1 || !strings.Contains(stderr.String(), io.ErrClosedPipe.Error()) {
-			t.Errorf("%v: status %d, stderr %q", args, code, stderr.String())
-		}
+		code := Run(args, brokenWriter{}, &stderr)
+		assert.Equal(t, 1, code, "%v: stderr %q", args, stderr.String())
+		assert.Contains(t, stderr.String(), io.ErrClosedPipe.Error(), "%v", args)
 	}
-	if code := Run([]string{"unknown"}, io.Discard, brokenWriter{}); code != 1 {
-		t.Errorf("diagnostic write failure changed exit status: %d", code)
-	}
+	assert.Equal(t, 1, Run([]string{"unknown"}, io.Discard, brokenWriter{}), "diagnostic write failure changed exit status")
 	_, err := compare([]output{{path: filepath.Join(t.TempDir(), "missing.go"), content: []byte("generated\n")}}, brokenWriter{})
-	if !errors.Is(err, io.ErrClosedPipe) {
-		t.Errorf("diff output failure: %v", err)
-	}
+	assert.ErrorIs(t, err, io.ErrClosedPipe, "diff output failure")
 }
 
 func invoke(args ...string) (int, string, string) {
@@ -49,12 +46,8 @@ func (offlineTransport) RoundTrip(*http.Request) (*http.Response, error) {
 }
 func put(t *testing.T, path, text string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(text), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0755))
+	require.NoError(t, os.WriteFile(path, []byte(text), 0600))
 }
 
 func TestGenerateCompileDiff(t *testing.T) {
@@ -63,36 +56,30 @@ func TestGenerateCompileDiff(t *testing.T) {
 	put(t, filepath.Join(dir, "queries.sql"), "-- name: GetAuthor :one\nDECLARE $author_id AS Uint64;\nSELECT name FROM authors WHERE id = $author_id;")
 	cfg := filepath.Join(dir, "sqlc.yaml")
 	put(t, cfg, "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n  gen:\n    go:\n      out: db\n      sql_package: database/sql\n    python:\n      out: py\n      runtime: ydb\n")
-	if code, _, err := invoke("-f", cfg, "compile"); code != 0 {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "db")); !os.IsNotExist(err) {
-		t.Fatal("compile wrote output")
-	}
-	if code, _, err := invoke("generate", "-f", cfg); code != 0 {
-		t.Fatal(err)
-	}
-	if code, out, err := invoke("diff", "--file="+cfg); code != 0 || out != "" {
-		t.Fatalf("diff %d: %s %s", code, out, err)
-	}
+	code, _, stderr := invoke("-f", cfg, "compile")
+	require.Zero(t, code, stderr)
+	_, err := os.Stat(filepath.Join(dir, "db"))
+	require.ErrorIs(t, err, os.ErrNotExist, "compile wrote output")
+	code, _, stderr = invoke("generate", "-f", cfg)
+	require.Zero(t, code, stderr)
+	code, out, stderr := invoke("diff", "--file="+cfg)
+	require.Zero(t, code, stderr)
+	require.Empty(t, out)
 	file := filepath.Join(dir, "db", "models.go")
 	original, err := os.ReadFile(file)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	put(t, file, string(original)+"// edited\n")
-	if code, out, err := invoke("diff", "-f", cfg); code != 1 || !strings.Contains(out, "-// edited") {
-		t.Fatalf("diff %d: %s %s", code, out, err)
-	}
-	if data, _ := os.ReadFile(file); !bytes.HasSuffix(data, []byte("// edited\n")) {
-		t.Fatal("diff modified file")
-	}
-	if code, _, err := invoke("generate", "-f", cfg); code != 0 {
-		t.Fatal(err)
-	}
-	if data, _ := os.ReadFile(file); !bytes.Equal(data, original) {
-		t.Fatal("regeneration not deterministic")
-	}
+	code, out, stderr = invoke("diff", "-f", cfg)
+	require.Equal(t, 1, code, stderr)
+	require.Contains(t, out, "-// edited")
+	data, err := os.ReadFile(file)
+	require.NoError(t, err)
+	require.True(t, bytes.HasSuffix(data, []byte("// edited\n")), "diff modified file")
+	code, _, stderr = invoke("generate", "-f", cfg)
+	require.Zero(t, code, stderr)
+	data, err = os.ReadFile(file)
+	require.NoError(t, err)
+	require.Equal(t, original, data, "regeneration not deterministic")
 }
 
 func TestGenerationErrorLeavesOutputsIntact(t *testing.T) {
@@ -103,12 +90,12 @@ func TestGenerationErrorLeavesOutputsIntact(t *testing.T) {
 	put(t, filepath.Join(dir, "invalid.sql"), "-- name: Broken :one\nSELECT missing FROM a;")
 	put(t, filepath.Join(dir, "db", "models.go"), "sentinel")
 	put(t, cfg, "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: valid.sql\n  gen:\n    go:\n      out: db\n- engine: ydb\n  schema: schema.sql\n  queries: invalid.sql\n  gen:\n    go:\n      out: db2\n")
-	if code, _, err := invoke("generate", "-f", cfg); code == 0 || !strings.Contains(err, "missing") {
-		t.Fatalf("invalid query accepted: %d %s", code, err)
-	}
-	if data, _ := os.ReadFile(filepath.Join(dir, "db", "models.go")); string(data) != "sentinel" {
-		t.Fatal("partially generated despite analysis error")
-	}
+	code, _, stderr := invoke("generate", "-f", cfg)
+	require.NotZero(t, code, stderr)
+	require.Contains(t, stderr, "missing")
+	data, err := os.ReadFile(filepath.Join(dir, "db", "models.go"))
+	require.NoError(t, err)
+	require.Equal(t, "sentinel", string(data), "partially generated despite analysis error")
 }
 
 func TestOutputFileCannotBeAnotherOutputDirectory(t *testing.T) {
@@ -118,51 +105,48 @@ func TestOutputFileCannotBeAnotherOutputDirectory(t *testing.T) {
 	put(t, filepath.Join(dir, "queries.sql"), "-- name: GetA :one\nSELECT id FROM a;")
 	put(t, cfg, "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n  gen:\n    go:\n      out: db\n    python:\n      out: db/db.go\n")
 	for _, command := range []string{"diff", "generate"} {
-		if code, _, err := invoke(command, "-f", cfg); code != 1 || !strings.Contains(err, "output path conflict") {
-			t.Errorf("%s: got %d: %s", command, code, err)
-		}
+		code, _, stderr := invoke(command, "-f", cfg)
+		assert.Equal(t, 1, code, "%s: %s", command, stderr)
+		assert.Contains(t, stderr, "output path conflict", command)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "db")); !os.IsNotExist(err) {
-		t.Fatal("generate wrote files before reporting conflicting paths")
-	}
+	_, err := os.Stat(filepath.Join(dir, "db"))
+	require.ErrorIs(t, err, os.ErrNotExist, "generate wrote files before reporting conflicting paths")
 }
 
 func TestCLIAndInit(t *testing.T) {
 	for _, args := range [][]string{{"generate", "--bogus"}, {"generate", "-f"}, {"version", "extra"}, {"init", "--v1"}, {"push"}, {"generate", "--remote"}} {
-		if code, _, _ := invoke(args...); code == 0 {
-			t.Fatalf("accepted %v", args)
-		}
+		code, _, _ := invoke(args...)
+		require.NotZero(t, code, "accepted %v", args)
 	}
 	for _, args := range [][]string{{"--help"}, {"version"}} {
-		if code, _, err := invoke(args...); code != 0 {
-			t.Fatal(err)
-		}
+		code, _, stderr := invoke(args...)
+		require.Zero(t, code, stderr)
 	}
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "new.yaml")
-	if code, _, err := invoke("init", "-f", cfg); code != 0 {
-		t.Fatal(err)
-	}
-	first, _ := os.ReadFile(cfg)
-	if code, _, err := invoke("init", "-f", cfg, "--v2"); code != 0 {
-		t.Fatal(err)
-	}
-	second, _ := os.ReadFile(cfg)
-	if !bytes.Equal(first, second) {
-		t.Fatal("init overwrote existing config")
-	}
+	code, _, stderr := invoke("init", "-f", cfg)
+	require.Zero(t, code, stderr)
+	first, err := os.ReadFile(cfg)
+	require.NoError(t, err)
+	code, _, stderr = invoke("init", "-f", cfg, "--v2")
+	require.Zero(t, code, stderr)
+	second, err := os.ReadFile(cfg)
+	require.NoError(t, err)
+	require.Equal(t, first, second, "init overwrote existing config")
 }
 
 func TestVersionVerboseIsOnlyAvailableForVersion(t *testing.T) {
-	if code, out, err := invoke("version"); code != 0 || out != Version+"\n" || err != "" {
-		t.Fatalf("version: %d %q %q", code, out, err)
-	}
-	if code, out, err := invoke("version", "--verbose"); code != 0 || out != Version+"\ncommit: "+Commit+"\n" || err != "" {
-		t.Fatalf("verbose version: %d %q %q", code, out, err)
-	}
-	if code, _, err := invoke("generate", "--verbose"); code != 1 || !strings.Contains(err, "only valid for version") {
-		t.Fatalf("generate --verbose: %d %q", code, err)
-	}
+	code, out, stderr := invoke("version")
+	require.Zero(t, code, stderr)
+	require.Equal(t, Version+"\n", out)
+	require.Empty(t, stderr)
+	code, out, stderr = invoke("version", "--verbose")
+	require.Zero(t, code, stderr)
+	require.Equal(t, Version+"\ncommit: "+Commit+"\n", out)
+	require.Empty(t, stderr)
+	code, _, stderr = invoke("generate", "--verbose")
+	require.Equal(t, 1, code)
+	require.Contains(t, stderr, "only valid for version")
 }
 
 func TestSymlinkOutputCannotOverwriteConfig(t *testing.T) {
@@ -172,16 +156,13 @@ func TestSymlinkOutputCannotOverwriteConfig(t *testing.T) {
 	put(t, filepath.Join(dir, "queries.sql"), "-- name: GetA :one\nSELECT id FROM a;")
 	data := "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n  gen:\n    go:\n      out: linked\n"
 	put(t, cfg, data)
-	if err := os.Symlink(dir, filepath.Join(dir, "linked")); err != nil {
-		t.Fatal(err)
-	}
-	if code, _, err := invoke("generate", "-f", cfg); code == 0 || !strings.Contains(err, "overwrite input") {
-		t.Fatalf("got %d: %s", code, err)
-	}
-	got, _ := os.ReadFile(cfg)
-	if string(got) != data {
-		t.Fatal("config overwritten")
-	}
+	require.NoError(t, os.Symlink(dir, filepath.Join(dir, "linked")))
+	code, _, stderr := invoke("generate", "-f", cfg)
+	require.NotZero(t, code)
+	require.Contains(t, stderr, "overwrite input")
+	got, err := os.ReadFile(cfg)
+	require.NoError(t, err)
+	require.Equal(t, data, string(got), "config overwritten")
 }
 
 func TestRenamedQueryLeavesStaleOutput(t *testing.T) {
@@ -190,38 +171,30 @@ func TestRenamedQueryLeavesStaleOutput(t *testing.T) {
 	put(t, filepath.Join(dir, "schema.sql"), "CREATE TABLE a (id Uint64 NOT NULL, PRIMARY KEY(id));")
 	put(t, filepath.Join(dir, "queries", "old.sql"), "-- name: GetA :one\nSELECT id FROM a;")
 	put(t, cfg, "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: queries\n  gen:\n    go:\n      out: db\n")
-	if code, _, err := invoke("generate", "-f", cfg); code != 0 {
-		t.Fatal(err)
-	}
-	if err := os.Rename(filepath.Join(dir, "queries", "old.sql"), filepath.Join(dir, "queries", "new.sql")); err != nil {
-		t.Fatal(err)
-	}
+	code, _, stderr := invoke("generate", "-f", cfg)
+	require.Zero(t, code, stderr)
+	require.NoError(t, os.Rename(filepath.Join(dir, "queries", "old.sql"), filepath.Join(dir, "queries", "new.sql")))
 	stalePath := filepath.Join(dir, "db", "old.sql.go")
 	staleBefore, err := os.ReadFile(stalePath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, command := range []string{"diff", "generate"} {
-		if code, _, err := invoke(command, "-f", cfg); code != 1 || !strings.Contains(err, "old.sql.go") || !strings.Contains(err, "stale") {
-			t.Fatalf("%s accepted stale output: %d %s", command, code, err)
-		}
+		code, _, stderr := invoke(command, "-f", cfg)
+		require.Equal(t, 1, code, "%s: %s", command, stderr)
+		require.Contains(t, stderr, "old.sql.go", command)
+		require.Contains(t, stderr, "stale", command)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "db", "new.sql.go")); !os.IsNotExist(err) {
-		t.Fatal("generate wrote files before reporting stale output")
-	}
-	if data, err := os.ReadFile(stalePath); err != nil || !bytes.Equal(data, staleBefore) {
-		t.Fatal("stale output was removed or changed")
-	}
-	if err := os.Remove(stalePath); err != nil {
-		t.Fatal(err)
-	}
+	_, err = os.Stat(filepath.Join(dir, "db", "new.sql.go"))
+	require.ErrorIs(t, err, os.ErrNotExist, "generate wrote files before reporting stale output")
+	data, err := os.ReadFile(stalePath)
+	require.NoError(t, err)
+	require.Equal(t, staleBefore, data, "stale output was removed or changed")
+	require.NoError(t, os.Remove(stalePath))
 	// Handwritten files and packages nested in out are not generator-owned.
 	put(t, filepath.Join(dir, "db", "custom.go"), "package db\n// Code generated by sqlc-ydb. DO NOT EDIT.\n")
 	put(t, filepath.Join(dir, "db", "nested", "models.go"), "// Code generated by sqlc-ydb. DO NOT EDIT.\npackage nested\n")
 	for _, command := range []string{"generate", "diff"} {
-		if code, _, err := invoke(command, "-f", cfg); code != 0 {
-			t.Fatalf("%s after cleanup: %s", command, err)
-		}
+		code, _, stderr := invoke(command, "-f", cfg)
+		require.Zero(t, code, "%s after cleanup: %s", command, stderr)
 	}
 }
 
@@ -241,16 +214,14 @@ func TestStaleOutputsAcrossLanguages(t *testing.T) {
 			put(t, filepath.Join(dir, "schema.sql"), "CREATE TABLE a (id Uint64 NOT NULL, PRIMARY KEY(id));")
 			put(t, filepath.Join(dir, "queries.sql"), "-- name: GetA :one\nSELECT id FROM a;")
 			put(t, cfg, "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n  gen:\n    go:\n      out: db\n    python:\n      out: db\n")
-			if code, _, err := invoke("generate", "-f", cfg); code != 0 {
-				t.Fatal(err)
-			}
+			code, _, stderr := invoke("generate", "-f", cfg)
+			require.Zero(t, code, stderr)
 			put(t, filepath.Join(dir, "db", file.name), file.header)
-			if code, _, err := invoke("diff", "-f", cfg); code != 1 || !strings.Contains(err, file.name) {
-				t.Fatalf("diff accepted stale %s: %d %s", file.name, code, err)
-			}
-			if code, _, err := invoke("compile", "-f", cfg); code != 0 {
-				t.Fatalf("compile inspected output: %s", err)
-			}
+			code, _, stderr = invoke("diff", "-f", cfg)
+			require.Equal(t, 1, code, stderr)
+			require.Contains(t, stderr, file.name)
+			code, _, stderr = invoke("compile", "-f", cfg)
+			require.Zero(t, code, stderr)
 		})
 	}
 }
@@ -264,32 +235,27 @@ func TestKotlinGenerateCompileDiff(t *testing.T) {
 			put(t, filepath.Join(dir, "schema.sql"), "CREATE TABLE authors (id Int64 NOT NULL, name Utf8, PRIMARY KEY(id));")
 			put(t, filepath.Join(dir, "queries.sql"), "-- name: GetAuthor :one\nDECLARE $id AS Int64;\nSELECT name FROM authors WHERE id = $id;")
 			put(t, cfg, "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n  gen:\n    kotlin:\n      out: generated/kotlin\n      package: example.db\n      runtime: "+runtime+"\n")
-			if code, _, err := invoke("compile", "-f", cfg); code != 0 {
-				t.Fatal(err)
-			}
-			if _, err := os.Stat(outDir); !os.IsNotExist(err) {
-				t.Fatal("compile wrote Kotlin output")
-			}
-			if code, _, err := invoke("generate", "-f", cfg); code != 0 {
-				t.Fatal(err)
-			}
+			code, _, stderr := invoke("compile", "-f", cfg)
+			require.Zero(t, code, stderr)
+			_, err := os.Stat(outDir)
+			require.ErrorIs(t, err, os.ErrNotExist, "compile wrote Kotlin output")
+			code, _, stderr = invoke("generate", "-f", cfg)
+			require.Zero(t, code, stderr)
 			files, err := filepath.Glob(filepath.Join(outDir, "*.kt"))
-			if err != nil || len(files) == 0 {
-				t.Fatalf("no Kotlin files in configured output directory: %v", err)
-			}
+			require.NoError(t, err)
+			require.NotEmpty(t, files, "no Kotlin files in configured output directory")
 			for _, file := range files {
 				content, err := os.ReadFile(file)
-				if err != nil || !bytes.Contains(content, []byte("package example.db")) {
-					t.Fatalf("Kotlin package option was not applied to %s: %v", file, err)
-				}
+				require.NoError(t, err)
+				require.Contains(t, string(content), "package example.db", file)
 			}
-			if code, out, err := invoke("diff", "-f", cfg); code != 0 || out != "" {
-				t.Fatalf("diff %d: %s %s", code, out, err)
-			}
+			code, out, stderr := invoke("diff", "-f", cfg)
+			require.Zero(t, code, stderr)
+			require.Empty(t, out)
 			put(t, filepath.Join(outDir, "Obsolete.kt"), "// Code generated by sqlc-ydb. DO NOT EDIT.\n")
-			if code, _, err := invoke("generate", "-f", cfg); code != 1 || !strings.Contains(err, "Obsolete.kt") {
-				t.Fatalf("accepted stale Kotlin output: %d %s", code, err)
-			}
+			code, _, stderr = invoke("generate", "-f", cfg)
+			require.Equal(t, 1, code, stderr)
+			require.Contains(t, stderr, "Obsolete.kt")
 		})
 	}
 }

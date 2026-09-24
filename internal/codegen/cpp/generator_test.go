@@ -2,12 +2,15 @@ package cpp
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -51,18 +54,14 @@ func generatedContent(t *testing.T, files []model.File, name string) string {
 			return string(file.Content)
 		}
 	}
-	t.Fatalf("missing generated file %q", name)
+	require.FailNow(t, fmt.Sprintf("missing generated file %q", name))
 	return ""
 }
 
 func TestGenerateNativeYDBAuthorsAPI(t *testing.T) {
 	files, err := Generate(authorsAnalysis(), Options{Namespace: "example::authors", Runtime: "ydb"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(files) != 3 {
-		t.Fatalf("got %d files, want 3", len(files))
-	}
+	require.NoError(t, err)
+	require.Equal(t, 3, len(files), "got %d files, want 3", len(files))
 	models := generatedContent(t, files, "models.hpp")
 	header := generatedContent(t, files, "queries.hpp")
 	source := generatedContent(t, files, "queries.cpp")
@@ -73,9 +72,7 @@ func TestGenerateNativeYDBAuthorsAPI(t *testing.T) {
 		"std::string name;",
 		"std::optional<std::string> bio;",
 	} {
-		if !strings.Contains(models, want) {
-			t.Errorf("models.hpp missing %q:\n%s", want, models)
-		}
+		assert.Contains(t, models, want, "models.hpp missing %q:\n%s", want, models)
 	}
 	for _, want := range []string{
 		"explicit Queries(NYdb::NQuery::TQueryClient& client,",
@@ -86,9 +83,7 @@ func TestGenerateNativeYDBAuthorsAPI(t *testing.T) {
 		"NYdb::NQuery::TQueryClient* client_;",
 		"NYdb::NQuery::TTransaction* transaction_;",
 	} {
-		if !strings.Contains(header, want) {
-			t.Errorf("queries.hpp missing %q:\n%s", want, header)
-		}
+		assert.Contains(t, header, want, "queries.hpp missing %q:\n%s", want, header)
 	}
 	for _, want := range []string{
 		"#include <ydb-cpp-sdk/client/types/status/status.h>",
@@ -103,17 +98,13 @@ func TestGenerateNativeYDBAuthorsAPI(t *testing.T) {
 		"GetUtf8()",
 		"GetOptionalUtf8()",
 	} {
-		if !strings.Contains(source, want) {
-			t.Errorf("queries.cpp missing %q:\n%s", want, source)
-		}
+		assert.Contains(t, source, want, "queries.cpp missing %q:\n%s", want, source)
 	}
 }
 
 func TestGenerateUserverAuthorsAPI(t *testing.T) {
 	files, err := Generate(authorsAnalysis(), Options{Namespace: "example::authors", Runtime: "userver"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	models := generatedContent(t, files, "models.hpp")
 	header := generatedContent(t, files, "queries.hpp")
 	source := generatedContent(t, files, "queries.cpp")
@@ -121,9 +112,7 @@ func TestGenerateUserverAuthorsAPI(t *testing.T) {
 		"::userver::ydb::Utf8 name;",
 		"std::optional<::userver::ydb::Utf8> bio;",
 	} {
-		if !strings.Contains(models, want) {
-			t.Errorf("models.hpp missing %q:\n%s", want, models)
-		}
+		assert.Contains(t, models, want, "models.hpp missing %q:\n%s", want, models)
 	}
 	for _, want := range []string{
 		"explicit Queries(::userver::ydb::TableClient& client,",
@@ -132,9 +121,7 @@ func TestGenerateUserverAuthorsAPI(t *testing.T) {
 		"::userver::ydb::TableClient* client_;",
 		"::userver::ydb::TxActor* transaction_;",
 	} {
-		if !strings.Contains(header, want) {
-			t.Errorf("queries.hpp missing %q:\n%s", want, header)
-		}
+		assert.Contains(t, header, want, "queries.hpp missing %q:\n%s", want, header)
 	}
 	for _, want := range []string{
 		"::userver::ydb::Query{",
@@ -146,9 +133,7 @@ func TestGenerateUserverAuthorsAPI(t *testing.T) {
 		"sqlc_row.Get<::userver::ydb::Utf8>(\"name\")",
 		"sqlc_row.Get<std::optional<::userver::ydb::Utf8>>(\"bio\")",
 	} {
-		if !strings.Contains(source, want) {
-			t.Errorf("queries.cpp missing %q:\n%s", want, source)
-		}
+		assert.Contains(t, source, want, "queries.cpp missing %q:\n%s", want, source)
 	}
 }
 
@@ -159,22 +144,14 @@ func TestUserverRuntimeQueryConstructor(t *testing.T) {
 	}
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Named", Command: model.Exec, SQL: "SELECT 1;\nSELECT 2;"}}}
 	files, err := Generate(a, Options{Runtime: "userver"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	generated := generatedContent(t, files, "queries.cpp")
 	start := strings.Index(generated, "::userver::ydb::Query{")
-	if start < 0 {
-		t.Fatal("missing Query construction")
-	}
+	require.False(t, start < 0, "missing Query construction")
 	end := strings.Index(generated[start:], "\n    }")
-	if end < 0 {
-		t.Fatal("missing Query initializer end")
-	}
+	require.False(t, end < 0, "missing Query initializer end")
 	query := generated[start : start+end+len("\n    }")]
-	if !strings.Contains(query, "\n        \"SELECT 1;\\n\"\n        \"SELECT 2;\"") {
-		t.Fatal("SQL literals must align with the query constructor arguments")
-	}
+	require.Contains(t, query, "\n        \"SELECT 1;\\n\"\n        \"SELECT 2;\"", "SQL literals must align with the query constructor arguments")
 	// The generated runtime Name selects the overload that owns the query text.
 	program := `#include <optional>
 #include <string>
@@ -198,14 +175,12 @@ int main() {
 `
 	dir := t.TempDir()
 	input, binary := filepath.Join(dir, "query.cpp"), filepath.Join(dir, "query")
-	if err := os.WriteFile(input, []byte(program), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(input, []byte(program), 0600))
 	if out, err := exec.Command(compiler, "-std=c++20", input, "-o", binary).CombinedOutput(); err != nil {
-		t.Fatalf("compile userver Query constructor: %v\n%s", err, out)
+		require.NoError(t, err, "compile userver Query constructor: %v\n%s", err, out)
 	}
 	if out, err := exec.Command(binary).CombinedOutput(); err != nil {
-		t.Fatalf("query name or SQL bytes changed: %v\n%s", err, out)
+		require.NoError(t, err, "query name or SQL bytes changed: %v\n%s", err, out)
 	}
 }
 
@@ -241,20 +216,14 @@ func TestJoinedColumnsUseExactResultKeysWithoutChangingAPIFields(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.runtime, func(t *testing.T) {
 			files, err := Generate(analysis, Options{Runtime: tc.runtime})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			models := generatedContent(t, files, "models.hpp")
 			source := generatedContent(t, files, "queries.cpp")
 			for _, field := range []string{"std::uint64_t id;", tc.aliasField} {
-				if count := strings.Count(models, field); count != 2 {
-					t.Errorf("models.hpp contains %q %d times, want once for :one and once for :many:\n%s", field, count, models)
-				}
+				assert.Equal(t, 2, strings.Count(models, field), "models.hpp should contain %q twice:\n%s", field, models)
 			}
 			for _, lookup := range []string{tc.qualifiedGet, tc.aliasGet} {
-				if count := strings.Count(source, lookup); count != 2 {
-					t.Errorf("queries.cpp contains %q %d times, want once for :one and once for :many:\n%s", lookup, count, source)
-				}
+				assert.Equal(t, 2, strings.Count(source, lookup), "queries.cpp should contain %q twice:\n%s", lookup, source)
 			}
 		})
 	}
@@ -282,9 +251,7 @@ func TestGenerateRejectsUnsupportedAndUnsafeInput(t *testing.T) {
 			a := authorsAnalysis()
 			tc.mutate(a)
 			_, err := Generate(a, tc.opts)
-			if err == nil || !strings.Contains(err.Error(), tc.message) {
-				t.Fatalf("got error %v, want substring %q", err, tc.message)
-			}
+			require.ErrorContains(t, err, tc.message, "got error %v, want substring %q", err, tc.message)
 		})
 	}
 }
@@ -293,12 +260,8 @@ func TestOneReturnsFirstRowWithoutRejectingAdditionalRows(t *testing.T) {
 	for _, runtime := range []string{"ydb", "userver"} {
 		t.Run(runtime, func(t *testing.T) {
 			files, err := Generate(authorsAnalysis(), Options{Runtime: runtime})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if source := generatedContent(t, files, "queries.cpp"); strings.Contains(source, ":one query returned more than one row") {
-				t.Fatalf(":one must return the first row, not reject extra rows:\n%s", source)
-			}
+			require.NoError(t, err)
+			require.NotContains(t, generatedContent(t, files, "queries.cpp"), ":one query returned more than one row")
 		})
 	}
 }
@@ -308,42 +271,32 @@ func TestRejectsGeneratedNameCollisions(t *testing.T) {
 		a := authorsAnalysis()
 		a.Queries = append(a.Queries, model.AnalyzedQuery{Name: "GetAuthorRow", Command: model.Exec, SQL: "SELECT 1;"})
 		_, err := Generate(a, Options{Runtime: "ydb"})
-		if err == nil || !strings.Contains(err.Error(), "GetAuthorRow") || !strings.Contains(err.Error(), "row type") {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		require.False(t, err == nil || !strings.Contains(err.Error(), "GetAuthorRow") || !strings.Contains(err.Error(), "row type"), "unexpected error: %v", err)
 	})
 	t.Run("field has its row type name", func(t *testing.T) {
 		a := authorsAnalysis()
 		a.Queries[0].ResultSets[0].Columns[0].Name = "GetAuthorRow"
 		_, err := Generate(a, Options{Runtime: "ydb"})
-		if err == nil || !strings.Contains(err.Error(), "GetAuthorRow") || !strings.Contains(err.Error(), "row type") {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		require.False(t, err == nil || !strings.Contains(err.Error(), "GetAuthorRow") || !strings.Contains(err.Error(), "row type"), "unexpected error: %v", err)
 	})
 	t.Run("parameter hides row type", func(t *testing.T) {
 		a := authorsAnalysis()
 		a.Queries[0].Parameters[0].Name = "GetAuthorRow"
 		_, err := Generate(a, Options{Runtime: "ydb"})
-		if err == nil || !strings.Contains(err.Error(), "GetAuthorRow") || !strings.Contains(err.Error(), "row type") {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		require.False(t, err == nil || !strings.Contains(err.Error(), "GetAuthorRow") || !strings.Contains(err.Error(), "row type"), "unexpected error: %v", err)
 	})
 	t.Run("former SQL constant name is available", func(t *testing.T) {
 		a := authorsAnalysis()
 		a.Queries[0].Parameters[0].Name = "kGetAuthorSql"
 		_, err := Generate(a, Options{Runtime: "ydb"})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		require.NoError(t, err, "unexpected error: %v", err)
 	})
 	for _, member := range []string{"client_", "transaction_"} {
 		t.Run("query method conflicts with "+member, func(t *testing.T) {
 			a := authorsAnalysis()
 			a.Queries[0].Name = member
 			_, err := Generate(a, Options{Runtime: "ydb"})
-			if err == nil || !strings.Contains(err.Error(), "invalid C++ query name") {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			require.ErrorContains(t, err, "invalid C++ query name", "unexpected error: %v", err)
 		})
 	}
 }
@@ -352,13 +305,9 @@ func TestParameterCannotShadowClientMember(t *testing.T) {
 	a := authorsAnalysis()
 	a.Queries[0].Parameters[0].Name = "client_"
 	files, err := Generate(a, Options{Runtime: "ydb"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	source := generatedContent(t, files, "queries.cpp")
-	if !strings.Contains(source, "this->client_->RetryQuerySync") {
-		t.Fatalf("client member is not explicitly qualified:\n%s", source)
-	}
+	require.Contains(t, source, "this->client_->RetryQuerySync", "client member is not explicitly qualified:\n%s", source)
 }
 
 func TestScalarWidthsAndStringKindsRemainDistinct(t *testing.T) {
@@ -385,25 +334,15 @@ func TestScalarWidthsAndStringKindsRemainDistinct(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.kind, func(t *testing.T) {
 			info, err := typeInfo(model.Type{Kind: tc.kind}, "ydb")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if info.cpp != tc.cpp || info.builder != tc.nativeBuilder || info.parser != tc.nativeParser {
-				t.Fatalf("got %+v, want C++ %q builder %q parser %q", info, tc.cpp, tc.nativeBuilder, tc.nativeParser)
-			}
+			require.NoError(t, err)
+			require.False(t, info.cpp != tc.cpp || info.builder != tc.nativeBuilder || info.parser != tc.nativeParser, "got %+v, want C++ %q builder %q parser %q", info, tc.cpp, tc.nativeBuilder, tc.nativeParser)
 		})
 	}
 	stringInfo, err := typeInfo(model.Type{Kind: "String"}, "userver")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	utf8Info, err := typeInfo(model.Type{Kind: "Utf8"}, "userver")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stringInfo.cpp != "std::string" || utf8Info.cpp != "::userver::ydb::Utf8" {
-		t.Fatalf("userver string types collapsed: String=%q Utf8=%q", stringInfo.cpp, utf8Info.cpp)
-	}
+	require.NoError(t, err)
+	require.False(t, stringInfo.cpp != "std::string" || utf8Info.cpp != "::userver::ydb::Utf8", "userver string types collapsed: String=%q Utf8=%q", stringInfo.cpp, utf8Info.cpp)
 }
 
 func TestSQLLiteralPreservesSourceBytes(t *testing.T) {
@@ -423,31 +362,21 @@ func TestSQLLiteralPreservesSourceBytes(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			literal := sqlLiteral(tc.sql)
-			if strings.HasPrefix(literal, "R\"") {
-				t.Fatalf("unexpected literal form: %s", literal)
-			}
+			require.False(t, strings.HasPrefix(literal, "R\""), "unexpected literal form: %s", literal)
 			for _, line := range strings.Split(literal, "\n") {
-				if strings.HasSuffix(line, " ") || strings.HasSuffix(line, "\t") {
-					t.Fatalf("literal adds trailing whitespace: %q", line)
-				}
+				require.False(t, strings.HasSuffix(line, " ") || strings.HasSuffix(line, "\t"), "literal adds trailing whitespace: %q", line)
 			}
 			dir := t.TempDir()
 			input := filepath.Join(dir, "literal.cpp")
 			binary := filepath.Join(dir, "literal")
 			source := "#include <iostream>\n#include <string>\nint main(){const std::string sql=" + literal + ";std::cout.write(sql.data(),sql.size());}\n"
-			if err := os.WriteFile(input, []byte(source), 0600); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, os.WriteFile(input, []byte(source), 0600))
 			if output, err := exec.Command(compiler, "-std=c++20", input, "-o", binary).CombinedOutput(); err != nil {
-				t.Fatalf("compile: %v %s", err, output)
+				require.NoError(t, err, "compile: %v %s", err, output)
 			}
 			actual, err := exec.Command(binary).Output()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !bytes.Equal(actual, []byte(tc.sql)) {
-				t.Fatalf("SQL source changed: got %q want %q", actual, tc.sql)
-			}
+			require.NoError(t, err)
+			require.False(t, !bytes.Equal(actual, []byte(tc.sql)), "SQL source changed: got %q want %q", actual, tc.sql)
 		})
 	}
 }
@@ -455,33 +384,21 @@ func TestSQLLiteralPreservesSourceBytes(t *testing.T) {
 func TestSettingsAndHeaderHygiene(t *testing.T) {
 	for _, runtime := range []string{"ydb", "userver"} {
 		files, err := Generate(authorsAnalysis(), Options{Runtime: runtime})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		source := generatedContent(t, files, "queries.cpp")
-		if !strings.Contains(source, "this->execute_settings_") {
-			t.Errorf("%s: missing execution settings", runtime)
-		}
+		assert.Contains(t, source, "this->execute_settings_", "%s: missing execution settings", runtime)
 		if runtime == "ydb" {
 			for _, want := range []string{"}, this->retry_settings_)", "GetResultSets().size() != 1"} {
-				if !strings.Contains(source, want) {
-					t.Errorf("native: missing %s", want)
-				}
+				assert.Contains(t, source, want, "native: missing %s", want)
 			}
 		} else {
-			if strings.Contains(source, "#include <utility>") {
-				t.Error("unused userver utility include")
-			}
+			assert.False(t, strings.Contains(source, "#include <utility>"), "unused userver utility include")
 			for _, name := range []string{"models.hpp", "queries.hpp"} {
-				if strings.Contains(generatedContent(t, files, name), "#include <string>") {
-					t.Errorf("unused string include in %s", name)
-				}
+				assert.False(t, strings.Contains(generatedContent(t, files, name), "#include <string>"), "unused string include in %s", name)
 			}
 		}
 	}
-	if err := validateIdent("a__b"); err == nil {
-		t.Error("C++ reserved double underscore accepted")
-	}
+	assert.Error(t, validateIdent("a__b"), "C++ reserved double underscore accepted")
 }
 
 func TestJsonTimestampTypes(t *testing.T) {
@@ -497,26 +414,20 @@ func TestJsonTimestampTypes(t *testing.T) {
 				ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "data", Type: jsonType}, {Name: "at", Type: timestampType}}}},
 			}}}
 			files, err := Generate(in, Options{Runtime: runtime})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			models := generatedContent(t, files, "models.hpp")
 			source := generatedContent(t, files, "queries.cpp")
 			if runtime == "ydb" {
-				if !strings.Contains(models, "TInstant") || !strings.Contains(models, "std::string") {
-					t.Fatal(models)
-				}
+				require.False(t, !strings.Contains(models, "TInstant") || !strings.Contains(models, "std::string"), models)
 				prefix := ""
 				if optional {
 					prefix = "Optional"
 				}
 				for _, kind := range []string{"Json", "Timestamp"} {
-					if !strings.Contains(source, "."+prefix+kind+"(") || !strings.Contains(source, "Get"+prefix+kind+"()") {
-						t.Fatal(source)
-					}
+					require.False(t, !strings.Contains(source, "."+prefix+kind+"(") || !strings.Contains(source, "Get"+prefix+kind+"()"), source)
 				}
-			} else if !strings.Contains(models, "::userver::formats::json::Value") || !strings.Contains(models, "std::chrono::system_clock::time_point") || !strings.Contains(models, "<userver/formats/json/value.hpp>") {
-				t.Fatal(models)
+			} else {
+				require.False(t, !strings.Contains(models, "::userver::formats::json::Value") || !strings.Contains(models, "std::chrono::system_clock::time_point") || !strings.Contains(models, "<userver/formats/json/value.hpp>"), models)
 			}
 		}
 	}
@@ -528,9 +439,7 @@ func TestStructListParameter(t *testing.T) {
 			typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, {Name: "tags", Type: model.Optional(model.Type{Kind: "Json"})}, {Name: "available", Type: model.Type{Kind: "Timestamp"}}}}}
 			a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
 			files, err := Generate(a, Options{Runtime: runtime})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			var output strings.Builder
 			for _, f := range files {
 				output.Write(f.Content)
@@ -542,13 +451,11 @@ func TestStructListParameter(t *testing.T) {
 				expected = append(expected, "static constexpr ::userver::ydb::StructMemberNames kYdbMemberNames{}", "std::optional<::userver::formats::json::Value>", "#include <chrono>")
 			}
 			for _, want := range expected {
-				if !strings.Contains(output.String(), want) {
-					t.Errorf("missing %s", want)
-				}
+				assert.Contains(t, output.String(), want, "missing %s", want)
 			}
 			typ.Elem.Fields[1].Type = model.Type{Kind: "List", Elem: &model.Type{Kind: "Utf8"}}
 			if _, err := Generate(a, Options{Runtime: runtime}); err == nil || !strings.Contains(err.Error(), "unsupported YQL type") {
-				t.Fatalf("nested list: %v", err)
+				require.FailNow(t, fmt.Sprintf("nested list: %v", err))
 			}
 		})
 	}
@@ -573,7 +480,7 @@ func TestStructListRejectsInvalidFieldsAndAmbiguousTypeNames(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, err := Generate(&model.AnalysisResult{Queries: tc.queries}, Options{Runtime: tc.runtime}); err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("got %v, want %s", err, tc.want)
+				require.FailNow(t, fmt.Sprintf("got %v, want %s", err, tc.want))
 			}
 		})
 	}

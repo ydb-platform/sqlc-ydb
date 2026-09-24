@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -15,24 +17,28 @@ func TestCurrentAndRandomBuiltinTypes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			for _, args := range [][]model.Type{nil, {scalar("Uint32")}, {model.Optional(scalar("String")), scalar("Null")}} {
 				if len(args) == 0 && strings.HasPrefix(name, "Random") {
-					if _, err := Resolve(name, args); err == nil {
-						t.Fatal("random function requires at least one dependency argument")
+					{
+						_, err := Resolve(name, args)
+						require.Error(t, err)
 					}
 					continue
 				}
 				assertResolved(t, strings.ToLower(name), args, scalar(kind))
 			}
-			if _, err := Resolve(name, []model.Type{{Kind: "Any"}}); err == nil {
-				t.Fatal("unresolved dependency must not produce a concrete result")
+			{
+				_, err := Resolve(name, []model.Type{{Kind: "Any"}})
+				require.Error(t, err)
 			}
-			if _, err := defaultRegistry.ResolveCall(name, []CallArgument{{Name: "unexpected", Type: scalar("Uint32")}}); err == nil {
-				t.Fatal("unexpected named argument accepted")
+			{
+				_, err := defaultRegistry.ResolveCall(name, []CallArgument{{Name: "unexpected", Type: scalar("Uint32")}})
+				require.Error(t, err)
 			}
 		})
 	}
 	assertResolved(t, "Version", nil, scalar("String"))
-	if _, err := Resolve("Version", []model.Type{scalar("String")}); err == nil {
-		t.Fatal("Version must not accept arguments")
+	{
+		_, err := Resolve("Version", []model.Type{scalar("String")})
+		require.Error(t, err)
 	}
 }
 
@@ -41,8 +47,9 @@ func TestCountIfType(t *testing.T) {
 		assertResolved(t, "COUNT_IF", []model.Type{typ}, scalar("Uint64"))
 	}
 	for _, args := range [][]model.Type{nil, {scalar("Uint64")}, {scalar("String")}, {scalar("Bool"), scalar("Bool")}} {
-		if _, err := Resolve("COUNT_IF", args); err == nil {
-			t.Fatalf("COUNT_IF(%v) accepted invalid operands", args)
+		{
+			_, err := Resolve("COUNT_IF", args)
+			require.Error(t, err)
 		}
 	}
 }
@@ -54,8 +61,10 @@ func TestCurrentTimezoneBuiltinTypes(t *testing.T) {
 			assertResolved(t, name, []model.Type{zone, scalar("Uint32"), scalar("Null")}, model.Optional(scalar(kind)))
 		}
 		for _, args := range [][]model.Type{nil, {scalar("Utf8")}, {scalar("Uint32")}, {scalar("String"), scalar("Any")}} {
-			if got, err := Resolve(name, args); err == nil || got.Kind != "" {
-				t.Fatalf("%s(%v) = %v, %v; want unsupported argument", name, args, got, err)
+			{
+				got, err := Resolve(name, args)
+				require.Error(t, err)
+				require.Equal(t, "", got.Kind)
 			}
 		}
 	}
@@ -65,8 +74,9 @@ func TestNanvlTypes(t *testing.T) {
 	assertResolved(t, "NANVL", []model.Type{scalar("Float"), scalar("Float")}, scalar("Float"))
 	assertResolved(t, "NANVL", []model.Type{model.Optional(scalar("Float")), scalar("Double")}, model.Optional(scalar("Double")))
 	for _, args := range [][]model.Type{nil, {scalar("Float")}, {scalar("Double"), scalar("Int32")}} {
-		if _, err := Resolve("NANVL", args); err == nil {
-			t.Fatalf("NANVL(%v) accepted invalid operands", args)
+		{
+			_, err := Resolve("NANVL", args)
+			require.Error(t, err)
 		}
 	}
 }

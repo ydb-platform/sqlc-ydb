@@ -6,6 +6,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"example.com/sqlc-ydb-example-tests/internal/testdb"
 	sq "example.com/sqlc-ydb-examples/authors/go/database/sql"
 	native "example.com/sqlc-ydb-examples/authors/go/native"
@@ -58,34 +61,29 @@ func TestGeneratedExample(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			id := ^uint64(0)
-			if name, bio, err := tc.create(id, "Автор", nil); err != nil || name != "Автор" || bio != nil {
-				t.Fatalf("insert returning: %q %v %v", name, bio, err)
-			}
-			if err := tc.put(id, "Автор", nil); err != nil {
-				t.Fatal(err)
-			}
-			if name, bio, err := tc.get(id); err != nil || name != "Автор" || bio != nil {
-				t.Fatalf("read: %q %v %v", name, bio, err)
-			}
-			if name, err := tc.projection(id); err != nil || name != "Автор" {
-				t.Fatalf("projection: %q %v", name, err)
-			}
-			bio := "Биография"
-			if err := tc.put(id, "Автор", &bio); err != nil {
-				t.Fatal(err)
-			}
-			if _, got, err := tc.get(id); err != nil || got == nil || *got != bio {
-				t.Fatalf("optional: %v %v", got, err)
-			}
-			if count, err := tc.list(); err != nil || count != 1 {
-				t.Fatalf("many: %d %v", count, err)
-			}
-			if err := tc.remove(id); err != nil {
-				t.Fatal(err)
-			}
-			if _, _, err := tc.get(id); err == nil {
-				t.Fatal("expected missing-row error")
-			}
+			name, bio, err := tc.create(id, "Автор", nil)
+			require.NoError(t, err)
+			require.Equal(t, "Автор", name)
+			require.Nil(t, bio)
+			require.NoError(t, tc.put(id, "Автор", nil))
+			name, bio, err = tc.get(id)
+			require.NoError(t, err)
+			require.Equal(t, "Автор", name)
+			require.Nil(t, bio)
+			name, err = tc.projection(id)
+			require.NoError(t, err)
+			require.Equal(t, "Автор", name)
+			biography := "Биография"
+			require.NoError(t, tc.put(id, "Автор", &biography))
+			_, got, err := tc.get(id)
+			require.NoError(t, err)
+			require.Equal(t, &biography, got)
+			count, err := tc.list()
+			require.NoError(t, err)
+			require.Equal(t, 1, count)
+			require.NoError(t, tc.remove(id))
+			_, _, err = tc.get(id)
+			require.Error(t, err, "expected missing-row error")
 		})
 	}
 }
@@ -110,36 +108,24 @@ func TestSharedTransactions(t *testing.T) {
 		}
 		return aborted
 	})
-	if !errors.Is(err, aborted) {
-		t.Fatalf("rollback: %v", err)
-	}
+	require.ErrorIs(t, err, aborted)
 	rows, err := native.New(db.Native).ListAuthors(ctx)
-	if err != nil || len(rows) != 0 {
-		t.Fatalf("native rollback: %v %v", rows, err)
-	}
+	require.NoError(t, err)
+	require.Empty(t, rows)
 	tx, err := db.SQL.BeginTx(ctx, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer func() {
-		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
-			t.Errorf("rollback cleanup: %v", err)
-		}
+		err := tx.Rollback()
+		assert.True(t, err == nil || errors.Is(err, sql.ErrTxDone), "rollback cleanup: %v", err)
 	}()
 	q := sq.New(db.SQL).WithTx(tx)
-	if err := q.UpsertAuthor(ctx, sq.UpsertAuthorParams{AuthorID: 42, AuthorName: "transaction"}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, q.UpsertAuthor(ctx, sq.UpsertAuthorParams{AuthorID: 42, AuthorName: "transaction"}))
 	row, err := q.GetAuthor(ctx, 42)
-	if err != nil || row.Name != "transaction" {
-		t.Fatalf("transaction read: %v %v", row, err)
-	}
-	if err := tx.Rollback(); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := sq.New(db.SQL).GetAuthor(ctx, 42); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("SQL rollback: %v", err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "transaction", row.Name)
+	require.NoError(t, tx.Rollback())
+	_, err = sq.New(db.SQL).GetAuthor(ctx, 42)
+	require.ErrorIs(t, err, sql.ErrNoRows)
 }
 
 func TestGeneratedIndexQueries(t *testing.T) {
@@ -149,9 +135,7 @@ func TestGeneratedIndexQueries(t *testing.T) {
 	n, s := native.New(db.Native), sq.New(db.SQL)
 	bio := "covered biography"
 	for _, value := range []native.UpsertAuthorParams{{AuthorID: 1, AuthorName: "same", Biography: &bio}, {AuthorID: 2, AuthorName: "same"}, {AuthorID: 3, AuthorName: "other"}} {
-		if err := n.UpsertAuthor(ctx, value); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, n.UpsertAuthor(ctx, value))
 	}
 	for _, tc := range []struct {
 		name string
@@ -208,13 +192,11 @@ func TestGeneratedIndexQueries(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rows, err := tc.read("same")
-			if err != nil || len(rows) != 2 || rows[0] != bio || rows[1] != "NULL" {
-				t.Fatalf("indexed results: %v, %v", rows, err)
-			}
+			require.NoError(t, err)
+			require.Equal(t, []string{bio, "NULL"}, rows)
 			rows, err = tc.read("missing")
-			if err != nil || len(rows) != 0 {
-				t.Fatalf("empty indexed results: %v, %v", rows, err)
-			}
+			require.NoError(t, err)
+			require.Empty(t, rows)
 		})
 	}
 }

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -42,9 +44,7 @@ func TestGenerateRejectsInvalidContracts(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Generate(tc.in, tc.opts)
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("Generate() error = %v, want %q", err, tc.want)
-			}
+			require.ErrorContains(t, err, tc.want, "Generate() error = %v, want %q", err, tc.want)
 		})
 	}
 }
@@ -56,19 +56,13 @@ func TestJDBCUsesStandardPositionalParameters(t *testing.T) {
 		Parameters: []model.Parameter{{Name: "author_id", Type: model.Type{Kind: "Uint64"}}},
 		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}}}}},
 	}}}, Options{Package: "authors.jdbc", Runtime: "jdbc"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	generated := string(files[len(files)-1].Content)
 	for _, unwanted := range []string{"DECLARE ", "unwrap("} {
-		if strings.Contains(generated, unwanted) {
-			t.Fatalf("unexpected %q in generated Kotlin JDBC API:\n%s", unwanted, generated)
-		}
+		require.False(t, strings.Contains(generated, unwanted), "unexpected %q in generated Kotlin JDBC API:\n%s", unwanted, generated)
 	}
 	wantPrepared := "client.prepareStatement(" + sqlLiteral("SELECT id FROM authors WHERE id = ?;") + ")"
-	if !strings.Contains(generated, wantPrepared) {
-		t.Fatalf("generated Kotlin JDBC API did not use positional SQL:\n%s", generated)
-	}
+	require.Contains(t, generated, wantPrepared, "generated Kotlin JDBC API did not use positional SQL:\n%s", generated)
 }
 
 func TestNullableScalarModelsAndRuntimeOwnership(t *testing.T) {
@@ -76,27 +70,19 @@ func TestNullableScalarModelsAndRuntimeOwnership(t *testing.T) {
 	for _, runtime := range []string{"", "native", "ydb", "jdbc", "exposed"} {
 		t.Run(runtime, func(t *testing.T) {
 			files, err := Generate(a, Options{Runtime: runtime})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			row := string(files[0].Content)
 			source := string(files[len(files)-1].Content)
 			for _, want := range []string{"data class GetAuthorRow", "val id: Long", "val bio: String?"} {
-				if !strings.Contains(row, want) {
-					t.Errorf("missing %q in %s", want, row)
-				}
+				assert.Contains(t, row, want, "missing %q in %s", want, row)
 			}
-			if !strings.Contains(source, "fun getAuthor(id: Long): GetAuthorRow?") {
-				t.Fatal(source)
-			}
+			require.Contains(t, source, "fun getAuthor(id: Long): GetAuthorRow?", source)
 			if runtime == "jdbc" || runtime == "exposed" {
 				for _, want := range []string{".use { _prepared", ".use { _rows", "setObject(1, PrimitiveValue.newUint64(id))", "_rows.getString(2)"} {
-					if !strings.Contains(source, want) {
-						t.Errorf("missing %q", want)
-					}
+					assert.Contains(t, source, want, "missing %q", want)
 				}
-			} else if !strings.Contains(source, "TxMode.SERIALIZABLE_RW") {
-				t.Fatal(source)
+			} else {
+				require.Contains(t, source, "TxMode.SERIALIZABLE_RW", source)
 			}
 			if runtime == "" || runtime == "native" || runtime == "ydb" {
 				for _, want := range []string{
@@ -104,15 +90,11 @@ func TestNullableScalarModelsAndRuntimeOwnership(t *testing.T) {
 					"constructor(transaction: QueryTransaction)",
 					"transaction.createQuery(",
 				} {
-					if !strings.Contains(source, want) {
-						t.Errorf("native transaction support missing %q", want)
-					}
+					assert.Contains(t, source, want, "native transaction support missing %q", want)
 				}
 			}
 			for _, bad := range []string{"client.close", "client.commit", "client.rollback"} {
-				if strings.Contains(source, bad) {
-					t.Fatalf("borrowed resource ownership violated: %s", bad)
-				}
+				require.False(t, strings.Contains(source, bad), "borrowed resource ownership violated: %s", bad)
 			}
 		})
 	}
@@ -121,9 +103,7 @@ func TestNullableScalarModelsAndRuntimeOwnership(t *testing.T) {
 func TestRejectsMalformedAndNestedOptionalTypes(t *testing.T) {
 	for _, typ := range []model.Type{{Kind: "Optional"}, model.Optional(model.Optional(model.Type{Kind: "Utf8"})), {Kind: "Int64", Elem: &model.Type{Kind: "Utf8"}}} {
 		_, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.Exec, Parameters: []model.Parameter{{Name: "v", Type: typ}}}}}, Options{})
-		if err == nil || !strings.Contains(err.Error(), "unsupported Kotlin type") {
-			t.Fatalf("type %s: %v", typ, err)
-		}
+		require.ErrorContains(t, err, "unsupported Kotlin type", "type %s: %v", typ, err)
 	}
 }
 
@@ -135,9 +115,7 @@ func TestNativeJsonAndTimestampUseSDKTypes(t *testing.T) {
 		Parameters: []model.Parameter{{Name: "tags", Type: json}, {Name: "available", Type: timestamp}},
 		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "tags", Type: json}, {Name: "available", Type: timestamp}}}},
 	}}}, Options{Package: "books.nativeapi", Runtime: "ydb"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	row, source := string(files[0].Content), string(files[len(files)-1].Content)
 	for _, want := range []string{
 		"val tags: String", "val available: java.time.Instant",
@@ -145,9 +123,7 @@ func TestNativeJsonAndTimestampUseSDKTypes(t *testing.T) {
 		"PrimitiveValue.newJson(tags)", "PrimitiveValue.newTimestamp(available)",
 		"getJson()", "getTimestamp()",
 	} {
-		if !strings.Contains(row+source, want) {
-			t.Fatalf("missing %q in generated Kotlin:\n%s\n%s", want, row, source)
-		}
+		require.Contains(t, row+source, want, "missing %q in generated Kotlin:\n%s\n%s", want, row, source)
 	}
 }
 
@@ -169,14 +145,10 @@ func TestSQLLiteralRoundTripsThroughKotlin(t *testing.T) {
 		queries[i] = model.AnalyzedQuery{Name: fmt.Sprintf("Case%02d", i), Command: model.Exec, SQL: sql}
 	}
 	files, err := Generate(&model.AnalysisResult{Queries: queries}, Options{Package: "literal", Runtime: "jdbc"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src", "main", "kotlin")
-	if err := os.MkdirAll(src, 0700); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(src, 0700))
 	for _, f := range files {
 		writeFile(t, filepath.Join(src, f.Name), f.Content)
 	}
@@ -194,26 +166,22 @@ func TestSQLLiteralRoundTripsThroughKotlin(t *testing.T) {
 <build><sourceDirectory>src/main/kotlin</sourceDirectory><plugins><plugin><groupId>org.jetbrains.kotlin</groupId><artifactId>kotlin-maven-plugin</artifactId><version>2.2.20</version><executions><execution><id>compile</id><phase>compile</phase><goals><goal>compile</goal></goals></execution></executions><configuration><jvmTarget>17</jvmTarget></configuration></plugin></plugins></build></project>`))
 	runMaven(t, maven, dir)
 	cp, err := os.ReadFile(filepath.Join(dir, "classpath"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	cmd := exec.Command("java", "-cp", filepath.Join(dir, "target", "classes")+string(os.PathListSeparator)+strings.TrimSpace(string(cp)), "literal.MainKt")
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("Kotlin literal round-trip: %v\n%s", err, out)
+		require.NoError(t, err, "Kotlin literal round-trip: %v\n%s", err, out)
 	}
 }
 func writeFile(t *testing.T, path string, content []byte) {
 	t.Helper()
-	if err := os.WriteFile(path, content, 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, content, 0600))
 }
 func runMaven(t *testing.T, maven, dir string) {
 	t.Helper()
 	cmd := exec.Command(maven, "-q", "-DskipTests", "compile", "dependency:build-classpath", "-Dmdep.outputFile="+filepath.Join(dir, "classpath"))
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("Kotlin compilation failed: %v\n%s", err, out)
+		require.NoError(t, err, "Kotlin compilation failed: %v\n%s", err, out)
 	}
 }
 
@@ -225,9 +193,7 @@ func TestAllSupportedScalarsCompileAgainstAuthorsMaven(t *testing.T) {
 		t.Skip("set SQLC_YDB_TEST_MAVEN for Kotlin SDK compilation")
 	}
 	pom, err := os.ReadFile(filepath.Join("..", "..", "..", "examples", "authors", "kotlin", "pom.xml"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "pom.xml"), pom)
 	var params []model.Parameter
@@ -259,13 +225,9 @@ func TestAllSupportedScalarsCompileAgainstAuthorsMaven(t *testing.T) {
 		}
 		queries = append(queries, batchQuery(), optionalBatchQuery(), listBooksQuery(), declaredBatchQuery(), declaredMixedQuery())
 		files, err := Generate(&model.AnalysisResult{Queries: queries}, Options{Package: "synthetic." + runtime, Runtime: profile})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		src := filepath.Join(dir, runtime, "synthetic", runtime)
-		if err := os.MkdirAll(src, 0700); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.MkdirAll(src, 0700))
 		for _, f := range files {
 			writeFile(t, filepath.Join(src, f.Name), f.Content)
 		}
@@ -273,7 +235,7 @@ func TestAllSupportedScalarsCompileAgainstAuthorsMaven(t *testing.T) {
 	runMaven(t, maven, dir)
 	for _, runtime := range []string{"nativeapi", "jdbc", "exposed"} {
 		if _, err := os.Stat(filepath.Join(dir, "target", "classes", "synthetic", runtime, "Queries.class")); err != nil {
-			t.Fatalf("Maven did not compile the %s fixture: %v", runtime, err)
+			require.NoError(t, err, "Maven did not compile the %s fixture: %v", runtime, err)
 		}
 	}
 }
@@ -284,29 +246,19 @@ func TestGenerateMixedScripts(t *testing.T) {
 DELETE FROM records; SELECT 42 AS answer; DELETE FROM records;
 -- name: ReadManyAndClear :many
 DELETE FROM records; SELECT 42 AS answer; DELETE FROM records;`}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, runtime := range []string{"ydb", "jdbc", "exposed"} {
 		t.Run(runtime, func(t *testing.T) {
 			files, err := Generate(analysis, Options{Package: "scripts", Runtime: runtime})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			code := string(files[len(files)-1].Content)
 			copies := 2
 			if runtime == "ydb" {
 				copies = 4 // One copy for the retrying client and one for a caller-owned transaction.
 			}
-			if strings.Count(code, "DELETE FROM records; SELECT 42 AS answer; DELETE FROM records;") != copies {
-				t.Fatalf("mixed script text changed: %s", code)
-			}
-			if runtime != "ydb" && strings.Contains(code, ".executeQuery()") {
-				t.Fatalf("script execution must traverse JDBC update counts: %s", code)
-			}
-			if runtime != "ydb" && !strings.Contains(code, "Expected one result set") {
-				t.Fatalf("script execution must reject a mismatched result count: %s", code)
-			}
+			require.Equal(t, copies, strings.Count(code, "DELETE FROM records; SELECT 42 AS answer; DELETE FROM records;"), "mixed script text changed: %s", code)
+			require.False(t, runtime != "ydb" && strings.Contains(code, ".executeQuery()"), "script execution must traverse JDBC update counts: %s", code)
+			require.False(t, runtime != "ydb" && !strings.Contains(code, "Expected one result set"), "script execution must reject a mismatched result count: %s", code)
 		})
 	}
 }
@@ -331,25 +283,17 @@ func TestGeneratedJDBCUsesTypedDriverValuesAndGuardsUnsignedRanges(t *testing.T)
 		{Name: "Bad32", Command: model.Exec, SQL: "SELECT 1;", Parameters: []model.Parameter{{Name: "value", Type: model.Type{Kind: "Uint32"}}}},
 	}
 	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "queries.sql", Text: "-- name: ReadAndClear :one\nDELETE FROM records; SELECT 42 AS answer; DELETE FROM records;\n-- name: ReadManyAndClear :many\nDELETE FROM records; SELECT 42 AS answer; DELETE FROM records;"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	queries = append(queries, analysis.Queries...)
 	queries = append(queries, batchQuery(), optionalBatchQuery(), listBooksQuery(), declaredBatchQuery(), declaredMixedQuery())
 	files, err := Generate(&model.AnalysisResult{Queries: queries}, Options{Package: "synthetic.jdbc", Runtime: "jdbc"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	pom, err := os.ReadFile(filepath.Join("..", "..", "..", "examples", "authors", "kotlin", "pom.xml"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	moduleDir := t.TempDir()
 	writeFile(t, filepath.Join(moduleDir, "pom.xml"), pom)
 	packageDir := filepath.Join(moduleDir, "jdbc", "synthetic", "jdbc")
-	if err := os.MkdirAll(packageDir, 0700); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(packageDir, 0700))
 	for _, file := range files {
 		writeFile(t, filepath.Join(packageDir, file.Name), file.Content)
 	}
@@ -593,37 +537,27 @@ public final class Main {
     @FunctionalInterface private interface ThrowingRun { void run() throws Exception; }
 }
 `
-	if err := os.WriteFile(filepath.Join(moduleDir, "Main.java"), []byte(program), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(moduleDir, "Main.java"), []byte(program), 0600))
 	runMaven(t, maven, moduleDir)
 	classpath, err := os.ReadFile(filepath.Join(moduleDir, "classpath"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	cp := filepath.Join(moduleDir, "target", "classes") + string(os.PathListSeparator) + strings.TrimSpace(string(classpath))
 	compile := exec.Command("javac", "--release", "17", "-cp", cp, "-d", filepath.Join(moduleDir, "target", "classes"), filepath.Join(moduleDir, "Main.java"))
 	if out, err := compile.CombinedOutput(); err != nil {
-		t.Fatalf("Java caller of Kotlin bindings failed to compile: %v\n%s", err, out)
+		require.NoError(t, err, "Java caller of Kotlin bindings failed to compile: %v\n%s", err, out)
 	}
 
 	run := exec.Command("java", "-cp", filepath.Join(moduleDir, "target", "classes")+string(os.PathListSeparator)+strings.TrimSpace(string(classpath)), "synthetic.jdbc.Main")
 	run.Dir = moduleDir
 	if out, err := run.CombinedOutput(); err != nil {
-		t.Fatalf("generated JDBC binding fixture failed against the published driver: %v\n%s", err, out)
+		require.NoError(t, err, "generated JDBC binding fixture failed against the published driver: %v\n%s", err, out)
 	}
 }
 
 func TestReservedNamesAndImportedTypeShadowing(t *testing.T) {
 	files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "When", Command: model.Exec, Parameters: []model.Parameter{{Name: "class", Type: model.Type{Kind: "Utf8"}}}}}}, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if source := string(files[len(files)-1].Content); !strings.Contains(source, "fun when_(class_: String): Unit") {
-		t.Fatal(source)
-	}
+	require.NoError(t, err)
+	require.Contains(t, string(files[len(files)-1].Content), "fun when_(class_: String): Unit")
 	_, err = Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.Exec, Parameters: []model.Parameter{{Name: "_params", Type: model.Type{Kind: "Utf8"}}}}}}, Options{})
-	if err == nil || !strings.Contains(err.Error(), "parameter name collision") {
-		t.Fatalf("import shadowing: %v", err)
-	}
+	require.ErrorContains(t, err, "parameter name collision", "import shadowing: %v", err)
 }

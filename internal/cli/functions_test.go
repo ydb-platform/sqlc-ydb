@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const functionSchema = `CREATE TABLE records (
@@ -36,35 +39,24 @@ WHERE r.id = Acme::Hash("where");`)
 	cfg := filepath.Join(dir, "sqlc.yaml")
 	put(t, cfg, "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n"+customHashConfig+"  gen:\n    go:\n      out: db\n")
 
-	if code, _, stderr := invoke("compile", "-f", cfg); code != 0 {
-		t.Fatalf("compile failed: %s", stderr)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "db")); !os.IsNotExist(err) {
-		t.Fatal("compile wrote generated output")
-	}
-	if code, _, stderr := invoke("generate", "-f", cfg); code != 0 {
-		t.Fatalf("generate failed: %s", stderr)
-	}
-	if code, stdout, stderr := invoke("diff", "-f", cfg); code != 0 || stdout != "" {
-		t.Fatalf("diff = %d, stdout %q, stderr %q", code, stdout, stderr)
-	}
+	code, _, stderr := invoke("compile", "-f", cfg)
+	require.Zero(t, code, stderr)
+	_, err := os.Stat(filepath.Join(dir, "db"))
+	require.ErrorIs(t, err, os.ErrNotExist, "compile wrote generated output")
+	code, _, stderr = invoke("generate", "-f", cfg)
+	require.Zero(t, code, stderr)
+	code, stdout, stderr := invoke("diff", "-f", cfg)
+	require.Zero(t, code, stderr)
+	require.Empty(t, stdout)
 	models, err := os.ReadFile(filepath.Join(dir, "db", "models.go"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	normalizedModels := strings.Join(strings.Fields(string(models)), " ")
 	for _, field := range []string{"Direct uint64", "Casted []byte", "MemberValue uint64", "LocalValue uint64"} {
-		if !strings.Contains(normalizedModels, field) {
-			t.Errorf("generated models do not contain %q:\n%s", field, models)
-		}
+		assert.True(t, strings.Contains(normalizedModels, field), "generated models do not contain %q:\n%s", field, models)
 	}
 	generatedQuery, err := os.ReadFile(filepath.Join(dir, "db", "queries.sql.go"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Count(string(generatedQuery), "Acme::Hash") != 5 || !strings.Contains(string(generatedQuery), `$local = Acme::Hash`) || !strings.Contains(string(generatedQuery), "Acme::Hash(r.payload)") {
-		t.Fatalf("generated SQL did not preserve configured function calls:\n%s", generatedQuery)
-	}
+	require.NoError(t, err)
+	require.False(t, strings.Count(string(generatedQuery), "Acme::Hash") != 5 || !strings.Contains(string(generatedQuery), `$local = Acme::Hash`) || !strings.Contains(string(generatedQuery), "Acme::Hash(r.payload)"), "generated SQL did not preserve configured function calls:\n%s", generatedQuery)
 }
 
 func TestConfiguredFunctionDiagnostics(t *testing.T) {
@@ -105,9 +97,9 @@ func TestConfiguredFunctionDiagnostics(t *testing.T) {
 			put(t, filepath.Join(dir, "queries.sql"), "-- name: Check :many\n"+tc.query)
 			cfg := filepath.Join(dir, "sqlc.yaml")
 			put(t, cfg, "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n"+tc.functions)
-			if code, _, stderr := invoke("compile", "-f", cfg); code == 0 || !strings.Contains(stderr, tc.want) {
-				t.Fatalf("compile = %d, stderr %q; want %q", code, stderr, tc.want)
-			}
+			code, _, stderr := invoke("compile", "-f", cfg)
+			require.NotZero(t, code, stderr)
+			require.Contains(t, stderr, tc.want)
 		})
 	}
 }
@@ -120,18 +112,17 @@ func TestConfiguredFunctionsDoNotLeakBetweenSQLSetsOrRuns(t *testing.T) {
 
 	first := filepath.Join(dir, "first.yaml")
 	put(t, first, "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: configured.sql\n"+customHashConfig+"- engine: ydb\n  schema: schema.sql\n  queries: unconfigured.sql\n")
-	if code, _, stderr := invoke("compile", "-f", first); code == 0 || !strings.Contains(stderr, `unsupported YQL function "Acme::Hash"`) {
-		t.Fatalf("second SQL set inherited functions: %d %q", code, stderr)
-	}
+	code, _, stderr := invoke("compile", "-f", first)
+	require.NotZero(t, code, "second SQL set inherited functions: %s", stderr)
+	require.Contains(t, stderr, `unsupported YQL function "Acme::Hash"`)
 
 	configuredOnly := filepath.Join(dir, "configured.yaml")
 	put(t, configuredOnly, "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: configured.sql\n"+customHashConfig)
-	if code, _, stderr := invoke("compile", "-f", configuredOnly); code != 0 {
-		t.Fatalf("configured run failed: %s", stderr)
-	}
+	code, _, stderr = invoke("compile", "-f", configuredOnly)
+	require.Zero(t, code, stderr)
 	unconfiguredOnly := filepath.Join(dir, "unconfigured.yaml")
 	put(t, unconfiguredOnly, "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: unconfigured.sql\n")
-	if code, _, stderr := invoke("compile", "-f", unconfiguredOnly); code == 0 || !strings.Contains(stderr, `unsupported YQL function "Acme::Hash"`) {
-		t.Fatalf("later run inherited functions: %d %q", code, stderr)
-	}
+	code, _, stderr = invoke("compile", "-f", unconfiguredOnly)
+	require.NotZero(t, code, "later run inherited functions: %s", stderr)
+	require.Contains(t, stderr, `unsupported YQL function "Acme::Hash"`)
 }

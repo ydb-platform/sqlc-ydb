@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -44,14 +45,10 @@ func TestSQLLiteralRoundTripsThroughJava17(t *testing.T) {
 		queries[i] = model.AnalyzedQuery{Name: fmt.Sprintf("Case%02d", i), Command: model.Exec, SQL: tc.sql}
 	}
 	files, err := Generate(&model.AnalysisResult{Queries: queries}, Options{Package: "literal", Runtime: "jdbc"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	for _, f := range files {
-		if err := os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600))
 	}
 	var program strings.Builder
 	program.WriteString("package literal;\nimport java.lang.reflect.*; import java.nio.charset.StandardCharsets; import java.util.Base64;\npublic final class Main {\n")
@@ -61,19 +58,17 @@ func TestSQLLiteralRoundTripsThroughJava17(t *testing.T) {
 		fmt.Fprintf(&program, "    check(\"case%02d\", \"%s\");\n", i, base64.StdEncoding.EncodeToString([]byte(tc.sql)))
 	}
 	program.WriteString("  }\n}\n")
-	if err := os.WriteFile(filepath.Join(dir, "Main.java"), []byte(program.String()), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Main.java"), []byte(program.String()), 0600))
 	classes := filepath.Join(dir, "classes")
 	compile := exec.Command("javac", "--release", "17", "-d", classes, "Queries.java", "Main.java")
 	compile.Dir = dir
 	if out, err := compile.CombinedOutput(); err != nil {
-		t.Fatalf("generated Java 17 source does not compile: %v\n%s\n%s", err, out, files[len(files)-1].Content)
+		require.NoError(t, err, "generated Java 17 source does not compile: %v\n%s\n%s", err, out, files[len(files)-1].Content)
 	}
 	run := exec.Command("java", "-cp", classes, "literal.Main")
 	run.Dir = dir
 	if out, err := run.CombinedOutput(); err != nil {
-		t.Fatalf("generated Java SQL literal changed at runtime: %v\n%s", err, out)
+		require.NoError(t, err, "generated Java SQL literal changed at runtime: %v\n%s", err, out)
 	}
 }
 
@@ -84,19 +79,13 @@ func TestJDBCUsesStandardPositionalParameters(t *testing.T) {
 		Parameters: []model.Parameter{{Name: "author_id", Type: model.Type{Kind: "Uint64"}}},
 		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}}}}},
 	}}}, Options{Package: "authors.jdbc", Runtime: "jdbc"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	generated := string(files[len(files)-1].Content)
 	for _, unwanted := range []string{"unwrap(", "DECLARE ", "wasNull("} {
-		if strings.Contains(generated, unwanted) {
-			t.Fatalf("unexpected %s in JDBC output", unwanted)
-		}
+		require.False(t, strings.Contains(generated, unwanted), "unexpected %s in JDBC output", unwanted)
 	}
 	wantPrepared := "client.prepareStatement(" + sqlLiteral("SELECT id FROM authors WHERE id = ?;") + ")"
-	if !strings.Contains(generated, wantPrepared) {
-		t.Fatalf("generated JDBC API did not use positional SQL:\n%s", generated)
-	}
+	require.Contains(t, generated, wantPrepared, "generated JDBC API did not use positional SQL:\n%s", generated)
 }
 
 func TestGenerateRejectsInvalidContracts(t *testing.T) {
@@ -130,9 +119,7 @@ func TestGenerateRejectsInvalidContracts(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Generate(tc.in, tc.opts)
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("Generate() error = %v, want %q", err, tc.want)
-			}
+			require.ErrorContains(t, err, tc.want, "Generate() error = %v, want %q", err, tc.want)
 		})
 	}
 }
@@ -158,13 +145,9 @@ func TestAllSupportedScalarsCompileAgainstAuthorsMavenProfiles(t *testing.T) {
 		columns = append(columns, model.Column{Name: name, Type: typ}, model.Column{Name: "optional_" + name, Type: model.Optional(typ)})
 	}
 	repoRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	parentPom, err := os.ReadFile(filepath.Join(repoRoot, "examples", "authors", "java", "pom.xml"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	profiles := []struct{ runtime, module, pkg string }{
 		{"ydb", "native", "synthetic.nativeapi"},
 		{"jdbc", "jdbc", "synthetic.jdbc"},
@@ -174,33 +157,21 @@ func TestAllSupportedScalarsCompileAgainstAuthorsMavenProfiles(t *testing.T) {
 			files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{
 				Name: "AllScalars", Command: model.One, SQL: "SELECT 1;", Parameters: parameters, ResultSets: []model.ResultSet{{Columns: columns}},
 			}, batchQuery(), optionalBatchQuery(), listBooksQuery(), declaredBatchQuery(), declaredMixedQuery()}}, Options{Package: profile.pkg, Runtime: profile.runtime})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			dir := t.TempDir()
-			if err := os.WriteFile(filepath.Join(dir, "pom.xml"), parentPom, 0600); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "pom.xml"), parentPom, 0600))
 			modulePom, err := os.ReadFile(filepath.Join(repoRoot, "examples", "authors", "java", profile.module, "pom.xml"))
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			moduleDir := filepath.Join(dir, profile.module)
-			if err := os.MkdirAll(filepath.Join(moduleDir, "src", "main", "java", filepath.FromSlash(strings.ReplaceAll(profile.pkg, ".", "/"))), 0700); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(filepath.Join(moduleDir, "pom.xml"), modulePom, 0600); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, os.MkdirAll(filepath.Join(moduleDir, "src", "main", "java", filepath.FromSlash(strings.ReplaceAll(profile.pkg, ".", "/"))), 0700))
+			require.NoError(t, os.WriteFile(filepath.Join(moduleDir, "pom.xml"), modulePom, 0600))
 			for _, file := range files {
-				if err := os.WriteFile(filepath.Join(moduleDir, "src", "main", "java", filepath.FromSlash(strings.ReplaceAll(profile.pkg, ".", "/")), file.Name), file.Content, 0600); err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, os.WriteFile(filepath.Join(moduleDir, "src", "main", "java", filepath.FromSlash(strings.ReplaceAll(profile.pkg, ".", "/")), file.Name), file.Content, 0600))
 			}
 			cmd := exec.Command(maven, "-q", "-DskipTests", "compile")
 			cmd.Dir = moduleDir
 			if out, err := cmd.CombinedOutput(); err != nil {
-				t.Fatalf("generated %s all-scalar API does not compile against authors Maven pins: %v\n%s", profile.runtime, err, out)
+				require.NoError(t, err, "generated %s all-scalar API does not compile against authors Maven pins: %v\n%s", profile.runtime, err, out)
 			}
 		})
 	}
@@ -214,25 +185,15 @@ func TestGenerateMixedScripts(t *testing.T) {
 DELETE FROM records; SELECT 42 AS answer; DELETE FROM records;
 -- name: ReadManyAndClear :many
 DELETE FROM records; SELECT 42 AS answer; DELETE FROM records;`}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, runtime := range []string{"ydb", "jdbc"} {
 		t.Run(runtime, func(t *testing.T) {
 			files, err := Generate(analysis, Options{Package: "scripts", Runtime: runtime})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			code := string(files[len(files)-1].Content)
-			if strings.Count(code, "DELETE FROM records; SELECT 42 AS answer; DELETE FROM records;") != 2 {
-				t.Fatalf("mixed script text changed: %s", code)
-			}
-			if runtime != "ydb" && strings.Contains(code, ".executeQuery()") {
-				t.Fatalf("script execution must traverse JDBC update counts: %s", code)
-			}
-			if runtime != "ydb" && !strings.Contains(code, "Expected one result set") {
-				t.Fatalf("script execution must reject a mismatched result count: %s", code)
-			}
+			require.Equal(t, 2, strings.Count(code, "DELETE FROM records; SELECT 42 AS answer; DELETE FROM records;"), "mixed script text changed: %s", code)
+			require.False(t, runtime != "ydb" && strings.Contains(code, ".executeQuery()"), "script execution must traverse JDBC update counts: %s", code)
+			require.False(t, runtime != "ydb" && !strings.Contains(code, "Expected one result set"), "script execution must reject a mismatched result count: %s", code)
 		})
 	}
 }
@@ -270,43 +231,25 @@ func TestGeneratedJDBCUsesTypedDriverValuesAndGuardsUnsignedRanges(t *testing.T)
 		}}},
 	})
 	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "queries.sql", Text: "-- name: ReadAndClear :one\nDELETE FROM records; SELECT 42 AS value; DELETE FROM records;\n-- name: ReadManyAndClear :many\nDELETE FROM records; SELECT 42 AS value; DELETE FROM records;"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	queries = append(queries, analysis.Queries...)
 	queries = append(queries, batchQuery(), optionalBatchQuery(), listBooksQuery(), declaredBatchQuery(), declaredMixedQuery())
 	files, err := Generate(&model.AnalysisResult{Queries: queries}, Options{Package: "synthetic.jdbc", Runtime: "jdbc"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	repoRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	parentPom, err := os.ReadFile(filepath.Join(repoRoot, "examples", "authors", "java", "pom.xml"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	jdbcPom, err := os.ReadFile(filepath.Join(repoRoot, "examples", "authors", "java", "jdbc", "pom.xml"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), parentPom, 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "pom.xml"), parentPom, 0600))
 	moduleDir := filepath.Join(dir, "jdbc")
 	packageDir := filepath.Join(moduleDir, "src", "main", "java", "synthetic", "jdbc")
-	if err := os.MkdirAll(packageDir, 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(moduleDir, "pom.xml"), jdbcPom, 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(packageDir, 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(moduleDir, "pom.xml"), jdbcPom, 0600))
 	for _, file := range files {
-		if err := os.WriteFile(filepath.Join(packageDir, file.Name), file.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(packageDir, file.Name), file.Content, 0600))
 	}
 	const program = `package synthetic.jdbc;
 
@@ -558,23 +501,19 @@ public final class Main {
     @FunctionalInterface private interface ThrowingRun { void run() throws Exception; }
 }
 `
-	if err := os.WriteFile(filepath.Join(packageDir, "Main.java"), []byte(program), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(packageDir, "Main.java"), []byte(program), 0600))
 	classpathFile := filepath.Join(moduleDir, "classpath")
 	cmd := exec.Command(maven, "-q", "-DskipTests", "compile", "dependency:build-classpath", "-Dmdep.outputFile="+classpathFile)
 	cmd.Dir = moduleDir
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("generated JDBC binding fixture did not compile: %v\n%s", err, out)
+		require.NoError(t, err, "generated JDBC binding fixture did not compile: %v\n%s", err, out)
 	}
 	classpath, err := os.ReadFile(classpathFile)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	run := exec.Command("java", "-cp", filepath.Join(moduleDir, "target", "classes")+string(os.PathListSeparator)+strings.TrimSpace(string(classpath)), "synthetic.jdbc.Main")
 	run.Dir = moduleDir
 	if out, err := run.CombinedOutput(); err != nil {
-		t.Fatalf("generated JDBC binding fixture failed against the published driver: %v\n%s", err, out)
+		require.NoError(t, err, "generated JDBC binding fixture failed against the published driver: %v\n%s", err, out)
 	}
 }
 
@@ -585,29 +524,21 @@ func TestNullableJavaGettersAndTextBinding(t *testing.T) {
 	}}}}
 	for _, runtime := range []string{"jdbc", "ydb"} {
 		files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{q}}, Options{Package: "nullable", Runtime: runtime})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		output := string(files[len(files)-1].Content)
 		expected := []string{"_prepared.setString(1, bio)", "_rows.getObject(2, Long.class)"}
 		if runtime == "ydb" {
 			expected = []string{"PrimitiveValue.newText(bio).makeOptional()", "String _value0 = _rows.getColumn(0).getText();"}
 		}
 		for _, fragment := range expected {
-			if !strings.Contains(output, fragment) {
-				t.Fatalf("missing %s in %s", fragment, output)
-			}
+			require.Contains(t, output, fragment, "missing %s in %s", fragment, output)
 		}
 	}
 }
 
 func TestNativeExecDoesNotMaterializeResults(t *testing.T) {
 	files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Delete", Command: model.Exec, SQL: "DELETE FROM authors;"}}}, Options{Package: "authors", Runtime: "ydb"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	output := string(files[len(files)-1].Content)
-	if strings.Contains(output, "QueryReader") || !strings.Contains(output, ".execute().join().getStatus().expectSuccess();") {
-		t.Fatalf("native exec must execute without collecting results and check status:\n%s", output)
-	}
+	require.False(t, strings.Contains(output, "QueryReader") || !strings.Contains(output, ".execute().join().getStatus().expectSuccess();"), "native exec must execute without collecting results and check status:\n%s", output)
 }

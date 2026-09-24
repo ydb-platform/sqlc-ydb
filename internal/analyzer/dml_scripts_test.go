@@ -2,9 +2,10 @@ package analyzer
 
 import (
 	"context"
-	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -18,31 +19,28 @@ CREATE TABLE texts (id Utf8 NOT NULL, PRIMARY KEY(id));
 func TestDMLScriptPreservesOneQueryAndSharedBindings(t *testing.T) {
 	const sql = "-- name: Change :exec\r\nDECLARE $id AS Uint64;\r\nDECLARE $payload AS Utf8;\r\n$local = $id;\r\n-- Keep '; SELECT' and Unicode: пример\r\nINSERT INTO records (id, payload) VALUES ($local, $payload);\r\nUPSERT INTO copies SELECT id, payload FROM records WHERE id = $local;\r\nUPDATE records SET payload = $payload WHERE records.id = $id;\r\nDELETE FROM copies WHERE copies.id = $id;"
 	result, err := Analyze(dmlScriptSchema, []model.Source{{Name: "query.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(result.Queries) != 1 {
-		t.Fatalf("queries = %d", len(result.Queries))
-	}
+	require.NoError(t, err)
+	require.Len(t, result.Queries, 1)
 	q := result.Queries[0]
 	want := []model.Parameter{{Name: "id", Type: model.Type{Kind: "Uint64"}}, {Name: "payload", Type: model.Type{Kind: "Utf8"}}}
-	if !q.MultipleStatements || q.SQL != sql || len(q.ResultSets) != 0 || !reflect.DeepEqual(q.Parameters, want) || !reflect.DeepEqual(q.DeclaredParameters, []string{"id", "payload"}) {
-		t.Fatalf("query = %#v", q)
-	}
+	require.True(t, q.MultipleStatements)
+	require.Equal(t, sql, q.SQL)
+	require.Len(t, q.ResultSets, 0)
+	require.Equal(t, want, q.Parameters)
+	require.Equal(t, []string{"id", "payload"}, q.DeclaredParameters)
 	tables := map[string]bool{}
 	for _, name := range q.Syntax.Tables {
 		tables[name] = true
 	}
-	if !tables["records"] || !tables["copies"] || len(q.Syntax.Tables) != 5 {
-		t.Fatalf("physical references = %#v", q.Syntax.Tables)
-	}
+	require.True(t, tables["records"])
+	require.True(t, tables["copies"])
+	require.Len(t, q.Syntax.Tables, 5)
 	bound := map[string]bool{}
 	for _, binding := range q.Syntax.Columns {
 		bound[binding.Table] = true
 	}
-	if !bound["records"] || !bound["copies"] {
-		t.Fatalf("column bindings = %#v", q.Syntax.Columns)
-	}
+	require.True(t, bound["records"])
+	require.True(t, bound["copies"])
 }
 
 func TestDMLScriptInferredParametersUseStatementScope(t *testing.T) {
@@ -51,47 +49,37 @@ func TestDMLScriptInferredParametersUseStatementScope(t *testing.T) {
 		"INSERT INTO records (id,payload) VALUES ($number,$text); UPDATE copies SET payload=$text WHERE id=$number; DELETE FROM texts WHERE id=$text;",
 	} {
 		result, err := Analyze(dmlScriptSchema, []model.Source{{Name: "query.sql", Text: "-- name: Change :exec\n" + sql}})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		want := []model.Parameter{{Name: "number", Type: model.Type{Kind: "Uint64"}}, {Name: "text", Type: model.Type{Kind: "Utf8"}}}
-		if !reflect.DeepEqual(result.Queries[0].Parameters, want) {
-			t.Fatalf("parameters = %#v", result.Queries[0].Parameters)
-		}
+		require.Equal(t, want, result.Queries[0].Parameters)
 	}
 }
 
 func TestDMLScriptRejectsConflictingInferredParameters(t *testing.T) {
 	result, err := Analyze(dmlScriptSchema, []model.Source{{Name: "query.sql", Text: "-- name: Change :exec\nDELETE FROM records WHERE id=$id; DELETE FROM texts WHERE id=$id;"}})
 	const want = "external parameter $id has incompatible inferred types; add DECLARE to specify its intended type"
-	if err == nil {
-		t.Fatal("accepted conflicting parameter types")
-	}
+	require.Error(t, err)
 	found := false
 	for _, d := range result.Diagnostics {
 		if d.Message == want {
 			found = true
 		}
 	}
-	if !found {
-		t.Fatalf("diagnostics = %#v, want %q", result.Diagnostics, want)
-	}
+	require.True(t, found)
 }
 
 func TestDMLScriptSelectSourcesAndWildcardNormalization(t *testing.T) {
 	const sql = "-- name: Change :exec\nDECLARE $rows AS List<Struct<id:Uint64,payload:Utf8>>;\nUPSERT INTO records SELECT r.* FROM AS_TABLE($rows) AS r;\nUPDATE copies ON SELECT r.* FROM AS_TABLE($rows) AS r;\nDELETE FROM records WHERE id IN (SELECT r.id FROM AS_TABLE($rows) AS r);\nDELETE FROM copies ON SELECT id FROM records;"
 	result, err := Analyze(dmlScriptSchema, []model.Source{{Name: "query.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	q := result.Queries[0]
-	if strings.Contains(q.SQL, "r.*") || strings.Count(q.SQL, "AS `payload`") != 2 || len(q.Syntax.Selects) != 4 || len(q.Parameters) != 1 {
-		t.Fatalf("query = %#v; SQL=%s", q, q.SQL)
-	}
+	require.NotContains(t, q.SQL, "r.*")
+	require.Equal(t, 2, strings.Count(q.SQL, "AS `payload`"))
+	require.Len(t, q.Syntax.Selects, 4)
+	require.Len(t, q.Parameters, 1)
 	for token, binding := range q.Syntax.Columns {
-		if token < 0 || binding.Column.Name == "" {
-			t.Fatalf("invalid normalized binding = %d: %#v", token, binding)
-		}
+		require.False(t, token < 0)
+		require.NotEqual(t, "", binding.Column.Name)
 	}
 }
 
@@ -112,9 +100,9 @@ func TestDMLScriptRejectsUnsupportedShapes(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := Analyze(dmlScriptSchema, []model.Source{{Name: "query.sql", Text: "-- name: Change " + tc.command + "\n" + tc.sql}})
-			if err == nil || len(result.Diagnostics) != 1 || result.Diagnostics[0].Message != tc.want {
-				t.Fatalf("diagnostics = %#v; error = %v; want %q", result.Diagnostics, err, tc.want)
-			}
+			require.Error(t, err)
+			require.Len(t, result.Diagnostics, 1)
+			require.Equal(t, tc.want, result.Diagnostics[0].Message)
 		})
 	}
 }
@@ -123,27 +111,21 @@ func TestDMLScriptDatabaseDiscoversAllTargetsAndValidatesOnce(t *testing.T) {
 	const sql = "-- name: Change :exec\nPRAGMA TablePathPrefix='/local/tenant';\nDECLARE $id AS Uint64;\nDECLARE $name AS Utf8;\nINSERT INTO records(id,name) VALUES($id,$name);\nUPSERT INTO copies SELECT * FROM records;\nUPDATE copies SET name=$name WHERE copies.id=$id;\nDELETE FROM records WHERE records.id=$id;"
 	database := &fakeAnalysisDatabase{tables: map[string]model.Table{"/local/tenant/records": databaseTestTable("name"), "/local/tenant/copies": databaseTestTable("name")}}
 	result, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: sql}}, Options{}, database)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(database.validated, []string{sql}) || !reflect.DeepEqual(database.described, []string{"/local/tenant/records", "/local/tenant/copies"}) {
-		t.Fatalf("validated=%q described=%q", database.validated, database.described)
-	}
-	if len(result.Queries) != 1 || strings.Contains(result.Queries[0].SQL, "SELECT *") {
-		t.Fatalf("queries=%#v", result.Queries)
-	}
+	require.NoError(t, err)
+	require.Equal(t, []string{sql}, database.validated)
+	require.Equal(t, []string{"/local/tenant/records", "/local/tenant/copies"}, database.described)
+	require.Len(t, result.Queries, 1)
+	require.NotContains(t, result.Queries[0].SQL, "SELECT *")
 	for _, name := range result.Queries[0].Syntax.Tables {
-		if !strings.HasPrefix(name, "/local/tenant/") {
-			t.Fatalf("unresolved table: %q", name)
-		}
+		require.True(t, strings.HasPrefix(name, "/local/tenant/"))
 	}
 }
 
 func TestDMLScriptRejectsForwardLocalReference(t *testing.T) {
 	result, err := Analyze(dmlScriptSchema, []model.Source{{Name: "query.sql", Text: "-- name: Change :exec\n$first=$later; $later=1ul; DELETE FROM records WHERE id=$first; DELETE FROM copies;"}})
-	if err == nil || len(result.Diagnostics) == 0 || result.Diagnostics[0].Message != "cannot resolve local $first from $later; declare the external parameter first" {
-		t.Fatalf("diagnostics=%#v; error=%v", result.Diagnostics, err)
-	}
+	require.Error(t, err)
+	require.NotEqual(t, 0, len(result.Diagnostics))
+	require.Equal(t, "cannot resolve local $first from $later; declare the external parameter first", result.Diagnostics[0].Message)
 }
 
 func TestDMLScriptSharedParametersRefineNullability(t *testing.T) {
@@ -153,27 +135,20 @@ func TestDMLScriptSharedParametersRefineNullability(t *testing.T) {
 	const required = "UPDATE records SET payload=$p || \"!\"u WHERE payload=$p;"
 	for _, sql := range []string{optional + required, required + optional, optional + "UPDATE records SET payload=$p; UPDATE copies SET payload=$p || \"!\"u;"} {
 		result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Change :exec\n" + sql}})
-		if err != nil {
-			t.Fatalf("%s: %v", sql, err)
-		}
+		require.NoError(t, err)
 		want := []model.Parameter{{Name: "p", Type: model.Type{Kind: "Utf8"}}}
-		if !reflect.DeepEqual(result.Queries[0].Parameters, want) {
-			t.Fatalf("parameters=%#v", result.Queries[0].Parameters)
-		}
+		require.Equal(t, want, result.Queries[0].Parameters)
 	}
 	_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Change :exec\nDECLARE $p AS Utf8?; " + optional + required}})
-	if err == nil || !strings.Contains(err.Error(), "cannot assign Optional<Utf8> to column \"payload\" of type Utf8") {
-		t.Fatalf("declared optional type was overwritten: %v", err)
-	}
+	require.ErrorContains(t, err, "cannot assign Optional<Utf8> to column \"payload\" of type Utf8")
 }
 
 func TestDMLScriptUnknownColumnKeepsStatementPosition(t *testing.T) {
 	result, err := Analyze(dmlScriptSchema, []model.Source{{Name: "query.sql", Text: "-- name: Change :exec\nDELETE FROM records WHERE payload='value'u;\nDELETE FROM texts WHERE payload='value'u;"}})
-	if err == nil || len(result.Diagnostics) == 0 {
-		t.Fatalf("accepted column from preceding table: %v", err)
-	}
+	require.Error(t, err)
+	require.NotEqual(t, 0, len(result.Diagnostics))
 	d := result.Diagnostics[0]
-	if d.Message != "unknown column \"payload\"" || d.Position.File != "query.sql" || d.Position.Line != 3 {
-		t.Fatalf("diagnostic=%#v", d)
-	}
+	require.Equal(t, "unknown column \"payload\"", d.Message)
+	require.Equal(t, "query.sql", d.Position.File)
+	require.Equal(t, 3, d.Position.Line)
 }

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/cli"
 )
 
@@ -19,9 +20,7 @@ var outputRoots = []string{"db", "py", "cpp", "cs", "java", "typescript", "rust"
 
 func TestGolden(t *testing.T) {
 	fixtures, err := os.ReadDir("testdata")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, entry := range fixtures {
 		if !entry.IsDir() {
 			continue
@@ -37,62 +36,46 @@ func run(t *testing.T, fixture string) {
 	var out, stderr bytes.Buffer
 	code := cli.Run([]string{"generate", "-f", filepath.Join(dir, "sqlc.yaml")}, &out, &stderr)
 	wantErr, err := os.ReadFile(filepath.Join(fixture, "stderr.txt"))
-	if err != nil && !os.IsNotExist(err) {
-		t.Fatal(err)
+	if err != nil {
+		require.ErrorIs(t, err, os.ErrNotExist)
 	}
 	negative := err == nil
-	if out.Len() != 0 {
-		t.Fatalf("generate wrote unexpected stdout: %s", out.String())
-	}
+	require.Equal(t, 0, out.Len(), "generate wrote unexpected stdout: %s", out.String())
 	if negative {
-		if code == 0 {
-			t.Fatal("expected generate to fail")
-		}
+		require.NotEqual(t, 0, code, "expected generate to fail")
 		got := normalize(stderr.String(), dir)
 		if *update {
 			write(t, filepath.Join(fixture, "stderr.txt"), []byte(got))
 			return
 		}
-		if got != string(wantErr) {
-			t.Fatalf("stderr mismatch\nwant: %s\ngot:  %s", wantErr, got)
-		}
+		require.Equal(t, string(wantErr), got, "stderr mismatch\nwant: %s\ngot:  %s", wantErr, got)
 		return
 	}
-	if code != 0 {
-		t.Fatalf("generate failed: %s", normalize(stderr.String(), dir))
-	}
+	require.Equal(t, 0, code, "generate failed: %s", normalize(stderr.String(), dir))
 	if *update {
 		updateExpected(t, fixture, dir)
 		return
 	}
 	want := files(t, filepath.Join(fixture, "expected"))
 	got := generated(t, dir, want)
-	if diff := compare(want, got); diff != "" {
-		t.Fatal(diff)
-	}
+	require.Empty(t, compare(want, got))
 }
 
 func copyFixture(t *testing.T, src, dst string) {
 	t.Helper()
 	entries, err := os.ReadDir(src)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, e := range entries {
 		if e.Name() == "expected" || e.Name() == "stderr.txt" {
 			continue
 		}
 		from, to := filepath.Join(src, e.Name()), filepath.Join(dst, e.Name())
 		if e.IsDir() {
-			if err := os.CopyFS(to, os.DirFS(from)); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, os.CopyFS(to, os.DirFS(from)))
 			continue
 		}
 		data, err := os.ReadFile(from)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		write(t, to, data)
 	}
 }
@@ -100,19 +83,15 @@ func copyFixture(t *testing.T, src, dst string) {
 func updateExpected(t *testing.T, fixture, dir string) {
 	t.Helper()
 	expected := filepath.Join(fixture, "expected")
-	if err := os.RemoveAll(expected); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.RemoveAll(expected))
 	for _, root := range outputRoots {
 		from := filepath.Join(dir, root)
 		if _, err := os.Stat(from); os.IsNotExist(err) {
 			continue
-		} else if err != nil {
-			t.Fatal(err)
+		} else {
+			require.NoError(t, err)
 		}
-		if err := os.CopyFS(filepath.Join(expected, root), os.DirFS(from)); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.CopyFS(filepath.Join(expected, root), os.DirFS(from)))
 	}
 }
 
@@ -120,16 +99,12 @@ func files(t *testing.T, root string) map[string][]byte {
 	t.Helper()
 	result := map[string][]byte{}
 	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		if info.IsDir() {
 			return nil
 		}
 		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		rel, _ := filepath.Rel(root, path)
 		result[filepath.ToSlash(rel)] = data
 		return nil
@@ -145,7 +120,7 @@ func generated(t *testing.T, root string, want map[string][]byte) map[string][]b
 			if os.IsNotExist(err) {
 				continue
 			}
-			t.Fatal(err)
+			require.NoError(t, err)
 		}
 		got[rel] = data
 	}
@@ -198,10 +173,6 @@ func normalize(s, dir string) string {
 }
 func write(t *testing.T, path string, data []byte) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, data, 0644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0755))
+	require.NoError(t, os.WriteFile(path, data, 0644))
 }

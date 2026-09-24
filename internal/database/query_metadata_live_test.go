@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb_Query"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -25,17 +27,11 @@ func TestLiveYDBQueryMetadata(t *testing.T) {
 		t.Skip("set YDB_CONNECTION_STRING for live query metadata probes")
 	}
 	settings, err := (config.Database{URI: uri, Timeout: "30s"}).Resolve(".")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	client, err := New(settings)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() {
-		if err := client.Close(); err != nil {
-			t.Error(err)
-		}
+		assert.NoError(t, client.Close())
 	})
 
 	run := func(t *testing.T, sql string, mode Ydb_Query.ExecMode, parameters map[string]*Ydb.TypedValue) []*Ydb_Query.ExecuteQueryResponsePart {
@@ -58,23 +54,17 @@ func TestLiveYDBQueryMetadata(t *testing.T) {
 			}
 		}
 		stream, err := client.queries.ExecuteQuery(ctx, request)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		var parts []*Ydb_Query.ExecuteQueryResponsePart
 		for {
 			part, err := stream.Recv()
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			parts = append(parts, part)
 		}
-		if len(parts) == 0 {
-			t.Fatal("server returned no response parts")
-		}
+		require.NotEqual(t, 0, len(parts), "server returned no response parts")
 		return parts
 	}
 	checkColumns := func(t *testing.T, parts []*Ydb_Query.ExecuteQueryResponsePart, want []string, wantRows int) {
@@ -82,26 +72,18 @@ func TestLiveYDBQueryMetadata(t *testing.T) {
 		var columns []string
 		rows := 0
 		for _, part := range parts {
-			if err := statusError(part.GetStatus(), part.GetIssues()); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, statusError(part.GetStatus(), part.GetIssues()))
 			if result := part.GetResultSet(); result != nil {
 				rows += len(result.GetRows())
 				for _, column := range result.GetColumns() {
 					typ, err := decodeType(column.GetType())
-					if err != nil {
-						t.Fatal(err)
-					}
+					require.NoError(t, err)
 					columns = append(columns, column.GetName()+":"+typ.String())
 				}
 			}
 		}
-		if rows != wantRows {
-			t.Fatalf("result row count: got %d, want %d", rows, wantRows)
-		}
-		if !reflect.DeepEqual(columns, want) {
-			t.Fatalf("result columns: got %v, want %v", columns, want)
-		}
+		require.Equal(t, wantRows, rows, "result row count: got %d, want %d", rows, wantRows)
+		require.True(t, reflect.DeepEqual(columns, want), "result columns: got %v, want %v", columns, want)
 	}
 	checkError := func(t *testing.T, parts []*Ydb_Query.ExecuteQueryResponsePart, wantStatus Ydb.StatusIds_StatusCode, wantMessage string) {
 		t.Helper()
@@ -113,7 +95,7 @@ func TestLiveYDBQueryMetadata(t *testing.T) {
 				}
 			}
 		}
-		t.Fatalf("expected %s with %q; responses: %v", wantStatus, wantMessage, parts)
+		require.FailNow(t, fmt.Sprintf("expected %s with %q; responses: %v", wantStatus, wantMessage, parts))
 	}
 
 	const complexSQL = `SELECT 1ul + 2ul AS next_id, CAST(NULL AS Utf8?) AS label,
@@ -130,12 +112,8 @@ SELECT $id + 1ul AS incremented, CAST(NULL AS Utf8?) AS label,
 	})
 	t.Run("declared_explain_without_values", func(t *testing.T) {
 		for _, part := range run(t, declaredSQL, Ydb_Query.ExecMode_EXEC_MODE_EXPLAIN, nil) {
-			if err := statusError(part.GetStatus(), part.GetIssues()); err != nil {
-				t.Fatal(err)
-			}
-			if part.GetResultSet() != nil {
-				t.Fatalf("EXPLAIN returned result metadata; reassess compile-only type discovery: %v", part.GetResultSet())
-			}
+			require.NoError(t, statusError(part.GetStatus(), part.GetIssues()))
+			require.Equal(t, nil, part.GetResultSet(), "EXPLAIN returned result metadata; reassess compile-only type discovery: %v", part.GetResultSet())
 		}
 	})
 	t.Run("undeclared_explain_error", func(t *testing.T) {
@@ -162,9 +140,7 @@ SELECT $id + 1ul AS incremented, $text AS label, $maybe AS maybe,
     r.key AS row_key, r.label AS row_label, COUNT(*) OVER () AS total
 FROM AS_TABLE($rows) AS r ORDER BY row_key`
 		for _, part := range run(t, sql+" LIMIT 1;", Ydb_Query.ExecMode_EXEC_MODE_EXPLAIN, nil) {
-			if err := statusError(part.GetStatus(), part.GetIssues()); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, statusError(part.GetStatus(), part.GetIssues()))
 		}
 		types := map[string]*Ydb.Type{
 			"$id":    primitive(Ydb.Type_UINT64),

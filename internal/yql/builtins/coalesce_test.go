@@ -4,15 +4,15 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
 func TestCoalesceIntegerLiterals(t *testing.T) {
 	literal := func(kind, value string) CallArgument {
 		integer, ok := new(big.Int).SetString(value, 10)
-		if !ok {
-			t.Fatal(value)
-		}
+		require.True(t, ok)
 		return CallArgument{Type: scalar(kind), IntegerLiteral: integer}
 	}
 	u32 := CallArgument{Type: model.Optional(scalar("Uint32"))}
@@ -42,17 +42,15 @@ func TestCoalesceIntegerLiterals(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, name := range []string{"COALESCE", "NVL"} {
 				got, err := defaultRegistry.ResolveCall(name, tc.args)
-				if err != nil || !got.Equal(tc.want) {
-					t.Fatalf("%s = %s, %v; want %s", name, got.String(), err, tc.want.String())
-				}
+				require.NoError(t, err)
+				require.True(t, got.Equal(tc.want))
 			}
 		})
 	}
 	arg := literal("Int32", "0")
 	_, _ = defaultRegistry.ResolveCall("COALESCE", []CallArgument{u32, arg})
-	if arg.Type.Kind != "Int32" || arg.IntegerLiteral.Sign() != 0 {
-		t.Fatal("caller literal metadata changed")
-	}
+	require.Equal(t, "Int32", arg.Type.Kind)
+	require.Equal(t, 0, arg.IntegerLiteral.Sign())
 }
 
 func TestCoalesceRejectsUnresolvedAndIncompatibleTypes(t *testing.T) {
@@ -61,8 +59,10 @@ func TestCoalesceRejectsUnresolvedAndIncompatibleTypes(t *testing.T) {
 		{{Type: scalar("String")}, {Type: scalar("Bool")}},
 		{{Type: model.Optional(model.Optional(scalar("Int32")))}},
 	} {
-		if got, err := defaultRegistry.ResolveCall("COALESCE", args); err == nil || got.Kind != "" {
-			t.Fatalf("accepted %v: %v %v", args, got, err)
+		{
+			got, err := defaultRegistry.ResolveCall("COALESCE", args)
+			require.Error(t, err)
+			require.Equal(t, "", got.Kind)
 		}
 	}
 }

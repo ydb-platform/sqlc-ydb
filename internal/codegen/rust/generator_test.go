@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -31,15 +33,13 @@ func generatedFile(t *testing.T, files []model.File, name string) string {
 			return string(file.Content)
 		}
 	}
-	t.Fatalf("missing generated file %s", name)
+	require.FailNow(t, fmt.Sprintf("missing generated file %s", name))
 	return ""
 }
 
 func TestGenerateYDBQuerierUsesNativeQueryClientContract(t *testing.T) {
 	files, err := Generate(representativeAnalysis(), Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	queries := generatedFile(t, files, "queries.rs")
 	for _, want := range []string{
 		"use super::models::*;",
@@ -57,15 +57,11 @@ func TestGenerateYDBQuerierUsesNativeQueryClientContract(t *testing.T) {
 		"UPDATE books SET tags = $tags WHERE id = $id;",
 		`.param("$tags", JsonParam(tags))`,
 	} {
-		if !strings.Contains(queries, want) {
-			t.Errorf("generated queries missing %q:\n%s", want, queries)
-		}
+		assert.Contains(t, queries, want, "generated queries missing %q:\n%s", want, queries)
 	}
 	models := generatedFile(t, files, "models.rs")
 	for _, want := range []string{"#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]", "pub id: u64", "pub title: String", "pub tags: String", "pub available: std::time::SystemTime", "pub subtitle: Option<String>"} {
-		if !strings.Contains(models, want) {
-			t.Errorf("generated models missing %q:\n%s", want, models)
-		}
+		assert.Contains(t, models, want, "generated models missing %q:\n%s", want, models)
 	}
 }
 
@@ -82,14 +78,10 @@ func TestResultCopyDerive(t *testing.T) {
 					ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "value", Type: typ}}}},
 				}}}
 				files, err := Generate(in, Options{})
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 				wantCopy := kind == "Bool" || kind == "Int64" || kind == "Uint64" || kind == "Timestamp"
 				models := generatedFile(t, files, "models.rs")
-				if strings.Contains(models, ", Copy,") != wantCopy {
-					t.Fatalf("unexpected Copy derive:\n%s", models)
-				}
+				require.Equal(t, wantCopy, strings.Contains(models, ", Copy,"), "unexpected Copy derive:\n%s", models)
 			})
 		}
 	}
@@ -104,21 +96,15 @@ func TestDecodesQualifiedProjectionByResolvedOrdinal(t *testing.T) {
 		}}},
 	}}}
 	files, err := Generate(a, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	queries := generatedFile(t, files, "queries.rs")
 	for _, want := range []string{
 		"book_id: row.remove_field(0)?.try_into()?",
 		"name: row.remove_field(1)?.try_into()?",
 	} {
-		if !strings.Contains(queries, want) {
-			t.Fatalf("projection decoding missing %q:\n%s", want, queries)
-		}
+		require.Contains(t, queries, want, "projection decoding missing %q:\n%s", want, queries)
 	}
-	if strings.Contains(queries, "remove_field_by_name") {
-		t.Fatalf("qualified result labels must not be used for decoding:\n%s", queries)
-	}
+	require.False(t, strings.Contains(queries, "remove_field_by_name"), "qualified result labels must not be used for decoding:\n%s", queries)
 }
 
 func TestGetPrefixAndMultilineSQLMatchApprovedRustStyle(t *testing.T) {
@@ -130,9 +116,7 @@ func TestGetPrefixAndMultilineSQLMatchApprovedRustStyle(t *testing.T) {
 		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}}, {Name: "name", Type: model.Type{Kind: "Utf8"}}}}},
 	}}}
 	files, err := Generate(a, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	queries := generatedFile(t, files, "queries.rs")
 	for _, want := range []string{
 		"// -- name: GetAuthor :one\n    #[builder(on(String, into))]\n    pub async fn author(",
@@ -142,20 +126,14 @@ func TestGetPrefixAndMultilineSQLMatchApprovedRustStyle(t *testing.T) {
                 "RETURNING id, name;",
             ))`,
 	} {
-		if !strings.Contains(queries, want) {
-			t.Fatalf("approved Rust style missing %q:\n%s", want, queries)
-		}
+		require.Contains(t, queries, want, "approved Rust style missing %q:\n%s", want, queries)
 	}
-	if strings.Contains(queries, "get_author") || strings.Contains(queries, "-- name: GetAuthor :one\n                 INSERT") {
-		t.Fatalf("generated Rust API retained the get_ prefix or sent metadata as SQL:\n%s", queries)
-	}
+	require.False(t, strings.Contains(queries, "get_author") || strings.Contains(queries, "-- name: GetAuthor :one\n                 INSERT"), "generated Rust API retained the get_ prefix or sent metadata as SQL:\n%s", queries)
 }
 
 func TestJsonInputsUseExplicitYDBValues(t *testing.T) {
 	files, err := Generate(representativeAnalysis(), Options{Runtime: "ydb"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	queries := generatedFile(t, files, "queries.rs")
 	for _, want := range []string{
 		"tags: String",
@@ -163,9 +141,7 @@ func TestJsonInputsUseExplicitYDBValues(t *testing.T) {
 		"ydb::Value::Json(value.0)",
 		`.param("$tags", JsonParam(tags))`,
 	} {
-		if !strings.Contains(queries, want) {
-			t.Fatalf("Json input must retain its YDB wire type; missing %q:\n%s", want, queries)
-		}
+		require.Contains(t, queries, want, "Json input must retain its YDB wire type; missing %q:\n%s", want, queries)
 	}
 }
 
@@ -175,18 +151,14 @@ func TestOptionalJsonInputsUseConstructibleTypedValues(t *testing.T) {
 		Parameters: []model.Parameter{{Name: "biography", Type: model.Optional(model.Type{Kind: "Json"})}},
 	}}}
 	files, err := Generate(a, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	queries := generatedFile(t, files, "queries.rs")
 	for _, want := range []string{
 		"biography: Option<String>",
 		"#[derive(Default)]\nstruct JsonParam(String);",
 		`.param("$biography", biography.map(JsonParam))`,
 	} {
-		if !strings.Contains(queries, want) {
-			t.Fatalf("Optional<Json> must use the SDK's typed Option conversion; missing %q:\n%s", want, queries)
-		}
+		require.Contains(t, queries, want, "Optional<Json> must use the SDK's typed Option conversion; missing %q:\n%s", want, queries)
 	}
 }
 
@@ -200,9 +172,7 @@ func TestTemporalInputsUseExactConstructibleYDBValues(t *testing.T) {
 		},
 	}}}
 	files, err := Generate(a, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	queries := generatedFile(t, files, "queries.rs")
 	for _, want := range []string{
 		"struct TimestampParam(std::time::SystemTime);",
@@ -211,9 +181,7 @@ func TestTemporalInputsUseExactConstructibleYDBValues(t *testing.T) {
 		`.param("$created_at", created_at.map(TimestampParam))`,
 		`.param("$day", ydb::Value::Date(day))`,
 	} {
-		if !strings.Contains(queries, want) {
-			t.Fatalf("temporal input must retain its YDB wire type; missing %q:\n%s", want, queries)
-		}
+		require.Contains(t, queries, want, "temporal input must retain its YDB wire type; missing %q:\n%s", want, queries)
 	}
 }
 
@@ -225,25 +193,17 @@ func TestGeneratedSQLRoundTripsThroughRustCompiler(t *testing.T) {
 	} {
 		t.Run(fmt.Sprint(len(sql)), func(t *testing.T) {
 			files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "SpecialSQL", Command: model.Exec, SQL: sql}}}, Options{})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			queries := generatedFile(t, files, "queries.rs")
 			start := strings.Index(queries, ".exec(")
-			if start < 0 {
-				t.Fatal("inline SQL missing")
-			}
+			require.False(t, start < 0, "inline SQL missing")
 			start += len(".exec(")
 			end := strings.Index(queries[start:], "\n            ))")
-			if end < 0 {
-				t.Fatal("inline SQL delimiter missing")
-			}
+			require.False(t, end < 0, "inline SQL delimiter missing")
 			literal := queries[start : start+end+len("\n            )")]
 			lines := strings.Split(literal, "\n")
 			for _, line := range lines[1 : len(lines)-1] {
-				if !strings.HasPrefix(line, "                \"") {
-					t.Fatalf("SQL line lacks external code indent: %q", line)
-				}
+				require.False(t, !strings.HasPrefix(line, "                \""), "SQL line lacks external code indent: %q", line)
 			}
 			var expected strings.Builder
 			expected.WriteString("&[")
@@ -257,15 +217,13 @@ func TestGeneratedSQLRoundTripsThroughRustCompiler(t *testing.T) {
 			source := fmt.Sprintf("fn main() { assert_eq!((%s).as_bytes(), %s); }\n", literal, expected.String())
 			dir := t.TempDir()
 			path := filepath.Join(dir, "main.rs")
-			if err := os.WriteFile(path, []byte(source), 0600); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, os.WriteFile(path, []byte(source), 0600))
 			bin := filepath.Join(dir, "roundtrip")
 			if out, err := exec.Command("rustc", path, "-o", bin).CombinedOutput(); err != nil {
-				t.Fatalf("rustc: %v\n%s", err, out)
+				require.NoError(t, err, "rustc: %v\n%s", err, out)
 			}
 			if out, err := exec.Command(bin).CombinedOutput(); err != nil {
-				t.Fatalf("round trip: %v\n%s", err, out)
+				require.NoError(t, err, "round trip: %v\n%s", err, out)
 			}
 		})
 	}
@@ -273,34 +231,26 @@ func TestGeneratedSQLRoundTripsThroughRustCompiler(t *testing.T) {
 
 func TestGeneratedRustIsRustfmtClean(t *testing.T) {
 	files, err := Generate(representativeAnalysis(), Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	paths := make([]string, 0, len(files))
 	for _, file := range files {
 		path := filepath.Join(dir, file.Name)
-		if err := os.WriteFile(path, file.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(path, file.Content, 0600))
 		paths = append(paths, path)
 	}
 	args := append([]string{"--edition", "2024", "--check"}, paths...)
 	if out, err := exec.Command("rustfmt", args...).CombinedOutput(); err != nil {
-		t.Fatalf("generated Rust is not rustfmt-clean: %v\n%s", err, out)
+		require.NoError(t, err, "generated Rust is not rustfmt-clean: %v\n%s", err, out)
 	}
 }
 
 func TestGeneratedQueriesPreserveExplicitDeclarations(t *testing.T) {
 	files, err := Generate(representativeAnalysis(), Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	queries := generatedFile(t, files, "queries.rs")
 	for _, want := range []string{"DECLARE $id AS Uint64;", "DECLARE $year AS Int32;", "DECLARE $tags AS Json;", "UPDATE books SET tags = $tags WHERE id = $id;"} {
-		if !strings.Contains(queries, want) {
-			t.Fatalf("generated Rust query lost %q:\n%s", want, queries)
-		}
+		require.Contains(t, queries, want, "generated Rust query lost %q:\n%s", want, queries)
 	}
 }
 
@@ -308,36 +258,36 @@ func TestRejectsUnsupportedRuntimeTypeAndNames(t *testing.T) {
 	aNew := representativeAnalysis()
 	aNew.Queries[0].Name = "New"
 	if _, err := Generate(aNew, Options{}); err == nil || !strings.Contains(err.Error(), "constructor") {
-		t.Fatalf("constructor collision error: %v", err)
+		require.FailNow(t, fmt.Sprintf("constructor collision error: %v", err))
 	}
 	if _, err := Generate(representativeAnalysis(), Options{Runtime: "sqlx"}); err == nil || !strings.Contains(err.Error(), `unsupported runtime "sqlx"`) {
-		t.Fatalf("runtime error: %v", err)
+		require.FailNow(t, fmt.Sprintf("runtime error: %v", err))
 	}
 	a := representativeAnalysis()
 	a.Queries[0].Parameters[0].Type = model.Type{Kind: "Any"}
 	if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), `query "CreateBook" parameter "id": unsupported YQL type "Any"`) {
-		t.Fatalf("type error: %v", err)
+		require.FailNow(t, fmt.Sprintf("type error: %v", err))
 	}
 	a = representativeAnalysis()
 	a.Queries[0].Name = "match"
 	if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), "generated Rust name") {
-		t.Fatalf("name error: %v", err)
+		require.FailNow(t, fmt.Sprintf("name error: %v", err))
 	}
 	a = representativeAnalysis()
 	a.Queries[0].SQL = "SELECT '\xff';"
 	if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), "SQL is not valid UTF-8") {
-		t.Fatalf("UTF-8 error: %v", err)
+		require.FailNow(t, fmt.Sprintf("UTF-8 error: %v", err))
 	}
 }
 
 func TestRejectsExecRowsAndMalformedResults(t *testing.T) {
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Affected", Command: model.ExecRows}}}
 	if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), ":execrows is unsupported") {
-		t.Fatalf("execrows error: %v", err)
+		require.FailNow(t, fmt.Sprintf("execrows error: %v", err))
 	}
 	a.Queries[0] = model.AnalyzedQuery{Name: "Missing", Command: model.One}
 	if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), "expected one non-empty result set") {
-		t.Fatalf("result error: %v", err)
+		require.FailNow(t, fmt.Sprintf("result error: %v", err))
 	}
 }
 
@@ -346,7 +296,7 @@ func TestGeneratedRustCompilesAgainstPinnedSDK(t *testing.T) {
 		t.Skip("set SQLC_YDB_RUST_SDK_CHECK=1 to compile against the published SDK")
 	}
 	if _, err := exec.LookPath("cargo"); err != nil {
-		t.Fatal("SQLC_YDB_RUST_SDK_CHECK requires cargo")
+		require.NoError(t, err, "SQLC_YDB_RUST_SDK_CHECK requires cargo")
 	}
 	analysis := representativeAnalysis()
 	scalar := model.Type{Kind: "Uint64"}
@@ -366,26 +316,18 @@ func TestGeneratedRustCompilesAgainstPinnedSDK(t *testing.T) {
 		})
 	}
 	files, err := Generate(analysis, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(dir, "src"), 0700); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "src"), 0700))
 	for _, file := range files {
-		if err := os.WriteFile(filepath.Join(dir, "src", file.Name), file.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "src", file.Name), file.Content, 0600))
 	}
 	format := exec.Command("rustfmt", "--edition", "2024", "--check", filepath.Join(dir, "src", "lib.rs"))
 	if out, err := format.CombinedOutput(); err != nil {
-		t.Fatalf("list output format: %v\n%s", err, out)
+		require.NoError(t, err, "list output format: %v\n%s", err, out)
 	}
 	cargo := "[package]\nname = \"generated-check\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n[dependencies]\nydb = \"=0.18.2\"\nbon = \"=3.10.1\"\ntokio = { version = \"1\", features = [\"macros\", \"rt-multi-thread\"] }\n"
-	if err := os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte(cargo), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte(cargo), 0600))
 	consumer := `#![recursion_limit = "256"]
 use generated_check::queries::Queries;
 async fn check(q: &mut Queries<'_, ydb::QueryClient>) -> ydb::YdbResult<()> {
@@ -423,29 +365,25 @@ async fn main() -> ydb::YdbResult<()> {
 }
 `
 	mainPath := filepath.Join(dir, "src", "main.rs")
-	if err := os.WriteFile(mainPath, []byte(consumer), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(mainPath, []byte(consumer), 0600))
 	cmd := exec.Command("cargo", "check", "--quiet")
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("generated Rust does not compile against ydb 0.18.2: %v\n%s", err, out)
+		require.NoError(t, err, "generated Rust does not compile against ydb 0.18.2: %v\n%s", err, out)
 	}
 	if os.Getenv("YDB_CONNECTION_STRING") != "" {
 		cmd = exec.Command("cargo", "run", "--quiet")
 		cmd.Dir = dir
 		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("live lists: %v\n%s", err, out)
+			require.NoError(t, err, "live lists: %v\n%s", err, out)
 		}
 	}
 	incomplete := strings.Replace(consumer, ".create_book().id(1).call()", ".create_book().call()", 1)
-	if err := os.WriteFile(mainPath, []byte(incomplete), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(mainPath, []byte(incomplete), 0600))
 	cmd = exec.Command("cargo", "check", "--quiet")
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "IsComplete") {
-		t.Fatalf("missing required parameter must fail the builder completeness check: %v\n%s", err, out)
+		require.FailNow(t, fmt.Sprintf("missing required parameter must fail the builder completeness check: %v\n%s", err, out))
 	}
 }
 
@@ -461,9 +399,7 @@ func TestFloatingPointResultsCompileAndRetainPartialComparison(t *testing.T) {
 		}
 	}
 	files, err := Generate(&model.AnalysisResult{Queries: queries}, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	source := generatedFile(t, files, "models.rs") + `
 fn main() {
@@ -475,13 +411,11 @@ fn main() {
 }
 `
 	path, bin := filepath.Join(dir, "main.rs"), filepath.Join(dir, "main")
-	if err := os.WriteFile(path, []byte(source), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(source), 0600))
 	if out, err := exec.Command("rustc", path, "-o", bin).CombinedOutput(); err != nil {
-		t.Fatalf("floating-point result models do not compile: %v\n%s", err, out)
+		require.NoError(t, err, "floating-point result models do not compile: %v\n%s", err, out)
 	}
 	if out, err := exec.Command(bin).CombinedOutput(); err != nil {
-		t.Fatalf("floating-point comparison contract failed: %v\n%s", err, out)
+		require.NoError(t, err, "floating-point comparison contract failed: %v\n%s", err, out)
 	}
 }

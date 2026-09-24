@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -20,18 +21,12 @@ func TestJSONResultAnnotationsFollowRuntime(t *testing.T) {
 	for _, runtime := range []string{"ydb", "dbapi", "sqlalchemy"} {
 		t.Run(runtime, func(t *testing.T) {
 			files, err := Generate(jsonResultInput(), Options{Runtime: runtime})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			dir := t.TempDir()
 			pkg := filepath.Join(dir, "generated")
-			if err := os.Mkdir(pkg, 0700); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, os.Mkdir(pkg, 0700))
 			for _, f := range files {
-				if err := os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600); err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600))
 			}
 			script := `import sys, types
 sys.modules["ydb"]=types.ModuleType("ydb")
@@ -67,7 +62,7 @@ assert not hasattr(models,"JSONValue")
 			cmd.Dir = dir
 			cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
 			if out, err := cmd.CombinedOutput(); err != nil {
-				t.Fatalf("%s annotations: %v\n%s", runtime, err, out)
+				require.NoError(t, err, "%s annotations: %v\n%s", runtime, err, out)
 			}
 		})
 	}
@@ -76,9 +71,7 @@ func TestJSONResultAliasCollision(t *testing.T) {
 	in := jsonResultInput()
 	in.Catalog.Tables = []model.Table{{Name: "J_S_O_N_Value", Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}}}}}
 	_, err := Generate(in, Options{Runtime: "ydb"})
-	if err == nil || !strings.Contains(err.Error(), "name collision") {
-		t.Fatalf("err=%v", err)
-	}
+	require.ErrorContains(t, err, "name collision", "err=%v", err)
 }
 func TestNativeJSONResultUsesSDKDecodedValues(t *testing.T) {
 	if os.Getenv("SQLC_YDB_PYTHON_SDK_CHECK") == "" {
@@ -86,18 +79,12 @@ func TestNativeJSONResultUsesSDKDecodedValues(t *testing.T) {
 	}
 	in := jsonResultInput()
 	files, err := Generate(in, Options{Runtime: "ydb"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	pkg := filepath.Join(dir, "generated")
-	if err := os.Mkdir(pkg, 0700); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Mkdir(pkg, 0700))
 	for _, f := range files {
-		if err := os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600))
 	}
 	script := `import types
 import ydb
@@ -119,7 +106,7 @@ for text, expected in [('{}',{}), ('[1,true,null]',[1,True,None]), ('"hello"','h
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("SDK decoded JSON: %v\n%s", err, out)
+		require.NoError(t, err, "SDK decoded JSON: %v\n%s", err, out)
 	}
 }
 
@@ -134,27 +121,21 @@ func TestNestedJSONResultContainers(t *testing.T) {
 			want = "Optional[dict[str, set[JSONValue]]]"
 		}
 		got, err := resultPyType(model.Optional(dict), Options{Runtime: runtime})
-		if err != nil || got != want {
-			t.Fatalf("%s: type=%q, err=%v", runtime, got, err)
-		}
+		require.False(t, err != nil || got != want, "%s: type=%q, err=%v", runtime, got, err)
 	}
 }
 
 func TestNativeJSONTableModelAnnotation(t *testing.T) {
 	in := &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "documents", Columns: []model.Column{{Name: "payload", Type: model.Type{Kind: "Json"}}}}}}}
 	files, err := Generate(in, Options{Runtime: "ydb"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, f := range files {
 		if f.Name == "models.py" {
-			if !strings.Contains(string(f.Content), "payload: JSONValue") || !strings.Contains(string(f.Content), "JSONValue = Union[") {
-				t.Fatalf("missing table JSON annotation:\n%s", f.Content)
-			}
+			require.False(t, !strings.Contains(string(f.Content), "payload: JSONValue") || !strings.Contains(string(f.Content), "JSONValue = Union["), "missing table JSON annotation:\n%s", f.Content)
 			return
 		}
 	}
-	t.Fatal("missing models.py")
+	require.FailNow(t, "missing models.py")
 }
 
 func TestJSONInsideUnsupportedResultShapesIsRejected(t *testing.T) {
@@ -164,9 +145,7 @@ func TestJSONInsideUnsupportedResultShapesIsRejected(t *testing.T) {
 			in := jsonResultInput()
 			in.Queries[0].ResultSets[0].Columns = []model.Column{{Name: "payload", Type: typ}}
 			files, err := Generate(in, Options{Runtime: runtime})
-			if err == nil || !strings.Contains(err.Error(), "unsupported YQL type") || len(files) != 0 {
-				t.Fatalf("%s %s: files=%d err=%v", runtime, typ.Kind, len(files), err)
-			}
+			require.False(t, err == nil || !strings.Contains(err.Error(), "unsupported YQL type") || len(files) != 0, "%s %s: files=%d err=%v", runtime, typ.Kind, len(files), err)
 		}
 	}
 }

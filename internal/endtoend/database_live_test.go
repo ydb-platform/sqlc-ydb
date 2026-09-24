@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/cli"
 	"github.com/ydb-platform/sqlc-ydb/internal/config"
 	"github.com/ydb-platform/sqlc-ydb/internal/database"
@@ -29,36 +30,24 @@ func TestLiveYDBDatabaseAnalysis(t *testing.T) {
 	before := runDatabasePython(t, dir, databaseFixturePython, "snapshot", table)
 	// Discovery follows the descriptor order, which need not equal raw SELECT * order.
 	settings, err := (config.Database{URI: os.Getenv("YDB_CONNECTION_STRING"), Timeout: "30s"}).Resolve(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	metadataClient, err := database.New(settings)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	described, describeErr := metadataClient.DescribeTable(context.Background(), table)
-	if err := metadataClient.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if describeErr != nil {
-		t.Fatal(describeErr)
-	}
+	require.NoError(t, metadataClient.Close())
+	require.NoError(t, describeErr)
 	var columnNames, goFields []string
 	fieldNames := map[string]string{"amount": "Amount", "id": "ID", "ztext": "Ztext"}
 	for _, column := range described.Columns {
 		columnNames = append(columnNames, column.Name)
 		name, ok := fieldNames[column.Name]
-		if !ok {
-			t.Fatalf("unexpected described column %q", column.Name)
-		}
+		require.True(t, ok, "unexpected described column %q", column.Name)
 		goFields = append(goFields, name)
 	}
 
 	write := func(name, contents string) {
 		t.Helper()
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(contents), 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(contents), 0600))
 	}
 	write("queries.sql", strings.ReplaceAll(`-- name: ReadRecord :one
 DECLARE $id AS Uint64;
@@ -115,37 +104,29 @@ UPDATE records SET ztext = $ztext WHERE id = $id;
 		t.Run(tc.name, func(t *testing.T) {
 			write("rejected.sql", "-- name: MissingDeclaration :one\n"+tc.sql)
 			code, stderr := invoke("generate")
-			if code == 0 || !strings.Contains(stderr, "YDB ") || !strings.Contains(stderr, "Unknown name: $id") || !strings.Contains(stderr, "DECLARE") {
-				t.Fatalf("undeclared parameter must return a YDB error with a DECLARE suggestion: %d %s", code, stderr)
-			}
-			if strings.Contains(stderr, "computed result expression") || strings.Contains(stderr, "unsupported result expression") {
-				t.Fatalf("local expression rejection preceded server validation: %s", stderr)
-			}
+			require.False(t, code == 0 || !strings.Contains(stderr, "YDB ") || !strings.Contains(stderr, "Unknown name: $id") || !strings.Contains(stderr, "DECLARE"), "undeclared parameter must return a YDB error with a DECLARE suggestion: %d %s", code, stderr)
+			require.False(t, strings.Contains(stderr, "computed result expression") || strings.Contains(stderr, "unsupported result expression"), "local expression rejection preceded server validation: %s", stderr)
 			for _, output := range []string{"stdlib", "native", "pydb", "rejected"} {
-				if _, err := os.Stat(filepath.Join(dir, output)); !os.IsNotExist(err) {
-					t.Fatalf("failed generation left output %s: %v", output, err)
-				}
+				_, err := os.Stat(filepath.Join(dir, output))
+				require.ErrorIs(t, err, os.ErrNotExist, "failed generation left output %s", output)
 			}
 		})
 	}
 	write("sqlc.yaml", cfg)
 	for _, command := range []string{"compile", "generate", "diff"} {
-		if code, stderr := invoke(command); code != 0 {
-			t.Fatalf("%s: %s", command, stderr)
-		}
+		code, stderr := invoke(command)
+		require.Zero(t, code, "%s: %s", command, stderr)
 		after := runDatabasePython(t, dir, databaseFixturePython, "snapshot", table)
-		if after != before {
-			t.Fatalf("%s changed database rows: before=%s after=%s", command, before, after)
-		}
+		require.Equal(t, before, after, "%s changed database rows: before=%s after=%s", command, before, after)
 	}
-	if code, stderr := invoke("compile", "--no-database"); code == 0 || !strings.Contains(stderr, "schema is required") {
-		t.Fatalf("offline discovery should require schema: %d %s", code, stderr)
-	}
+	code, stderr := invoke("compile", "--no-database")
+	require.NotZero(t, code, stderr)
+	require.Contains(t, stderr, "schema is required")
 	write("schema.sql", "CREATE TABLE "+table+" (ztext Utf8, id Uint64 NOT NULL, amount Int64, PRIMARY KEY(id));")
 	write("sqlc.yaml", strings.ReplaceAll(cfg, "  queries: queries.sql\n", "  schema: schema.sql\n  queries: queries.sql\n"))
-	if code, stderr := invoke("compile"); code == 0 || !strings.Contains(stderr, "amount") {
-		t.Fatalf("schema drift should identify mismatched amount column: %d %s", code, stderr)
-	}
+	code, stderr = invoke("compile")
+	require.NotZero(t, code, stderr)
+	require.Contains(t, stderr, "amount")
 	write("sqlc.yaml", cfg)
 
 	write("go.mod", "module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n")
@@ -169,9 +150,7 @@ func runDatabasePython(t *testing.T, dir, script string, args ...string) string 
 	cmd := exec.CommandContext(ctx, "python3", append([]string{"-c", script}, args...)...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("Python database acceptance: %v\n%s", err, out)
-	}
+	require.NoError(t, err, "Python database acceptance: %v\n%s", err, out)
 	return strings.TrimSpace(string(out))
 }
 

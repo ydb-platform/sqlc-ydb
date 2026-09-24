@@ -1,9 +1,9 @@
 package analyzer
 
 import (
-	"reflect"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -24,15 +24,14 @@ UNION ALL
 SELECT title AS title FROM second_records;`}}
 
 	got, err := Analyze(schema, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	want := []model.Column{
 		{Name: "id", Type: model.Optional(model.Type{Kind: "Uint64"})},
 		{Name: "title", Type: model.Optional(model.Type{Kind: "Utf8"})},
 	}
-	if columns := got.Queries[0].ResultSets[0].Columns; !reflect.DeepEqual(columns, want) {
-		t.Fatalf("columns = %#v, want %#v", columns, want)
+	{
+		columns := got.Queries[0].ResultSets[0].Columns
+		require.Equal(t, want, columns)
 	}
 }
 
@@ -43,12 +42,12 @@ UNION
 SELECT 2l AS value;`}}
 
 	got, err := Analyze(nil, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	want := model.Type{Kind: "Int64"}
-	if result := got.Queries[0].ResultSets[0].Columns[0]; result.Name != "value" || !reflect.DeepEqual(result.Type, want) {
-		t.Fatalf("result = %#v, want value %#v", result, want)
+	{
+		result := got.Queries[0].ResultSets[0].Columns[0]
+		require.Equal(t, "value", result.Name)
+		require.Equal(t, want, result.Type)
 	}
 }
 
@@ -59,18 +58,12 @@ UNION ALL
 SELECT 4 AS id, 5 AS a, 6 AS z;`}}
 
 	got, err := Analyze(nil, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	wantNames := []string{"id", "z", "a"}
 	columns := got.Queries[0].ResultSets[0].Columns
-	if len(columns) != len(wantNames) {
-		t.Fatalf("columns = %#v", columns)
-	}
+	require.Len(t, columns, len(wantNames))
 	for i, name := range wantNames {
-		if columns[i].Name != name {
-			t.Fatalf("column %d = %q, want %q; columns = %#v", i, columns[i].Name, name, columns)
-		}
+		require.Equal(t, name, columns[i].Name)
 	}
 }
 
@@ -83,18 +76,12 @@ UNION ALL
 SELECT 4 AS b, 5 AS a;`}}
 
 	got, err := Analyze(nil, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	wantNames := []string{"z", "y", "d", "b", "a"}
 	columns := got.Queries[0].ResultSets[0].Columns
-	if len(columns) != len(wantNames) {
-		t.Fatalf("columns = %#v", columns)
-	}
+	require.Len(t, columns, len(wantNames))
 	for i, name := range wantNames {
-		if columns[i].Name != name {
-			t.Fatalf("column %d = %q, want %q; columns = %#v", i, columns[i].Name, name, columns)
-		}
+		require.Equal(t, name, columns[i].Name)
 	}
 }
 
@@ -103,9 +90,7 @@ func TestAnalyzeUnionRejectsDuplicateNamesWithinInput(t *testing.T) {
 SELECT 1 AS value, 2 AS value
 UNION ALL
 SELECT 3 AS value;`}})
-	if err == nil || !strings.Contains(err.Error(), `UNION input has duplicate result column "value"`) {
-		t.Fatalf("error = %v", err)
-	}
+	require.ErrorContains(t, err, `UNION input has duplicate result column "value"`)
 }
 
 func TestAnalyzeUnionResolvesContextualNull(t *testing.T) {
@@ -115,12 +100,12 @@ UNION ALL
 SELECT 1 AS value;`}}
 
 	got, err := Analyze(nil, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	want := model.Optional(model.Type{Kind: "Int32"})
-	if result := got.Queries[0].ResultSets[0].Columns[0]; result.Name != "value" || !reflect.DeepEqual(result.Type, want) {
-		t.Fatalf("result = %#v, want value %#v", result, want)
+	{
+		result := got.Queries[0].ResultSets[0].Columns[0]
+		require.Equal(t, "value", result.Name)
+		require.Equal(t, want, result.Type)
 	}
 }
 
@@ -135,15 +120,14 @@ UNION ALL
 SELECT b.id FROM records AS a JOIN records AS b ON a.id = b.id;`}}
 
 	got, err := Analyze(schema, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	want := []model.Column{
 		{Name: "a_id", WireName: "a.id", Type: model.Optional(model.Type{Kind: "Uint64"})},
 		{Name: "b_id", WireName: "b.id", Type: model.Optional(model.Type{Kind: "Uint64"})},
 	}
-	if columns := got.Queries[0].ResultSets[0].Columns; !reflect.DeepEqual(columns, want) {
-		t.Fatalf("columns = %#v, want %#v", columns, want)
+	{
+		columns := got.Queries[0].ResultSets[0].Columns
+		require.Equal(t, want, columns)
 	}
 }
 
@@ -158,15 +142,14 @@ UNION ALL
 SELECT a.id, b.id FROM records AS a JOIN records AS b ON a.id = b.id;`}}
 
 	got, err := Analyze(schema, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	want := []model.Column{
 		{Name: "a_id", WireName: "a.id", Type: model.Type{Kind: "Uint64"}},
 		{Name: "b_id", WireName: "b.id", Type: model.Type{Kind: "Uint64"}},
 	}
-	if columns := got.Queries[0].ResultSets[0].Columns; !reflect.DeepEqual(columns, want) {
-		t.Fatalf("columns = %#v, want %#v", columns, want)
+	{
+		columns := got.Queries[0].ResultSets[0].Columns
+		require.Equal(t, want, columns)
 	}
 }
 
@@ -181,12 +164,11 @@ UNION ALL
 SELECT a.id FROM records AS a JOIN records AS b ON a.id = b.id;`}}
 
 	got, err := Analyze(schema, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	want := []model.Column{{Name: "id", WireName: "a.id", Type: model.Type{Kind: "Uint64"}}}
-	if columns := got.Queries[0].ResultSets[0].Columns; !reflect.DeepEqual(columns, want) {
-		t.Fatalf("columns = %#v, want %#v", columns, want)
+	{
+		columns := got.Queries[0].ResultSets[0].Columns
+		require.Equal(t, want, columns)
 	}
 }
 
@@ -201,9 +183,7 @@ UNION ALL
 SELECT a.id, b.id, 2 AS a_id FROM records AS a JOIN records AS b ON a.id = b.id;`}}
 
 	_, err := Analyze(schema, queries)
-	if err == nil || !strings.Contains(err.Error(), `UNION result columns "a.id" and "a_id" produce duplicate logical name "a_id"; use explicit unique AS aliases`) {
-		t.Fatalf("error = %v", err)
-	}
+	require.ErrorContains(t, err, `UNION result columns "a.id" and "a_id" produce duplicate logical name "a_id"; use explicit unique AS aliases`)
 }
 
 func TestAnalyzeUnionPaginationParameters(t *testing.T) {
@@ -212,15 +192,14 @@ func TestAnalyzeUnionPaginationParameters(t *testing.T) {
 (SELECT id FROM records)
 UNION ALL
 SELECT id FROM records ORDER BY id LIMIT $limit OFFSET $offset;`}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	want := []model.Parameter{{Name: "limit", Type: model.Type{Kind: "Uint64"}}, {Name: "offset", Type: model.Type{Kind: "Uint64"}}}
 	q := got.Queries[0]
-	if !reflect.DeepEqual(q.Parameters, want) {
-		t.Fatalf("parameters = %#v, want %#v", q.Parameters, want)
-	}
-	if columns := q.ResultSets[0].Columns; len(columns) != 1 || columns[0].Name != "id" || !columns[0].Type.Equal(model.Type{Kind: "Uint64"}) {
-		t.Fatalf("columns = %#v", columns)
+	require.Equal(t, want, q.Parameters)
+	{
+		columns := q.ResultSets[0].Columns
+		require.Len(t, columns, 1)
+		require.Equal(t, "id", columns[0].Name)
+		require.True(t, columns[0].Type.Equal(model.Type{Kind: "Uint64"}))
 	}
 }

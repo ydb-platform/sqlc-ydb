@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -35,13 +36,9 @@ func TestResultComparisonDerives(t *testing.T) {
 			}
 			analysis := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Read", Command: model.One, SQL: "SELECT value FROM readings;", ResultSets: []model.ResultSet{{Columns: columns}}}}}
 			files, err := Generate(analysis, Options{})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			models := generatedFile(t, files, "models.rs")
-			if !strings.Contains(models, "#[derive("+tc.derives+")]\npub struct ReadRow") {
-				t.Fatalf("unexpected public row traits:\n%s", models)
-			}
+			require.Contains(t, models, "#[derive("+tc.derives+")]\npub struct ReadRow", "unexpected public row traits:\n%s", models)
 		})
 	}
 }
@@ -52,9 +49,7 @@ func TestRejectsNestedOptionalResultSDKTypes(t *testing.T) {
 			typ := model.Optional(model.Optional(model.Type{Kind: kind}))
 			query := model.AnalyzedQuery{Name: "Read", Command: model.One, SQL: "SELECT value FROM readings;", ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "value", Type: typ}}}}}
 			files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{query}}, Options{})
-			if files != nil || err == nil || !strings.Contains(err.Error(), "nested optional result decoding is unsupported by ydb 0.18.2") {
-				t.Fatalf("files=%v error=%v", files, err)
-			}
+			require.False(t, files != nil || err == nil || !strings.Contains(err.Error(), "nested optional result decoding is unsupported by ydb 0.18.2"), "files=%v error=%v", files, err)
 		})
 	}
 }
@@ -86,22 +81,14 @@ func TestBytesResultsCompileAndRetainEquality(t *testing.T) {
 	queries = append(queries, model.AnalyzedQuery{Name: "ReadText", Command: model.One, SQL: "SELECT value FROM readings;", ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "value", Type: model.Optional(model.Type{Kind: "Utf8"})}}}}})
 	queries = append(queries, model.AnalyzedQuery{Name: "BindNestedText", Command: model.Exec, SQL: "DECLARE $value AS Optional<Optional<Utf8>>; SELECT $value;", Parameters: []model.Parameter{{Name: "value", Type: model.Optional(model.Optional(model.Type{Kind: "Utf8"}))}}})
 	files, err := Generate(&model.AnalysisResult{Queries: queries}, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(dir, "src"), 0700); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "src"), 0700))
 	for _, file := range files {
-		if err := os.WriteFile(filepath.Join(dir, "src", file.Name), file.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "src", file.Name), file.Content, 0600))
 	}
 	manifest := "[package]\nname=\"bytes-result-check\"\nversion=\"0.0.0\"\nedition=\"2024\"\n[dependencies]\nydb=\"=0.18.2\"\nbon=\"=3.10.1\"\n"
-	if err := os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte(manifest), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte(manifest), 0600))
 	consumer := `use bytes_result_check::models::*;
 async fn check_nested_parameter(q: &mut bytes_result_check::queries::Queries<'_, ydb::QueryClient>) -> ydb::YdbResult<()> {
     q.bind_nested_text().value(Some(Some("nested".to_string()))).call().await
@@ -131,12 +118,10 @@ fn main() {
     assert_ne!(nan, nan.clone());
 }
 `
-	if err := os.WriteFile(filepath.Join(dir, "src", "main.rs"), []byte(consumer), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "src", "main.rs"), []byte(consumer), 0600))
 	cmd := exec.Command("cargo", "run", "--quiet")
 	cmd.Dir = dir
 	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("byte result traits against ydb 0.18.2: %v\n%s", err, output)
+		require.NoError(t, err, "byte result traits against ydb 0.18.2: %v\n%s", err, output)
 	}
 }

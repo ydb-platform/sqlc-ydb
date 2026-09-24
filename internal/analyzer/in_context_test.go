@@ -1,8 +1,9 @@
 package analyzer
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -19,12 +20,10 @@ func TestTypedINReportsUnsupportedExpressionContext(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			query := "-- name: Read :many\nDECLARE $ids AS List<Uint64>;\n" + tc.statement
 			result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
-			if err == nil || !strings.Contains(err.Error(), want) || !strings.Contains(err.Error(), tc.context) {
-				t.Fatalf("error = %v; want explicit IN context boundary in %s", err, tc.name)
-			}
-			if len(result.Queries) != 0 {
-				t.Fatal("unsupported IN expression produced an analyzed query")
-			}
+			require.Error(t, err)
+			require.Contains(t, err.Error(), want)
+			require.Contains(t, err.Error(), tc.context)
+			require.Len(t, result.Queries, 0)
 		})
 	}
 }
@@ -38,17 +37,15 @@ func TestTypedINRemainsSupportedInPredicateContexts(t *testing.T) {
 		t.Run(statement, func(t *testing.T) {
 			query := "-- name: Read :many\nDECLARE $ids AS List<Uint64>;\n" + statement
 			result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			analyzed := result.Queries[0]
-			if analyzed.SQL != query || len(analyzed.Parameters) != 1 || analyzed.Parameters[0].Name != "ids" || analyzed.Parameters[0].Type.String() != "List<Uint64>" {
-				t.Fatalf("IN predicate changed SQL or parameter type: %+v", analyzed)
-			}
+			require.Equal(t, query, analyzed.SQL)
+			require.Len(t, analyzed.Parameters, 1)
+			require.Equal(t, "ids", analyzed.Parameters[0].Name)
+			require.Equal(t, "List<Uint64>", analyzed.Parameters[0].Type.String())
 			columns := analyzed.ResultSets[0].Columns
-			if len(columns) != 1 || columns[0].Type.String() != "Uint64" {
-				t.Fatalf("IN predicate changed result type: %+v", columns)
-			}
+			require.Len(t, columns, 1)
+			require.Equal(t, "Uint64", columns[0].Type.String())
 		})
 	}
 }

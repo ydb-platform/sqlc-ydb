@@ -3,6 +3,8 @@ package jets_test
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"example.com/sqlc-ydb-example-tests/internal/testdb"
 	jetssql "example.com/sqlc-ydb-examples/jets/go/database/sql"
 	jetsnative "example.com/sqlc-ydb-examples/jets/go/native"
@@ -16,38 +18,29 @@ func TestLive(t *testing.T) {
 		"DROP TABLE jets;",
 		"DROP TABLE pilots;",
 	)
-	if err := db.Native.Exec(db.Context, `UPSERT INTO pilots (id, name) VALUES
+	require.NoError(t, db.Native.Exec(db.Context, `UPSERT INTO pilots (id, name) VALUES
         (1, "Maverick"u),
         (2, "Iceman"u),
         (3, "Goose"u),
         (4, "Viper"u),
         (5, "Jester"u),
         (6, "Cougar"u),
-        (7, "Merlin"u);`); err != nil {
-		t.Fatal(err)
-	}
+        (7, "Merlin"u);`))
 
 	native := jetsnative.New(db.Native)
 	count, err := native.CountPilots(db.Context)
-	if err != nil || count.PilotCount != 7 {
-		t.Fatalf("native count = %#v, %v", count, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, uint64(7), count.PilotCount)
 
 	portable := jetssql.New(db.SQL)
 	pilots, err := portable.ListPilots(db.Context)
-	if err != nil || len(pilots) != 5 {
-		t.Fatalf("database/sql pilots = %#v, %v", pilots, err)
-	}
+	require.NoError(t, err)
+	require.Len(t, pilots, 5)
 	for i, pilot := range pilots {
-		if pilot.ID != int32(i+1) {
-			t.Fatalf("pilot order/limit = %#v", pilots)
-		}
+		require.Equal(t, int32(i+1), pilot.ID)
 	}
-	if err := portable.DeletePilot(db.Context, 1); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, portable.DeletePilot(db.Context, 1))
 	count, err = native.CountPilots(db.Context)
-	if err != nil || count.PilotCount != 6 {
-		t.Fatalf("count after delete = %#v, %v", count, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, uint64(6), count.PilotCount)
 }

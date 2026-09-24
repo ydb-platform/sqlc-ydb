@@ -12,18 +12,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/cli"
 )
 
 func TestTypedDMLGeneratedGoCompiles(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.CopyFS(filepath.Join(dir, "db"), os.DirFS("testdata/typed_dml/expected/db")); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.CopyFS(filepath.Join(dir, "db"), os.DirFS("testdata/typed_dml/expected/db")))
 	mod := "module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(mod), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte(mod), 0600))
 	schema := string(mustRead(t, "testdata/typed_dml/schema.sql"))
 	compileTypedDMLPackage(t, dir, "./db", typedDMLRuntimeSource("grpc://localhost:2136/local", "records", schema,
 		`
@@ -85,25 +82,15 @@ func TestLiveYDBTypedDML(t *testing.T) {
 	for _, name := range []string{"schema.sql", "queries.sql"} {
 		path := filepath.Join(dir, name)
 		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		data = []byte(strings.ReplaceAll(string(data), "records", table))
-		if err := os.WriteFile(path, data, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(path, data, 0600))
 	}
 	var stdout, stderr bytes.Buffer
-	if code := cli.Run([]string{"generate", "-f", filepath.Join(dir, "sqlc.yaml")}, &stdout, &stderr); code != 0 {
-		t.Fatalf("generate typed DML fixture: %s", stderr.String())
-	}
-	if stdout.Len() != 0 || stderr.Len() != 0 {
-		t.Fatalf("generate wrote output: stdout=%q stderr=%q", stdout.String(), stderr.String())
-	}
+	require.Zero(t, cli.Run([]string{"generate", "-f", filepath.Join(dir, "sqlc.yaml")}, &stdout, &stderr), "generate typed DML fixture: %s", stderr.String())
+	require.False(t, stdout.Len() != 0 || stderr.Len() != 0, "generate wrote output: stdout=%q stderr=%q", stdout.String(), stderr.String())
 	mod := "module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(mod), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte(mod), 0600))
 	for _, runtime := range []struct {
 		name, path, setup, cleanup string
 	}{
@@ -167,9 +154,7 @@ func TestLiveYDBTypedDML(t *testing.T) {
 func compileTypedDMLPackage(t *testing.T, root, packagePath, source string, compileOnly bool) {
 	t.Helper()
 	pkgDir := filepath.Join(root, strings.TrimPrefix(packagePath, "./"))
-	if err := os.WriteFile(filepath.Join(pkgDir, "typed_dml_live_test.go"), []byte(source), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "typed_dml_live_test.go"), []byte(source), 0600))
 	args := []string{"test", "-p", "1", "-mod=mod", "-count=1"}
 	if compileOnly {
 		args = append(args, "-run", "^$")
@@ -179,17 +164,14 @@ func compileTypedDMLPackage(t *testing.T, root, packagePath, source string, comp
 	defer cancel()
 	cmd := exec.CommandContext(commandCtx, "go", args...)
 	cmd.Dir = pkgDir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("generated package %s: %v\n%s", packagePath, err, out)
-	}
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "generated package %s:\n%s", packagePath, out)
 }
 
 func mustRead(t *testing.T, path string) []byte {
 	t.Helper()
 	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	return data
 }
 

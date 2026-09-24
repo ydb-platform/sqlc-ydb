@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -69,7 +72,7 @@ func TestLiveYDBUDFModules(t *testing.T) {
 	for _, tc := range cases {
 		analysis, err := analyzer.Analyze(nil, []model.Source{{Name: tc.name + ".sql", Text: "-- name: Check :one\n" + tc.sql}})
 		if err != nil {
-			t.Errorf("%s: %v", tc.name, err)
+			assert.Fail(t, fmt.Sprintf("%s: %v", tc.name, err))
 			continue
 		}
 		query := analysis.Queries[0]
@@ -89,9 +92,7 @@ func TestLiveYDBUDFModules(t *testing.T) {
 		{`SELECT Roaring::Cardinality("not_bitmap") AS bad;`, "Resource"},
 	} {
 		_, err := analyzer.Analyze(nil, []model.Source{{Name: "invalid.sql", Text: "-- name: Check :one\n" + tc.sql}})
-		if err == nil || !strings.Contains(err.Error(), tc.errorText) {
-			t.Errorf("%s: error = %v, want %q", tc.sql, err, tc.errorText)
-		}
+		assert.False(t, err == nil || !strings.Contains(err.Error(), tc.errorText), "%s: error = %v, want %q", tc.sql, err, tc.errorText)
 	}
 	if t.Failed() {
 		t.FailNow()
@@ -100,9 +101,7 @@ func TestLiveYDBUDFModules(t *testing.T) {
 		t.Skip("set YDB_CONNECTION_STRING for live UDF validation")
 	}
 	payload, err := json.Marshal(live)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	const script = `import json, os, sys, urllib.parse
 import ydb
 cases = json.load(sys.stdin)
@@ -134,8 +133,6 @@ assert not errors, "\n".join(errors)
 	cmd := exec.CommandContext(ctx, "python3", "-c", script)
 	cmd.Stdin = bytes.NewReader(payload)
 	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("live UDF validation: %v\n%s", err, out)
-	}
+	require.NoError(t, err, "live UDF validation: %v\n%s", err, out)
 	t.Log(string(out))
 }

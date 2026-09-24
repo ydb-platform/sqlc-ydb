@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/cli"
 )
 
@@ -38,14 +39,10 @@ func runInSubqueries(t *testing.T, dsn string, compileOnly bool) {
 		configuration += "- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n  gen:\n    go:\n      package: records\n      out: " + strings.ReplaceAll(runtime, "/", "_") + "\n      sql_package: " + runtime + "\n"
 	}
 	for name, contents := range map[string]string{"schema.sql": schema, "queries.sql": queries, "sqlc.yaml": configuration, "go.mod": "module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(contents), 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(contents), 0600))
 	}
 	var stdout, stderr bytes.Buffer
-	if code := cli.Run([]string{"generate", "-f", filepath.Join(dir, "sqlc.yaml")}, &stdout, &stderr); code != 0 {
-		t.Fatalf("generate IN subqueries: %s", stderr.String())
-	}
+	require.Zero(t, cli.Run([]string{"generate", "-f", filepath.Join(dir, "sqlc.yaml")}, &stdout, &stderr), "generate IN subqueries: %s", stderr.String())
 	for _, runtime := range []string{"ydb", "database/sql"} {
 		t.Run(runtime, func(t *testing.T) {
 			setup, sqlImport := "q := New(driver.Query())", ""

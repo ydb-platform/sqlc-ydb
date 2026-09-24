@@ -1,9 +1,9 @@
 package analyzer
 
 import (
-	"reflect"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -14,15 +14,14 @@ func TestAnalyzeInfersLimitAndOffsetParametersAsUint64(t *testing.T) {
 SELECT id FROM records LIMIT $limit OFFSET $offset;`}}
 
 	got, err := Analyze(schema, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	want := []model.Parameter{
 		{Name: "limit", Type: model.Type{Kind: "Uint64"}},
 		{Name: "offset", Type: model.Type{Kind: "Uint64"}},
 	}
-	if parameters := got.Queries[0].Parameters; !reflect.DeepEqual(parameters, want) {
-		t.Fatalf("parameters = %#v, want %#v", parameters, want)
+	{
+		parameters := got.Queries[0].Parameters
+		require.Equal(t, want, parameters)
 	}
 }
 
@@ -32,15 +31,14 @@ func TestAnalyzeInfersParametersInDirectInList(t *testing.T) {
 SELECT id FROM records WHERE id IN ($first, $second);`}}
 
 	got, err := Analyze(schema, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	want := []model.Parameter{
 		{Name: "first", Type: model.Type{Kind: "Uint64"}},
 		{Name: "second", Type: model.Type{Kind: "Uint64"}},
 	}
-	if parameters := got.Queries[0].Parameters; !reflect.DeepEqual(parameters, want) {
-		t.Fatalf("parameters = %#v, want %#v", parameters, want)
+	{
+		parameters := got.Queries[0].Parameters
+		require.Equal(t, want, parameters)
 	}
 }
 
@@ -58,16 +56,15 @@ GROUP BY id
 HAVING id = $having_id;`}}
 
 	got, err := Analyze(schema, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	want := []model.Parameter{
 		{Name: "case_id", Type: model.Type{Kind: "Uint64"}},
 		{Name: "if_id", Type: model.Type{Kind: "Uint64"}},
 		{Name: "having_id", Type: model.Type{Kind: "Uint64"}},
 	}
-	if parameters := got.Queries[0].Parameters; !reflect.DeepEqual(parameters, want) {
-		t.Fatalf("parameters = %#v, want %#v", parameters, want)
+	{
+		parameters := got.Queries[0].Parameters
+		require.Equal(t, want, parameters)
 	}
 }
 
@@ -86,21 +83,18 @@ UNION ALL
 SELECT CASE WHEN value = $wanted THEN 1 ELSE 0 END AS matched FROM labels;`}}
 
 	_, err := Analyze(schema, queries)
-	if err == nil || !strings.Contains(err.Error(), "external parameter $wanted has incompatible inferred types") {
-		t.Fatalf("error = %v", err)
-	}
+	require.ErrorContains(t, err, "external parameter $wanted has incompatible inferred types")
 }
 
 func TestAnalyzeRepeatedParametersKeepFirstUseOrder(t *testing.T) {
 	got, err := Analyze([]model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, label Utf8, PRIMARY KEY (id));`}},
 		[]model.Source{{Name: "query.sql", Text: `-- name: Rows :many
 SELECT id FROM records WHERE ($id = id OR id = $id) AND label = $label OR label = $label;`}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	want := []model.Parameter{{Name: "id", Type: model.Type{Kind: "Uint64"}}, {Name: "label", Type: model.Optional(model.Type{Kind: "Utf8"})}}
-	if params := got.Queries[0].Parameters; !reflect.DeepEqual(params, want) {
-		t.Fatalf("parameters = %#v, want %#v", params, want)
+	{
+		params := got.Queries[0].Parameters
+		require.Equal(t, want, params)
 	}
 }
 
@@ -115,9 +109,9 @@ func TestAnalyzeParameterContextsRequireDeclare(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Rows :many\n" + tt.sql}})
-			if err == nil || !strings.Contains(err.Error(), "cannot resolve type of external parameter") || !strings.Contains(err.Error(), "add DECLARE") {
-				t.Fatalf("error = %v, want explicit declaration advice", err)
-			}
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "cannot resolve type of external parameter")
+			require.Contains(t, err.Error(), "add DECLARE")
 		})
 	}
 }
@@ -126,12 +120,11 @@ func TestAnalyzeJoinParametersInOnAndWhere(t *testing.T) {
 	got, err := Analyze([]model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, label Utf8, PRIMARY KEY (id));`}},
 		[]model.Source{{Name: "query.sql", Text: `-- name: Rows :many
 SELECT a.id FROM records a JOIN records b ON b.id = $joined WHERE a.label = $label;`}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	want := []model.Parameter{{Name: "joined", Type: model.Type{Kind: "Uint64"}}, {Name: "label", Type: model.Optional(model.Type{Kind: "Utf8"})}}
-	if params := got.Queries[0].Parameters; !reflect.DeepEqual(params, want) {
-		t.Fatalf("parameters = %#v, want %#v", params, want)
+	{
+		params := got.Queries[0].Parameters
+		require.Equal(t, want, params)
 	}
 }
 
@@ -140,12 +133,11 @@ func TestAnalyzeInfersParameterFromConcatenatedStringLiteral(t *testing.T) {
 SELECT "hello "u || $name AS greeting;`}}
 
 	got, err := Analyze(nil, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	want := []model.Parameter{{Name: "name", Type: model.Type{Kind: "Utf8"}}}
-	if parameters := got.Queries[0].Parameters; !reflect.DeepEqual(parameters, want) {
-		t.Fatalf("parameters = %#v, want %#v", parameters, want)
+	{
+		parameters := got.Queries[0].Parameters
+		require.Equal(t, want, parameters)
 	}
 }
 
@@ -160,11 +152,10 @@ func TestINContainerAndScalarParameters(t *testing.T) {
 				[]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));"}},
 				[]model.Source{{Name: "queries.sql", Text: "-- name: Find :many\nSELECT id FROM records WHERE " + tc.sql + ";"}},
 			)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got := result.Queries[0].Parameters[0].Type.String(); got != tc.want {
-				t.Fatalf("got %s, want %s", got, tc.want)
+			require.NoError(t, err)
+			{
+				got := result.Queries[0].Parameters[0].Type.String()
+				require.Equal(t, tc.want, got)
 			}
 		})
 	}
@@ -175,10 +166,6 @@ func TestINListExplicitDeclaration(t *testing.T) {
 		[]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));"}},
 		[]model.Source{{Name: "queries.sql", Text: "-- name: Find :many\nDECLARE $ids AS List<Uint64>;\nSELECT id FROM records WHERE id IN $ids;"}},
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Queries[0].Parameters[0].Type.String() != "List<Uint64>" {
-		t.Fatal(got.Queries[0].Parameters)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "List<Uint64>", got.Queries[0].Parameters[0].Type.String())
 }

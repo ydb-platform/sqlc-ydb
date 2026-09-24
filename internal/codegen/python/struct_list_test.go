@@ -6,10 +6,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -19,17 +19,13 @@ func structInput() *model.AnalysisResult {
 func TestStructListGeneration(t *testing.T) {
 	for _, runtime := range []string{"ydb", "dbapi", "sqlalchemy"} {
 		files, err := Generate(structInput(), Options{Runtime: runtime})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		source := ""
 		for _, f := range files {
 			source += string(f.Content)
 		}
 		for _, want := range []string{"class CreateBooksBooksItem:", "book_id: int", "tags: str", "title: Optional[str]", "books: list[_models.CreateBooksBooksItem]", "                    {\n                        \"book_id\": item.book_id,\n                        \"tags\": item.tags,\n                        \"title\": item.title,\n                    }\n                    for item in books\n                ],", "\"book_id\": item.book_id,\n", "_ydb.ListType(\n                    _ydb.StructType()\n                    .add_member(\"book_id\", _ydb.PrimitiveType.Uint64)"} {
-			if !strings.Contains(source, want) {
-				t.Fatalf("%s missing %s\n%s", runtime, want, source)
-			}
+			require.Contains(t, source, want, "%s missing %s\n%s", runtime, want, source)
 		}
 	}
 }
@@ -37,9 +33,7 @@ func TestStructListRejectsNestedField(t *testing.T) {
 	in := structInput()
 	in.Queries[0].Parameters[0].Type.Elem.Fields[0].Type = model.Type{Kind: "List", Elem: &model.Type{Kind: "Uint64"}}
 	_, err := Generate(in, Options{})
-	if err == nil || !strings.Contains(err.Error(), "field book_id must be a supported scalar") {
-		t.Fatalf("err=%v", err)
-	}
+	require.ErrorContains(t, err, "field book_id must be a supported scalar", "err=%v", err)
 }
 func TestStructListSDKSerialization(t *testing.T) {
 	if os.Getenv("SQLC_YDB_PYTHON_SDK_CHECK") == "" {
@@ -49,17 +43,11 @@ func TestStructListSDKSerialization(t *testing.T) {
 		t.Run(runtime, func(t *testing.T) {
 			dir := t.TempDir()
 			pkg := filepath.Join(dir, "generated")
-			if err := os.Mkdir(pkg, 0700); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, os.Mkdir(pkg, 0700))
 			files, err := Generate(structInput(), Options{Runtime: runtime})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			for _, f := range files {
-				if err := os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600); err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600))
 			}
 			script := `
 import ydb
@@ -99,7 +87,7 @@ assert types[0] == types[1]
 			cmd.Dir = dir
 			cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
 			if out, err := cmd.CombinedOutput(); err != nil {
-				t.Fatalf("%s SDK serialization: %v\n%s", runtime, err, out)
+				require.NoError(t, err, "%s SDK serialization: %v\n%s", runtime, err, out)
 			}
 		})
 	}
@@ -116,17 +104,11 @@ func TestLiveYDBBatchInsertRuntimes(t *testing.T) {
 	root := t.TempDir()
 	for _, runtime := range []string{"ydb", "dbapi", "sqlalchemy"} {
 		dir := filepath.Join(root, runtime+"_generated")
-		if err := os.Mkdir(dir, 0700); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.Mkdir(dir, 0700))
 		files, err := Generate(in, Options{Runtime: runtime})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		for _, f := range files {
-			if err := os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600))
 		}
 	}
 	script := fmt.Sprintf(`import os, urllib.parse, json
@@ -196,9 +178,7 @@ finally:
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(root, "pycache"))
 	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("live batch: %v\n%s", err, out)
-	}
+	require.NoError(t, err, "live batch: %v\n%s", err, out)
 	t.Log(string(out))
 }
 
@@ -211,18 +191,12 @@ func TestStructListDunderFieldsUseSafeNamesAndKeepWireNames(t *testing.T) {
 	}
 	in.Queries[0].Parameters[0].Type.Elem.Fields = fields
 	files, err := Generate(in, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	pkg := filepath.Join(dir, "generated")
-	if err := os.Mkdir(pkg, 0700); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Mkdir(pkg, 0700))
 	for _, f := range files {
-		if err := os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600))
 	}
 	script := `import sys, types
 class StructType:
@@ -242,7 +216,7 @@ assert captured == [{"$books":[{"__dict__":"dict","__weakref__":"weakref","__ini
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("dunder fields: %v\n%s", err, out)
+		require.NoError(t, err, "dunder fields: %v\n%s", err, out)
 	}
 }
 
@@ -255,16 +229,12 @@ func TestStructListNamesCollideAfterNormalization(t *testing.T) {
 		}
 		in.Queries[0].Parameters[0].Type.Elem.Fields = fields
 		_, err := Generate(in, Options{})
-		if err == nil || !strings.Contains(err.Error(), "colliding field") {
-			t.Fatalf("%v: %v", names, err)
-		}
+		require.ErrorContains(t, err, "colliding field", "%v: %v", names, err)
 	}
 	in := structInput()
 	in.Catalog.Tables = []model.Table{{Name: "create_books_books_item", Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}}}}}
 	_, err := Generate(in, Options{})
-	if err == nil || !strings.Contains(err.Error(), "name collision") {
-		t.Fatalf("class namespace collision: %v", err)
-	}
+	require.ErrorContains(t, err, "name collision", "class namespace collision: %v", err)
 }
 
 func TestStructListFieldDiagnostics(t *testing.T) {
@@ -282,9 +252,7 @@ func TestStructListFieldDiagnostics(t *testing.T) {
 			in := structInput()
 			in.Queries[0].Parameters[0].Type.Elem.Fields = tc.fields
 			_, err := Generate(in, Options{})
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("got %v, want %s", err, tc.want)
-			}
+			require.ErrorContains(t, err, tc.want, "got %v, want %s", err, tc.want)
 		})
 	}
 }

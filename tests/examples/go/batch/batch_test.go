@@ -2,9 +2,7 @@ package batch_test
 
 import (
 	"context"
-	"encoding/json"
 	"path"
-	"reflect"
 	"testing"
 	"time"
 
@@ -12,6 +10,7 @@ import (
 	batch "example.com/sqlc-ydb-examples/batch/go"
 	sq "example.com/sqlc-ydb-examples/batch/go/database/sql"
 	native "example.com/sqlc-ydb-examples/batch/go/native"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBulkUpsertBooks(t *testing.T) {
@@ -20,11 +19,10 @@ func TestBulkUpsertBooks(t *testing.T) {
 
 	biography := `{"born":1818,"works":["A Book"]}`
 	nativeQueries := native.New(db.Native)
-	if _, err := nativeQueries.CreateAuthor(db.Context, native.CreateAuthorParams{
+	_, err := nativeQueries.CreateAuthor(db.Context, native.CreateAuthorParams{
 		AuthorID: 1, Name: "Unknown Master", Biography: &biography,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	})
+	require.NoError(t, err)
 	available := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
 	books := []native.CreateBookParams{
 		{BookID: 1, AuthorID: 1, Isbn: "1", BookType: "FICTION", Title: "my book title", Year: 2016, Available: available, Tags: `[]`},
@@ -32,49 +30,41 @@ func TestBulkUpsertBooks(t *testing.T) {
 		{BookID: 3, AuthorID: 1, Isbn: "3", BookType: "FICTION", Title: "the third book", Year: 2001, Available: available, Tags: `["cool"]`},
 		{BookID: 4, AuthorID: 1, Isbn: "4", BookType: "NONFICTION", Title: "4th place finisher", Year: 2011, Available: available, Tags: `["other"]`},
 	}
-	if err := batch.BulkUpsertBooks(
+	require.NoError(t, batch.BulkUpsertBooks(
 		db.Context, db.Driver.Table(), path.Join(db.Driver.Name(), "books"), books,
-	); err != nil {
-		t.Fatal(err)
-	}
+	))
 
 	nativeRows, err := nativeQueries.BooksByYear(db.Context, 2016)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	assertBooks(t, nativeRows, map[uint64]string{1: `[]`, 2: `["cool","unique"]`})
 
 	sqlQueries := sq.New(db.SQL)
 	sqlRows, err := sqlQueries.BooksByYear(db.Context, 2016)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	assertSQLBooks(t, sqlRows, map[uint64]string{1: `[]`, 2: `["cool","unique"]`})
 
 	author, err := sqlQueries.GetAuthor(db.Context, 1)
-	if err != nil || author.Biography == nil || !jsonEqual(*author.Biography, biography) {
-		t.Fatalf("database/sql author = %#v, err = %v", author, err)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, author.Biography)
+	require.JSONEq(t, biography, *author.Biography)
 	gotBiography, err := nativeQueries.GetBiography(db.Context, 1)
-	if err != nil || gotBiography.Biography == nil || !jsonEqual(*gotBiography.Biography, biography) {
-		t.Fatalf("native biography = %#v, err = %v", gotBiography, err)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, gotBiography.Biography)
+	require.JSONEq(t, biography, *gotBiography.Biography)
 	created, err := nativeQueries.CreateBook(db.Context, native.CreateBookParams{
 		BookID: 5, AuthorID: 1, Isbn: "5", BookType: "FICTION", Title: "ordinary insert",
 		Year: 2020, Available: available, Tags: `["new"]`,
 	})
-	if err != nil || created.BookID != 5 {
-		t.Fatalf("CreateBook = %#v, err = %v", created, err)
-	}
-	if err := sqlQueries.UpdateBook(db.Context, sq.UpdateBookParams{
+	require.NoError(t, err)
+	require.Equal(t, uint64(5), created.BookID)
+	require.NoError(t, sqlQueries.UpdateBook(db.Context, sq.UpdateBookParams{
 		BookID: 5, Title: "updated", Tags: `["updated"]`,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	}))
 	updated, err := nativeQueries.BooksByYear(db.Context, 2020)
-	if err != nil || len(updated) != 1 || updated[0].Title != "updated" || !jsonEqual(updated[0].Tags, `["updated"]`) {
-		t.Fatalf("updated rows = %#v, err = %v", updated, err)
-	}
+	require.NoError(t, err)
+	require.Len(t, updated, 1)
+	require.Equal(t, "updated", updated[0].Title)
+	require.JSONEq(t, `["updated"]`, updated[0].Tags)
 
 	for _, tc := range []struct {
 		name   string
@@ -86,54 +76,39 @@ func TestBulkUpsertBooks(t *testing.T) {
 		{"named sign", func() error { return nativeQueries.DeleteBookNamedSign(db.Context, 4) }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := tc.remove(); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, tc.remove())
 		})
 	}
 	for _, year := range []int32{2016, 2001, 2011} {
 		rows, err := nativeQueries.BooksByYear(db.Context, year)
-		if err != nil || len(rows) != 0 {
-			t.Fatalf("rows after delete (%d) = %#v, %v", year, rows, err)
-		}
+		require.NoError(t, err)
+		require.Empty(t, rows, "year %d", year)
 	}
 
 }
 
 func assertBooks(t *testing.T, rows []native.BooksByYearRow, expected map[uint64]string) {
 	t.Helper()
-	if len(rows) != len(expected) {
-		t.Fatalf("native rows = %#v", rows)
-	}
+	require.Len(t, rows, len(expected))
 	for _, row := range rows {
-		if tags, ok := expected[row.BookID]; !ok || !jsonEqual(row.Tags, tags) {
-			t.Fatalf("native row = %#v", row)
-		}
+		tags, ok := expected[row.BookID]
+		require.True(t, ok, "unexpected native book %d", row.BookID)
+		require.JSONEq(t, tags, row.Tags)
 	}
 }
 
 func assertSQLBooks(t *testing.T, rows []sq.BooksByYearRow, expected map[uint64]string) {
 	t.Helper()
-	if len(rows) != len(expected) {
-		t.Fatalf("database/sql rows = %#v", rows)
-	}
+	require.Len(t, rows, len(expected))
 	for _, row := range rows {
-		if tags, ok := expected[row.BookID]; !ok || !jsonEqual(row.Tags, tags) {
-			t.Fatalf("database/sql row = %#v", row)
-		}
+		tags, ok := expected[row.BookID]
+		require.True(t, ok, "unexpected database/sql book %d", row.BookID)
+		require.JSONEq(t, tags, row.Tags)
 	}
-}
-
-func jsonEqual(left, right string) bool {
-	var a, b any
-	return json.Unmarshal([]byte(left), &a) == nil &&
-		json.Unmarshal([]byte(right), &b) == nil && reflect.DeepEqual(a, b)
 }
 
 func TestBulkUpsertEmptyInput(t *testing.T) {
-	if err := batch.BulkUpsertBooks(context.Background(), nil, "unused", nil); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, batch.BulkUpsertBooks(context.Background(), nil, "unused", nil))
 }
 
 func TestCreateBooksFromStructList(t *testing.T) {
@@ -142,53 +117,33 @@ func TestCreateBooksFromStructList(t *testing.T) {
 	nq, sqlq := native.New(db.Native), sq.New(db.SQL)
 	available := time.Date(2026, time.January, 2, 3, 4, 5, 123456000, time.UTC)
 	for _, books := range [][]native.CreateBooksBooksItem{nil, {}} {
-		if err := nq.CreateBooks(db.Context, books); err != nil {
-			t.Fatalf("native empty: %v", err)
-		}
+		require.NoError(t, nq.CreateBooks(db.Context, books), "native empty")
 	}
 	for _, books := range [][]sq.CreateBooksBooksItem{nil, {}} {
-		if err := sqlq.CreateBooks(db.Context, books); err != nil {
-			t.Fatalf("database/sql empty: %v", err)
-		}
+		require.NoError(t, sqlq.CreateBooks(db.Context, books), "database/sql empty")
 	}
 	nativeBooks := []native.CreateBooksBooksItem{
 		{BookID: ^uint64(0), AuthorID: 1, Isbn: "high", BookType: "FICTION", Title: "Unicode ☀", Year: 2026, Available: available, Tags: `{"kind":"native"}`},
 		{BookID: 1, AuthorID: 1, Isbn: "one", BookType: "FICTION", Title: "Second", Year: 2026, Available: available, Tags: `[]`},
 	}
-	if err := nq.CreateBooks(db.Context, nativeBooks); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, nq.CreateBooks(db.Context, nativeBooks))
 	sqlBooks := []sq.CreateBooksBooksItem{
 		{BookID: 2, AuthorID: 1, Isbn: "two", BookType: "REFERENCE", Title: "SQL batch", Year: 2026, Available: available, Tags: `["sql"]`},
 		{BookID: 3, AuthorID: 1, Isbn: "three", BookType: "REFERENCE", Title: "Fourth", Year: 2026, Available: available, Tags: `{}`},
 	}
-	if err := sqlq.CreateBooks(db.Context, sqlBooks); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, sqlq.CreateBooks(db.Context, sqlBooks))
 	rows, err := nq.BooksByYear(db.Context, 2026)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	assertBooks(t, rows, map[uint64]string{^uint64(0): `{"kind":"native"}`, 1: `[]`, 2: `["sql"]`, 3: `{}`})
 	for _, row := range rows {
-		if !row.Available.Equal(available) {
-			t.Fatalf("timestamp lost precision: %v", row.Available)
-		}
+		require.True(t, row.Available.Equal(available), "timestamp lost precision: %v", row.Available)
 	}
-	if err := nq.CreateBooks(db.Context, nativeBooks[:1]); err == nil {
-		t.Fatal("native duplicate INSERT must fail")
-	}
-	if err := sqlq.CreateBooks(db.Context, sqlBooks[:1]); err == nil {
-		t.Fatal("database/sql duplicate INSERT must fail")
-	}
+	require.Error(t, nq.CreateBooks(db.Context, nativeBooks[:1]), "native duplicate INSERT must fail")
+	require.Error(t, sqlq.CreateBooks(db.Context, sqlBooks[:1]), "database/sql duplicate INSERT must fail")
 	cancelled, cancel := context.WithCancel(db.Context)
 	cancel()
-	if err := nq.CreateBooks(cancelled, nativeBooks); err == nil {
-		t.Fatal("native cancelled INSERT succeeded")
-	}
-	if err := sqlq.CreateBooks(cancelled, sqlBooks); err == nil {
-		t.Fatal("database/sql cancelled INSERT succeeded")
-	}
+	require.Error(t, nq.CreateBooks(cancelled, nativeBooks), "native cancelled INSERT succeeded")
+	require.Error(t, sqlq.CreateBooks(cancelled, sqlBooks), "database/sql cancelled INSERT succeeded")
 }
 
 func TestAuthorsFromNamedStructLists(t *testing.T) {
@@ -196,62 +151,45 @@ func TestAuthorsFromNamedStructLists(t *testing.T) {
 	db.Apply(t, "../../../../examples/batch/schema.sql", "DROP TABLE books;", "DROP TABLE authors;")
 	nq, sqlq := native.New(db.Native), sq.New(db.SQL)
 	for _, authors := range [][]native.CreateAuthorsAuthorsItem{nil, {}} {
-		if err := nq.CreateAuthors(db.Context, authors); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, nq.CreateAuthors(db.Context, authors))
 	}
 	for _, authors := range [][]sq.CreateAuthorsAuthorsItem{nil, {}} {
-		if err := sqlq.CreateAuthors(db.Context, authors); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, sqlq.CreateAuthors(db.Context, authors))
 	}
 	for _, authors := range [][]native.UpsertAuthorsAuthorsItem{nil, {}} {
-		if err := nq.UpsertAuthors(db.Context, authors); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, nq.UpsertAuthors(db.Context, authors))
 	}
 	for _, authors := range [][]sq.UpsertAuthorsAuthorsItem{nil, {}} {
-		if err := sqlq.UpsertAuthors(db.Context, authors); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, sqlq.UpsertAuthors(db.Context, authors))
 	}
-	if err := nq.CreateAuthors(db.Context, []native.CreateAuthorsAuthorsItem{{AuthorID: 1, Name: "Native ☀"}}); err != nil {
-		t.Fatal(err)
-	}
-	if err := sqlq.CreateAuthors(db.Context, []sq.CreateAuthorsAuthorsItem{{AuthorID: 2, Name: "SQL"}}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, nq.CreateAuthors(db.Context, []native.CreateAuthorsAuthorsItem{{AuthorID: 1, Name: "Native ☀"}}))
+	require.NoError(t, sqlq.CreateAuthors(db.Context, []sq.CreateAuthorsAuthorsItem{{AuthorID: 2, Name: "SQL"}}))
 	for id, name := range map[uint64]string{1: "Native ☀", 2: "SQL"} {
 		row, err := nq.GetAuthor(db.Context, id)
-		if err != nil || row.AuthorID != id || row.Name != name || row.Biography != nil {
-			t.Fatalf("named insert: %#v, err=%v", row, err)
-		}
+		require.NoError(t, err)
+		require.Equal(t, id, row.AuthorID)
+		require.Equal(t, name, row.Name)
+		require.Nil(t, row.Biography)
 	}
 	biography := `{"preserve":true}`
-	if _, err := nq.CreateAuthor(db.Context, native.CreateAuthorParams{AuthorID: 3, Name: "Original", Biography: &biography}); err != nil {
-		t.Fatal(err)
-	}
-	if err := nq.UpsertAuthors(db.Context, []native.UpsertAuthorsAuthorsItem{
+	_, err := nq.CreateAuthor(db.Context, native.CreateAuthorParams{AuthorID: 3, Name: "Original", Biography: &biography})
+	require.NoError(t, err)
+	require.NoError(t, nq.UpsertAuthors(db.Context, []native.UpsertAuthorsAuthorsItem{
 		{AuthorID: 1, Name: "Updated native"}, {AuthorID: 3, Name: "Preserved native"},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := sqlq.UpsertAuthors(db.Context, []sq.UpsertAuthorsAuthorsItem{
+	}))
+	require.NoError(t, sqlq.UpsertAuthors(db.Context, []sq.UpsertAuthorsAuthorsItem{
 		{AuthorID: 2, Name: "Updated SQL"}, {AuthorID: 3, Name: "Preserved SQL"}, {AuthorID: 4, Name: "New SQL"},
-	}); err != nil {
-		t.Fatal(err)
-	}
+	}))
 	for id, name := range map[uint64]string{1: "Updated native", 2: "Updated SQL", 3: "Preserved SQL", 4: "New SQL"} {
 		row, err := sqlq.GetAuthor(db.Context, id)
-		if err != nil || row.AuthorID != id || row.Name != name {
-			t.Fatalf("named upsert: %#v, err=%v", row, err)
-		}
+		require.NoError(t, err)
+		require.Equal(t, id, row.AuthorID)
+		require.Equal(t, name, row.Name)
 		if id == 3 {
-			if row.Biography == nil || !jsonEqual(*row.Biography, biography) {
-				t.Fatalf("omitted biography was changed: %#v", row)
-			}
-		} else if row.Biography != nil {
-			t.Fatalf("expected NULL biography: %#v", row)
+			require.NotNil(t, row.Biography)
+			require.JSONEq(t, biography, *row.Biography)
+		} else {
+			require.Nil(t, row.Biography)
 		}
 	}
 }

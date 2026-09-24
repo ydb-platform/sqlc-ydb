@@ -8,6 +8,7 @@ import (
 	"example.com/sqlc-ydb-example-tests/internal/testdb"
 	sq "example.com/sqlc-ydb-examples/records/go/database/sql"
 	native "example.com/sqlc-ydb-examples/records/go/native"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRecordsNative(t *testing.T) {
@@ -26,18 +27,17 @@ func TestRecordsNative(t *testing.T) {
 			{RecordID: "b", GroupID: "new", Payload: []byte("second"), Attributes: `["blue"]`},
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	rows, err := q.ListRecords(ctx, ownerID)
-	if err != nil || len(rows) != 2 {
-		t.Fatalf("insert/list: %+v, %v", rows, err)
-	}
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
 	key := native.GetRecordKey{OwnerHash: rows[0].OwnerHash, RecordID: "a"}
 	row, err := q.GetRecord(ctx, key)
-	if err != nil || row.OwnerID != ownerID || !bytes.Equal(row.Payload, payload) || row.Attributes != `["red"]` || !row.CreatedAt.Equal(createdAt) {
-		t.Fatalf("Struct key and scalar values: %+v, %v", row, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, ownerID, row.OwnerID)
+	require.True(t, bytes.Equal(row.Payload, payload))
+	require.Equal(t, `["red"]`, row.Attributes)
+	require.True(t, row.CreatedAt.Equal(createdAt))
 	err = q.UpdateRecords(ctx, native.UpdateRecordsParams{
 		OwnerID: ownerID, UpdatedAt: updatedAt,
 		Rows: []native.UpdateRecordsRowsItem{
@@ -45,37 +45,34 @@ func TestRecordsNative(t *testing.T) {
 			{RecordID: "missing", GroupID: "changed", Payload: payload, Attributes: `[]`},
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	row, err = q.GetRecord(ctx, key)
-	if err != nil || row.GroupID != "changed" || string(row.Payload) != "updated" || !row.CreatedAt.Equal(createdAt) || !row.UpdatedAt.Equal(updatedAt) {
-		t.Fatalf("partial UPDATE preserves created_at: %+v, %v", row, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "changed", row.GroupID)
+	require.Equal(t, "updated", string(row.Payload))
+	require.True(t, row.CreatedAt.Equal(createdAt))
+	require.True(t, row.UpdatedAt.Equal(updatedAt))
 	rows, err = q.ListRecords(ctx, ownerID)
-	if err != nil || len(rows) != 2 || rows[1].GroupID != "new" {
-		t.Fatalf("UPDATE must not insert missing keys or change other rows: %+v, %v", rows, err)
-	}
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.Equal(t, "new", rows[1].GroupID)
 	filtered, err := q.FilterRecords(ctx, native.FilterRecordsParams{OwnerID: ownerID, RecordIds: []string{"a", "b"}, GroupID: "changed"})
-	if err != nil || len(filtered) != 1 || filtered[0].RecordID != "a" {
-		t.Fatalf("typed IN list: %+v, %v", filtered, err)
-	}
+	require.NoError(t, err)
+	require.Len(t, filtered, 1)
+	require.Equal(t, "a", filtered[0].RecordID)
 	tagged, err := q.FindRecordsByTags(ctx, [][]byte{[]byte("green")})
-	if err != nil || len(tagged) != 1 || tagged[0].RecordID != "a" {
-		t.Fatalf("JSON tag intersection: %+v, %v", tagged, err)
-	}
+	require.NoError(t, err)
+	require.Len(t, tagged, 1)
+	require.Equal(t, "a", tagged[0].RecordID)
 	tagged, err = q.FindRecordsByTags(ctx, nil)
-	if err != nil || len(tagged) != 0 {
-		t.Fatalf("empty tag list: %+v, %v", tagged, err)
-	}
+	require.NoError(t, err)
+	require.Empty(t, tagged)
 	err = q.DeleteRecords(ctx, native.DeleteRecordsParams{OwnerID: ownerID, RecordIds: []string{"a", "b"}, GroupID: "changed"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	rows, err = q.ListRecords(ctx, ownerID)
-	if err != nil || len(rows) != 1 || rows[0].RecordID != "b" {
-		t.Fatalf("filtered DELETE ON: %+v, %v", rows, err)
-	}
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "b", rows[0].RecordID)
 	err = q.UpsertRecords(ctx, native.UpsertRecordsParams{
 		OwnerID: ownerID, CreatedAt: updatedAt,
 		Rows: []native.UpsertRecordsRowsItem{
@@ -83,25 +80,21 @@ func TestRecordsNative(t *testing.T) {
 			{RecordID: "c", GroupID: "inserted", Payload: payload, Attributes: `[]`},
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	rows, err = q.ListRecords(ctx, ownerID)
-	if err != nil || len(rows) != 2 || rows[0].GroupID != "replaced" || rows[1].GroupID != "inserted" {
-		t.Fatalf("UPSERT SELECT updates and inserts: %+v, %v", rows, err)
-	}
-	if err := q.InsertRecords(ctx, native.InsertRecordsParams{OwnerID: ownerID, CreatedAt: createdAt}); err != nil {
-		t.Fatalf("empty batch: %v", err)
-	}
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.Equal(t, "replaced", rows[0].GroupID)
+	require.Equal(t, "inserted", rows[1].GroupID)
+	require.NoError(t, q.InsertRecords(ctx, native.InsertRecordsParams{OwnerID: ownerID, CreatedAt: createdAt}), "empty batch")
 	label := "Москва"
 	reversed, err := q.ReverseGroupLabel(ctx, &label)
-	if err != nil || reversed.ReversedLabel == nil || *reversed.ReversedLabel != "авксоМ" {
-		t.Fatalf("configured function: %+v, %v", reversed, err)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, reversed.ReversedLabel)
+	require.Equal(t, "авксоМ", *reversed.ReversedLabel)
 	reversed, err = q.ReverseGroupLabel(ctx, nil)
-	if err != nil || reversed.ReversedLabel != nil {
-		t.Fatalf("configured AutoMap: %+v, %v", reversed, err)
-	}
+	require.NoError(t, err)
+	require.Nil(t, reversed.ReversedLabel)
 }
 
 func TestRecordsDatabaseSQL(t *testing.T) {
@@ -120,18 +113,17 @@ func TestRecordsDatabaseSQL(t *testing.T) {
 			{RecordID: "b", GroupID: "new", Payload: []byte("second"), Attributes: `["blue"]`},
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	rows, err := q.ListRecords(ctx, ownerID)
-	if err != nil || len(rows) != 2 {
-		t.Fatalf("insert/list: %+v, %v", rows, err)
-	}
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
 	key := sq.GetRecordKey{OwnerHash: rows[0].OwnerHash, RecordID: "a"}
 	row, err := q.GetRecord(ctx, key)
-	if err != nil || row.OwnerID != ownerID || !bytes.Equal(row.Payload, payload) || row.Attributes != `["red"]` || !row.CreatedAt.Equal(createdAt) {
-		t.Fatalf("Struct key and scalar values: %+v, %v", row, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, ownerID, row.OwnerID)
+	require.True(t, bytes.Equal(row.Payload, payload))
+	require.Equal(t, `["red"]`, row.Attributes)
+	require.True(t, row.CreatedAt.Equal(createdAt))
 	err = q.UpdateRecords(ctx, sq.UpdateRecordsParams{
 		OwnerID: ownerID, UpdatedAt: updatedAt,
 		Rows: []sq.UpdateRecordsRowsItem{
@@ -139,37 +131,34 @@ func TestRecordsDatabaseSQL(t *testing.T) {
 			{RecordID: "missing", GroupID: "changed", Payload: payload, Attributes: `[]`},
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	row, err = q.GetRecord(ctx, key)
-	if err != nil || row.GroupID != "changed" || string(row.Payload) != "updated" || !row.CreatedAt.Equal(createdAt) || !row.UpdatedAt.Equal(updatedAt) {
-		t.Fatalf("partial UPDATE preserves created_at: %+v, %v", row, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "changed", row.GroupID)
+	require.Equal(t, "updated", string(row.Payload))
+	require.True(t, row.CreatedAt.Equal(createdAt))
+	require.True(t, row.UpdatedAt.Equal(updatedAt))
 	rows, err = q.ListRecords(ctx, ownerID)
-	if err != nil || len(rows) != 2 || rows[1].GroupID != "new" {
-		t.Fatalf("UPDATE must not insert missing keys or change other rows: %+v, %v", rows, err)
-	}
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.Equal(t, "new", rows[1].GroupID)
 	filtered, err := q.FilterRecords(ctx, sq.FilterRecordsParams{OwnerID: ownerID, RecordIds: []string{"a", "b"}, GroupID: "changed"})
-	if err != nil || len(filtered) != 1 || filtered[0].RecordID != "a" {
-		t.Fatalf("typed IN list: %+v, %v", filtered, err)
-	}
+	require.NoError(t, err)
+	require.Len(t, filtered, 1)
+	require.Equal(t, "a", filtered[0].RecordID)
 	tagged, err := q.FindRecordsByTags(ctx, [][]byte{[]byte("green")})
-	if err != nil || len(tagged) != 1 || tagged[0].RecordID != "a" {
-		t.Fatalf("JSON tag intersection: %+v, %v", tagged, err)
-	}
+	require.NoError(t, err)
+	require.Len(t, tagged, 1)
+	require.Equal(t, "a", tagged[0].RecordID)
 	tagged, err = q.FindRecordsByTags(ctx, nil)
-	if err != nil || len(tagged) != 0 {
-		t.Fatalf("empty tag list: %+v, %v", tagged, err)
-	}
+	require.NoError(t, err)
+	require.Empty(t, tagged)
 	err = q.DeleteRecords(ctx, sq.DeleteRecordsParams{OwnerID: ownerID, RecordIds: []string{"a", "b"}, GroupID: "changed"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	rows, err = q.ListRecords(ctx, ownerID)
-	if err != nil || len(rows) != 1 || rows[0].RecordID != "b" {
-		t.Fatalf("filtered DELETE ON: %+v, %v", rows, err)
-	}
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "b", rows[0].RecordID)
 	err = q.UpsertRecords(ctx, sq.UpsertRecordsParams{
 		OwnerID: ownerID, CreatedAt: updatedAt,
 		Rows: []sq.UpsertRecordsRowsItem{
@@ -177,23 +166,19 @@ func TestRecordsDatabaseSQL(t *testing.T) {
 			{RecordID: "c", GroupID: "inserted", Payload: payload, Attributes: `[]`},
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	rows, err = q.ListRecords(ctx, ownerID)
-	if err != nil || len(rows) != 2 || rows[0].GroupID != "replaced" || rows[1].GroupID != "inserted" {
-		t.Fatalf("UPSERT SELECT updates and inserts: %+v, %v", rows, err)
-	}
-	if err := q.InsertRecords(ctx, sq.InsertRecordsParams{OwnerID: ownerID, CreatedAt: createdAt}); err != nil {
-		t.Fatalf("empty batch: %v", err)
-	}
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.Equal(t, "replaced", rows[0].GroupID)
+	require.Equal(t, "inserted", rows[1].GroupID)
+	require.NoError(t, q.InsertRecords(ctx, sq.InsertRecordsParams{OwnerID: ownerID, CreatedAt: createdAt}), "empty batch")
 	label := "Москва"
 	reversed, err := q.ReverseGroupLabel(ctx, &label)
-	if err != nil || reversed.ReversedLabel == nil || *reversed.ReversedLabel != "авксоМ" {
-		t.Fatalf("configured function: %+v, %v", reversed, err)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, reversed.ReversedLabel)
+	require.Equal(t, "авксоМ", *reversed.ReversedLabel)
 	reversed, err = q.ReverseGroupLabel(ctx, nil)
-	if err != nil || reversed.ReversedLabel != nil {
-		t.Fatalf("configured AutoMap: %+v, %v", reversed, err)
-	}
+	require.NoError(t, err)
+	require.Nil(t, reversed.ReversedLabel)
 }

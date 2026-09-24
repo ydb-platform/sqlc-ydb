@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -32,15 +34,11 @@ func nativeErrorInput() *model.AnalysisResult {
 
 func TestGeneratedYDBErrorReturnFormatting(t *testing.T) {
 	files, err := Generate(nativeErrorInput(), Options{Package: "db", Runtime: "ydb"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, file := range files {
 		fset := token.NewFileSet()
 		syntax, err := parser.ParseFile(fset, file.Name, file.Content, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		ast.Inspect(syntax, func(node ast.Node) bool {
 			block, ok := node.(*ast.BlockStmt)
 			if !ok {
@@ -53,9 +51,7 @@ func TestGeneratedYDBErrorReturnFormatting(t *testing.T) {
 				}
 				previous := fset.Position(block.List[i-1].End())
 				position := fset.Position(ret.Pos())
-				if position.Line-previous.Line < 2 {
-					t.Errorf("%s: return following another statement needs a blank line", position)
-				}
+				assert.False(t, position.Line-previous.Line < 2, "%s: return following another statement needs a blank line", position)
 			}
 			return true
 		})

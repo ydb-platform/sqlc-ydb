@@ -2,9 +2,9 @@ package analyzer
 
 import (
 	"context"
-	"reflect"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -48,9 +48,7 @@ func TestDatabaseAnalysisIndexDiscoveryAndOfflineParity(t *testing.T) {
 		t.Run(sql, func(t *testing.T) {
 			queries := []model.Source{{Name: "query.sql", Text: sql}}
 			offline, err := Analyze(schema, queries)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			for _, local := range []bool{false, true} {
 				database := &fakeAnalysisDatabase{tables: map[string]model.Table{"records": indexedDatabaseTable()}}
 				var sources []model.Source
@@ -58,19 +56,14 @@ func TestDatabaseAnalysisIndexDiscoveryAndOfflineParity(t *testing.T) {
 					sources = schema
 				}
 				connected, err := AnalyzeWithDatabase(context.Background(), sources, queries, Options{}, database)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if !reflect.DeepEqual(database.described, []string{"records"}) || !reflect.DeepEqual(database.validated, []string{sql}) {
-					t.Fatalf("discovery must describe the base table and validate original SQL: %+v", database)
-				}
+				require.NoError(t, err)
+				require.Equal(t, []string{"records"}, database.described)
+				require.Equal(t, []string{sql}, database.validated)
 				want, got := offline.Queries[0], connected.Queries[0]
-				if got.SQL != want.SQL || !reflect.DeepEqual(got.Parameters, want.Parameters) || !reflect.DeepEqual(got.ResultSets, want.ResultSets) {
-					t.Fatalf("local=%v: offline/connected query mismatch\noffline: %#v\nconnected: %#v", local, want, got)
-				}
-				if !reflect.DeepEqual(connected.Catalog.Tables[0].Indexes, offline.Catalog.Tables[0].Indexes) {
-					t.Fatalf("index metadata was lost: %#v", connected.Catalog.Tables[0].Indexes)
-				}
+				require.Equal(t, want.SQL, got.SQL)
+				require.Equal(t, want.Parameters, got.Parameters)
+				require.Equal(t, want.ResultSets, got.ResultSets)
+				require.Equal(t, offline.Catalog.Tables[0].Indexes, connected.Catalog.Tables[0].Indexes)
 			}
 		})
 	}
@@ -102,17 +95,15 @@ func TestDatabaseAnalysisIndexDrift(t *testing.T) {
 			database := &fakeAnalysisDatabase{tables: map[string]model.Table{"records": table}}
 			result, err := AnalyzeWithDatabase(context.Background(), schema, query, Options{}, database)
 			if tc.want == "" {
-				if err != nil || len(result.Queries) != 1 {
-					t.Fatalf("irrelevant metadata order rejected: %v", err)
-				}
+				require.NoError(t, err)
+				require.Equal(t, 1, len(result.Queries))
 				return
 			}
-			if err == nil || !strings.Contains(err.Error(), "database schema drift") || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), "query.sql:2:") {
-				t.Fatalf("drift = %v, want %q at table reference", err, tc.want)
-			}
-			if len(result.Queries) != 0 {
-				t.Fatal("index drift must stop query analysis")
-			}
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "database schema drift")
+			require.Contains(t, err.Error(), tc.want)
+			require.Contains(t, err.Error(), "query.sql:2:")
+			require.Len(t, result.Queries, 0)
 		})
 	}
 }
@@ -120,10 +111,8 @@ func TestDatabaseAnalysisIndexDrift(t *testing.T) {
 func TestDatabaseAnalysisUnknownIndexDoesNotDescribeIndexAsTable(t *testing.T) {
 	database := &fakeAnalysisDatabase{tables: map[string]model.Table{"records": indexedDatabaseTable()}}
 	_, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\nSELECT id FROM records VIEW absent_index;"}}, Options{}, database)
-	if err == nil || !strings.Contains(err.Error(), "absent_index") || !strings.Contains(err.Error(), "index") {
-		t.Fatalf("unknown index diagnostic = %v", err)
-	}
-	if !reflect.DeepEqual(database.described, []string{"records"}) {
-		t.Fatalf("described %v instead of base table", database.described)
-	}
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "absent_index")
+	require.Contains(t, err.Error(), "index")
+	require.Equal(t, []string{"records"}, database.described)
 }

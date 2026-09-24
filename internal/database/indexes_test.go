@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb_Operations"
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb_Table"
@@ -50,9 +52,7 @@ func TestDescribeTablePreservesSecondaryIndexes(t *testing.T) {
 				}
 				index.Status, index.SizeBytes = state, 12345
 				client := testClient(t, tableServer{describe: func(_ context.Context, request *Ydb_Table.DescribeTableRequest) (*Ydb_Table.DescribeTableResponse, error) {
-					if request.GetPath() != "/local/records" {
-						t.Errorf("DescribeTable path = %q", request.GetPath())
-					}
+					assert.Equal(t, "/local/records", request.GetPath(), "DescribeTable path = %q", request.GetPath())
 					result, err := anypb.New(description)
 					if err != nil {
 						return nil, err
@@ -60,13 +60,9 @@ func TestDescribeTablePreservesSecondaryIndexes(t *testing.T) {
 					return &Ydb_Table.DescribeTableResponse{Operation: &Ydb_Operations.Operation{Ready: true, Status: Ydb.StatusIds_SUCCESS, Result: result}}, nil
 				}}, queryServer{})
 				table, err := client.DescribeTable(context.Background(), "records")
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 				want := []model.Index{{Name: "by_label", Kind: kind, Columns: []string{"label", "id"}, DataColumns: index.DataColumns}}
-				if !reflect.DeepEqual(table.Indexes, want) {
-					t.Fatalf("async=%v covering=%v state=%v: indexes = %#v, want %#v", async, covering, state, table.Indexes, want)
-				}
+				require.True(t, reflect.DeepEqual(table.Indexes, want), "async=%v covering=%v state=%v: indexes = %#v, want %#v", async, covering, state, table.Indexes, want)
 			}
 		}
 	}
@@ -102,9 +98,7 @@ func TestDecodeTableRejectsUnsupportedAndInvalidIndexes(t *testing.T) {
 			description := indexedDescription()
 			tc.edit(description)
 			_, err := decodeTable("records", description)
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("error = %v, want %q", err, tc.want)
-			}
+			require.False(t, err == nil || !strings.Contains(err.Error(), tc.want), "error = %v, want %q", err, tc.want)
 		})
 	}
 }

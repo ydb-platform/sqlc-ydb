@@ -2,9 +2,10 @@ package analyzer
 
 import (
 	"context"
-	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -32,29 +33,20 @@ UPDATE records SET enabled = true WHERE (tenant, code) IN (SELECT (k.tenant, k.c
 		t.Run(tc.name, func(t *testing.T) {
 			sql := "-- name: Read " + tc.command + "\n" + tc.sql
 			result, err := Analyze([]model.Source{{Name: "schema.sql", Text: inSubquerySchema}}, []model.Source{{Name: "query.sql", Text: sql}})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(result.Queries) != 1 {
-				t.Fatalf("queries = %#v", result.Queries)
-			}
+			require.NoError(t, err)
+			require.Len(t, result.Queries, 1)
 			query := result.Queries[0]
-			if query.SQL != sql {
-				t.Fatalf("SQL changed: %q", query.SQL)
-			}
+			require.Equal(t, sql, query.SQL)
 			want, err := parseType(tc.wantParameter)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(query.Parameters) != 1 || !query.Parameters[0].Type.Equal(want) {
-				t.Fatalf("parameters = %+v, want %s", query.Parameters, tc.wantParameter)
-			}
+			require.NoError(t, err)
+			require.Len(t, query.Parameters, 1)
+			require.True(t, query.Parameters[0].Type.Equal(want))
 			if tc.command == ":many" {
-				if len(query.ResultSets) != 1 || len(query.ResultSets[0].Columns) != 1 || query.ResultSets[0].Columns[0].Type.String() != "Utf8" {
-					t.Fatalf("outer result = %+v", query.ResultSets)
-				}
-			} else if len(query.ResultSets) != 0 {
-				t.Fatalf("inner SELECT leaked into result: %+v", query.ResultSets)
+				require.Len(t, query.ResultSets, 1)
+				require.Len(t, query.ResultSets[0].Columns, 1)
+				require.Equal(t, "Utf8", query.ResultSets[0].Columns[0].Type.String())
+			} else {
+				require.Len(t, query.ResultSets, 0)
 			}
 		})
 	}
@@ -94,28 +86,22 @@ func TestINSubqueryPredicateForms(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			sql := "-- name: Read " + tc.command + "\n" + tc.sql
 			result, err := Analyze([]model.Source{{Name: "schema.sql", Text: inSubquerySchema}}, []model.Source{{Name: "query.sql", Text: sql}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			q := result.Queries[0]
 			if tc.columns == 0 {
-				if len(q.ResultSets) != 0 {
-					t.Fatalf("unexpected results: %+v", q.ResultSets)
-				}
-			} else if len(q.ResultSets) != 1 || len(q.ResultSets[0].Columns) != tc.columns {
-				t.Fatalf("results: %+v", q.ResultSets)
+				require.Len(t, q.ResultSets, 0)
+			} else {
+				require.Len(t, q.ResultSets, 1)
+				require.Len(t, q.ResultSets[0].Columns, tc.columns)
 			}
 			if tc.name == "shadowed alias" {
-				if len(q.Parameters) != 1 || q.Parameters[0].Type.Kind != "Uint64" || q.ResultSets[0].Columns[0].Type.Kind != "Utf8" {
-					t.Fatalf("scope leaked: %+v", q)
-				}
-				if len(q.Syntax.Selects) != 2 || len(q.Syntax.Relations) != 1 {
-					t.Fatalf("scopes=%+v, outer relations=%+v", q.Syntax.Selects, q.Syntax.Relations)
-				}
+				require.Len(t, q.Parameters, 1)
+				require.Equal(t, "Uint64", q.Parameters[0].Type.Kind)
+				require.Equal(t, "Utf8", q.ResultSets[0].Columns[0].Type.Kind)
+				require.Len(t, q.Syntax.Selects, 2)
+				require.Len(t, q.Syntax.Relations, 1)
 			}
-			if tc.name == "scoped wildcards" && strings.Contains(q.SQL, "*") {
-				t.Fatalf("wildcard was not normalized: %s", q.SQL)
-			}
+			require.False(t, tc.name == "scoped wildcards" && strings.Contains(q.SQL, "*"))
 		})
 	}
 }
@@ -143,9 +129,7 @@ func TestINSubqueryRejectsInvalidScopesAndKeys(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Analyze([]model.Source{{Name: "schema.sql", Text: inSubquerySchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + tc.sql}})
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("error=%v, want %q", err, tc.want)
-			}
+			require.ErrorContains(t, err, tc.want)
 		})
 	}
 }
@@ -157,15 +141,10 @@ func TestINSubqueryDatabaseDiscoveryAndPrefixes(t *testing.T) {
 	indexed.Indexes = []model.Index{{Name: "by_id", Kind: "GlobalSync", Columns: []string{"id"}}}
 	db := &fakeAnalysisDatabase{tables: map[string]model.Table{"/local/app/outer_records": table, "/local/app/inner_records": indexed}}
 	result, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: sql}}, Options{}, db)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(db.described, []string{"/local/app/outer_records", "/local/app/inner_records"}) {
-		t.Fatalf("described=%v", db.described)
-	}
-	if result.Queries[0].SQL != sql || len(result.Queries[0].Syntax.Selects) != 2 {
-		t.Fatalf("query=%+v", result.Queries[0])
-	}
+	require.NoError(t, err)
+	require.Equal(t, []string{"/local/app/outer_records", "/local/app/inner_records"}, db.described)
+	require.Equal(t, sql, result.Queries[0].SQL)
+	require.Len(t, result.Queries[0].Syntax.Selects, 2)
 }
 
 func TestINSubquerySharesExternalParameterConstraints(t *testing.T) {
@@ -178,16 +157,12 @@ func TestINSubquerySharesExternalParameterConstraints(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := Analyze([]model.Source{{Name: "schema.sql", Text: inSubquerySchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read " + tc.command + "\n" + tc.sql}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			query := result.Queries[0]
-			if len(query.Parameters) != 1 || query.Parameters[0].Name != "selected" || query.Parameters[0].Type.Kind != "Uint64" {
-				t.Fatalf("parameters = %+v", query.Parameters)
-			}
-			if tc.command == ":many" && (len(query.ResultSets) != 1 || len(query.ResultSets[0].Columns) != 1 || query.ResultSets[0].Columns[0].Type.Kind != "Uint64") {
-				t.Fatalf("results = %+v", query.ResultSets)
-			}
+			require.Len(t, query.Parameters, 1)
+			require.Equal(t, "selected", query.Parameters[0].Name)
+			require.Equal(t, "Uint64", query.Parameters[0].Type.Kind)
+			require.False(t, tc.command == ":many" && (len(query.ResultSets) != 1 || len(query.ResultSets[0].Columns) != 1 || query.ResultSets[0].Columns[0].Type.Kind != "Uint64"))
 		})
 	}
 }
@@ -195,13 +170,11 @@ func TestINSubquerySharesExternalParameterConstraints(t *testing.T) {
 func TestINSubqueryPreservesInnerTypeForSharedLimit(t *testing.T) {
 	result, err := Analyze([]model.Source{{Name: "schema.sql", Text: `CREATE TABLE small_keys (id Uint32 NOT NULL, PRIMARY KEY(id));`}}, []model.Source{{Name: "query.sql", Text: `-- name: Read :many
 SELECT id FROM small_keys WHERE id IN (SELECT id FROM small_keys WHERE id = $count) LIMIT $count;`}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	parameters := result.Queries[0].Parameters
-	if len(parameters) != 1 || parameters[0].Name != "count" || parameters[0].Type.Kind != "Uint32" {
-		t.Fatalf("parameters = %+v", parameters)
-	}
+	require.Len(t, parameters, 1)
+	require.Equal(t, "count", parameters[0].Name)
+	require.Equal(t, "Uint32", parameters[0].Type.Kind)
 }
 
 func TestINSubqueryPreservesUsefulDiagnostics(t *testing.T) {
@@ -241,12 +214,8 @@ func TestINSubqueryPreservesUsefulDiagnostics(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Analyze([]model.Source{{Name: "schema.sql", Text: inSubquerySchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + tc.sql}})
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("error = %v, want %q", err, tc.want)
-			}
-			if tc.absent != "" && strings.Contains(err.Error(), tc.absent) {
-				t.Fatalf("error = %v must not contain %q", err, tc.absent)
-			}
+			require.ErrorContains(t, err, tc.want)
+			require.False(t, tc.absent != "" && strings.Contains(err.Error(), tc.absent))
 		})
 	}
 }
@@ -266,9 +235,9 @@ func TestINSubqueryRejectsContextsBeforeResolvingInnerQuery(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := Analyze([]model.Source{{Name: "schema.sql", Text: inSubquerySchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read " + tc.command + "\n" + tc.sql}})
-			if err == nil || len(result.Diagnostics) != 1 || result.Diagnostics[0].Message != tc.want {
-				t.Fatalf("diagnostics = %+v, want exactly %q", result.Diagnostics, tc.want)
-			}
+			require.Error(t, err)
+			require.Len(t, result.Diagnostics, 1)
+			require.Equal(t, tc.want, result.Diagnostics[0].Message)
 		})
 	}
 }
@@ -286,9 +255,9 @@ func TestINSubqueryFailuresDoNotCascade(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := Analyze([]model.Source{{Name: "schema.sql", Text: inSubquerySchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read " + tc.command + "\n" + tc.sql}})
-			if err == nil || len(result.Diagnostics) != 1 || result.Diagnostics[0].Message != tc.want {
-				t.Fatalf("diagnostics = %+v, want exactly %q", result.Diagnostics, tc.want)
-			}
+			require.Error(t, err)
+			require.Len(t, result.Diagnostics, 1)
+			require.Equal(t, tc.want, result.Diagnostics[0].Message)
 		})
 	}
 }
@@ -296,9 +265,7 @@ func TestINSubqueryFailuresDoNotCascade(t *testing.T) {
 func TestINSubqueryCorrelationHintPreservesInnerErrors(t *testing.T) {
 	result, err := Analyze([]model.Source{{Name: "schema.sql", Text: inSubquerySchema}}, []model.Source{{Name: "query.sql", Text: `-- name: Read :many
 SELECT tenant FROM records WHERE tenant IN (SELECT MissingFunction(tenant) FROM allowed WHERE enabled);`}})
-	if err == nil {
-		t.Fatal("expected invalid inner query diagnostics")
-	}
+	require.Error(t, err)
 	var messages []string
 	for _, diagnostic := range result.Diagnostics {
 		messages = append(messages, diagnostic.Message)
@@ -309,7 +276,5 @@ SELECT tenant FROM records WHERE tenant IN (SELECT MissingFunction(tenant) FROM 
 		`invalid predicate: cannot resolve predicate operand "enabled": unknown column "enabled"`,
 		`correlated IN subqueries are unsupported: "enabled" may refer to an outer column; use only the subquery's own sources`,
 	}
-	if !reflect.DeepEqual(messages, want) {
-		t.Fatalf("diagnostics = %#v, want %#v", messages, want)
-	}
+	require.Equal(t, want, messages)
 }

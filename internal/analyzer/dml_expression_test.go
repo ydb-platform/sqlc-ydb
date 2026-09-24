@@ -2,9 +2,10 @@ package analyzer
 
 import (
 	"context"
-	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -38,44 +39,30 @@ func TestAnalyzeComputedDMLValues(t *testing.T) {
 			sql := "-- name: Write :one\n" + strings.TrimSuffix(tt.sql, ";") + " RETURNING value, optional_value;"
 			input := []model.Source{{Name: "query.sql", Text: sql}}
 			offline, err := Analyze([]model.Source{{Name: "schema.sql", Text: computedDMLSchema}}, input)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			query := offline.Queries[0]
-			if query.SQL != sql {
-				t.Fatalf("changed SQL: %q", query.SQL)
-			}
+			require.Equal(t, sql, query.SQL)
 			want := []model.Column{
 				{Name: "value", Type: model.Type{Kind: "Int64"}, Table: "counters"},
 				{Name: "optional_value", Type: model.Optional(model.Type{Kind: "Int64"}), Table: "counters"},
 			}
-			if !reflect.DeepEqual(query.ResultSets[0].Columns, want) {
-				t.Fatalf("columns: %#v", query.ResultSets)
-			}
+			require.Equal(t, want, query.ResultSets[0].Columns)
 			parameterNames := strings.Split(tt.parameters, ",")
-			if len(query.Parameters) != len(parameterNames) {
-				t.Fatalf("parameters: %#v", query.Parameters)
-			}
+			require.Len(t, query.Parameters, len(parameterNames))
 			for i, parameter := range query.Parameters {
-				if parameter.Name != parameterNames[i] {
-					t.Fatalf("parameters: %#v", query.Parameters)
-				}
+				require.Equal(t, parameterNames[i], parameter.Name)
 				kind := "Int64"
 				if parameter.Name == "id" {
 					kind = "Utf8"
 				}
-				if parameter.Name == "step" || parameter.Type.Kind != kind {
-					t.Fatalf("parameter: %#v", parameter)
-				}
+				require.NotEqual(t, "step", parameter.Name)
+				require.Equal(t, kind, parameter.Type.Kind)
 			}
 			db := &fakeAnalysisDatabase{tables: map[string]model.Table{"counters": offline.Catalog.Tables[0]}}
 			connected, err := AnalyzeWithDatabase(context.Background(), nil, input, Options{}, db)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !reflect.DeepEqual(connected.Queries[0].Parameters, query.Parameters) || !reflect.DeepEqual(connected.Queries[0].ResultSets, query.ResultSets) {
-				t.Fatalf("connected metadata differs: %#v", connected.Queries[0])
-			}
+			require.NoError(t, err)
+			require.Equal(t, query.Parameters, connected.Queries[0].Parameters)
+			require.Equal(t, query.ResultSets, connected.Queries[0].ResultSets)
 		})
 	}
 }
@@ -106,12 +93,9 @@ func TestAnalyzeRejectsInvalidDMLExpressions(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := Analyze([]model.Source{{Name: "schema.sql", Text: computedDMLSchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Write :exec\n" + tt.sql}})
-			if err == nil || !strings.Contains(err.Error(), tt.want) {
-				t.Fatalf("error=%v; want %q", err, tt.want)
-			}
-			if len(result.Diagnostics) == 0 || result.Diagnostics[0].Position.File != "query.sql" {
-				t.Fatalf("diagnostics=%#v", result.Diagnostics)
-			}
+			require.ErrorContains(t, err, tt.want)
+			require.NotEqual(t, 0, len(result.Diagnostics))
+			require.Equal(t, "query.sql", result.Diagnostics[0].Position.File)
 		})
 	}
 }

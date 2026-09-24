@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/cli"
 )
 
@@ -30,13 +31,10 @@ func TestExplicitBatchDeclarationsSurviveGeneration(t *testing.T) {
 			config := fmt.Sprintf("version: \"2\"\nsql:\n  - engine: ydb\n    schema: schema.sql\n    queries: queries.sql\n    gen:\n      %s:\n        out: generated\n        %s: %s\n", profile.language, profile.key, profile.runtime)
 			write(t, filepath.Join(dir, "sqlc.yaml"), []byte(config))
 			var out, stderr bytes.Buffer
-			if status := cli.Run([]string{"generate", "-f", filepath.Join(dir, "sqlc.yaml")}, &out, &stderr); status != 0 {
-				t.Fatalf("generate failed: %s", stderr.String())
-			}
+			status := cli.Run([]string{"generate", "-f", filepath.Join(dir, "sqlc.yaml")}, &out, &stderr)
+			require.Zero(t, status, "generate failed: %s", stderr.String())
 			entries, err := os.ReadDir(filepath.Join(dir, "generated"))
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			wantDeclaration := declaration
 			if profile.language == "python" && profile.runtime == "sqlalchemy" {
 				wantDeclaration = strings.ReplaceAll(declaration, ":", "\\\\:")
@@ -50,9 +48,7 @@ func TestExplicitBatchDeclarationsSurviveGeneration(t *testing.T) {
 					continue
 				}
 				content, err := os.ReadFile(filepath.Join(dir, "generated", entry.Name()))
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 				remaining := string(content)
 				complete := true
 				for _, line := range strings.Split(wantDeclaration, "\n") {
@@ -65,9 +61,7 @@ func TestExplicitBatchDeclarationsSurviveGeneration(t *testing.T) {
 				}
 				preserved = preserved || complete
 			}
-			if !preserved {
-				t.Fatalf("%s/%s removed or changed the explicit batch DECLARE", profile.language, profile.runtime)
-			}
+			require.True(t, preserved, "%s/%s removed or changed the explicit batch DECLARE", profile.language, profile.runtime)
 		})
 	}
 }

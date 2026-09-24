@@ -1,8 +1,9 @@
 package analyzer
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -24,21 +25,17 @@ func TestOrderByUsesProjectedTypesAndBindings(t *testing.T) {
 	} {
 		t.Run(tc.statement, func(t *testing.T) {
 			result, err := Analyze([]model.Source{{Name: "schema.sql", Text: schema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + tc.statement}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			query := result.Queries[0]
-			if (tc.typ == "" && len(query.Parameters) != 0) || (tc.typ != "" && (len(query.Parameters) != 1 || query.Parameters[0].Type.String() != tc.typ)) {
-				t.Fatalf("parameters = %+v; want $p %s", query.Parameters, tc.typ)
-			}
+			require.False(t, (tc.typ == "" && len(query.Parameters) != 0))
+			require.False(t, (tc.typ != "" && (len(query.Parameters) != 1 || query.Parameters[0].Type.String() != tc.typ)))
 			for _, ref := range columnRefs(query.Syntax.Root) {
 				if !isOrderByReference(ref.ctx) {
 					continue
 				}
 				binding, exists := query.Syntax.Columns[ref.ctx.GetStart().GetTokenIndex()]
-				if exists != (tc.boundColumn != "") || binding.Column.Name != tc.boundColumn {
-					t.Fatalf("ORDER BY binding = %+v, exists %v; want source column %q", binding, exists, tc.boundColumn)
-				}
+				require.Equal(t, (tc.boundColumn != ""), exists)
+				require.Equal(t, tc.boundColumn, binding.Column.Name)
 			}
 		})
 	}
@@ -51,8 +48,6 @@ func TestOrderByUsesProjectedTypesAndBindings(t *testing.T) {
 		`DECLARE $p AS Bool; SELECT id > 0ul AS id FROM records ORDER BY id = $p;`,
 	} {
 		_, err := Analyze([]model.Source{{Name: "schema.sql", Text: schema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + statement}})
-		if err == nil || !strings.Contains(err.Error(), "ORDER BY expressions referencing projection aliases") {
-			t.Fatalf("unsafe ORDER BY scope accepted for %s: %v", statement, err)
-		}
+		require.ErrorContains(t, err, "ORDER BY expressions referencing projection aliases")
 	}
 }

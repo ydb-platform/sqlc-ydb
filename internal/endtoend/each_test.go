@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/cli"
 )
 
@@ -24,16 +25,13 @@ func TestEachUnsupportedTargets(t *testing.T) {
 			dir := t.TempDir()
 			copyFixture(t, "testdata/each", dir)
 			cfg := "version: \"2\"\nsql:\n  - engine: ydb\n    schema: schema.sql\n    queries: queries.sql\n    gen:\n      go:\n        out: db\n      " + profile.target + ":\n        out: other\n        runtime: " + profile.runtime + "\n"
-			if err := os.WriteFile(filepath.Join(dir, "sqlc.yaml"), []byte(cfg), 0600); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "sqlc.yaml"), []byte(cfg), 0600))
 			var stdout, stderr bytes.Buffer
-			if code := cli.Run([]string{"generate", "--no-remote", "-f", filepath.Join(dir, "sqlc.yaml")}, &stdout, &stderr); code == 0 || !strings.Contains(stderr.String(), ":each") {
-				t.Fatalf("code=%d stderr=%s", code, stderr.String())
-			}
-			if _, err := os.Stat(filepath.Join(dir, "db")); !os.IsNotExist(err) {
-				t.Fatalf("partial Go output despite unsupported target: %v", err)
-			}
+			code := cli.Run([]string{"generate", "--no-remote", "-f", filepath.Join(dir, "sqlc.yaml")}, &stdout, &stderr)
+			require.NotZero(t, code, stderr.String())
+			require.Contains(t, stderr.String(), ":each")
+			_, err := os.Stat(filepath.Join(dir, "db"))
+			require.ErrorIs(t, err, os.ErrNotExist, "partial Go output despite unsupported target")
 		})
 	}
 }
@@ -56,18 +54,13 @@ func runEachFixture(t *testing.T, live bool) {
 		data := strings.ReplaceAll(string(mustRead(t, path)), "devices", table)
 		// The parameter's public name stays stable while the physical table is isolated.
 		data = strings.ReplaceAll(data, "$"+table, "$devices")
-		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(path, []byte(data), 0600))
 	}
 	var stdout, stderr bytes.Buffer
-	if code := cli.Run([]string{"generate", "--no-remote", "-f", filepath.Join(dir, "sqlc.yaml")}, &stdout, &stderr); code != 0 {
-		t.Fatal(stderr.String())
-	}
+	code := cli.Run([]string{"generate", "--no-remote", "-f", filepath.Join(dir, "sqlc.yaml")}, &stdout, &stderr)
+	require.Zero(t, code, stderr.String())
 	mod := "module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(mod), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte(mod), 0600))
 	schema := string(mustRead(t, filepath.Join(dir, "schema.sql")))
 	for _, native := range []bool{false, true} {
 		path := "./db"

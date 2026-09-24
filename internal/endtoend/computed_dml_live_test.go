@@ -9,14 +9,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/cli"
 )
 
 func TestComputedDMLGeneratedGoCompiles(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.CopyFS(filepath.Join(dir, "db"), os.DirFS("testdata/computed_dml/expected/db")); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.CopyFS(filepath.Join(dir, "db"), os.DirFS("testdata/computed_dml/expected/db")))
 	writeComputedDMLModule(t, dir)
 	for _, native := range []bool{false, true} {
 		path := "./db"
@@ -38,9 +37,7 @@ func TestLiveYDBComputedDML(t *testing.T) {
 	table := fmt.Sprintf("sqlc_computed_dml_%d", time.Now().UnixNano())
 	for _, name := range []string{"schema.sql", "queries.sql"} {
 		contents := strings.ReplaceAll(string(mustRead(t, filepath.Join(dir, name))), "counters", table)
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(contents), 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(contents), 0600))
 	}
 	runDatabasePython(t, dir, databasePythonConnection+`from pathlib import Path
 with ydb.Driver(config) as driver:
@@ -52,18 +49,14 @@ with ydb.Driver(config) as driver:
 	invoke := func(command string) {
 		t.Helper()
 		var stdout, stderr bytes.Buffer
-		if code := cli.Run([]string{command, "--no-remote", "-f", filepath.Join(dir, "sqlc.yaml")}, &stdout, &stderr); code != 0 {
-			t.Fatalf("%s: %s", command, stderr.String())
-		}
+		require.Zero(t, cli.Run([]string{command, "--no-remote", "-f", filepath.Join(dir, "sqlc.yaml")}, &stdout, &stderr), "%s: %s", command, stderr.String())
 	}
 	invoke("generate")
 	// Connected validation must produce the same generated API and SQL as offline
 	// analysis; EXPLAIN must not execute the INSERT used by each runtime below.
 	cfgPath := filepath.Join(dir, "sqlc.yaml")
 	cfg := strings.ReplaceAll(string(mustRead(t, cfgPath)), "    schema: schema.sql", "    schema: schema.sql\n    database:\n      uri: ${YDB_CONNECTION_STRING}")
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), 0600))
 	invoke("diff")
 	writeComputedDMLModule(t, dir)
 	for _, native := range []bool{false, true} {
@@ -78,9 +71,7 @@ with ydb.Driver(config) as driver:
 
 func writeComputedDMLModule(t *testing.T, dir string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"), 0600))
 }
 
 func computedDMLGoRuntime(native bool) string {

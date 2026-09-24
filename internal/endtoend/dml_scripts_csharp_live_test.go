@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/codegen/csharp"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
@@ -36,20 +37,14 @@ func runDMLScriptsCsharp(t *testing.T, compileOnly bool) {
 			replace := strings.NewReplacer("records", table, "copies", table+"_copies")
 			schema := replace.Replace(dmlScriptsSchema)
 			analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: schema}}, []model.Source{{Name: "queries.sql", Text: replace.Replace(dmlScriptsCsharpQueries)}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			files, err := csharp.Generate(analysis, csharp.Options{Namespace: "Generated", Runtime: runtime})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			dir := t.TempDir()
 			files = append(files, model.File{Name: "Program.cs", Content: []byte(strings.ReplaceAll(dmlScriptsCsharpProgram, "$SCHEMA", strconv.Quote(schema)))})
 			files = append(files, model.File{Name: "scripts.csproj", Content: []byte(`<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup><ItemGroup><PackageReference Include="Ydb.Sdk" Version="0.35.0"/><PackageReference Include="Dapper" Version="2.1.79"/></ItemGroup></Project>`)})
 			for _, file := range files {
-				if err := os.WriteFile(filepath.Join(dir, file.Name), file.Content, 0600); err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, os.WriteFile(filepath.Join(dir, file.Name), file.Content, 0600))
 			}
 			env := append(os.Environ(), "DOTNET_CLI_HOME="+filepath.Join(dir, ".dotnet"))
 			if os.Getenv("NUGET_PACKAGES") == "" {
@@ -62,9 +57,8 @@ func runDMLScriptsCsharp(t *testing.T, compileOnly bool) {
 			for _, args := range commands {
 				cmd := exec.Command(dotnet, args...)
 				cmd.Dir, cmd.Env = dir, env
-				if out, err := cmd.CombinedOutput(); err != nil {
-					t.Fatalf("C# %s %s: %v\n%s", runtime, args[0], err, out)
-				}
+				out, err := cmd.CombinedOutput()
+				require.NoError(t, err, "C# %s %s:\n%s", runtime, args[0], out)
 			}
 		})
 	}

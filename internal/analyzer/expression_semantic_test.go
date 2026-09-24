@@ -1,9 +1,10 @@
 package analyzer
 
 import (
-	"reflect"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -23,15 +24,14 @@ SELECT
 FROM records;`}}
 
 	got, err := Analyze(schema, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	want := []model.Column{
 		{Name: "display", Type: model.Optional(model.Type{Kind: "Utf8"})},
 		{Name: "parsed", Type: model.Type{Kind: "Uint64"}},
 	}
-	if columns := got.Queries[0].ResultSets[0].Columns; !reflect.DeepEqual(columns, want) {
-		t.Fatalf("columns = %#v, want %#v", columns, want)
+	{
+		columns := got.Queries[0].ResultSets[0].Columns
+		require.Equal(t, want, columns)
 	}
 }
 
@@ -45,12 +45,12 @@ func TestAnalyzeResolvesOptionalOrdinaryFunctionResult(t *testing.T) {
 SELECT StartsWith(label, "pre"u) AS matches FROM records;`}}
 
 	got, err := Analyze(schema, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	want := model.Optional(model.Type{Kind: "Bool"})
-	if result := got.Queries[0].ResultSets[0].Columns[0]; result.Name != "matches" || !reflect.DeepEqual(result.Type, want) {
-		t.Fatalf("result = %#v, want matches %#v", result, want)
+	{
+		result := got.Queries[0].ResultSets[0].Columns[0]
+		require.Equal(t, "matches", result.Name)
+		require.Equal(t, want, result.Type)
 	}
 }
 
@@ -68,24 +68,21 @@ SELECT
 FROM records;`}}
 
 	got, err := Analyze(schema, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	want := []model.Column{
 		{Name: "encoded", Type: model.Optional(model.Type{Kind: "String"})},
 		{Name: "length", Type: model.Optional(model.Type{Kind: "Uint64"})},
 	}
-	if columns := got.Queries[0].ResultSets[0].Columns; !reflect.DeepEqual(columns, want) {
-		t.Fatalf("columns = %#v, want %#v", columns, want)
+	{
+		columns := got.Queries[0].ResultSets[0].Columns
+		require.Equal(t, want, columns)
 	}
 }
 
 func TestAnalyzeRejectsIncompatibleCaseBranches(t *testing.T) {
 	_, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: `-- name: Invalid :one
 SELECT CASE WHEN true THEN 1 ELSE "one"u END AS value;`}})
-	if err == nil || !strings.Contains(err.Error(), "CASE branches have incompatible types") {
-		t.Fatalf("error = %v", err)
-	}
+	require.ErrorContains(t, err, "CASE branches have incompatible types")
 }
 
 func TestAnalyzeResolvesCaseComparisonCondition(t *testing.T) {
@@ -94,12 +91,12 @@ func TestAnalyzeResolvesCaseComparisonCondition(t *testing.T) {
 SELECT CASE WHEN id > 0ul THEN "positive"u ELSE "zero"u END AS sign FROM records;`}}
 
 	got, err := Analyze(schema, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	want := model.Type{Kind: "Utf8"}
-	if result := got.Queries[0].ResultSets[0].Columns[0]; result.Name != "sign" || !reflect.DeepEqual(result.Type, want) {
-		t.Fatalf("result = %#v, want sign %#v", result, want)
+	{
+		result := got.Queries[0].ResultSets[0].Columns[0]
+		require.Equal(t, "sign", result.Name)
+		require.Equal(t, want, result.Type)
 	}
 }
 
@@ -112,15 +109,14 @@ SELECT
 FROM records;`}}
 
 	got, err := Analyze(schema, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	want := []model.Column{
 		{Name: "case_label", Type: model.Type{Kind: "Utf8"}},
 		{Name: "if_label", Type: model.Type{Kind: "Utf8"}},
 	}
-	if columns := got.Queries[0].ResultSets[0].Columns; !reflect.DeepEqual(columns, want) {
-		t.Fatalf("columns = %#v, want %#v", columns, want)
+	{
+		columns := got.Queries[0].ResultSets[0].Columns
+		require.Equal(t, want, columns)
 	}
 }
 
@@ -131,25 +127,24 @@ $parsed = COALESCE(CAST($raw AS Uint64), 0ul);
 SELECT $parsed AS parsed;`}}
 
 	got, err := Analyze(nil, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	wantParameters := []model.Parameter{{Name: "raw", Type: model.Type{Kind: "String"}}}
-	if parameters := got.Queries[0].Parameters; !reflect.DeepEqual(parameters, wantParameters) {
-		t.Fatalf("parameters = %#v, want %#v", parameters, wantParameters)
+	{
+		parameters := got.Queries[0].Parameters
+		require.Equal(t, wantParameters, parameters)
 	}
 	wantResult := model.Type{Kind: "Uint64"}
-	if result := got.Queries[0].ResultSets[0].Columns[0]; result.Name != "parsed" || !reflect.DeepEqual(result.Type, wantResult) {
-		t.Fatalf("result = %#v, want parsed %#v", result, wantResult)
+	{
+		result := got.Queries[0].ResultSets[0].Columns[0]
+		require.Equal(t, "parsed", result.Name)
+		require.Equal(t, wantResult, result.Type)
 	}
 }
 
 func TestAnalyzeRejectsUnresolvedNullResult(t *testing.T) {
 	_, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: `-- name: NullOnly :one
 SELECT NULL AS value;`}})
-	if err == nil || !strings.Contains(err.Error(), `result column "value" has unresolved Null type`) {
-		t.Fatalf("error = %v", err)
-	}
+	require.ErrorContains(t, err, `result column "value" has unresolved Null type`)
 }
 
 func TestAnalyzeRejectsUngroupedProjectionAndHavingColumn(t *testing.T) {
@@ -165,13 +160,9 @@ GROUP BY category
 HAVING id > 0;`}}
 
 	_, err := Analyze(schema, queries)
-	if err == nil {
-		t.Fatal("Analyze() error = nil, want grouping diagnostics")
-	}
+	require.Error(t, err)
 	for _, want := range []string{`projection column "id" must appear in GROUP BY or an aggregate function`, `HAVING column "id" must appear in GROUP BY or an aggregate function`} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("error = %v, want %q", err, want)
-		}
+		assert.Contains(t, err.Error(), want)
 	}
 }
 
@@ -188,15 +179,14 @@ GROUP BY category
 HAVING COUNT(*) > 0ul;`}}
 
 	got, err := Analyze(schema, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	want := []model.Column{
 		{Name: "category", Type: model.Type{Kind: "Utf8"}, Table: "records"},
 		{Name: "total", Type: model.Type{Kind: "Uint64"}},
 	}
-	if columns := got.Queries[0].ResultSets[0].Columns; !reflect.DeepEqual(columns, want) {
-		t.Fatalf("columns = %#v, want %#v", columns, want)
+	{
+		columns := got.Queries[0].ResultSets[0].Columns
+		require.Equal(t, want, columns)
 	}
 }
 
@@ -215,9 +205,7 @@ SELECT MIN(id) AS minimum, SUM(id) AS total, AVG(id) AS average
 FROM records;`}}
 
 	got, err := Analyze(schema, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	wantGrouped := []model.Type{{Kind: "Uint64"}, {Kind: "Uint64"}, {Kind: "Double"}}
 	wantGlobal := []model.Type{
 		model.Optional(model.Type{Kind: "Uint64"}),
@@ -225,13 +213,15 @@ FROM records;`}}
 		model.Optional(model.Type{Kind: "Double"}),
 	}
 	for i, want := range wantGrouped {
-		if gotType := got.Queries[0].ResultSets[0].Columns[i].Type; !reflect.DeepEqual(gotType, want) {
-			t.Errorf("grouped column %d type = %#v, want %#v", i, gotType, want)
+		{
+			gotType := got.Queries[0].ResultSets[0].Columns[i].Type
+			assert.Equal(t, want, gotType)
 		}
 	}
 	for i, want := range wantGlobal {
-		if gotType := got.Queries[1].ResultSets[0].Columns[i].Type; !reflect.DeepEqual(gotType, want) {
-			t.Errorf("global column %d type = %#v, want %#v", i, gotType, want)
+		{
+			gotType := got.Queries[1].ResultSets[0].Columns[i].Type
+			assert.Equal(t, want, gotType)
 		}
 	}
 }
@@ -245,9 +235,7 @@ FROM left_records AS l JOIN right_records AS r ON l.id = r.id
 GROUP BY l.id;`}}
 
 	_, err := Analyze(schema, queries)
-	if err == nil || !strings.Contains(err.Error(), `projection column "r.id" must appear in GROUP BY or an aggregate function`) {
-		t.Fatalf("error = %v", err)
-	}
+	require.ErrorContains(t, err, `projection column "r.id" must appear in GROUP BY or an aggregate function`)
 }
 
 func TestAnalyzeRejectsNonBooleanHaving(t *testing.T) {
@@ -256,9 +244,7 @@ func TestAnalyzeRejectsNonBooleanHaving(t *testing.T) {
 SELECT id FROM records GROUP BY id HAVING 1;`}}
 
 	_, err := Analyze(schema, queries)
-	if err == nil || !strings.Contains(err.Error(), "HAVING expression has type Int32, want Bool") {
-		t.Fatalf("error = %v", err)
-	}
+	require.ErrorContains(t, err, "HAVING expression has type Int32, want Bool")
 }
 
 func TestAnalyzeRejectsStarAlongsideAggregate(t *testing.T) {
@@ -267,9 +253,7 @@ func TestAnalyzeRejectsStarAlongsideAggregate(t *testing.T) {
 SELECT *, COUNT(*) AS total FROM records GROUP BY category;`}}
 
 	_, err := Analyze(schema, queries)
-	if err == nil || !strings.Contains(err.Error(), "star projections are unsupported in grouped or aggregate queries") {
-		t.Fatalf("error = %v", err)
-	}
+	require.ErrorContains(t, err, "star projections are unsupported in grouped or aggregate queries")
 }
 
 func TestAnalyzeRejectsNestedAggregate(t *testing.T) {
@@ -278,9 +262,7 @@ func TestAnalyzeRejectsNestedAggregate(t *testing.T) {
 SELECT SUM(COUNT(*)) AS total FROM records GROUP BY category;`}}
 
 	_, err := Analyze(schema, queries)
-	if err == nil || !strings.Contains(err.Error(), `aggregate function "SUM" cannot contain another aggregate`) {
-		t.Fatalf("error = %v", err)
-	}
+	require.ErrorContains(t, err, `aggregate function "SUM" cannot contain another aggregate`)
 }
 
 func TestAnalyzeRejectsUnknownHavingFunction(t *testing.T) {
@@ -289,7 +271,5 @@ func TestAnalyzeRejectsUnknownHavingFunction(t *testing.T) {
 SELECT COUNT(*) AS total FROM records HAVING Mystery(id);`}}
 
 	_, err := Analyze(schema, queries)
-	if err == nil || !strings.Contains(err.Error(), `cannot resolve HAVING expression: unsupported YQL function "Mystery"`) {
-		t.Fatalf("error = %v", err)
-	}
+	require.ErrorContains(t, err, `cannot resolve HAVING expression: unsupported YQL function "Mystery"`)
 }

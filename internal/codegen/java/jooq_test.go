@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/antlr4-go/antlr/v4"
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/codegen/jdbc"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
@@ -27,29 +28,17 @@ func TestJooqAllExampleQueries(t *testing.T) {
 				schema, queries = "schema", "query"
 			}
 			schemas, e := source.Read(root, []string{schema}, true)
-			if e != nil {
-				t.Fatal(e)
-			}
+			require.Nil(t, e)
 			sources, e := source.Read(root, []string{queries}, false)
-			if e != nil {
-				t.Fatal(e)
-			}
+			require.Nil(t, e)
 			a, e := analyzer.Analyze(schemas, sources)
-			if e != nil {
-				t.Fatal(e)
-			}
+			require.Nil(t, e)
 			files, e := Generate(a, Options{Package: family + ".jooq", Runtime: "jooq"})
-			if e != nil {
-				t.Fatal(e)
-			}
+			require.Nil(t, e)
 			content := string(files[len(files)-1].Content)
 			for _, q := range a.Queries {
-				if !strings.Contains(content, "// "+model.QueryAnnotation(q)) {
-					t.Fatalf("missing method for %s", q.Name)
-				}
-				if strings.Contains(content, model.WithoutQueryAnnotation(q.SQL)) {
-					t.Fatalf("embedded query: %s", q.Name)
-				}
+				require.Contains(t, content, "// "+model.QueryAnnotation(q), "missing method for %s", q.Name)
+				require.False(t, strings.Contains(content, model.WithoutQueryAnnotation(q.SQL)), "embedded query: %s", q.Name)
 			}
 		})
 	}
@@ -67,16 +56,10 @@ func TestJooqRejectsUnsupportedSyntax(t *testing.T) {
 	} {
 		t.Run(sql, func(t *testing.T) {
 			a, e := analyzer.Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Unsupported :many\n" + sql}})
-			if e != nil {
-				t.Fatal(e)
-			}
+			require.Nil(t, e)
 			files, e := Generate(a, Options{Runtime: "jooq"})
-			if e == nil || files != nil {
-				t.Fatalf("accepted unsupported syntax: %s", sql)
-			}
-			if !strings.Contains(e.Error(), "Unsupported: unsupported jOOQ syntax") {
-				t.Fatalf("missing actionable diagnostic: %v", e)
-			}
+			require.False(t, e == nil || files != nil, "accepted unsupported syntax: %s", sql)
+			require.Contains(t, e.Error(), "Unsupported: unsupported jOOQ syntax", "missing actionable diagnostic: %v", e)
 		})
 	}
 }
@@ -91,16 +74,10 @@ func TestJooqRejectsSelectBackedDML(t *testing.T) {
 	} {
 		t.Run(sql, func(t *testing.T) {
 			a, err := analyzer.Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: WriteItems :exec\n" + sql}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			files, err := Generate(a, Options{Runtime: "jooq"})
-			if err == nil || files != nil {
-				t.Fatalf("SELECT-backed DML must not generate a plain SELECT: generated %d files, err=%v", len(files), err)
-			}
-			if !strings.Contains(err.Error(), "WriteItems: SELECT-backed DML is unsupported by the jOOQ DSL; use runtime: jdbc or ydb") {
-				t.Fatalf("missing actionable diagnostic: %v", err)
-			}
+			require.False(t, err == nil || files != nil, "SELECT-backed DML must not generate a plain SELECT: generated %d files, err=%v", len(files), err)
+			require.Contains(t, err.Error(), "WriteItems: SELECT-backed DML is unsupported by the jOOQ DSL; use runtime: jdbc or ydb", "missing actionable diagnostic: %v", err)
 		})
 	}
 }
@@ -108,22 +85,16 @@ func TestJooqRejectsSelectBackedDML(t *testing.T) {
 func TestJooqKeepsEscapedLiteralSemantics(t *testing.T) {
 	for _, literal := range []string{`"line\nnext"u`, `"quote\"value"u`} {
 		a, e := analyzer.Analyze(nil, []model.Source{{Name: "q.sql", Text: "-- name: Literal :one\nSELECT " + literal + " AS value;"}})
-		if e != nil {
-			t.Fatal(e)
-		}
+		require.Nil(t, e)
 		_, e = Generate(a, Options{Runtime: "jooq"})
-		if e == nil {
-			t.Fatalf("silently changed literal %s", literal)
-		}
+		require.NotNil(t, e, "silently changed literal %s", literal)
 	}
 }
 
 func TestJooqImportsPreserveLiterals(t *testing.T) {
 	input := "package db;\n\npublic record Row(org.jooq.JSON data) { String value() { return \"org.jooq.JSON\"; } }\n"
 	output := jooqImports(input)
-	if !strings.Contains(output, `return "org.jooq.JSON";`) || !strings.Contains(output, "import org.jooq.JSON;") || !strings.Contains(output, "Row(JSON data)") {
-		t.Fatal(output)
-	}
+	require.False(t, !strings.Contains(output, `return "org.jooq.JSON";`) || !strings.Contains(output, "import org.jooq.JSON;") || !strings.Contains(output, "Row(JSON data)"), output)
 }
 
 func TestJooqExplicitDeclarationsKeepNamedSQLAndTableMapping(t *testing.T) {
@@ -134,13 +105,9 @@ func TestJooqExplicitDeclarationsKeepNamedSQLAndTableMapping(t *testing.T) {
 		}
 		sql := "-- name: Declared :many\nDECLARE $id AS Uint64;\nSELECT " + qualifier + ".id FROM " + from + " WHERE " + qualifier + ".id = $id;"
 		analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE books (id Uint64 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "queries.sql", Text: sql}})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		files, err := Generate(analysis, Options{Runtime: "jooq"})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		var generated string
 		for _, file := range files {
 			if file.Name == "Queries.java" {
@@ -148,13 +115,9 @@ func TestJooqExplicitDeclarationsKeepNamedSQLAndTableMapping(t *testing.T) {
 			}
 		}
 		for _, want := range []string{"DECLARE $id AS Uint64;", "YdbPrepareMode.DATA_QUERY", "_prepared.setObject(\"id\"", "dsl.render(BOOKS)", "dsl.fetch(_rows, YdbTypes.UINT64)", qualifier + ".id = $id"} {
-			if !strings.Contains(generated, want) {
-				t.Fatalf("missing %q in %s", want, generated)
-			}
+			require.Contains(t, generated, want, "missing %q in %s", want, generated)
 		}
-		if qualifier == "books" && !strings.Contains(generated, " AS `books`") {
-			t.Fatal("unaliased source lost qualifier under mapping", generated)
-		}
+		require.False(t, qualifier == "books" && !strings.Contains(generated, " AS `books`"), "unaliased source lost qualifier under mapping", generated)
 	}
 }
 
@@ -162,22 +125,16 @@ func TestJooqDeclaredDMLMapsQualifiedTargetColumns(t *testing.T) {
 	for _, statement := range []string{"UPDATE books SET title = $title WHERE books.id = $id;", "DELETE FROM books WHERE books.id = $id;", "DELETE FROM books WHERE (books.id = $id);"} {
 		sql := "-- name: Declared :exec\nDECLARE $id AS Uint64;\n" + statement
 		analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE books (id Uint64 NOT NULL, title Utf8 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "queries.sql", Text: sql}})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		files, err := Generate(analysis, Options{Runtime: "jooq"})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		var code string
 		for _, file := range files {
 			if file.Name == "Queries.java" {
 				code = string(file.Content)
 			}
 		}
-		if strings.Count(code, "dsl.render(BOOKS)") != 2 || strings.Contains(code, "books.id") {
-			t.Fatal("target qualifier was not mapped", code)
-		}
+		require.False(t, strings.Count(code, "dsl.render(BOOKS)") != 2 || strings.Contains(code, "books.id"), "target qualifier was not mapped", code)
 	}
 }
 
@@ -211,23 +168,17 @@ func TestJooqDeclaredSQLBytesThroughJava(t *testing.T) {
 			annotation = strings.Replace(header, ":exec", ":many", 1)
 		}
 		a, err := analyzer.Analyze(schema, []model.Source{{Name: "q.sql", Text: annotation + tc.sql}})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		q := a.Queries[0]
 		sql, _ := jdbc.SQL(q)
 		expression, err := jooqDeclaredSQL(q, sql)
 		if hasStructList(q) {
 			expression, err = jooqBatchSQL(q, sql)
 		}
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		expression = indentExpression(expression, "    ")
 		for _, line := range strings.Split(expression, "\n") {
-			if line != "" && strings.TrimSpace(line) == "" {
-				t.Fatalf("mapped SQL has a whitespace-only source line: %q", line)
-			}
+			require.False(t, line != "" && strings.TrimSpace(line) == "", "mapped SQL has a whitespace-only source line: %q", line)
 		}
 		want := "DECLARE $id AS Uint64;\n\n-- Автор 🚀\n" + tc.want
 		if i == 0 {
@@ -237,14 +188,12 @@ func TestJooqDeclaredSQLBytesThroughJava(t *testing.T) {
 	}
 	program.WriteString("}}")
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "Main.java"), []byte(program.String()), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Main.java"), []byte(program.String()), 0600))
 	for _, args := range [][]string{{"javac", "--release", "17", "Main.java"}, {"java", "-cp", dir, "Main"}} {
 		cmd := exec.Command(args[0], args[1:]...)
 		cmd.Dir = dir
 		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("%s: %v\n%s\n%s", args[0], err, out, program.String())
+			require.NoError(t, err, "%s: %v\n%s\n%s", args[0], err, out, program.String())
 		}
 	}
 }
@@ -269,9 +218,7 @@ func TestJooqDeclaredCarrierValuesWithSDK(t *testing.T) {
 	for _, tc := range cases {
 		typ := model.Type{Kind: tc.kind}
 		carrier, _, err := jooqType(typ)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		fmt.Fprintf(&program, "{ %s input = %s; PrimitiveValue value = %s; if (!java.util.Objects.deepEquals(value.%s, %s)) throw new AssertionError(%q);\n", carrier, tc.input, jooqDeclaredValue(model.Parameter{Type: typ}, "input"), tc.read, tc.want, tc.kind)
 		expression := jooqDeclaredValue(model.Parameter{Type: model.Optional(typ)}, "input")
 		fmt.Fprintf(&program, "OptionalValue present = %s; if (!present.get().equals(value)) throw new AssertionError(\"optional payload\"); input = null; OptionalValue empty = %s; if (empty.isPresent() || !empty.getType().equals(present.getType())) throw new AssertionError(\"optional schema\"); }\n", expression, expression)
@@ -282,20 +229,16 @@ func TestJooqDeclaredCarrierValuesWithSDK(t *testing.T) {
 	cmd := exec.Command(maven, "-q", "dependency:build-classpath", "-Dmdep.outputFile="+classpath)
 	cmd.Dir = filepath.Join("..", "..", "..", "tests", "examples", "java", "jooq")
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("SDK classpath: %v\n%s", err, out)
+		require.NoError(t, err, "SDK classpath: %v\n%s", err, out)
 	}
 	cp, err := os.ReadFile(classpath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "Main.java"), []byte(program.String()), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Main.java"), []byte(program.String()), 0600))
 	for _, args := range [][]string{{"javac", "-cp", strings.TrimSpace(string(cp)), "Main.java"}, {"java", "-cp", dir + string(os.PathListSeparator) + strings.TrimSpace(string(cp)), "Main"}} {
 		cmd := exec.Command(args[0], args[1:]...)
 		cmd.Dir = dir
 		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("%s: %v\n%s", args[0], err, out)
+			require.NoError(t, err, "%s: %v\n%s", args[0], err, out)
 		}
 	}
 }
@@ -309,18 +252,12 @@ func TestJooqIndexViewDSL(t *testing.T) {
 		{"```title`", "", "`title"},
 	} {
 		analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE books (id Uint64 NOT NULL, title Utf8 NOT NULL, INDEX " + tc.view + " GLOBAL SYNC ON (title), PRIMARY KEY(id));"}}, []model.Source{{Name: "queries.sql", Text: "-- name: Indexed :many\nSELECT * FROM books VIEW " + tc.view + tc.alias + " WHERE title = $title;"}})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		files, err := Generate(analysis, Options{Runtime: "jooq"})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		want := `table("{0} VIEW {1}", BOOKS, name(` + strconv.Quote(tc.name) + `))`
 		for _, file := range files {
-			if file.Name == "Queries.java" && !strings.Contains(string(file.Content), want) {
-				t.Fatalf("VIEW was lost: %s", file.Content)
-			}
+			require.False(t, file.Name == "Queries.java" && !strings.Contains(string(file.Content), want), "VIEW was lost: %s", file.Content)
 		}
 	}
 }
@@ -333,21 +270,15 @@ SELECT b.id, a.name FROM books AS b JOIN authors VIEW by_name AS a ON b.author_i
 -- name: LeftJoinAuthors :many
 SELECT books.id, authors.name FROM books VIEW by_title LEFT JOIN authors VIEW by_name ON books.author_id = authors.id WHERE books.title = $title;`
 	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: schema}}, []model.Source{{Name: "queries.sql", Text: queries}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	files, err := Generate(analysis, Options{Package: "indexjoin", Runtime: "jooq"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, file := range files {
 		if file.Name != "Queries.java" {
 			continue
 		}
 		for _, want := range []string{`.join(table("{0} VIEW {1}", AUTHORS, name("by_name")).as("a"))`, `.leftJoin(table("{0} VIEW {1}", AUTHORS, name("by_name")))`, `.from(table("{0} VIEW {1}", BOOKS, name("by_title")))`} {
-			if !strings.Contains(string(file.Content), want) {
-				t.Fatalf("missing indexed join source %s in %s", want, file.Content)
-			}
+			require.Contains(t, string(file.Content), want, "missing indexed join source %s in %s", want, file.Content)
 		}
 	}
 	t.Run("published dialect", func(t *testing.T) {
@@ -360,12 +291,10 @@ SELECT books.id, authors.name FROM books VIEW by_title LEFT JOIN authors VIEW by
 		cmd := exec.Command(maven, "-q", "dependency:build-classpath", "-Dmdep.outputFile="+classpath)
 		cmd.Dir = filepath.Join("..", "..", "..", "tests", "examples", "java", "jooq")
 		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("SDK classpath: %v\n%s", err, out)
+			require.NoError(t, err, "SDK classpath: %v\n%s", err, out)
 		}
 		cp, err := os.ReadFile(classpath)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		program := `package indexjoin;
 import java.util.*;
 import org.jooq.conf.*;
@@ -401,14 +330,12 @@ public class Main {
 		compile := []string{"-cp", strings.TrimSpace(string(cp)), "-d", dir}
 		for _, file := range files {
 			path := filepath.Join(dir, file.Name)
-			if err := os.WriteFile(path, file.Content, 0600); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, os.WriteFile(path, file.Content, 0600))
 			compile = append(compile, path)
 		}
 		for _, args := range [][]string{append([]string{"javac"}, compile...), {"java", "-cp", dir + string(os.PathListSeparator) + strings.TrimSpace(string(cp)), "indexjoin.Main"}} {
 			if out, err := exec.Command(args[0], args[1:]...).CombinedOutput(); err != nil {
-				t.Fatalf("%s: %v\n%s", args[0], err, out)
+				require.NoError(t, err, "%s: %v\n%s", args[0], err, out)
 			}
 		}
 	})
@@ -423,12 +350,10 @@ func TestJooqTableSourceRejectsUnsupportedSources(t *testing.T) {
 			p := parser.NewYQLParser(antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel))
 			p.SetErrorHandler(antlr.NewBailErrorStrategy())
 			context := p.Flatten_source()
-			if lexer.HasError() || p.HasError() || len(jooqNodes[antlr.ErrorNode](context)) != 0 {
-				t.Fatal("test source did not parse")
-			}
+			require.False(t, lexer.HasError() || p.HasError() || len(jooqNodes[antlr.ErrorNode](context)) != 0, "test source did not parse")
 			r := jooqRenderer{}
 			if sql := r.tableSource(context, model.TableBinding{}); sql != "" || r.err == nil || !strings.Contains(r.err.Error(), "unsupported jOOQ syntax") {
-				t.Fatalf("unsupported source produced SQL %q, error %v", sql, r.err)
+				require.FailNow(t, fmt.Sprintf("unsupported source produced SQL %q, error %v", sql, r.err))
 			}
 		})
 	}
@@ -438,18 +363,16 @@ func TestJooqMappingHelpersRejectInvalidTableNames(t *testing.T) {
 	schema := "CREATE TABLE `a``b` (id Uint64 NOT NULL, INDEX by_id GLOBAL SYNC ON(id), PRIMARY KEY(id));"
 	query := "-- name: Read :many\nDECLARE $id AS Uint64; SELECT id FROM `a``b` VIEW by_id WHERE id = $id;"
 	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: schema}}, []model.Source{{Name: "query.sql", Text: query}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	q := analysis.Queries[0]
 	r := jooqRenderer{query: q}
 	source := jooqNodes[*parser.Flatten_sourceContext](q.Syntax.Root)[0]
 	if sql := r.tableSource(source, q.Syntax.Relations[0]); sql != "" || r.err == nil || r.err.Error() != "cannot represent \"a`b\" as a Java identifier" {
-		t.Fatalf("invalid table produced SQL %q, error %v", sql, r.err)
+		require.FailNow(t, fmt.Sprintf("invalid table produced SQL %q, error %v", sql, r.err))
 	}
 	text, _ := jdbc.SQL(q)
 	if sql, err := jooqDeclaredSQL(q, text); sql != "" || err == nil || err.Error() != "cannot represent \"a`b\" as a Java identifier" {
-		t.Fatalf("invalid declared table produced SQL %q, error %v", sql, err)
+		require.FailNow(t, fmt.Sprintf("invalid declared table produced SQL %q, error %v", sql, err))
 	}
 }
 
@@ -463,14 +386,10 @@ func TestJooqRejectsBackticksInTableNames(t *testing.T) {
 			t.Run(table+suffix, func(t *testing.T) {
 				sql := "-- name: Declared :many\nDECLARE $id AS Uint64; SELECT id FROM " + quotedTable + suffix + " WHERE id = $id;"
 				analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: schema}}, []model.Source{{Name: "query.sql", Text: sql}})
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 				files, err := Generate(analysis, Options{Runtime: "jooq"})
 				want := fmt.Sprintf("cannot represent %q as a Java identifier", table)
-				if err == nil || err.Error() != want || files != nil {
-					t.Fatalf("generated unsupported table name: files=%v err=%v, want %q", files, err, want)
-				}
+				require.False(t, err == nil || err.Error() != want || files != nil, "generated unsupported table name: files=%v err=%v, want %q", files, err, want)
 			})
 		}
 	}

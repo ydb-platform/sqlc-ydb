@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/config"
 )
 
@@ -22,30 +24,22 @@ func TestInitHelp(t *testing.T) {
 		{"init", "--language=go", "--runtime=ydb", "--help"},
 	} {
 		code, out, stderr := invoke(append(args, "-f", path)...)
-		if code != 0 || stderr != "" {
-			t.Fatalf("%v: %d %s", args, code, stderr)
-		}
+		require.Zero(t, code, "%v: %s", args, stderr)
+		require.Empty(t, stderr, "%v", args)
 		for _, generator := range config.Generators() {
 			want := fmt.Sprintf("%-12s %s (default: %s)", generator.Language, strings.Join(generator.Runtimes, ", "), generator.DefaultRuntime)
-			if !strings.Contains(out, want) {
-				t.Errorf("%v: missing discovery entry %q", args, want)
-			}
+			assert.Contains(t, out, want, "%v", args)
 			for alias, canonical := range generator.RuntimeAliases {
-				if !strings.Contains(out, alias+" is an alias for "+canonical) {
-					t.Errorf("%v: missing alias %s for %s", args, alias, generator.Language)
-				}
+				assert.Contains(t, out, alias+" is an alias for "+canonical, "%v", args)
 			}
 		}
 		if strings.Contains(strings.Join(args, " "), "go") {
 			for _, want := range []string{"gen.go", "runtime: ydb", "emit_json_tags", "default: false", "database/sql", "Selected for this configuration: ydb"} {
-				if !strings.Contains(out, want) {
-					t.Errorf("%v: help missing %q: %s", args, want, out)
-				}
+				assert.Contains(t, out, want, "%v", args)
 			}
 		}
-		if _, err := os.Stat(path); !os.IsNotExist(err) {
-			t.Fatalf("help touched config: %v", err)
-		}
+		_, err := os.Stat(path)
+		require.ErrorIs(t, err, os.ErrNotExist, "help touched config")
 	}
 }
 
@@ -55,49 +49,36 @@ func TestInitEveryRuntime(t *testing.T) {
 			t.Run(generator.Language+"/"+runtime, func(t *testing.T) {
 				path := filepath.Join(t.TempDir(), "sqlc.yaml")
 				args := []string{"init", "--language=" + generator.Language, "--runtime=" + runtime, "--file=" + path}
-				if code, _, stderr := invoke(args...); code != 0 {
-					t.Fatal(stderr)
-				}
-				if _, err := config.Load(path); err != nil {
-					t.Fatalf("created invalid configuration: %v", err)
-				}
+				code, _, stderr := invoke(args...)
+				require.Zero(t, code, stderr)
+				_, err := config.Load(path)
+				require.NoError(t, err, "created invalid configuration")
 				data, err := os.ReadFile(path)
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 				for _, option := range generator.Options {
-					if !bytes.Contains(data, []byte(option.Name+":")) {
-						t.Errorf("config missing option %s", option.Name)
-					}
+					assert.Contains(t, string(data), option.Name+":")
 				}
 				code, out, stderr := invoke(append(args, "--help")...)
-				if code != 0 || !strings.Contains(out, "gen."+generator.Language) {
-					t.Fatalf("runtime help: %d %s %s", code, out, stderr)
-				}
-				if !strings.Contains(out, "Selected for this configuration: "+runtime) {
-					t.Errorf("help omitted selected runtime %s", runtime)
-				}
+				require.Zero(t, code, stderr)
+				require.Contains(t, out, "gen."+generator.Language)
+				assert.Contains(t, out, "Selected for this configuration: "+runtime)
 				for _, option := range generator.Options {
 					heading := fmt.Sprintf("%s (%s; default: %s)", option.Name, option.Type, option.Default)
 					if option.Required {
 						heading = fmt.Sprintf("%s (%s; required)", option.Name, option.Type)
 					}
 					for _, want := range []string{heading, option.Description} {
-						if !strings.Contains(out, want) {
-							t.Errorf("help omitted %q", want)
-						}
+						assert.Contains(t, out, want)
 					}
-					if len(option.Values) > 0 && !strings.Contains(out, "Values: "+strings.Join(option.Values, ", ")) {
-						t.Errorf("help omitted supported values for %s", option.Name)
+					if len(option.Values) > 0 {
+						assert.Contains(t, out, "Values: "+strings.Join(option.Values, ", "), option.Name)
 					}
 				}
-				if code, _, stderr := invoke(append(args, "--all-options")...); code != 0 {
-					t.Fatal(stderr)
-				}
-				after, _ := os.ReadFile(path)
-				if !bytes.Equal(data, after) {
-					t.Fatal("init modified an existing file")
-				}
+				code, _, stderr = invoke(append(args, "--all-options")...)
+				require.Zero(t, code, stderr)
+				after, err := os.ReadFile(path)
+				require.NoError(t, err)
+				require.Equal(t, data, after, "init modified an existing file")
 			})
 		}
 	}
@@ -109,9 +90,8 @@ func TestExplicitDashPrefixedFile(t *testing.T) {
 		{"init", "-f", "./-cfg.yaml"},
 	} {
 		parsed, err := parseArgs(args)
-		if err != nil || filepath.Base(parsed.file) != "-cfg.yaml" {
-			t.Fatalf("explicit dash-prefixed path %v: %q, %v", args, parsed.file, err)
-		}
+		require.NoError(t, err, "%v", args)
+		require.Equal(t, "-cfg.yaml", filepath.Base(parsed.file), "%v", args)
 	}
 }
 
@@ -140,12 +120,11 @@ func TestInitInvalidSelectionDoesNotWrite(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "sqlc.yaml")
 		// Put the file flag first so a missing final value remains missing.
 		args := append([]string{"--file", path}, tc.args...)
-		if code, _, stderr := invoke(args...); code != 1 || !strings.Contains(stderr, tc.want) {
-			t.Errorf("%v: %d %q; want %q", tc.args, code, stderr, tc.want)
-		}
-		if _, err := os.Stat(path); !os.IsNotExist(err) {
-			t.Fatalf("invalid command touched config: %v", err)
-		}
+		code, _, stderr := invoke(args...)
+		assert.Equal(t, 1, code, "%v: %s", tc.args, stderr)
+		assert.Contains(t, stderr, tc.want, "%v", tc.args)
+		_, err := os.Stat(path)
+		require.ErrorIs(t, err, os.ErrNotExist, "invalid command touched config")
 	}
 }
 
@@ -161,33 +140,24 @@ func TestInitAllOptionsAndDefaults(t *testing.T) {
 			if all {
 				args = append(args, "--all-options")
 			}
-			if code, _, stderr := invoke(args...); code != 0 {
-				t.Fatal(stderr)
-			}
+			code, _, stderr := invoke(args...)
+			require.Zero(t, code, stderr)
 			data, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			outputs = append(outputs, data)
 		}
-		if !bytes.Equal(outputs[0], outputs[1]) {
-			t.Fatalf("--all-options changed default output for %q", language)
-		}
-		if language == "" && (!bytes.Contains(outputs[0], []byte("python:")) || !bytes.Contains(outputs[0], []byte("sql_package: ydb"))) {
-			t.Fatal("legacy default must include Go ydb and Python")
-		}
+		require.Equal(t, outputs[0], outputs[1], "--all-options changed default output for %q", language)
+		require.False(t, language == "" && (!bytes.Contains(outputs[0], []byte("python:")) || !bytes.Contains(outputs[0], []byte("sql_package: ydb"))), "legacy default must include Go ydb and Python")
 	}
 }
 
 func TestInitNativeRuntimeAliases(t *testing.T) {
 	for _, language := range []string{"cpp", "java", "kotlin"} {
 		path := filepath.Join(t.TempDir(), "sqlc.yaml")
-		if code, _, stderr := invoke("init", "--language", language, "--runtime", "native", "-f", path); code != 0 {
-			t.Fatal(stderr)
-		}
+		code, _, stderr := invoke("init", "--language", language, "--runtime", "native", "-f", path)
+		require.Zero(t, code, stderr)
 		data, err := os.ReadFile(path)
-		if err != nil || !bytes.Contains(data, []byte("runtime: ydb")) {
-			t.Fatalf("%s alias did not resolve to ydb: %s, %v", language, data, err)
-		}
+		require.NoError(t, err)
+		require.Contains(t, string(data), "runtime: ydb", "%s alias did not resolve to ydb", language)
 	}
 }

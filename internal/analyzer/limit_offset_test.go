@@ -1,9 +1,9 @@
 package analyzer
 
 import (
-	"reflect"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -32,17 +32,13 @@ func TestDeclaredLimitOffsetTypes(t *testing.T) {
 		t.Run(tc.declared, func(t *testing.T) {
 			sql := "-- name: Page :many\nDECLARE $count AS " + tc.declared + "; DECLARE $skip AS " + tc.declared + "; SELECT id FROM records LIMIT $count OFFSET $skip;"
 			result, err := Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint32 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "query.sql", Text: sql}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			query := result.Queries[0]
-			if query.SQL != sql || len(query.Parameters) != 2 {
-				t.Fatalf("unexpected query: %#v", query)
-			}
+			require.Equal(t, sql, query.SQL)
+			require.Len(t, query.Parameters, 2)
 			for _, param := range query.Parameters {
-				if param.Type.String() != tc.want || !query.IsDeclaredParameter(param.Name) {
-					t.Fatalf("parameter = %#v, want declared %s", param, tc.want)
-				}
+				require.Equal(t, tc.want, param.Type.String())
+				require.True(t, query.IsDeclaredParameter(param.Name))
 			}
 		})
 	}
@@ -56,22 +52,21 @@ func TestIntegerTypeAliases(t *testing.T) {
 			schema := "CREATE TABLE records (id " + tc.alias + " NOT NULL, PRIMARY KEY(id));"
 			sql := "-- name: Read :many\nDECLARE $id AS " + tc.alias + "; SELECT CAST($id AS " + tc.alias + ") AS value FROM records WHERE id = $id;"
 			result, err := Analyze([]model.Source{{Name: "schema.sql", Text: schema}}, []model.Source{{Name: "query.sql", Text: sql}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			query := result.Queries[0]
-			if query.SQL != sql || query.Parameters[0].Type.String() != tc.want || query.ResultSets[0].Columns[0].Type.String() != tc.want || result.Catalog.Tables[0].Columns[0].Type.String() != tc.want {
-				t.Fatalf("alias was not canonicalized consistently: %#v", result)
-			}
+			require.Equal(t, sql, query.SQL)
+			require.Equal(t, tc.want, query.Parameters[0].Type.String())
+			require.Equal(t, tc.want, query.ResultSets[0].Columns[0].Type.String())
+			require.Equal(t, tc.want, result.Catalog.Tables[0].Columns[0].Type.String())
 			typ, err := parseType("List<Struct<value:" + tc.alias + "?>>")
-			if err != nil || typ.String() != "List<Struct<`value`:Optional<"+tc.want+">>>" {
-				t.Fatalf("nested alias = %s, %v", typ.String(), err)
-			}
+			require.NoError(t, err)
+			require.Equal(t, "List<Struct<`value`:Optional<"+tc.want+">>>", typ.String())
 		})
 	}
 	for _, alias := range []string{"Uint", "Unsigned", "Long", "Short", "Byte"} {
-		if _, err := parseType(alias); err == nil || !strings.Contains(err.Error(), "unsupported YQL type") {
-			t.Fatalf("unsupported alias %s: %v", alias, err)
+		{
+			_, err := parseType(alias)
+			require.ErrorContains(t, err, "unsupported YQL type")
 		}
 	}
 }
@@ -97,12 +92,8 @@ func TestLimitOffsetScalarExpressions(t *testing.T) {
 		t.Run(sql, func(t *testing.T) {
 			query := "-- name: Page :many\n" + sql
 			result, err := Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint32 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "query.sql", Text: query}})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if result.Queries[0].SQL != query {
-				t.Fatalf("SQL changed: %s", result.Queries[0].SQL)
-			}
+			require.NoError(t, err)
+			require.Equal(t, query, result.Queries[0].SQL)
 		})
 	}
 }
@@ -110,11 +101,10 @@ func TestLimitOffsetScalarExpressions(t *testing.T) {
 func TestLimitOffsetPreservesInferredTypes(t *testing.T) {
 	for _, tail := range []string{"WHERE id = $n LIMIT $n", "WHERE id = $n LIMIT 2 OFFSET $n", "WHERE id = $n LIMIT $n, 2"} {
 		result, err := Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint32 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "query.sql", Text: "-- name: Page :many\nSELECT id FROM records " + tail + ";"}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if params := result.Queries[0].Parameters; !reflect.DeepEqual(params, []model.Parameter{{Name: "n", Type: model.Type{Kind: "Uint32"}}}) {
-			t.Fatalf("parameters = %#v", params)
+		require.NoError(t, err)
+		{
+			params := result.Queries[0].Parameters
+			require.Equal(t, []model.Parameter{{Name: "n", Type: model.Type{Kind: "Uint32"}}}, params)
 		}
 	}
 }
@@ -123,20 +113,16 @@ func TestLimitOffsetAcrossUnionArmsNeedsDeclare(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint32 NOT NULL, PRIMARY KEY(id));"}}
 	statement := "SELECT id FROM records LIMIT $n UNION ALL SELECT id FROM records WHERE id = $n;"
 	_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Page :many\n" + statement}})
-	if err == nil || !strings.Contains(err.Error(), "external parameter $n has incompatible inferred types; add DECLARE") {
-		t.Fatalf("error = %v, want an explicit declaration remedy for conflicting inference", err)
-	}
+	require.ErrorContains(t, err, "external parameter $n has incompatible inferred types; add DECLARE")
 
 	sql := "-- name: Page :many\nDECLARE $n AS Uint32;\n" + statement
 	result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	query := result.Queries[0]
 	want := []model.Parameter{{Name: "n", Type: model.Type{Kind: "Uint32"}}}
-	if query.SQL != sql || !query.IsDeclaredParameter("n") || !reflect.DeepEqual(query.Parameters, want) {
-		t.Fatalf("DECLARE did not preserve the intended type and query: %#v", query)
-	}
+	require.Equal(t, sql, query.SQL)
+	require.True(t, query.IsDeclaredParameter("n"))
+	require.Equal(t, want, query.Parameters)
 }
 
 func TestLimitOffsetDiagnostics(t *testing.T) {
@@ -168,9 +154,7 @@ func TestLimitOffsetDiagnostics(t *testing.T) {
 	} {
 		t.Run(tc.sql, func(t *testing.T) {
 			_, err := Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint32 NOT NULL, label Utf8, PRIMARY KEY(id));"}}, []model.Source{{Name: "query.sql", Text: "-- name: Page :many\n" + tc.sql}})
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("error = %v, want %q", err, tc.want)
-			}
+			require.ErrorContains(t, err, tc.want)
 		})
 	}
 }
@@ -185,11 +169,10 @@ func TestLimitOffsetInDMLSelect(t *testing.T) {
 			sql := "-- name: Write :exec\nDECLARE $n AS " + typ + "; " + verb + " records " + source + ";"
 			result, err := Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint32 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "query.sql", Text: sql}})
 			if typ == "Utf8" {
-				if err == nil || !strings.Contains(err.Error(), "LIMIT expression has unsupported type Utf8") {
-					t.Fatalf("%s: %v", sql, err)
-				}
-			} else if err != nil || result.Queries[0].Parameters[0].Type.String() != "Int32" {
-				t.Fatalf("%s: %#v, %v", sql, result, err)
+				require.ErrorContains(t, err, "LIMIT expression has unsupported type Utf8")
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, "Int32", result.Queries[0].Parameters[0].Type.String())
 			}
 		}
 	}

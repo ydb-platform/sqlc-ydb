@@ -1,8 +1,9 @@
 package analyzer
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 	"github.com/ydb-platform/sqlc-ydb/internal/yql/builtins"
@@ -25,20 +26,13 @@ func TestStructuredMemberExpressions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Lookup :many\nDECLARE $key AS " + tc.declaration + ";\n" + tc.sql}})
 			if tc.failure != "" {
-				if err == nil || !strings.Contains(err.Error(), tc.failure) {
-					t.Fatalf("error = %v, want %s", err, tc.failure)
-				}
+				require.ErrorContains(t, err, tc.failure)
 				return
 			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got.Queries[0].ResultSets[0].Columns[0].Type.String() != tc.result {
-				t.Fatal(got.Queries[0])
-			}
-			if len(got.Queries[0].Parameters) != 1 || got.Queries[0].Parameters[0].Name != "key" {
-				t.Fatal(got.Queries[0].Parameters)
-			}
+			require.NoError(t, err)
+			require.Equal(t, tc.result, got.Queries[0].ResultSets[0].Columns[0].Type.String())
+			require.Len(t, got.Queries[0].Parameters, 1)
+			require.Equal(t, "key", got.Queries[0].Parameters[0].Name)
 		})
 	}
 }
@@ -50,23 +44,18 @@ func TestFunctionReturningStructMemberAccessUsesFieldNames(t *testing.T) {
 	}}
 	options := Options{Functions: []builtins.Signature{{Name: "MakeRecord", Returns: resultType}}}
 	got, err := AnalyzeWithOptions(nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nSELECT MakeRecord().id AS value;"}}, options)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Queries[0].ResultSets[0].Columns[0].Type.Kind != "Uint64" {
-		t.Fatal(got.Queries[0])
-	}
+	require.NoError(t, err)
+	require.Equal(t, "Uint64", got.Queries[0].ResultSets[0].Columns[0].Type.Kind)
 }
 
 func TestUnaryNotResolvesFunctionAtomically(t *testing.T) {
 	options := Options{Functions: []builtins.Signature{{Name: "IsReady", Returns: model.Type{Kind: "Bool"}}}}
-	if _, err := AnalyzeWithOptions(nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nSELECT true AS value WHERE NOT IsReady();"}}, options); err != nil {
-		t.Fatal(err)
+	{
+		_, err := AnalyzeWithOptions(nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nSELECT true AS value WHERE NOT IsReady();"}}, options)
+		require.NoError(t, err)
 	}
 	_, err := AnalyzeWithOptions(nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nSELECT true AS value WHERE NOT Unknown::Ready();"}}, options)
-	if err == nil || !strings.Contains(err.Error(), "unsupported YQL function") {
-		t.Fatalf("unknown function under NOT: %v", err)
-	}
+	require.ErrorContains(t, err, "unsupported YQL function")
 }
 
 func TestConfiguredStructTypeValidation(t *testing.T) {
@@ -76,9 +65,7 @@ func TestConfiguredStructTypeValidation(t *testing.T) {
 		{Kind: "Uint64", Fields: []model.StructField{{Name: "hidden", Type: model.Type{Kind: "Utf8"}}}},
 	} {
 		_, err := AnalyzeWithOptions(nil, nil, Options{Functions: []builtins.Signature{{Name: "Broken", Returns: typ}}})
-		if err == nil {
-			t.Fatalf("accepted invalid configured type: %#v", typ)
-		}
+		require.Error(t, err)
 	}
 }
 
@@ -89,9 +76,7 @@ func TestUnknownFunctionsCannotHideInStructuredExpressions(t *testing.T) {
 	} {
 		query := "-- name: Read :one\nDECLARE $id AS Uint64;\nSELECT " + expression + " AS value;"
 		_, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: query}})
-		if err == nil || !strings.Contains(err.Error(), "unsupported YQL function") {
-			t.Fatalf("%s: %v", expression, err)
-		}
+		require.ErrorContains(t, err, "unsupported YQL function")
 	}
 }
 
@@ -104,9 +89,7 @@ func TestStructuredMemberBasesAndSuffixes(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\n" + test.query}})
-			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("error = %v, want %q", err, test.want)
-			}
+			require.ErrorContains(t, err, test.want)
 		})
 	}
 }
@@ -114,12 +97,8 @@ func TestStructuredMemberBasesAndSuffixes(t *testing.T) {
 func TestStructuredTableColumnMemberAccess(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, payload Struct<label:Utf8,count:Uint64> NOT NULL, PRIMARY KEY(id));`}}
 	got, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\nSELECT r.payload.count AS value FROM records r;"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Queries[0].ResultSets[0].Columns[0].Type.Kind != "Uint64" {
-		t.Fatal(got.Queries[0])
-	}
+	require.NoError(t, err)
+	require.Equal(t, "Uint64", got.Queries[0].ResultSets[0].Columns[0].Type.Kind)
 }
 
 func TestParseTypeRejectsStatementInjectionAndMalformedInput(t *testing.T) {
@@ -130,8 +109,9 @@ func TestParseTypeRejectsStatementInjectionAndMalformedInput(t *testing.T) {
 		"List<Struct<id:Uint64>",
 		"Uint64 trailing",
 	} {
-		if typ, err := ParseType(text); err == nil {
-			t.Fatalf("ParseType(%q) = %v, want error", text, typ)
+		{
+			_, err := ParseType(text)
+			require.Error(t, err)
 		}
 	}
 }
@@ -139,22 +119,15 @@ func TestParseTypeRejectsStatementInjectionAndMalformedInput(t *testing.T) {
 func TestBytesAliasEveryTypePosition(t *testing.T) {
 	for _, spelling := range []string{"Bytes", "String"} {
 		got, err := Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL,payload " + spelling + ", PRIMARY KEY(id));"}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\nDECLARE $raw AS " + spelling + ";\nSELECT payload FROM records WHERE payload=$raw;"}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got.Queries[0].Parameters[0].Type.Kind != "String" {
-			t.Fatal(got.Queries[0].Parameters)
-		}
+		require.NoError(t, err)
+		require.Equal(t, "String", got.Queries[0].Parameters[0].Type.Kind)
 		typ, err := parseType("List<Struct<data:" + spelling + ">>")
-		if err != nil || typ.Elem.Fields[0].Type.Kind != "String" {
-			t.Fatalf("type=%v error=%v", typ, err)
-		}
+		require.NoError(t, err)
+		require.Equal(t, "String", typ.Elem.Fields[0].Type.Kind)
 	}
 }
 
 func TestUnknownFunctionInPredicateRejected(t *testing.T) {
 	_, err := Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\nDECLARE $id AS Uint64;\nSELECT id FROM records WHERE id=Unknown::Hash($id);"}})
-	if err == nil || !strings.Contains(err.Error(), "unsupported YQL function") {
-		t.Fatalf("error=%v", err)
-	}
+	require.ErrorContains(t, err, "unsupported YQL function")
 }

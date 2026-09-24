@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -27,17 +28,13 @@ func batchQuery() model.AnalyzedQuery {
 func TestBatchInsertTypedCollection(t *testing.T) {
 	for _, runtime := range []string{"ydb", "jdbc"} {
 		files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{batchQuery()}}, Options{Runtime: runtime})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		var code string
 		for _, file := range files {
 			code += string(file.Content)
 		}
 		for _, want := range []string{"CreateBooksBooksItem", "tech.ydb.table.values.ListType.of(\n", "tech.ydb.table.values.StructType.of(", "PrimitiveValue.newJson(", "PrimitiveValue.newTimestamp("} {
-			if !strings.Contains(code, want) {
-				t.Fatalf("%s missing %s in %s", runtime, want, code)
-			}
+			require.Contains(t, code, want, "%s missing %s in %s", runtime, want, code)
 		}
 	}
 }
@@ -69,17 +66,13 @@ func declaredMixedQuery() model.AnalyzedQuery {
 
 func TestBatchOptionalSchemaAndRangeChecks(t *testing.T) {
 	files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{optionalBatchQuery()}}, Options{Runtime: "jdbc"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	var code string
 	for _, f := range files {
 		code += string(f.Content)
 	}
 	for _, want := range []string{"OptionalType.of(tech.ydb.table.values.PrimitiveType.Uint8)", "OptionalType.of(tech.ydb.table.values.PrimitiveType.Json)", "parameter $books.rank is outside Uint8 range", "_batchItem"} {
-		if !strings.Contains(code, want) {
-			t.Fatalf("missing %q in %s", want, code)
-		}
+		require.Contains(t, code, want, "missing %q in %s", want, code)
 	}
 }
 
@@ -97,9 +90,7 @@ func TestBatchRejectsUnsupportedFieldsAndNames(t *testing.T) {
 			q := batchQuery()
 			q.Parameters[0].Type.Elem.Fields = tc.fields
 			files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{q}}, Options{Runtime: "jdbc"})
-			if err == nil || files != nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("expected %q, got files=%v err=%v", tc.want, files, err)
-			}
+			require.False(t, err == nil || files != nil || !strings.Contains(err.Error(), tc.want), "expected %q, got files=%v err=%v", tc.want, files, err)
 		})
 	}
 }

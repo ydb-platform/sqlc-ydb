@@ -1,9 +1,9 @@
 package analyzer
 
 import (
-	"reflect"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -27,20 +27,14 @@ func TestImplicitProjectionNames(t *testing.T) {
 		t.Run(tc.sql, func(t *testing.T) {
 			sql := "-- name: Read :many\n" + tc.sql
 			result, err := Analyze([]model.Source{{Name: "schema.sql", Text: schema}}, []model.Source{{Name: "query.sql", Text: sql}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			query := result.Queries[0]
 			var names []string
 			for _, column := range query.ResultSets[0].Columns {
 				names = append(names, column.ResultName())
 			}
-			if !reflect.DeepEqual(names, tc.names) {
-				t.Fatalf("names %v, want %v", names, tc.names)
-			}
-			if query.SQL != sql {
-				t.Fatalf("SQL changed: %s", query.SQL)
-			}
+			require.Equal(t, tc.names, names)
+			require.Equal(t, sql, query.SQL)
 		})
 	}
 }
@@ -57,24 +51,16 @@ func TestImplicitProjectionNamesSurviveWildcardExpansion(t *testing.T) {
 		t.Run(tc.projection, func(t *testing.T) {
 			sql := "-- name: Read :many\nSELECT " + tc.projection + " FROM records AS r ORDER BY column1;"
 			result, err := Analyze([]model.Source{{Name: "schema.sql", Text: schema}}, []model.Source{{Name: "query.sql", Text: sql}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			query := result.Queries[0]
 			want := "-- name: Read :many\nSELECT " + tc.want + " FROM records AS r ORDER BY column1;"
-			if query.SQL != want {
-				t.Fatalf("SQL:\n%s\nwant:\n%s", query.SQL, want)
-			}
+			require.Equal(t, want, query.SQL)
 			var names []string
 			for _, column := range query.ResultSets[0].Columns {
 				names = append(names, column.ResultName())
 			}
-			if !reflect.DeepEqual(names, tc.names) {
-				t.Fatalf("names %v", names)
-			}
-			if strings.Contains(query.SQL, "column2") {
-				t.Fatal("wildcard expansion renamed original expression")
-			}
+			require.Equal(t, tc.names, names)
+			require.NotContains(t, query.SQL, "column2")
 		})
 	}
 }

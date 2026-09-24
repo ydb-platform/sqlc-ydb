@@ -1,9 +1,11 @@
 package builtins
 
 import (
-	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -51,17 +53,11 @@ func TestCommonType(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := CommonType(tt.args...)
 			if tt.error != "" {
-				if err == nil || !strings.Contains(err.Error(), tt.error) {
-					t.Fatalf("CommonType() error = %v, want substring %q", err, tt.error)
-				}
+				require.ErrorContains(t, err, tt.error)
 				return
 			}
-			if err != nil {
-				t.Fatalf("CommonType() unexpected error: %v", err)
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("CommonType() = %#v, want %#v", got, tt.want)
-			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -72,12 +68,11 @@ func TestResolveDoesNotMutateArguments(t *testing.T) {
 	backing[1] = scalar("Int32")
 	backing[2] = scalar("Sentinel")
 	args := backing[:2]
-	if _, err := Resolve("IF", args); err != nil {
-		t.Fatalf("Resolve(IF) unexpected error: %v", err)
+	{
+		_, err := Resolve("IF", args)
+		require.NoError(t, err)
 	}
-	if backing[2].Kind != "Sentinel" {
-		t.Fatalf("Resolve(IF) mutated caller backing array: %#v", backing)
-	}
+	require.Equal(t, "Sentinel", backing[2].Kind)
 }
 
 func TestResolveCoreFunctions(t *testing.T) {
@@ -106,12 +101,8 @@ func TestResolveCoreFunctions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := Resolve(tt.name, tt.args)
-			if err != nil {
-				t.Fatalf("Resolve(%q) unexpected error: %v", tt.name, err)
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("Resolve(%q) = %#v, want %#v", tt.name, got, tt.want)
-			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -153,12 +144,8 @@ func TestResolveAggregates(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name+typeList(tt.args), func(t *testing.T) {
 			got, err := Resolve(tt.name, tt.args)
-			if err != nil {
-				t.Fatalf("Resolve(%q) unexpected error: %v", tt.name, err)
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("Resolve(%q) = %#v, want %#v", tt.name, got, tt.want)
-			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -192,12 +179,8 @@ func TestResolveLibraryFunctions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name+typeList(tt.args), func(t *testing.T) {
 			got, err := Resolve(tt.name, tt.args)
-			if err != nil {
-				t.Fatalf("Resolve(%q) unexpected error: %v", tt.name, err)
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("Resolve(%q) = %#v, want %#v", tt.name, got, tt.want)
-			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -252,13 +235,10 @@ func TestResolveEveryDocumentedLibraryEntry(t *testing.T) {
 func assertResolved(t *testing.T, name string, args []model.Type, want model.Type) {
 	t.Helper()
 	got, err := Resolve(name, args)
-	if err != nil {
-		t.Errorf("Resolve(%q) unexpected error: %v", name, err)
+	if !assert.NoError(t, err, "Resolve(%q)", name) {
 		return
 	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("Resolve(%q) = %#v, want %#v", name, got, want)
-	}
+	assert.Equal(t, want, got)
 }
 
 func TestResolveRejectsUnknownOrInvalidCalls(t *testing.T) {
@@ -298,12 +278,8 @@ func TestResolveRejectsUnknownOrInvalidCalls(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name+typeList(tt.args), func(t *testing.T) {
 			got, err := Resolve(tt.name, tt.args)
-			if err == nil || !strings.Contains(err.Error(), tt.error) {
-				t.Fatalf("Resolve(%q) = %#v, error %v; want error containing %q", tt.name, got, err, tt.error)
-			}
-			if got.Kind != "" {
-				t.Fatalf("Resolve(%q) returned a type on error: %#v", tt.name, got)
-			}
+			require.ErrorContains(t, err, tt.error)
+			require.Equal(t, "", got.Kind)
 		})
 	}
 }
@@ -323,9 +299,8 @@ func TestResolveCoalesceNumericCommonTypes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := Resolve(tt.function, tt.args)
-			if err != nil || !got.Equal(tt.want) {
-				t.Fatalf("Resolve(%q) = %#v, error %v; want %s", tt.function, got, err, tt.want.String())
-			}
+			require.NoError(t, err)
+			require.True(t, got.Equal(tt.want))
 		})
 	}
 }
@@ -349,19 +324,14 @@ func TestResolveCoreStringPositionsRejectUnsupportedTypes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := Resolve(tt.function, tt.args)
-			if err == nil {
-				t.Fatalf("Resolve(%q) = %#v, want error", tt.function, got)
-			}
+			_, err := Resolve(tt.function, tt.args)
+			require.Error(t, err)
 			if strings.Contains(tt.name, "Utf8 source") {
-				if !strings.Contains(err.Error(), "Unicode::Substring") {
-					t.Fatalf("Resolve(%q) error = %v; want Unicode::Substring advice", tt.function, err)
-				}
+				require.Contains(t, err.Error(), "Unicode::Substring")
 				return
 			}
-			if !strings.Contains(err.Error(), "CAST") || !strings.Contains(err.Error(), "Uint32") {
-				t.Fatalf("Resolve(%q) error = %v; want CAST AS Uint32 advice", tt.name, err)
-			}
+			require.Contains(t, err.Error(), "CAST")
+			require.Contains(t, err.Error(), "Uint32")
 		})
 	}
 }
@@ -399,17 +369,11 @@ func TestCast(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := Cast(tt.source, tt.target)
 			if tt.error != "" {
-				if err == nil || !strings.Contains(err.Error(), tt.error) {
-					t.Fatalf("Cast() error = %v, want substring %q", err, tt.error)
-				}
+				require.ErrorContains(t, err, tt.error)
 				return
 			}
-			if err != nil {
-				t.Fatalf("Cast() unexpected error: %v", err)
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("Cast() = %#v, want %#v", got, tt.want)
-			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }

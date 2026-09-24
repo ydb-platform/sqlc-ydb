@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/cli"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
@@ -28,28 +29,20 @@ func TestLiveYDBSharedExpressions(t *testing.T) {
 	combinedSchema := schema + "\n" + collisionSchema
 	queries := strings.ReplaceAll(sharedExpressionsQueries, "records", table)
 	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: combinedSchema}}, []model.Source{{Name: "queries.sql", Text: queries}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	configuration := "version: '2'\nsql:\n"
 	for _, runtime := range []string{"ydb", "database/sql"} {
 		configuration += "- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n  gen:\n    go:\n      package: records\n      out: " + strings.ReplaceAll(runtime, "/", "_") + "\n      sql_package: " + runtime + "\n"
 	}
 	for name, contents := range map[string]string{"schema.sql": combinedSchema, "queries.sql": queries, "sqlc.yaml": configuration, "go.mod": "module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(contents), 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(contents), 0600))
 	}
 	var stdout, stderr bytes.Buffer
-	if code := cli.Run([]string{"generate", "-f", filepath.Join(dir, "sqlc.yaml")}, &stdout, &stderr); code != 0 {
-		t.Fatalf("generate shared expressions: %s", stderr.String())
-	}
+	require.Zero(t, cli.Run([]string{"generate", "-f", filepath.Join(dir, "sqlc.yaml")}, &stdout, &stderr), "generate shared expressions: %s", stderr.String())
 	// Timezone types are analyzed and compared with server metadata separately;
 	// their Go row representation is outside the generated scalar subset.
 	timezones, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: schema}}, []model.Source{{Name: "timezone.sql", Text: "-- name: Timezones :many\nSELECT CurrentTzDate('Europe/Moscow') AS day, CurrentTzDatetime(CAST('Europe/Moscow' AS String?)) AS seconds, CurrentTzTimestamp('invalid-zone') AS micros FROM " + table + " LIMIT 0;"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	analysis.Queries = append(analysis.Queries, timezones.Queries...)
 	var metadata strings.Builder
 	var collisionSQL string

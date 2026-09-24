@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -40,14 +41,10 @@ func TestGeneratedSQLUsesQuotedLinesAndPreservesText(t *testing.T) {
 	} {
 		for _, runtime := range []string{"database/sql", "ydb"} {
 			source := generatedSQLSource(t, runtime, tc.sql)
-			if !strings.Contains(string(source), tc.wantLiteral) {
-				t.Fatalf("%s SQL is not a readable quoted expression:\n%s", runtime, source)
-			}
-			if !strings.Contains(string(source), "// -- name: GetUser :one\nfunc (q *Queries) GetUser") {
-				t.Fatalf("%s query annotation is not attached to the generated method:\n%s", runtime, source)
-			}
+			require.Contains(t, string(source), tc.wantLiteral, "%s SQL is not a readable quoted expression:\n%s", runtime, source)
+			require.Contains(t, string(source), "// -- name: GetUser :one\nfunc (q *Queries) GetUser", "%s query annotation is not attached to the generated method:\n%s", runtime, source)
 			if got := generatedSQLValue(t, source); got != tc.wantSQL {
-				t.Fatalf("%s SQL = %q, want original SQL %q", runtime, got, tc.wantSQL)
+				require.Equal(t, tc.wantSQL, got, "%s SQL = %q, want original SQL %q", runtime, got, tc.wantSQL)
 			}
 		}
 	}
@@ -57,9 +54,7 @@ func TestGeneratedSQLAlignsMultilineQuotedLines(t *testing.T) {
 	for _, runtime := range []string{"database/sql", "ydb"} {
 		source := string(generatedSQLSource(t, runtime, "SELECT id, bio\nFROM users;"))
 		want := "(ctx, \"\"+\n\t\t\"SELECT id, bio\\n\"+\n\t\t\"FROM users;\","
-		if !strings.Contains(source, want) {
-			t.Fatalf("%s multiline SQL literals are not aligned after gofmt:\n%s", runtime, source)
-		}
+		require.Contains(t, source, want, "%s multiline SQL literals are not aligned after gofmt:\n%s", runtime, source)
 	}
 }
 
@@ -67,9 +62,7 @@ func TestGeneratedSQLPrefixesSingleLineWithEmptyLiteral(t *testing.T) {
 	for _, runtime := range []string{"database/sql", "ydb"} {
 		source := string(generatedSQLSource(t, runtime, "SELECT id, bio FROM users;"))
 		want := "(ctx, \"\"+\n\t\t\"SELECT id, bio FROM users;\","
-		if !strings.Contains(source, want) {
-			t.Fatalf("%s single-line SQL does not start on its own aligned line:\n%s", runtime, source)
-		}
+		require.Contains(t, source, want, "%s single-line SQL does not start on its own aligned line:\n%s", runtime, source)
 	}
 }
 
@@ -79,7 +72,7 @@ func TestGeneratedSQLPreservesExplicitDeclarations(t *testing.T) {
 	for _, runtime := range []string{"database/sql", "ydb"} {
 		source := generatedSQLSourceForAnalysis(t, runtime, in)
 		if got := generatedSQLValue(t, source); got != in.Queries[0].SQL {
-			t.Fatalf("%s executable SQL=%q, want original %q", runtime, got, in.Queries[0].SQL)
+			require.Equal(t, in.Queries[0].SQL, got, "%s executable SQL=%q, want original %q", runtime, got, in.Queries[0].SQL)
 		}
 	}
 }
@@ -104,9 +97,7 @@ func TestGeneratedDatabaseSQLFormatsMultiParameterQueryRowCall(t *testing.T) {
 		"\t\t&row.Name,\n" +
 		"\t\t&row.Bio,\n" +
 		"\t)\n\n\treturn row, err"
-	if !strings.Contains(string(source), want) {
-		t.Fatalf("multi-parameter QueryRowContext call was not formatted readably:\n%s", source)
-	}
+	require.Contains(t, string(source), want, "multi-parameter QueryRowContext call was not formatted readably:\n%s", source)
 }
 
 func TestGeneratedDatabaseSQLFormatsParameterizedCallsAndScans(t *testing.T) {
@@ -127,9 +118,7 @@ func TestGeneratedDatabaseSQLFormatsParameterizedCallsAndScans(t *testing.T) {
 		"\n\t}\n\n\tif err := rows.Err(); err != nil {",
 		"\n\t}\n\n\treturn items, nil",
 	} {
-		if !strings.Contains(source, want) {
-			t.Fatalf("generated database/sql source misses %q:\n%s", want, source)
-		}
+		require.Contains(t, source, want, "generated database/sql source misses %q:\n%s", want, source)
 	}
 }
 
@@ -142,9 +131,7 @@ func TestGeneratedYDBManyUsesNamedColumnScans(t *testing.T) {
 			query.Named("id", &row.ID),
 			query.Named("name", &row.Name),
 		); err != nil {`
-	if !strings.Contains(string(source), want) {
-		t.Fatalf("native :many rows were not scanned by column name:\n%s", source)
-	}
+	require.Contains(t, string(source), want, "native :many rows were not scanned by column name:\n%s", source)
 }
 
 func TestGeneratedYDBManyValidatesOneResultSet(t *testing.T) {
@@ -189,18 +176,12 @@ func TestGeneratedYDBManyValidatesOneResultSet(t *testing.T) {
 	}
 
 	return items, nil`
-	if !strings.Contains(source, want) {
-		t.Fatalf("native :many query does not validate exactly one result set:\n%s", source)
-	}
+	require.Contains(t, source, want, "native :many query does not validate exactly one result set:\n%s", source)
 	for _, unwanted := range []string{"q.db.Do", "query.Session", "QueryResultSet", "attemptItems"} {
-		if strings.Contains(source, unwanted) {
-			t.Fatalf("native :many source contains caller-owned retry/materialization API %q:\n%s", unwanted, source)
-		}
+		require.False(t, strings.Contains(source, unwanted), "native :many source contains caller-owned retry/materialization API %q:\n%s", unwanted, source)
 	}
 	for _, wantImport := range []string{`"errors"`, `"io"`, `"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xerrors"`} {
-		if !strings.Contains(source, wantImport) {
-			t.Fatalf("native :many source misses import %s:\n%s", wantImport, source)
-		}
+		require.Contains(t, source, wantImport, "native :many source misses import %s:\n%s", wantImport, source)
 	}
 }
 
@@ -209,17 +190,13 @@ func TestGeneratedYDBWithoutManyOmitsStreamingImports(t *testing.T) {
 	in.Queries = []model.AnalyzedQuery{in.Queries[0], in.Queries[2]}
 	source := string(generatedSQLSourceForAnalysis(t, "ydb", in))
 	for _, unwanted := range []string{`"errors"`, `"io"`} {
-		if strings.Contains(source, unwanted) {
-			t.Fatalf("native source without :many imports %s:\n%s", unwanted, source)
-		}
+		require.False(t, strings.Contains(source, unwanted), "native source without :many imports %s:\n%s", unwanted, source)
 	}
 }
 
 func TestGeneratedYDBInterfaceSupportsClientsSessionsAndTransactions(t *testing.T) {
 	files, err := Generate(sample(), Options{Package: "db", Runtime: "ydb"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	var source string
 	for _, file := range files {
 		if file.Name == "db.go" {
@@ -230,14 +207,10 @@ func TestGeneratedYDBInterfaceSupportsClientsSessionsAndTransactions(t *testing.
 		`Query(context.Context, string, ...query.ExecuteOption) (query.Result, error)`,
 		"\t\"context\"\n\n\t\"github.com/ydb-platform/ydb-go-sdk/v3/query\"",
 	} {
-		if !strings.Contains(source, want) {
-			t.Fatalf("native DBTX misses %q:\n%s", want, source)
-		}
+		require.Contains(t, source, want, "native DBTX misses %q:\n%s", want, source)
 	}
 	for _, unwanted := range []string{"QueryResultSet", "query.Operation", "query.DoOption"} {
-		if strings.Contains(source, unwanted) {
-			t.Fatalf("native DBTX exposes %q:\n%s", unwanted, source)
-		}
+		require.False(t, strings.Contains(source, unwanted), "native DBTX exposes %q:\n%s", unwanted, source)
 	}
 }
 
@@ -245,9 +218,7 @@ func TestGeneratedYDBManyEmitsEmptySliceOnlyOnSuccess(t *testing.T) {
 	in := sample()
 	in.Queries = in.Queries[1:2]
 	files, err := Generate(in, Options{Package: "db", Runtime: "ydb", EmitEmptySlices: true})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	var source string
 	for _, file := range files {
 		if file.Name == "query.sql.go" {
@@ -260,13 +231,9 @@ func TestGeneratedYDBManyEmitsEmptySliceOnlyOnSuccess(t *testing.T) {
 		"return nil, xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)",
 		"return items, nil",
 	} {
-		if !strings.Contains(source, want) {
-			t.Fatalf("emit_empty_slices contract misses %q:\n%s", want, source)
-		}
+		require.Contains(t, source, want, "emit_empty_slices contract misses %q:\n%s", want, source)
 	}
-	if strings.Contains(source, "return make([]ListUsersRow, 0),") {
-		t.Fatalf("emit_empty_slices returned a non-nil slice with an error:\n%s", source)
-	}
+	require.False(t, strings.Contains(source, "return make([]ListUsersRow, 0),"), "emit_empty_slices returned a non-nil slice with an error:\n%s", source)
 }
 
 func TestGeneratedManyDecimalValidationReturnsNilOnError(t *testing.T) {
@@ -283,12 +250,8 @@ func TestGeneratedManyDecimalValidationReturnsNilOnError(t *testing.T) {
 		if runtime == "ydb" {
 			wantReturn = "return nil, xerrors.WithStackTrace(err)"
 		}
-		if !strings.Contains(source, "if err := validateDecimalParameter(") || !strings.Contains(source, wantReturn) {
-			t.Fatalf("%s decimal validation does not return a nil slice on error:\n%s", runtime, source)
-		}
-		if strings.Contains(source, "return make([]FindUsersRow, 0), err") {
-			t.Fatalf("%s decimal validation returned an empty slice with an error:\n%s", runtime, source)
-		}
+		require.False(t, !strings.Contains(source, "if err := validateDecimalParameter(") || !strings.Contains(source, wantReturn), "%s decimal validation does not return a nil slice on error:\n%s", runtime, source)
+		require.False(t, strings.Contains(source, "return make([]FindUsersRow, 0), err"), "%s decimal validation returned an empty slice with an error:\n%s", runtime, source)
 	}
 }
 
@@ -302,9 +265,7 @@ func TestGeneratedYDBOneUsesNamedColumnScans(t *testing.T) {
 		query.Named("id", &row.ID),
 		query.Named("users.bio", &row.Bio),
 	); err != nil {`
-	if !strings.Contains(string(source), want) {
-		t.Fatalf("native :one row was not scanned by wire name:\n%s", source)
-	}
+	require.Contains(t, string(source), want, "native :one row was not scanned by wire name:\n%s", source)
 }
 
 func TestGeneratedQueryImportsSeparateStandardLibraryAndExternalPackages(t *testing.T) {
@@ -318,12 +279,8 @@ func TestGeneratedQueryImportsSeparateStandardLibraryAndExternalPackages(t *test
 		} else {
 			want = "\t\"context\"\n\t\"errors\"\n\t\"io\"\n\n\tydb \"github.com/ydb-platform/ydb-go-sdk/v3\""
 		}
-		if !strings.Contains(source, want) {
-			t.Fatalf("%s imports do not separate stdlib and SDK packages:\n%s", runtime, source)
-		}
-		if strings.Contains(source, "import (\n\n") || strings.Contains(source, "\n\n)") {
-			t.Fatalf("%s imports contain an empty group:\n%s", runtime, source)
-		}
+		require.Contains(t, source, want, "%s imports do not separate stdlib and SDK packages:\n%s", runtime, source)
+		require.False(t, strings.Contains(source, "import (\n\n") || strings.Contains(source, "\n\n)"), "%s imports contain an empty group:\n%s", runtime, source)
 	}
 }
 
@@ -334,9 +291,7 @@ func TestGeneratedYDBNamedScanUsesWireNameAndGoFieldName(t *testing.T) {
 
 	source := generatedSQLSourceForAnalysis(t, "ydb", in)
 	want := `query.Named("users.name", &row.Name)`
-	if !strings.Contains(string(source), want) {
-		t.Fatalf("native named scan did not bind the wire name to the generated Go field:\n%s", source)
-	}
+	require.Contains(t, string(source), want, "native named scan did not bind the wire name to the generated Go field:\n%s", source)
 }
 
 func TestGeneratedSQLSpecialCharacters(t *testing.T) {
@@ -360,9 +315,7 @@ func TestGeneratedSQLSpecialCharacters(t *testing.T) {
 			t.Run(runtime+"/"+tc.name, func(t *testing.T) {
 				got := generatedSQLValue(t, generatedSQLSource(t, runtime, tc.sql))
 				want := tc.sql
-				if got != want {
-					t.Fatalf("SQL = %q, want original SQL %q", got, want)
-				}
+				require.Equal(t, want, got, "SQL = %q, want original SQL %q", got, want)
 			})
 		}
 	}
@@ -379,15 +332,13 @@ func generatedSQLSource(t *testing.T, runtime, sql string) []byte {
 func generatedSQLSourceForAnalysis(t *testing.T, runtime string, in *model.AnalysisResult) []byte {
 	t.Helper()
 	files, err := Generate(in, Options{Package: "db", Runtime: runtime})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, file := range files {
 		if file.Name == "query.sql.go" {
 			return file.Content
 		}
 	}
-	t.Fatal("generated query file missing")
+	require.FailNow(t, "generated query file missing")
 	return nil
 }
 
@@ -395,9 +346,7 @@ func generatedSQLValue(t *testing.T, source []byte) string {
 	t.Helper()
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "query.sql.go", source, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	var result string
 	found := false
 	ast.Inspect(file, func(node ast.Node) bool {
@@ -413,15 +362,11 @@ func generatedSQLValue(t *testing.T, source []byte) string {
 		expr := call.Args[1]
 		start, end := fset.Position(expr.Pos()).Offset, fset.Position(expr.End()).Offset
 		value, err := types.Eval(fset, nil, token.NoPos, string(source[start:end]))
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		result = constant.StringVal(value.Value)
 		return false
 	})
-	if !found {
-		t.Fatal("inline SQL argument missing")
-	}
+	require.False(t, !found, "inline SQL argument missing")
 	return result
 }
 
@@ -460,31 +405,23 @@ func runLiveTypedDatabaseSQL(t *testing.T, dsn string) {
 		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "amount", Type: model.Optional(decimal)}, {Name: "id", Type: model.Optional(uuid)}}}},
 	}}}
 	files, err := Generate(input, Options{Package: "db", Runtime: "database/sql"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	for _, f := range files {
-		if err := os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600))
 	}
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"), 0600))
 	source := `package db
 import ("context"; "database/sql"; "testing"; "math/big"; "github.com/ydb-platform/ydb-go-sdk/v3/pkg/decimal"; "github.com/google/uuid"; ydb "github.com/ydb-platform/ydb-go-sdk/v3"; "github.com/ydb-platform/ydb-go-sdk/v3/types")
 func TestTyped(t *testing.T) { ctx:=context.Background(); driver,err:=ydb.Open(ctx,` + strconv.Quote(dsn) + `,ydb.WithAnonymousCredentials());if err!=nil{t.Fatal(err)};defer driver.Close(ctx);db:=sql.OpenDB(ydb.MustConnector(driver));defer db.Close();q:=New(db);row,err:=q.RoundTripTyped(ctx,RoundTripTypedParams{Amount:nil,ID:nil});if err!=nil||row.Amount!=nil||row.ID!=nil{t.Fatalf("nil row=%#v err=%v",row,err)};amount:=&types.Decimal{Bytes:decimal.BigIntToByte(big.NewInt(123450000000),22),Precision:22,Scale:9};id:=uuid.MustParse("6e73b41c-4ede-4d08-9cfb-b7462d9e498b");row,err=q.RoundTripTyped(ctx,RoundTripTypedParams{Amount:amount,ID:&id});if err!=nil||row.Amount==nil||row.Amount.Precision!=22||row.Amount.Scale!=9||row.Amount.Bytes!=amount.Bytes||row.ID==nil||*row.ID!=id{t.Fatalf("typed row=%#v err=%v",row,err)} }
 `
-	if err := os.WriteFile(filepath.Join(dir, "typed_test.go"), []byte(source), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "typed_test.go"), []byte(source), 0600))
 	commandCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(commandCtx, "go", "test", "-mod=mod", ".")
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("typed database/sql adapter failed against %s:\n%s", dsn, out)
+		require.NoError(t, err, "typed database/sql adapter failed against %s:\n%s", dsn, out)
 	}
 }
 
@@ -518,18 +455,12 @@ func runLiveTypedNative(t *testing.T, dsn string) {
 		}}},
 	})
 	files, err := Generate(input, Options{Package: "db", Runtime: "ydb"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	for _, f := range files {
-		if err := os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600))
 	}
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"), 0600))
 	source := `package db
 import ("context"; "testing"; "time"; "math/big"; "github.com/ydb-platform/ydb-go-sdk/v3/pkg/decimal"; "github.com/google/uuid"; ydb "github.com/ydb-platform/ydb-go-sdk/v3"; "github.com/ydb-platform/ydb-go-sdk/v3/types")
 func TestTyped(t *testing.T) { ctx:=context.Background(); driver,err:=ydb.Open(ctx,` + strconv.Quote(dsn) + `,ydb.WithAnonymousCredentials());if err!=nil{t.Fatal(err)};defer driver.Close(ctx);q:=New(driver.Query());id:=uuid.MustParse("6e73b41c-4ede-4d08-9cfb-b7462d9e498b");row,err:=q.RoundTripTyped(ctx,RoundTripTypedParams{Ids:[]uint64{},NullableIds:[]*uint64{nil},Amount:nil,ID:id});if err!=nil||row.Amount!=nil||row.ID!=id||row.Size!=0||row.HasTwo||row.NullableSize!=1||row.HasOne{t.Fatalf("empty/nil row=%#v err=%v",row,err)};amount:=&types.Decimal{Bytes:decimal.BigIntToByte(big.NewInt(123450000000),22),Precision:22,Scale:9};one:=uint64(1);row,err=q.RoundTripTyped(ctx,RoundTripTypedParams{Ids:[]uint64{1,2},NullableIds:[]*uint64{nil,&one},Amount:amount,ID:id});if err!=nil||row.Amount==nil||row.Amount.Precision!=22||row.Amount.Scale!=9||row.Amount.Bytes!=amount.Bytes||row.ID!=id||row.Size!=2||!row.HasTwo||row.NullableSize!=2||!row.HasOne{t.Fatalf("typed row=%#v err=%v",row,err)} }
@@ -548,15 +479,13 @@ func TestTypedYsonAndDateLists(t *testing.T) {
 }
 
 `
-	if err := os.WriteFile(filepath.Join(dir, "typed_test.go"), []byte(source), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "typed_test.go"), []byte(source), 0600))
 	commandCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(commandCtx, "go", "test", "-mod=mod", ".")
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("typed native adapter failed against %s:\n%s", dsn, out)
+		require.NoError(t, err, "typed native adapter failed against %s:\n%s", dsn, out)
 	}
 }
 
@@ -573,36 +502,24 @@ func runLiveGenerated(t *testing.T, dsn, table, runtime string) {
 	}}
 	if runtime == "database/sql" {
 		_, listErr := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{input.Queries[3]}}, Options{Package: "db", Runtime: runtime})
-		if listErr == nil || !strings.Contains(listErr.Error(), "List results") {
-			t.Fatalf("database/sql List result: %v", listErr)
-		}
+		require.ErrorContains(t, listErr, "List results", "database/sql List result: %v", listErr)
 		input.Queries = input.Queries[:3]
 	}
 	files, err := Generate(input, Options{Package: "db", Runtime: runtime})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	for _, f := range files {
-		if err := os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600))
 	}
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"), 0600))
 	test := liveTestSource(dsn, table, runtime)
-	if err := os.WriteFile(filepath.Join(dir, "live_test.go"), []byte(test), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "live_test.go"), []byte(test), 0600))
 	commandCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(commandCtx, "go", "test", "-mod=mod", ".")
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("live %s adapter failed against %s:\n%s", runtime, dsn, out)
-	}
+	require.NoError(t, err, "live %s adapter failed against %s:\n%s", runtime, dsn, out)
 }
 
 func liveTestSource(dsn, table, runtime string) string {
@@ -630,32 +547,24 @@ func TestAbsoluteSourceIsCompilableQueryFile(t *testing.T) {
 		in.Queries[i].Source.File = "/private/project/queries.sql"
 	}
 	files, err := Generate(in, Options{Package: "db", Runtime: "database/sql"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	for _, f := range files {
-		if err := os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600))
 	}
-	if err := os.WriteFile(filepath.Join(dir, "use.go"), []byte("package db\nvar _ = (*Queries).GetUser\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module generated\n\ngo 1.26.0\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "use.go"), []byte("package db\nvar _ = (*Queries).GetUser\n"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module generated\n\ngo 1.26.0\n"), 0600))
 	cmd := exec.Command("go", "test", ".")
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("absolute source query file was ignored or failed to compile:\n%s", out)
+		require.NoError(t, err, "absolute source query file was ignored or failed to compile:\n%s", out)
 	}
 	for _, f := range files {
 		if f.Name == "queries.sql.go" {
 			return
 		}
 	}
-	t.Fatal("expected basename output queries.sql.go")
+	require.FailNow(t, "expected basename output queries.sql.go")
 }
 func TestGenerateCompilesYDB(t *testing.T) {
 	in := sample()
@@ -665,27 +574,17 @@ func TestGenerateCompilesYDB(t *testing.T) {
 
 func TestGeneratedDatabaseSQLRuntime(t *testing.T) {
 	files, err := Generate(sample(), Options{Package: "db", Runtime: "database/sql", EmitEmptySlices: true})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	for _, f := range files {
-		if err := os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600))
 	}
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module generated\n\ngo 1.26.0\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "runtime_test.go"), []byte(runtimeTest), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module generated\n\ngo 1.26.0\n"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "runtime_test.go"), []byte(runtimeTest), 0600))
 	cmd := exec.Command("go", "test", "-mod=mod", ".")
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("generated runtime behavior failed:\n%s", out)
-	}
+	require.NoError(t, err, "generated runtime behavior failed:\n%s", out)
 }
 
 const runtimeTest = `package db
@@ -711,50 +610,36 @@ func compile(t *testing.T, opts Options) {
 func compileInput(t *testing.T, input *model.AnalysisResult, opts Options) {
 	t.Helper()
 	files, err := Generate(input, opts)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	for _, f := range files {
-		if err := os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600))
 	}
 	mod := "module generated\n\ngo 1.26.0\n"
 	mod += "\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(mod), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte(mod), 0600))
 	cmd := exec.Command("go", "test", "-mod=mod", ".")
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("generated %s code does not compile:\n%s", opts.Runtime, out)
-	}
-	if opts.Runtime == "database/sql" && opts.EmitJSONTags && !strings.Contains(string(files[0].Content), "json:\"id\"") {
-		t.Fatal("JSON tags were not emitted")
-	}
+	require.NoError(t, err, "generated %s code does not compile:\n%s", opts.Runtime, out)
+	require.False(t, opts.Runtime == "database/sql" && opts.EmitJSONTags && !strings.Contains(string(files[0].Content), "json:\"id\""), "JSON tags were not emitted")
 }
 
 func TestRejectsUnsupportedType(t *testing.T) {
 	_, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.Exec, Parameters: []model.Parameter{{Name: "p", Type: model.Type{Kind: "Dict"}}}}}}, Options{Runtime: "ydb"})
-	if err == nil || !strings.Contains(err.Error(), "unsupported YQL type") {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.ErrorContains(t, err, "unsupported YQL type", "unexpected error: %v", err)
 }
 
 func TestRejectsExecRows(t *testing.T) {
 	for _, runtime := range []string{"ydb", "database/sql"} {
 		_, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Delete", Command: model.ExecRows}}}, Options{Runtime: runtime})
-		if err == nil || !strings.Contains(err.Error(), ":execrows") {
-			t.Fatalf("%s: %v", runtime, err)
-		}
+		require.ErrorContains(t, err, ":execrows", "%s: %v", runtime, err)
 	}
 }
 
 func TestGoNameInitialismID(t *testing.T) {
 	if got := goName("author_id"); got != "AuthorID" {
-		t.Fatalf("author_id => %q", got)
+		require.Equal(t, "AuthorID", got, "author_id => %q", got)
 	}
 }
 
@@ -787,9 +672,7 @@ func TestNoParameterQueryFilesCompileWithoutUnusedRuntimeImports(t *testing.T) {
 
 func TestDatabaseSQLRejectsQueryNamedWithTx(t *testing.T) {
 	_, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "WithTx", Command: model.Exec}}}, Options{Package: "db", Runtime: "database/sql"})
-	if err == nil || !strings.Contains(err.Error(), `query name "WithTx" conflicts with generated Queries.WithTx`) {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.ErrorContains(t, err, `query name "WithTx" conflicts with generated Queries.WithTx`, "unexpected error: %v", err)
 }
 
 func TestQueriesPreserveCaseDistinctNames(t *testing.T) {
@@ -817,9 +700,7 @@ func TestGenerateCompilesYDBJSONAndTimestampParameters(t *testing.T) {
 	compileInput(t, in, Options{Package: "db", Runtime: "ydb"})
 	compileInput(t, in, Options{Package: "db", Runtime: "database/sql"})
 	files, err := Generate(in, Options{Package: "db", Runtime: "database/sql"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	var source string
 	for _, file := range files {
 		if strings.Contains(file.Name, ".sql.go") {
@@ -834,13 +715,9 @@ func TestGenerateCompilesYDBJSONAndTimestampParameters(t *testing.T) {
 		`sql.Named("optional_document", types.NullableJSONDocumentValue(arg.OptionalDocument))`,
 		`sql.Named("available", arg.Available)`,
 	} {
-		if !strings.Contains(source, call) {
-			t.Fatalf("database/sql binding lacks %s:\n%s", call, source)
-		}
+		require.Contains(t, source, call, "database/sql binding lacks %s:\n%s", call, source)
 	}
-	if strings.Contains(source, `github.com/ydb-platform/ydb-go-sdk/v3/table`) || strings.Contains(source, `table.ValueParam`) {
-		t.Fatalf("database/sql typed bindings retain the obsolete table wrapper:\n%s", source)
-	}
+	require.False(t, strings.Contains(source, `github.com/ydb-platform/ydb-go-sdk/v3/table`) || strings.Contains(source, `table.ValueParam`), "database/sql typed bindings retain the obsolete table wrapper:\n%s", source)
 }
 
 func TestGenerateCompilesNativeTypedListsDecimalAndUUID(t *testing.T) {
@@ -867,9 +744,7 @@ func TestGenerateCompilesNativeTypedListsDecimalAndUUID(t *testing.T) {
 	}}}
 	compileInput(t, in, Options{Package: "db", Runtime: "ydb", EmitInterface: true})
 	files, err := Generate(in, Options{Package: "db", Runtime: "ydb", EmitInterface: true})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	var source string
 	for _, file := range files {
 		if file.Name == "query.sql.go" {
@@ -890,9 +765,7 @@ func TestGenerateCompilesNativeTypedListsDecimalAndUUID(t *testing.T) {
 		".BeginOptional().Uuid(arg.OptionalID).EndOptional()",
 		"callOptions = append(callOptions, query.WithParameters(parameters.Build()))",
 	} {
-		if !strings.Contains(source, want) {
-			t.Fatalf("generated native binding lacks %q:\n%s", want, source)
-		}
+		require.Contains(t, source, want, "generated native binding lacks %q:\n%s", want, source)
 	}
 }
 
@@ -906,9 +779,7 @@ func TestGenerateCompilesDatabaseSQLDecimalAndUUID(t *testing.T) {
 	}}}
 	compileInput(t, in, Options{Package: "db", Runtime: "database/sql"})
 	files, err := Generate(in, Options{Package: "db", Runtime: "database/sql"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	var source string
 	for _, file := range files {
 		if file.Name == "query.sql.go" {
@@ -919,9 +790,7 @@ func TestGenerateCompilesDatabaseSQLDecimalAndUUID(t *testing.T) {
 		`sql.Named("amount", types.DecimalValue(&types.Decimal{Bytes: arg.Amount.Bytes, Precision: 35, Scale: 12}))`,
 		`sql.Named("id", types.NullableUUIDTypedValue(arg.ID))`,
 	} {
-		if !strings.Contains(source, want) {
-			t.Fatalf("generated database/sql binding lacks %q:\n%s", want, source)
-		}
+		require.Contains(t, source, want, "generated database/sql binding lacks %q:\n%s", want, source)
 	}
 }
 
@@ -965,34 +834,24 @@ func TestRejectsInvalidDecimalInsideListResult(t *testing.T) {
 		Name: "ListAmounts", Command: model.Many,
 		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "amounts", Type: list}}}},
 	}}}, Options{Runtime: "ydb"})
-	if err == nil || !strings.Contains(err.Error(), "Decimal requires precision") {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.ErrorContains(t, err, "Decimal requires precision", "unexpected error: %v", err)
 }
 
 func runGeneratedRuntimeTest(t *testing.T, input *model.AnalysisResult, opts Options, source string) {
 	t.Helper()
 	files, err := Generate(input, opts)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	for _, f := range files {
-		if err := os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600))
 	}
 	mod := "module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(mod), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "runtime_test.go"), []byte(source), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte(mod), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "runtime_test.go"), []byte(source), 0600))
 	cmd := exec.Command("go", "test", "-mod=mod", ".")
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("generated %s runtime behavior failed:\n%s", opts.Runtime, out)
+		require.NoError(t, err, "generated %s runtime behavior failed:\n%s", opts.Runtime, out)
 	}
 }
 
@@ -1017,9 +876,7 @@ func TestNativeOptionsAreForwardedAndCannotReplaceTypedArguments(t *testing.T) {
 		{Name: "Put", Command: model.Exec, Parameters: []model.Parameter{{Name: "id", Type: u64}}},
 	}}
 	files, err := Generate(in, Options{Package: "db", Runtime: "ydb"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	var source string
 	for _, file := range files {
 		if file.Name == "query.sql.go" {
@@ -1034,9 +891,7 @@ func TestNativeOptionsAreForwardedAndCannotReplaceTypedArguments(t *testing.T) {
 		"callOptions = append(callOptions, query.WithParameters(parameters.Build()))",
 		"err := q.db.Exec(ctx, \"\",\n\t\tcallOptions...,\n\t)\n\n\treturn xerrors.WithStackTrace(err)",
 	} {
-		if !strings.Contains(source, want) {
-			t.Fatalf("native option forwarding lacks %q:\n%s", want, source)
-		}
+		require.Contains(t, source, want, "native option forwarding lacks %q:\n%s", want, source)
 	}
 }
 
@@ -1055,9 +910,7 @@ func TestRejectsUnsupportedListAndDecimalShapes(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Bad", Command: model.Exec, Parameters: []model.Parameter{{Name: "p", Type: tc.type_}}}}}, Options{Runtime: tc.runtime})
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			require.ErrorContains(t, err, tc.want, "unexpected error: %v", err)
 		})
 	}
 }
@@ -1081,17 +934,13 @@ func TestLists(t *testing.T){
 }
 `)
 	files, err := Generate(in, Options{Package: "db", Runtime: "database/sql"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	var source string
 	for _, f := range files {
 		source += string(f.Content)
 	}
 	for _, want := range []string{`sql.Named("ids", bindFindBooksIds(arg.Ids))`, `sql.Named("tags", bindFindBooksTags(arg.Tags))`} {
-		if !strings.Contains(source, want) {
-			t.Fatalf("missing %q:\n%s", want, source)
-		}
+		require.Contains(t, source, want, "missing %q:\n%s", want, source)
 	}
 }
 
@@ -1100,14 +949,10 @@ func TestRejectsNestedOptionalNativeListElementFromYQL(t *testing.T) {
 DECLARE $values AS List<Optional<Optional<Uint64>>>;
 SELECT $values AS values;
 `}})
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err, "Analyze() error = %v", err)
 
 	_, err = Generate(result, Options{Runtime: "ydb"})
-	if err == nil || !strings.Contains(err.Error(), "List element must be a scalar or Optional<scalar>") {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.ErrorContains(t, err, "List element must be a scalar or Optional<scalar>", "unexpected error: %v", err)
 }
 
 func ptr(t model.Type) *model.Type { return &t }
@@ -1125,9 +970,7 @@ func TestGenerateCompilesDatabaseSQLJSONOnlyQueryFile(t *testing.T) {
 
 func TestRejectsBlankIdentifierPackage(t *testing.T) {
 	_, err := Generate(&model.AnalysisResult{}, Options{Package: "_", Runtime: "database/sql"})
-	if err == nil || !strings.Contains(err.Error(), `invalid Go package "_"`) {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.ErrorContains(t, err, `invalid Go package "_"`, "unexpected error: %v", err)
 }
 
 func TestCompileTypedParametersAcrossSources(t *testing.T) {
@@ -1171,9 +1014,7 @@ func TestCompileListParameterMatrix(t *testing.T) {
 		compileInput(t, in, Options{Package: "db", Runtime: runtime})
 	}
 	files, err := Generate(in, Options{Package: "db", Runtime: "ydb"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	var source string
 	for _, file := range files {
 		if file.Name == "query.sql.go" {
@@ -1181,9 +1022,7 @@ func TestCompileListParameterMatrix(t *testing.T) {
 		}
 	}
 	for _, want := range []string{".YSON(listItem", "types.NullableYSONValueFromBytes(listItem"} {
-		if !strings.Contains(source, want) {
-			t.Fatalf("native YSON list binding lacks %q:\n%s", want, source)
-		}
+		require.Contains(t, source, want, "native YSON list binding lacks %q:\n%s", want, source)
 	}
 }
 
@@ -1214,9 +1053,7 @@ func TestRejectsExtendedTemporalNativeListParameters(t *testing.T) {
 					Name: "Bind", Command: model.Exec,
 					Parameters: []model.Parameter{{Name: "values", Type: model.Type{Kind: "List", Elem: &element}}},
 				}}}, Options{Runtime: "ydb"})
-				if err == nil || !strings.Contains(err.Error(), "SDK list builder has no "+kind+" method") {
-					t.Fatalf("unexpected error: %v", err)
-				}
+				require.ErrorContains(t, err, "SDK list builder has no "+kind+" method", "unexpected error: %v", err)
 			})
 		}
 	}
@@ -1227,10 +1064,8 @@ func TestGeneratedBatchSQLPreservesIndentationAndLineBreaks(t *testing.T) {
 	for _, runtime := range []string{"database/sql", "ydb"} {
 		source := generatedSQLSource(t, runtime, "-- name: GetUser :one\r\n"+body)
 		if got := generatedSQLValue(t, source); got != body {
-			t.Fatalf("%s changed original batch SQL bytes:\ngot %q\nwant %q", runtime, got, body)
+			require.Equal(t, body, got, "%s changed original batch SQL bytes:\ngot %q\nwant %q", runtime, got, body)
 		}
-		if !strings.Contains(string(source), `"    book_id: Uint64, \r\n"`) {
-			t.Fatalf("%s lost readable Struct indentation:\n%s", runtime, source)
-		}
+		require.Contains(t, string(source), `"    book_id: Uint64, \r\n"`, "%s lost readable Struct indentation:\n%s", runtime, source)
 	}
 }

@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	queryservice "github.com/ydb-platform/ydb-go-genproto/Ydb_Query_V1"
 	tableservice "github.com/ydb-platform/ydb-go-genproto/Ydb_Table_V1"
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
@@ -65,9 +67,7 @@ func testClient(t *testing.T, table tableServer, query queryServer) *Client {
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(server.Stop)
 	conn, err := grpc.NewClient("passthrough:///database-test", grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) { return listener.DialContext(ctx) }))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
 	return &Client{conn: conn, tables: tableservice.NewTableServiceClient(conn), queries: queryservice.NewQueryServiceClient(conn), database: "/local", token: "test-token", timeout: time.Second}
 }
@@ -75,9 +75,9 @@ func testClient(t *testing.T, table tableServer, query queryServer) *Client {
 func TestDescribeTableSessionlessMetadata(t *testing.T) {
 	client := testClient(t, tableServer{describe: func(ctx context.Context, request *Ydb_Table.DescribeTableRequest) (*Ydb_Table.DescribeTableResponse, error) {
 		checkHeadersAndDeadline(t, ctx)
-		if request.GetPath() != "/local/items" || request.GetSessionId() != "" || request.GetOperationParams().GetOperationMode() != Ydb_Operations.OperationParams_SYNC {
-			t.Errorf("unexpected describe request: %v", request)
-		}
+		assert.Equal(t, "/local/items", request.GetPath())
+		assert.Empty(t, request.GetSessionId())
+		assert.Equal(t, Ydb_Operations.OperationParams_SYNC, request.GetOperationParams().GetOperationMode())
 		result, err := anypb.New(&Ydb_Table.DescribeTableResult{Columns: []*Ydb_Table.ColumnMeta{
 			{Name: "id", Type: primitive(Ydb.Type_UINT64), DefaultValue: &Ydb_Table.ColumnMeta_FromSequence{FromSequence: &Ydb_Table.SequenceDescription{Name: proto.String("_serial_column_id")}}},
 			{Name: "title", Type: optional(primitive(Ydb.Type_UTF8))},
@@ -88,12 +88,13 @@ func TestDescribeTableSessionlessMetadata(t *testing.T) {
 		return &Ydb_Table.DescribeTableResponse{Operation: &Ydb_Operations.Operation{Ready: true, Status: Ydb.StatusIds_SUCCESS, Result: result}}, nil
 	}}, queryServer{})
 	table, err := client.DescribeTable(context.Background(), "items")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if table.Name != "items" || len(table.Columns) != 2 || table.Columns[0].Table != "items" || !table.Columns[0].SequenceGenerated || table.Columns[1].Type.String() != "Optional<Utf8>" || len(table.PrimaryKey) != 1 || table.PrimaryKey[0] != "id" {
-		t.Fatalf("wrong table metadata: %+v", table)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "items", table.Name)
+	require.Len(t, table.Columns, 2)
+	require.Equal(t, "items", table.Columns[0].Table)
+	require.True(t, table.Columns[0].SequenceGenerated)
+	require.Equal(t, "Optional<Utf8>", table.Columns[1].Type.String())
+	require.Equal(t, []string{"id"}, table.PrimaryKey)
 }
 
 func TestDescribeTablePathResolution(t *testing.T) {
@@ -126,30 +127,24 @@ func TestDescribeTablePathResolution(t *testing.T) {
 			}}, queryServer{})
 			table, err := client.DescribeTable(context.Background(), tc.name)
 			if tc.wantError {
-				if err == nil || !strings.Contains(err.Error(), "relative table paths must not contain '..' segments") {
-					t.Errorf("got %v; expected an actionable parent traversal error", err)
-				}
+				assert.ErrorContains(t, err, "relative table paths must not contain '..' segments")
 				select {
 				case sent := <-requests:
-					t.Errorf("rejected relative path reached YDB as %q", sent)
+					assert.Fail(t, "rejected relative path reached YDB", "path: %q", sent)
 				default:
 				}
 				return
 			}
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			select {
 			case sent := <-requests:
-				if sent != tc.path {
-					t.Fatalf("path = %q, want %q", sent, tc.path)
-				}
+				require.Equal(t, tc.path, sent, "path = %q, want %q", sent, tc.path)
 			default:
-				t.Fatal("table was not described")
+				require.FailNow(t, "table was not described")
 			}
-			if table.Name != tc.name || table.Columns[0].Table != tc.name {
-				t.Fatalf("logical source name was changed: %+v", table)
-			}
+			require.Equal(t, tc.name, table.Name)
+			require.NotEmpty(t, table.Columns)
+			require.Equal(t, tc.name, table.Columns[0].Table)
 		})
 	}
 }
@@ -168,15 +163,11 @@ func TestDescribeTableAbsolutePathAndErrors(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			client := testClient(t, tableServer{describe: func(_ context.Context, request *Ydb_Table.DescribeTableRequest) (*Ydb_Table.DescribeTableResponse, error) {
-				if request.GetPath() != "/other/items" {
-					t.Errorf("absolute path changed: %q", request.GetPath())
-				}
+				assert.Equal(t, "/other/items", request.GetPath(), "absolute path changed: %q", request.GetPath())
 				return &Ydb_Table.DescribeTableResponse{Operation: tc.op}, nil
 			}}, queryServer{})
 			_, err := client.DescribeTable(context.Background(), "/other/items")
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("got %v, want %q", err, tc.want)
-			}
+			require.ErrorContains(t, err, tc.want)
 		})
 	}
 }
@@ -185,14 +176,15 @@ func TestValidateQueryOnlyExplainsOriginalSQL(t *testing.T) {
 	const sql = "DECLARE $id AS Uint64;\nUPSERT INTO items (id) VALUES ($id);"
 	client := testClient(t, tableServer{}, queryServer{explain: func(request *Ydb_Query.ExecuteQueryRequest, stream queryservice.QueryService_ExecuteQueryServer) error {
 		checkHeadersAndDeadline(t, stream.Context())
-		if request.GetExecMode() != Ydb_Query.ExecMode_EXEC_MODE_EXPLAIN || request.GetQueryContent().GetText() != sql || request.GetQueryContent().GetSyntax() != Ydb_Query.Syntax_SYNTAX_YQL_V1 || request.GetTxControl() != nil || request.GetSessionId() != "" || len(request.GetParameters()) != 0 {
-			t.Errorf("request must only explain original SQL without parameter values: %v", request)
-		}
+		assert.Equal(t, Ydb_Query.ExecMode_EXEC_MODE_EXPLAIN, request.GetExecMode())
+		assert.Equal(t, sql, request.GetQueryContent().GetText())
+		assert.Equal(t, Ydb_Query.Syntax_SYNTAX_YQL_V1, request.GetQueryContent().GetSyntax())
+		assert.Nil(t, request.GetTxControl())
+		assert.Empty(t, request.GetSessionId())
+		assert.Empty(t, request.GetParameters())
 		return stream.Send(&Ydb_Query.ExecuteQueryResponsePart{Status: Ydb.StatusIds_SUCCESS})
 	}})
-	if err := client.ValidateQuery(context.Background(), sql); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, client.ValidateQuery(context.Background(), sql))
 }
 
 func TestValidateQueryResponseErrors(t *testing.T) {
@@ -217,9 +209,7 @@ func TestValidateQueryResponseErrors(t *testing.T) {
 				return nil
 			}})
 			err := client.ValidateQuery(context.Background(), "SELECT 1;")
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("got %v, want %q", err, tc.want)
-			}
+			require.False(t, err == nil || !strings.Contains(err.Error(), tc.want), "got %v, want %q", err, tc.want)
 		})
 	}
 }
@@ -230,41 +220,30 @@ func TestRequestDeadlineAndCancellation(t *testing.T) {
 		return status.FromContextError(stream.Context().Err()).Err()
 	}})
 	client.timeout = 20 * time.Millisecond
-	if err := client.ValidateQuery(context.Background(), "SELECT 1;"); status.Code(errors.Unwrap(err)) != codes.DeadlineExceeded {
-		t.Fatalf("expected deadline, got %v", err)
-	}
+	err := client.ValidateQuery(context.Background(), "SELECT 1;")
+	require.Equal(t, codes.DeadlineExceeded, status.Code(errors.Unwrap(err)), "expected deadline, got %v", err)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := client.ValidateQuery(ctx, "SELECT 1;"); status.Code(errors.Unwrap(err)) != codes.Canceled {
-		t.Fatalf("expected cancellation, got %v", err)
-	}
+	err = client.ValidateQuery(ctx, "SELECT 1;")
+	require.Equal(t, codes.Canceled, status.Code(errors.Unwrap(err)), "expected cancellation, got %v", err)
 }
 
 func checkHeadersAndDeadline(t *testing.T, ctx context.Context) {
 	t.Helper()
 	md, _ := metadata.FromIncomingContext(ctx)
-	if strings.Join(md.Get("x-ydb-database"), ",") != "/local" || strings.Join(md.Get("x-ydb-auth-ticket"), ",") != "test-token" {
-		t.Errorf("wrong database/auth headers: %v", md)
-	}
-	if deadline, ok := ctx.Deadline(); !ok || time.Until(deadline) > time.Second {
-		t.Error("missing configured per-RPC deadline")
-	}
+	assert.False(t, strings.Join(md.Get("x-ydb-database"), ",") != "/local" || strings.Join(md.Get("x-ydb-auth-ticket"), ",") != "test-token", "wrong database/auth headers: %v", md)
+	deadline, ok := ctx.Deadline()
+	assert.True(t, ok && time.Until(deadline) <= time.Second, "missing configured per-RPC deadline")
 }
 
 func TestTLSConnectionWithCustomCA(t *testing.T) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	certificate := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "sqlc-ydb test"}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, IsCA: true, BasicConstraintsValid: true}
 	der, err := x509.CreateCertificate(rand.Reader, certificate, certificate, &key.PublicKey, key)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	server := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key}}})))
 	queryservice.RegisterQueryServiceServer(server, queryServer{explain: func(_ *Ydb_Query.ExecuteQueryRequest, stream queryservice.QueryService_ExecuteQueryServer) error {
 		return stream.Send(&Ydb_Query.ExecuteQueryResponsePart{Status: Ydb.StatusIds_SUCCESS})
@@ -272,36 +251,22 @@ func TestTLSConnectionWithCustomCA(t *testing.T) {
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(server.Stop)
 	ca := filepath.Join(t.TempDir(), "ca.pem")
-	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600))
 	client, err := New(config.ResolvedDatabase{Endpoint: listener.Addr().String(), Database: "/local", Secure: true, CAFile: ca, Timeout: time.Second})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = client.Close() })
-	if err := client.ValidateQuery(context.Background(), "SELECT 1;"); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, client.ValidateQuery(context.Background(), "SELECT 1;"))
 	untrusted, err := New(config.ResolvedDatabase{Endpoint: listener.Addr().String(), Database: "/local", Secure: true, Timeout: time.Second})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = untrusted.Close() })
-	if err := untrusted.ValidateQuery(context.Background(), "SELECT 1;"); err == nil || !strings.Contains(err.Error(), "certificate") {
-		t.Fatalf("expected untrusted certificate error, got %v", err)
-	}
+	require.ErrorContains(t, untrusted.ValidateQuery(context.Background(), "SELECT 1;"), "certificate")
 }
 
 func TestInvalidCA(t *testing.T) {
 	ca := filepath.Join(t.TempDir(), "invalid.pem")
-	if err := os.WriteFile(ca, []byte("not a certificate"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(ca, []byte("not a certificate"), 0o600))
 	_, err := New(config.ResolvedDatabase{Secure: true, CAFile: ca, Timeout: time.Second})
-	if err == nil || !strings.Contains(err.Error(), "no valid PEM") {
-		t.Fatalf("got %v", err)
-	}
+	require.False(t, err == nil || !strings.Contains(err.Error(), "no valid PEM"), "got %v", err)
 }
 
 func TestValidateQuerySuggestsExplicitParameterDeclarations(t *testing.T) {
@@ -326,17 +291,11 @@ func TestValidateQuerySuggestsExplicitParameterDeclarations(t *testing.T) {
 				return stream.Send(&Ydb_Query.ExecuteQueryResponsePart{Status: Ydb.StatusIds_GENERIC_ERROR, Issues: []*Ydb_Issue.IssueMessage{tc.issue}})
 			}})
 			err := client.ValidateQuery(context.Background(), "SELECT $id;")
-			if err == nil || !strings.Contains(err.Error(), "YDB GENERIC_ERROR") || !strings.Contains(err.Error(), tc.issue.GetMessage()) {
-				t.Fatalf("server diagnostic was lost: %v", err)
-			}
+			require.False(t, err == nil || !strings.Contains(err.Error(), "YDB GENERIC_ERROR") || !strings.Contains(err.Error(), tc.issue.GetMessage()), "server diagnostic was lost: %v", err)
 			for _, nested := range tc.issue.GetIssues() {
-				if !strings.Contains(err.Error(), nested.GetMessage()) {
-					t.Fatalf("nested diagnostic was changed: %v", err)
-				}
+				require.True(t, strings.Contains(err.Error(), nested.GetMessage()), "nested diagnostic was changed: %v", err)
 			}
-			if strings.Contains(err.Error(), "DECLARE $var AS <YQL type>;") != tc.wantHint {
-				t.Fatalf("declaration hint mismatch: %v", err)
-			}
+			require.Equal(t, tc.wantHint, strings.Contains(err.Error(), "DECLARE $var AS <YQL type>;"), "declaration hint mismatch: %v", err)
 		})
 	}
 }

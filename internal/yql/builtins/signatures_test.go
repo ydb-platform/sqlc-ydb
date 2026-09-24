@@ -2,29 +2,29 @@ package builtins
 
 import (
 	"math/big"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
 func TestSignatureFittingIntegerLiteral(t *testing.T) {
 	r, err := NewRegistry([]Signature{{Name: "Acme::Byte", Arguments: []Parameter{{Type: scalar("Uint8")}}, Returns: scalar("Bool")}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, kind := range []string{"Int32", "Uint64"} {
 		result, err := r.ResolveCall("Acme::Byte", []CallArgument{{Type: scalar(kind), IntegerLiteral: big.NewInt(50)}})
-		if err != nil || result.Kind != "Bool" {
-			t.Fatalf("%s fitting literal: result %s, error %v", kind, result.String(), err)
-		}
+		require.NoError(t, err)
+		require.Equal(t, "Bool", result.Kind)
 	}
 	for _, argument := range []CallArgument{
 		{Type: scalar("Int32"), IntegerLiteral: big.NewInt(256)},
 		{Type: scalar("Int32")},
 	} {
-		if _, err := r.ResolveCall("Acme::Byte", []CallArgument{argument}); err == nil {
-			t.Fatalf("accepted non-fitting argument %+v", argument)
+		{
+			_, err := r.ResolveCall("Acme::Byte", []CallArgument{argument})
+			require.Error(t, err)
 		}
 	}
 }
@@ -32,24 +32,25 @@ func TestSignatureFittingIntegerLiteral(t *testing.T) {
 func TestUnicodeAcceptsValidStringLiteral(t *testing.T) {
 	value := "жніўня"
 	for _, name := range []string{"Unicode::GetLength", "Unicode::Reverse"} {
-		if _, err := defaultRegistry.ResolveCall(name, []CallArgument{{Type: scalar("String"), StringLiteral: &value}}); err != nil {
-			t.Fatalf("%s literal: %v", name, err)
+		{
+			_, err := defaultRegistry.ResolveCall(name, []CallArgument{{Type: scalar("String"), StringLiteral: &value}})
+			require.NoError(t, err)
 		}
-		if _, err := defaultRegistry.ResolveCall(name, []CallArgument{{Type: scalar("String")}}); err == nil {
-			t.Fatalf("%s accepted a nonliteral String", name)
+		{
+			_, err := defaultRegistry.ResolveCall(name, []CallArgument{{Type: scalar("String")}})
+			require.Error(t, err)
 		}
 	}
 	bad := string([]byte{0xff})
-	if _, err := defaultRegistry.ResolveCall("Unicode::GetLength", []CallArgument{{Type: scalar("String"), StringLiteral: &bad}}); err == nil {
-		t.Fatal("accepted invalid UTF-8 literal")
+	{
+		_, err := defaultRegistry.ResolveCall("Unicode::GetLength", []CallArgument{{Type: scalar("String"), StringLiteral: &bad}})
+		require.Error(t, err)
 	}
 }
 
 func TestRegistryResolvesDigestSignatures(t *testing.T) {
 	r, err := NewRegistry(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, tc := range []struct {
 		name string
 		args []CallArgument
@@ -64,12 +65,8 @@ func TestRegistryResolvesDigestSignatures(t *testing.T) {
 		{"Digest::NumericHash", []CallArgument{{Type: model.Optional(scalar("Uint64"))}}, model.Optional(scalar("Uint64"))},
 	} {
 		got, err := r.ResolveCall(tc.name, tc.args)
-		if err != nil {
-			t.Fatalf("ResolveCall(%s): %v", tc.name, err)
-		}
-		if !got.Equal(tc.want) {
-			t.Fatalf("ResolveCall(%s) = %s, want %s", tc.name, got.String(), tc.want.String())
-		}
+		require.NoError(t, err)
+		require.True(t, got.Equal(tc.want))
 	}
 }
 
@@ -86,9 +83,7 @@ func TestRegistryRejectsInvalidDigestCalls(t *testing.T) {
 		{"Digest::CityHash", []CallArgument{{Name: "Init", Type: scalar("Uint64")}, {Type: scalar("String")}}, "positional argument"},
 	} {
 		_, err := r.ResolveCall(tc.name, tc.args)
-		if err == nil || !strings.Contains(err.Error(), tc.want) {
-			t.Fatalf("ResolveCall(%s) error = %v, want %q", tc.name, err, tc.want)
-		}
+		require.ErrorContains(t, err, tc.want)
 	}
 }
 
@@ -101,15 +96,12 @@ func TestRegistryResolvesCustomConcreteSignature(t *testing.T) {
 		},
 		Returns: scalar("Double"),
 	}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	got, err := r.ResolveCall("Acme::Score", []CallArgument{{Type: model.Optional(scalar("Utf8"))}, {Name: "mode", Type: scalar("Uint32")}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := model.Optional(scalar("Double")); !got.Equal(want) {
-		t.Fatalf("got %s, want %s", got.String(), want.String())
+	require.NoError(t, err)
+	{
+		want := model.Optional(scalar("Double"))
+		require.True(t, got.Equal(want))
 	}
 }
 
@@ -121,15 +113,12 @@ func TestRegistryAutoMapWrapsConcreteContainerResult(t *testing.T) {
 		Arguments: []Parameter{{Type: scalar("Json"), AutoMap: true}},
 		Returns:   result,
 	}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	got, err := r.ResolveCall("Acme::Words", []CallArgument{{Type: model.Optional(scalar("Json"))}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := model.Optional(result); !got.Equal(want) {
-		t.Fatalf("got %s, want %s", got.String(), want.String())
+	require.NoError(t, err)
+	{
+		want := model.Optional(result)
+		require.True(t, got.Equal(want))
 	}
 }
 
@@ -141,9 +130,7 @@ func TestRegistryResolveCallDiagnostics(t *testing.T) {
 		{Name: "Acme::Pick", Arguments: []Parameter{{Name: "value", Type: model.Optional(uint64Type)}}, Returns: uint64Type},
 		{Name: "Acme::Strict", Arguments: []Parameter{{Name: "value", Type: stringType}}, Returns: stringType},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, tc := range []struct {
 		name string
 		args []CallArgument
@@ -157,13 +144,12 @@ func TestRegistryResolveCallDiagnostics(t *testing.T) {
 		{"Acme::Strict", []CallArgument{{Type: model.Type{Kind: "Optional"}}}, "element type"},
 	} {
 		_, err := r.ResolveCall(tc.name, tc.args)
-		if err == nil || !strings.Contains(err.Error(), tc.want) {
-			t.Errorf("ResolveCall(%s) error = %v, want %q", tc.name, err, tc.want)
-		}
+		assert.ErrorContains(t, err, tc.want)
 	}
 	var nilRegistry *Registry
-	if _, err := nilRegistry.ResolveCall("ABS", []CallArgument{{Name: "value", Type: scalar("Int32")}}); err == nil || !strings.Contains(err.Error(), "does not support named") {
-		t.Fatalf("nil registry named argument error = %v", err)
+	{
+		_, err := nilRegistry.ResolveCall("ABS", []CallArgument{{Name: "value", Type: scalar("Int32")}})
+		require.ErrorContains(t, err, "does not support named")
 	}
 }
 
@@ -176,18 +162,21 @@ func TestRegistryValidatesNestedConcreteSignatures(t *testing.T) {
 		Arguments: []Parameter{{Type: model.Type{Kind: "Dict", Key: &stringType, Elem: &uint64Type}}},
 		Returns:   model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "items", Type: model.Type{Kind: "List", Elem: &valueType}}}},
 	}
-	if _, err := NewRegistry([]Signature{valid}); err != nil {
-		t.Fatal(err)
+	{
+		_, err := NewRegistry([]Signature{valid})
+		require.NoError(t, err)
 	}
 	invalidKey := valid
 	invalidKey.Arguments = []Parameter{{Type: model.Type{Kind: "Dict", Key: typePointer(scalar("Null")), Elem: &uint64Type}}}
-	if _, err := NewRegistry([]Signature{invalidKey}); err == nil || !strings.Contains(err.Error(), "Null") {
-		t.Fatalf("nested Dict Null error = %v", err)
+	{
+		_, err := NewRegistry([]Signature{invalidKey})
+		require.ErrorContains(t, err, "Null")
 	}
 	invalidField := valid
 	invalidField.Returns = model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "bad", Type: scalar("Null")}}}
-	if _, err := NewRegistry([]Signature{invalidField}); err == nil || !strings.Contains(err.Error(), "Null") {
-		t.Fatalf("nested Struct Null error = %v", err)
+	{
+		_, err := NewRegistry([]Signature{invalidField})
+		require.ErrorContains(t, err, "Null")
 	}
 }
 
@@ -211,9 +200,7 @@ func TestRegistryRejectsInvalidDictionaryKeysRecursively(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := NewRegistry([]Signature{{Name: "Acme::Lookup", Arguments: []Parameter{{Type: tc.typeValue}}, Returns: boolType}})
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("NewRegistry() error = %v, want %q", err, tc.want)
-			}
+			require.ErrorContains(t, err, tc.want)
 		})
 	}
 	optionalString := model.Optional(stringType)
@@ -221,8 +208,9 @@ func TestRegistryRejectsInvalidDictionaryKeysRecursively(t *testing.T) {
 	optionalTupleKey := model.Optional(tupleKey)
 	nestedTupleKey := model.Type{Kind: "Tuple", Items: []model.Type{tupleKey, scalar("Uint64")}}
 	for _, key := range []model.Type{optionalString, tupleKey, optionalTupleKey, nestedTupleKey, decimalType} {
-		if _, err := NewRegistry([]Signature{{Name: "Acme::Lookup", Arguments: []Parameter{{Type: model.Type{Kind: "Dict", Key: &key, Elem: &boolType}}}, Returns: boolType}}); err != nil {
-			t.Errorf("valid dictionary key %s rejected: %v", key.String(), err)
+		{
+			_, err := NewRegistry([]Signature{{Name: "Acme::Lookup", Arguments: []Parameter{{Type: model.Type{Kind: "Dict", Key: &key, Elem: &boolType}}}, Returns: boolType}})
+			assert.NoError(t, err)
 		}
 	}
 }
@@ -241,9 +229,7 @@ func TestResolveDigestSignatureGroups(t *testing.T) {
 		{"Digest::IntHash64", scalar("Uint64"), "Uint64"},
 	} {
 		got, err := Resolve(tc.name, []model.Type{tc.arg})
-		if err != nil || got.Kind != tc.want {
-			t.Errorf("Resolve(%s) = %s, %v; want %s", tc.name, got.String(), err, tc.want)
-		}
+		assert.False(t, err != nil || got.Kind != tc.want)
 	}
 }
 
@@ -277,9 +263,7 @@ func TestRegistryValidatesCustomSignatures(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := NewRegistry(tc.sigs)
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("NewRegistry() error = %v, want %q", err, tc.want)
-			}
+			require.ErrorContains(t, err, tc.want)
 		})
 	}
 }
@@ -297,38 +281,36 @@ func TestRegistryNamedOverloadOverlap(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := NewRegistry([]Signature{{Name: "Acme::Call", Arguments: tc.left, Returns: scalar("Bool")}, {Name: "Acme::Call", Arguments: tc.right, Returns: scalar("Bool")}})
 			if tc.overlap {
-				if err == nil || !strings.Contains(err.Error(), "ambiguous overloads") {
-					t.Fatalf("expected ambiguous overloads, got %v", err)
-				}
-			} else if err != nil {
-				t.Fatal(err)
+				require.ErrorContains(t, err, "ambiguous overloads")
+			} else {
+				require.NoError(t, err)
 			}
 		})
 	}
 }
 
 func TestRegistryAllowsWrongCaseLibraryName(t *testing.T) {
-	if _, err := NewRegistry([]Signature{{Name: "yson::ConvertToStringList", Returns: scalar("Uint64")}}); err != nil {
-		t.Fatalf("NewRegistry() error = %v", err)
+	{
+		_, err := NewRegistry([]Signature{{Name: "yson::ConvertToStringList", Returns: scalar("Uint64")}})
+		require.NoError(t, err)
 	}
 }
 
 func TestLegacyResolveIncludesDigestCatalog(t *testing.T) {
 	got, err := Resolve("Digest::CityHash", []model.Type{scalar("String")})
-	if err != nil || !got.Equal(scalar("Uint64")) {
-		t.Fatalf("Resolve() = %s, %v", got.String(), err)
-	}
+	require.NoError(t, err)
+	require.True(t, got.Equal(scalar("Uint64")))
 }
 
 func TestLegacyResolveDoesNotObserveCustomRegistry(t *testing.T) {
 	r, err := NewRegistry([]Signature{{Name: "Acme::OnlyHere", Returns: scalar("Uint64")}})
-	if err != nil {
-		t.Fatal(err)
+	require.NoError(t, err)
+	{
+		_, err := r.ResolveCall("Acme::OnlyHere", nil)
+		require.NoError(t, err)
 	}
-	if _, err := r.ResolveCall("Acme::OnlyHere", nil); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := Resolve("Acme::OnlyHere", nil); err == nil || !strings.Contains(err.Error(), "unsupported YQL function") {
-		t.Fatalf("Resolve observed custom registry: %v", err)
+	{
+		_, err := Resolve("Acme::OnlyHere", nil)
+		require.ErrorContains(t, err, "unsupported YQL function")
 	}
 }

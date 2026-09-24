@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb_Table"
 )
@@ -35,12 +36,8 @@ func TestDecodeTypes(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := decodeType(tc.typ)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got.String() != tc.want {
-				t.Fatalf("got %s, want %s", got, tc.want)
-			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got.String(), "got %s, want %s", got, tc.want)
 		})
 	}
 }
@@ -48,15 +45,12 @@ func TestDecodeTypes(t *testing.T) {
 func TestDecodeTypeRejectsUnknownAndMalformedMetadata(t *testing.T) {
 	cases := []*Ydb.Type{nil, {}, primitive(Ydb.Type_PrimitiveTypeId(99999)), {Type: &Ydb.Type_OptionalType{OptionalType: &Ydb.OptionalType{}}}, {Type: &Ydb.Type_DecimalType{DecimalType: &Ydb.DecimalType{Precision: 36, Scale: 2}}}, {Type: &Ydb.Type_PgType{PgType: &Ydb.PgType{TypeName: "int4"}}}, {Type: &Ydb.Type_TaggedType{TaggedType: &Ydb.TaggedType{Tag: "tag", Type: primitive(Ydb.Type_UINT64)}}}}
 	for _, typ := range cases {
-		if got, err := decodeType(typ); err == nil {
-			t.Fatalf("accepted invalid type %v as %s", typ, got)
-		}
+		got, err := decodeType(typ)
+		require.Error(t, err, "accepted invalid type %v as %s", typ, got)
 	}
 }
 
 func TestDecodeTableRejectsLiteralDefaults(t *testing.T) {
 	_, err := decodeTable("items", &Ydb_Table.DescribeTableResult{Columns: []*Ydb_Table.ColumnMeta{{Name: "id", Type: primitive(Ydb.Type_UINT64), DefaultValue: &Ydb_Table.ColumnMeta_FromLiteral{FromLiteral: &Ydb.TypedValue{}}}}})
-	if err == nil || !strings.Contains(err.Error(), "literal column defaults") {
-		t.Fatalf("got %v", err)
-	}
+	require.False(t, err == nil || !strings.Contains(err.Error(), "literal column defaults"), "got %v", err)
 }

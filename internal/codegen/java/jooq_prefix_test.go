@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/codegen/jdbc"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
@@ -43,22 +44,14 @@ PRAGMA TablePathPrefix("/db/?w");
 SELECT u.id FROM ` + "`/local/a/users`" + ` AS u WHERE u.name = $name;
 `
 	a, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqPrefixSchema}}, []model.Source{{Name: "queries.sql", Text: queries}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	files, err := Generate(a, Options{Package: "prefix", Runtime: "jooq"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	code := string(files[len(files)-1].Content)
 	for _, want := range []string{jooqPrefixPragma, `dsl.resultQuery("{0};\n{1}"`, `dsl.query("{0};\n{1}"`, "LOCAL_A_USERS", "LOCAL_B_USERS"} {
-		if !strings.Contains(code, want) {
-			t.Fatalf("missing %q in %s", want, code)
-		}
+		require.Contains(t, code, want, "missing %q in %s", want, code)
 	}
-	if strings.Contains(code, "DECLARE") {
-		t.Fatal("inferred parameters must retain DSL bindings", code)
-	}
+	require.False(t, strings.Contains(code, "DECLARE"), "inferred parameters must retain DSL bindings", code)
 	t.Run("published dialect", func(t *testing.T) { runJooqPrefixSDK(t, files) })
 }
 
@@ -67,14 +60,10 @@ func TestJooqAliasCollisionNamesAuthoredAlias(t *testing.T) {
 		t.Run(aliases[0]+" then "+aliases[1], func(t *testing.T) {
 			query := fmt.Sprintf("-- name: Colliding :many\nSELECT `%s`.id FROM `/local/a/users` AS `%s` JOIN `/local/b/users` AS `%s` ON `%s`.id = `%s`.id;", aliases[0], aliases[0], aliases[1], aliases[0], aliases[1])
 			analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqPrefixSchema}}, []model.Source{{Name: "query.sql", Text: query}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			files, err := Generate(analysis, Options{Package: "prefix", Runtime: "jooq"})
 			want := fmt.Sprintf("Colliding: Java alias collision: aB (from %q and %q)", aliases[0], aliases[1])
-			if files != nil || err == nil || err.Error() != want {
-				t.Fatalf("files %v, error %v; want %q", files, err, want)
-			}
+			require.False(t, files != nil || err == nil || err.Error() != want, "files %v, error %v; want %q", files, err, want)
 		})
 	}
 }
@@ -87,14 +76,10 @@ func TestJooqAliasCollisionWithParametersAndLocals(t *testing.T) {
 		t.Run(tc.alias, func(t *testing.T) {
 			query := fmt.Sprintf("-- name: Colliding :many\nSELECT `%s`.id FROM `/local/a/users` AS unaffected JOIN `/local/b/users` AS `%s` ON unaffected.id = `%s`.id WHERE `%s`.id = $%s;", tc.alias, tc.alias, tc.alias, tc.alias, tc.parameter)
 			analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqPrefixSchema}}, []model.Source{{Name: "query.sql", Text: query}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			files, err := Generate(analysis, Options{Package: "prefix", Runtime: "jooq"})
 			want := fmt.Sprintf("Colliding: Java alias collision: %s (from %q)", tc.identifier, tc.alias)
-			if files != nil || err == nil || err.Error() != want {
-				t.Fatalf("files %v, error %v; want %q", files, err, want)
-			}
+			require.False(t, files != nil || err == nil || err.Error() != want, "files %v, error %v; want %q", files, err, want)
 		})
 	}
 }
@@ -109,16 +94,12 @@ func TestJooqPrefixRejectsMissingTableResolution(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			query := "-- name: Incomplete " + tc.command + "\n" + jooqPrefixPragma + ";\nDECLARE $id AS Uint64;\n" + tc.statement
 			analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqPrefixSchema}}, []model.Source{{Name: "query.sql", Text: query}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			// The analyzer normally supplies this metadata. Exercise the generator's
 			// explicit invalid-input contract while retaining the real parsed query.
 			analysis.Queries[0].Syntax.Tables = nil
 			files, err := Generate(analysis, Options{Package: "prefix", Runtime: "jooq"})
-			if files != nil || err == nil || err.Error() != `Incomplete: missing resolved jOOQ table "users"` {
-				t.Fatalf("incomplete table resolution produced files %v, error %v", files, err)
-			}
+			require.False(t, files != nil || err == nil || err.Error() != `Incomplete: missing resolved jOOQ table "users"`, "incomplete table resolution produced files %v, error %v", files, err)
 		})
 	}
 }
@@ -141,28 +122,22 @@ func TestJooqPrefixDeclaredSQLBytesThroughJava(t *testing.T) {
 			annotation = strings.Replace(header, ":many", ":exec", 1)
 		}
 		a, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqPrefixSchema}}, []model.Source{{Name: "q.sql", Text: annotation + tc.sql}})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		q := a.Queries[0]
 		sql, _ := jdbc.SQL(q)
 		expression, err := jooqDeclaredSQL(q, sql)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		want := strings.TrimPrefix(header, "-- name: Read :many\n") + tc.want
 		fmt.Fprintf(&program, "if (!java.util.Base64.getEncoder().encodeToString((%s).getBytes(java.nio.charset.StandardCharsets.UTF_8)).equals(%q)) throw new AssertionError(\"case %d\");\n", expression, base64.StdEncoding.EncodeToString([]byte(want)), i)
 	}
 	program.WriteString("}}")
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "Main.java"), []byte(program.String()), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Main.java"), []byte(program.String()), 0600))
 	for _, args := range [][]string{{"javac", "--release", "17", "Main.java"}, {"java", "-cp", dir, "Main"}} {
 		cmd := exec.Command(args[0], args[1:]...)
 		cmd.Dir = dir
 		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("%s: %v\n%s\n%s", args[0], err, out, program.String())
+			require.NoError(t, err, "%s: %v\n%s\n%s", args[0], err, out, program.String())
 		}
 	}
 }
@@ -178,12 +153,10 @@ func runJooqPrefixSDK(t *testing.T, files []model.File) {
 	cmd := exec.Command(maven, "-q", "dependency:build-classpath", "-Dmdep.outputFile="+classpath)
 	cmd.Dir = filepath.Join("..", "..", "..", "tests", "examples", "java", "jooq")
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("SDK classpath: %v\n%s", err, out)
+		require.NoError(t, err, "SDK classpath: %v\n%s", err, out)
 	}
 	cp, err := os.ReadFile(classpath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	program := `package prefix;
 import java.util.*;
 import org.jooq.conf.*;
@@ -238,14 +211,12 @@ public class Main {
 	compile := []string{"-cp", strings.TrimSpace(string(cp)), "-d", dir}
 	for _, file := range files {
 		path := filepath.Join(dir, file.Name)
-		if err := os.WriteFile(path, file.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(path, file.Content, 0600))
 		compile = append(compile, path)
 	}
 	for _, args := range [][]string{append([]string{"javac"}, compile...), {"java", "-cp", dir + string(os.PathListSeparator) + strings.TrimSpace(string(cp)), "prefix.Main"}} {
 		if out, err := exec.Command(args[0], args[1:]...).CombinedOutput(); err != nil {
-			t.Fatalf("%s: %v\n%s", args[0], err, out)
+			require.NoError(t, err, "%s: %v\n%s", args[0], err, out)
 		}
 	}
 }

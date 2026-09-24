@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestBatchSQLRuntimePreservesWhitespace(t *testing.T) {
@@ -18,35 +20,25 @@ func TestBatchSQLRuntimePreservesWhitespace(t *testing.T) {
 			in := structInput()
 			in.Queries[0].SQL = "-- name: CreateBooks :exec\n" + sql
 			files, err := Generate(in, Options{Runtime: runtime})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			dir := t.TempDir()
 			pkg := filepath.Join(dir, "generated")
-			if err := os.Mkdir(pkg, 0700); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, os.Mkdir(pkg, 0700))
 			for _, f := range files {
 				if f.Name == "queries.py" {
 					indent := "            "
 					if runtime == "dbapi" {
 						indent = "                "
 					}
-					if !strings.Contains(string(f.Content), "\n"+indent+"parameters,\n"+indent[4:]+")") {
-						t.Fatalf("unaligned execute arguments:\n%s", f.Content)
-					}
+					require.Contains(t, string(f.Content), "\n"+indent+"parameters,\n"+indent[4:]+")", "unaligned execute arguments:\n%s", f.Content)
 				}
-				if err := os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600); err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600))
 			}
 			want := sql
 			if runtime == "sqlalchemy" {
 				want = strings.ReplaceAll(sql, "AS_TABLE($books)", "AS_TABLE(?)")
 			}
-			if err := os.WriteFile(filepath.Join(dir, "expected.sql"), []byte(want), 0600); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "expected.sql"), []byte(want), 0600))
 			script := `from pathlib import Path
 from generated.queries import Querier
 from ydb_sqlalchemy.sqlalchemy import YqlDialect
@@ -67,7 +59,7 @@ assert captured==[Path("expected.sql").read_text()], repr(captured)
 			cmd.Dir = dir
 			cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "cache"))
 			if out, err := cmd.CombinedOutput(); err != nil {
-				t.Fatalf("%v\n%s", err, out)
+				require.NoError(t, err, "%v\n%s", err, out)
 			}
 		})
 	}
