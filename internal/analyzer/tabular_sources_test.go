@@ -59,6 +59,18 @@ func TestChainedTabularBindings(t *testing.T) {
 	}
 }
 
+func TestTabularBindingUsesComputedLocal(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY (id));"}}
+	const sql = "-- name: Read :many\n$minimum = 1ul; $next = $minimum + 1ul; $selected = (SELECT id FROM records WHERE id > $next); SELECT id FROM $selected;"
+	result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q := result.Queries[0]; len(q.Parameters) != 0 || len(q.ResultSets) != 1 || q.ResultSets[0].Columns[0].Type.Kind != "Uint64" {
+		t.Fatalf("query = %#v", q)
+	}
+}
+
 func TestTabularBindingRetainsQualifiedResultName(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY (id));"}}
 	const sql = "-- name: Read :many\n$selected = (SELECT r.id FROM records AS r JOIN records AS other ON r.id = other.id); SELECT s.`r.id` AS id FROM $selected AS s;"
@@ -130,6 +142,10 @@ func TestYsonResourceRequiresSerialization(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "nonpersistable type Resource<'Yson2.Node'>") {
 		t.Fatalf("direct resource result: %v", err)
 	}
+	_, err = Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nSELECT AGGREGATE_LIST(Json::From(label)) AS payload FROM records;"}})
+	if err == nil || !strings.Contains(err.Error(), "nonpersistable type List<Resource<'Yson2.Node'>>") {
+		t.Fatalf("nested resource result: %v", err)
+	}
 	result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nSELECT Yson::SerializeJson(Json::From(AGGREGATE_LIST(label))) AS payload FROM records;"}})
 	if err != nil {
 		t.Fatal(err)
@@ -163,6 +179,18 @@ func TestTabularSourceDiagnostics(t *testing.T) {
 		{"DECLARE $selected AS Uint64; $selected = (SELECT id FROM records); SELECT id FROM $selected;", "conflicts with a DECLARE parameter"},
 		{"$selected = (SELECT id FROM records); DECLARE $id AS Uint64; SELECT id FROM $selected;", "DECLARE statements must precede local assignments"},
 		{"SELECT id FROM records; $selected = (SELECT id FROM records);", "local assignments must precede all data statements"},
+		{"$selected = (SELECT id FROM records UNION ALL SELECT id FROM records); SELECT id FROM $selected;", "tabular local assignments support one SELECT input"},
+		{"$selected = SELECT id FROM records UNION ALL SELECT id FROM records; SELECT id FROM $selected;", "tabular local assignments support one SELECT input"},
+		{"$selected = WITH r AS (SELECT id FROM records) SELECT id FROM r; SELECT id FROM $selected;", "CTEs in tabular local assignments are not yet supported"},
+		{"$selected = (DISCARD SELECT id FROM records); SELECT id FROM $selected;", "tabular local assignments require SELECT without DISCARD or INTO RESULT"},
+		{"$first, $second = (SELECT id FROM records); SELECT id FROM $first;", "only single local assignments are supported"},
+		{"$step = 1ul; $next = $step + \"invalid\"; $selected = (SELECT id FROM records WHERE id > $next); SELECT id FROM $selected;", "cannot resolve type of local $next"},
+		{"SELECT d.id FROM (SELECT missing AS id FROM records) AS d;", "unknown column"},
+		{"SELECT d.id FROM (SELECT id AS id, id AS id FROM records) AS d;", "duplicate or unnamed result column"},
+		{"SELECT r.id FROM records AS r JOIN (SELECT id FROM records) ON r.id = id;", "derived SELECT requires an explicit alias"},
+		{"SELECT r.id FROM records AS r JOIN (VALUES (1u)) AS v ON r.id = v.column0;", "unsupported FROM or JOIN source"},
+		{"SELECT id FROM records WITH (FORCE_INDEX = idx);", "table hints and sampling are not yet supported"},
+		{"SELECT id WITHOUT id FROM records;", "SELECT WITHOUT is not yet supported"},
 	} {
 		result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + tc.sql}})
 		if err == nil || len(result.Diagnostics) == 0 || !strings.Contains(result.Diagnostics[0].Message, tc.want) {

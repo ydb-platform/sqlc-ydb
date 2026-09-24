@@ -24,6 +24,8 @@ func TestCommonType(t *testing.T) {
 		{name: "integer and floating promotion", args: []model.Type{scalar("Uint64"), scalar("Float")}, want: scalar("Float")},
 		{name: "float and double promotion", args: []model.Type{scalar("Float"), scalar("Double")}, want: scalar("Double")},
 		{name: "same decimal", args: []model.Type{{Kind: "Decimal", Precision: 22, Scale: 9}, {Kind: "Decimal", Precision: 22, Scale: 9}}, want: model.Type{Kind: "Decimal", Precision: 22, Scale: 9}},
+		{name: "tagged type", args: []model.Type{{Kind: "Tagged", Tag: "FloatVector", Elem: typePointer(scalar("String"))}}, want: model.Type{Kind: "Tagged", Tag: "FloatVector", Elem: typePointer(scalar("String"))}},
+		{name: "callable type", args: []model.Type{{Kind: "Callable", Items: []model.Type{scalar("String")}, Elem: typePointer(scalar("Bool"))}}, want: model.Type{Kind: "Callable", Items: []model.Type{scalar("String")}, Elem: typePointer(scalar("Bool"))}},
 		{name: "no arguments", error: "at least one"},
 		{name: "only null", args: []model.Type{scalar("Null"), scalar("Null")}, error: "only Null"},
 		{name: "different strings", args: []model.Type{scalar("String"), scalar("Utf8")}, error: "no common type"},
@@ -34,6 +36,15 @@ func TestCommonType(t *testing.T) {
 		{name: "malformed list", args: []model.Type{{Kind: "List"}, {Kind: "List"}}, error: "element type"},
 		{name: "malformed scalar", args: []model.Type{{Kind: "Utf8", Elem: typePointer(scalar("String"))}}, error: "unexpected type parameters"},
 		{name: "invalid decimal precision", args: []model.Type{{Kind: "Decimal", Precision: 36, Scale: 2}}, error: "invalid Decimal"},
+		{name: "unexpected tag", args: []model.Type{{Kind: "String", Tag: "FloatVector"}}, error: "unexpected tag"},
+		{name: "tagged without tag", args: []model.Type{{Kind: "Tagged", Elem: typePointer(scalar("String"))}}, error: "Tagged type requires"},
+		{name: "tagged without element", args: []model.Type{{Kind: "Tagged", Tag: "FloatVector"}}, error: "Tagged type requires"},
+		{name: "tagged with key", args: []model.Type{{Kind: "Tagged", Tag: "FloatVector", Elem: typePointer(scalar("String")), Key: typePointer(scalar("Int32"))}}, error: "Tagged type requires"},
+		{name: "tagged with invalid element", args: []model.Type{{Kind: "Tagged", Tag: "FloatVector", Elem: typePointer(scalar("Any"))}}, error: "unsupported type"},
+		{name: "callable without return", args: []model.Type{{Kind: "Callable", Items: []model.Type{scalar("String")}}}, error: "Callable type requires"},
+		{name: "callable with key", args: []model.Type{{Kind: "Callable", Key: typePointer(scalar("String")), Elem: typePointer(scalar("Bool"))}}, error: "Callable type requires"},
+		{name: "callable with invalid argument", args: []model.Type{{Kind: "Callable", Items: []model.Type{scalar("Any")}, Elem: typePointer(scalar("Bool"))}}, error: "unsupported type"},
+		{name: "callable with invalid return", args: []model.Type{{Kind: "Callable", Items: []model.Type{scalar("String")}, Elem: typePointer(scalar("Any"))}}, error: "unsupported type"},
 	}
 
 	for _, tt := range tests {

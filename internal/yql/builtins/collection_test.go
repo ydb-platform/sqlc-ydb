@@ -101,6 +101,10 @@ func TestResolveCollectionFunctionsRejectInvalidCalls(t *testing.T) {
 		args []model.Type
 		want string
 	}{
+		{"ListCreate", nil, "expects 1"},
+		{"ListCreate", []model.Type{{Kind: "Any"}}, "concrete element type"},
+		{"ListCreate", []model.Type{{Kind: "Null"}}, "concrete element type"},
+		{"ListCreate", []model.Type{{Kind: "Void"}}, "concrete element type"},
 		{"ToSet", []model.Type{stringType}, "List"},
 		{"ToSet", nil, "expects 1"},
 		{"ToSet", []model.Type{{Kind: "List"}}, "List"},

@@ -87,6 +87,19 @@ func TestJooqTabularNamedSQLCompilesAndPreservesText(t *testing.T) {
 	}
 }
 
+func TestJooqTabularNamedSQLRejectsReservedParameter(t *testing.T) {
+	const schema = "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));"
+	const query = "-- name: Read :many\n$selected = (SELECT id FROM records WHERE id = $tech); SELECT id FROM $selected;"
+	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: schema}}, []model.Source{{Name: "query.sql", Text: query}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := Generate(analysis, Options{Package: "tabular", Runtime: "jooq"})
+	if files != nil || err == nil || !strings.Contains(err.Error(), "Java parameter collision: tech") {
+		t.Fatalf("files = %v, error = %v; want Java parameter collision and no output", files, err)
+	}
+}
+
 func TestJooqUDFCallsUseNamedSQL(t *testing.T) {
 	for _, tc := range []struct {
 		name, schema, query string
