@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/codegen/java"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
@@ -21,38 +22,28 @@ func tablePathPrefixJooq(t *testing.T, schemas []model.Source, a, b string) {
 	}
 	queries := strings.NewReplacer("$PREFIX_A", a, "$PREFIX_B", b).Replace(tablePathPrefixJooqQueries)
 	analysis, err := analyzer.Analyze(schemas, []model.Source{{Name: "jooq.sql", Text: queries}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	files, err := java.Generate(analysis, java.Options{Package: "prefixlive", Runtime: "jooq"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	classpath := filepath.Join(dir, "classpath")
 	cmd := exec.Command(maven, "-q", "dependency:build-classpath", "-Dmdep.outputFile="+classpath)
 	cmd.Dir = filepath.Join("..", "..", "tests", "examples", "java", "jooq")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("jOOQ SDK classpath: %v\n%s", err, out)
-	}
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "jOOQ SDK classpath:\n%s", out)
 	cp, err := os.ReadFile(classpath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	program := strings.NewReplacer("$TABLE_A", strconv.Quote(a+"/users"), "$MAPPED_A", strconv.Quote(a+"/mapped_users")).Replace(tablePathPrefixJooqProgram)
 	files = append(files, model.File{Name: "Main.java", Content: []byte(program)})
 	compile := []string{"-cp", strings.TrimSpace(string(cp)), "-d", dir}
 	for _, file := range files {
 		filename := filepath.Join(dir, file.Name)
-		if err := os.WriteFile(filename, file.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filename, file.Content, 0600))
 		compile = append(compile, filename)
 	}
 	for _, args := range [][]string{append([]string{"javac"}, compile...), {"java", "-cp", dir + string(os.PathListSeparator) + strings.TrimSpace(string(cp)), "prefixlive.Main"}} {
-		if out, err := exec.Command(args[0], args[1:]...).CombinedOutput(); err != nil {
-			t.Fatalf("prefixed jOOQ %s: %v\n%s", args[0], err, out)
-		}
+		out, err := exec.Command(args[0], args[1:]...).CombinedOutput()
+		require.NoError(t, err, "prefixed jOOQ %s:\n%s", args[0], out)
 	}
 }
 

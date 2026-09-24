@@ -1,8 +1,9 @@
 package analyzer
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -31,12 +32,10 @@ func TestAnalyzeRejectsUnsupportedSQLCMacrosInEveryQueryContext(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			query := "-- name: Invalid " + string(tt.command) + "\n" + tt.query
 			result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
-			if err == nil {
-				t.Fatal("Analyze() error = nil, want unsupported sqlc macro diagnostic")
-			}
-			if result == nil || len(result.Diagnostics) == 0 || !strings.Contains(err.Error(), "sqlc macros are unsupported; use DECLARE parameters and explicit result columns instead") {
-				t.Fatalf("error = %v; diagnostics = %#v", err, result.Diagnostics)
-			}
+			require.Error(t, err)
+			require.NotNil(t, result)
+			require.NotEqual(t, 0, len(result.Diagnostics))
+			require.Contains(t, err.Error(), "sqlc macros are unsupported; use DECLARE parameters and explicit result columns instead")
 		})
 	}
 }
@@ -49,10 +48,7 @@ SELECT 'sqlc.narg(name)' AS macro_text, ` + "`sqlc.arg`" + `
 FROM foo /* sqlc.arg(name) */;`}}
 
 	got, err := Analyze(schema, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v; diagnostics = %#v", err, got.Diagnostics)
-	}
-	if len(got.Queries) != 1 || len(got.Queries[0].ResultSets) != 1 {
-		t.Fatalf("Queries = %#v", got.Queries)
-	}
+	require.NoError(t, err)
+	require.Len(t, got.Queries, 1)
+	require.Len(t, got.Queries[0].ResultSets, 1)
 }

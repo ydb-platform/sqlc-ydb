@@ -1,8 +1,9 @@
 package builtins
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -26,9 +27,8 @@ func TestAggregateListResultAndArguments(t *testing.T) {
 	} {
 		t.Run(tc.name+typeList(tc.args), func(t *testing.T) {
 			got, err := Resolve(tc.name, tc.args)
-			if err != nil || got.String() != tc.want {
-				t.Fatalf("Resolve(%s, %s) = %s, %v; want %s", tc.name, typeList(tc.args), got.String(), err, tc.want)
-			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got.String())
 		})
 	}
 	for _, tc := range []struct {
@@ -43,9 +43,7 @@ func TestAggregateListResultAndArguments(t *testing.T) {
 		{[]model.Type{{Kind: "String"}, {Kind: "Uint64"}, {Kind: "Uint64"}}, "expects 1 or 2"},
 	} {
 		_, err := Resolve("AGGREGATE_LIST", tc.args)
-		if err == nil || !strings.Contains(err.Error(), tc.want) {
-			t.Fatalf("Resolve(AGGREGATE_LIST, %s) error = %v, want %q", typeList(tc.args), err, tc.want)
-		}
+		require.ErrorContains(t, err, tc.want)
 	}
 }
 
@@ -58,13 +56,11 @@ func TestJsonFromSerializeJson(t *testing.T) {
 	for _, name := range []string{"Json::From", "Yson::From"} {
 		for _, arg := range []model.Type{item, uintType, model.Optional(item), list, model.Optional(list), {Kind: "List", Elem: typePointer(model.Type{Kind: "Utf8"})}, dict, structure, {Kind: "Tuple", Items: []model.Type{item, uintType}}} {
 			resource, err := Resolve(name, []model.Type{arg})
-			if err != nil || resource.String() != "Resource<'Yson2.Node'>" {
-				t.Fatalf("%s(%s) = %s, %v", name, arg.String(), resource.String(), err)
-			}
+			require.NoError(t, err)
+			require.Equal(t, "Resource<'Yson2.Node'>", resource.String())
 			got, err := Resolve("Yson::SerializeJson", []model.Type{resource})
-			if err != nil || got.String() != "Optional<Json>" {
-				t.Fatalf("Yson::SerializeJson(%s) = %s, %v", resource.String(), got.String(), err)
-			}
+			require.NoError(t, err)
+			require.Equal(t, "Optional<Json>", got.String())
 		}
 	}
 	for _, tc := range []struct {
@@ -80,9 +76,7 @@ func TestJsonFromSerializeJson(t *testing.T) {
 		{"Yson::SerializeJson", []model.Type{{Kind: "Resource<'Other.Node'>"}}, "Resource"},
 	} {
 		_, err := Resolve(tc.name, tc.args)
-		if err == nil || !strings.Contains(err.Error(), tc.want) {
-			t.Fatalf("%s(%s) error = %v, want %q", tc.name, typeList(tc.args), err, tc.want)
-		}
+		require.ErrorContains(t, err, tc.want)
 	}
 }
 
@@ -90,22 +84,21 @@ func TestListCreateTypeAndContextualEmptyFallback(t *testing.T) {
 	stringType := model.Type{Kind: "String"}
 	innerList := model.Type{Kind: "List", Elem: &stringType}
 	emptyList, err := Resolve("ListCreate", []model.Type{model.Optional(innerList)})
-	if err != nil || emptyList.String() != "List<Optional<List<String>>>" {
-		t.Fatalf("ListCreate(Optional<List<String>>) = %s, %v", emptyList.String(), err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "List<Optional<List<String>>>", emptyList.String())
 	for _, name := range []string{"NVL", "COALESCE"} {
 		got, err := defaultRegistry.ResolveCall(name, []CallArgument{
 			{Type: model.Optional(innerList)},
 			{Type: emptyList, EmptyList: true},
 		})
-		if err != nil || got.String() != "List<String>" {
-			t.Fatalf("%s(Optional<List<String>>, ListCreate(...)) = %s, %v", name, got.String(), err)
-		}
-		if _, err := defaultRegistry.ResolveCall(name, []CallArgument{
-			{Type: model.Optional(innerList)},
-			{Type: emptyList},
-		}); err == nil {
-			t.Fatalf("%s accepted mismatched ordinary list", name)
+		require.NoError(t, err)
+		require.Equal(t, "List<String>", got.String())
+		{
+			_, err := defaultRegistry.ResolveCall(name, []CallArgument{
+				{Type: model.Optional(innerList)},
+				{Type: emptyList},
+			})
+			require.Error(t, err)
 		}
 	}
 }

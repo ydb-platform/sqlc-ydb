@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/cli"
 )
 
@@ -44,14 +45,10 @@ SELECT * FROM copies ORDER BY id;`, "records", table)
 		config += "- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n  gen:\n    go:\n      package: records\n      out: " + out + "\n      sql_package: " + runtime + "\n"
 	}
 	for name, content := range map[string]string{"schema.sql": schema, "queries.sql": queries, "sqlc.yaml": config, "go.mod": "module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0600))
 	}
 	var stdout, stderr bytes.Buffer
-	if code := cli.Run([]string{"generate", "-f", filepath.Join(dir, "sqlc.yaml")}, &stdout, &stderr); code != 0 {
-		t.Fatalf("generate: %s", stderr.String())
-	}
+	require.Zero(t, cli.Run([]string{"generate", "-f", filepath.Join(dir, "sqlc.yaml")}, &stdout, &stderr), "generate: %s", stderr.String())
 	for _, runtime := range []string{"ydb", "database/sql"} {
 		t.Run(runtime, func(t *testing.T) {
 			setup := "q := New(driver.Query())"

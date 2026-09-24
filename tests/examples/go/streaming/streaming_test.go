@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"example.com/sqlc-ydb-example-tests/internal/testdb"
 	sq "example.com/sqlc-ydb-examples/streaming/go/database/sql"
@@ -44,14 +45,10 @@ func TestCallbackExports(t *testing.T) {
 	nq := native.New(db.Native)
 	names := []*string{nil, new("Датчик"), new("Lamp")}
 	for i, name := range names {
-		if err := nq.UpsertDevice(db.Context, native.UpsertDeviceParams{ID: uint64(i + 1), Name: name}); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, nq.UpsertDevice(db.Context, native.UpsertDeviceParams{ID: uint64(i + 1), Name: name}))
 	}
 	sqlQueries := sq.New(db.SQL)
-	if err := sqlQueries.UpsertDevice(db.Context, sq.UpsertDeviceParams{ID: 4, Name: new("SQL device")}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, sqlQueries.UpsertDevice(db.Context, sq.UpsertDeviceParams{ID: 4, Name: new("SQL device")}))
 	for _, tc := range []struct {
 		name   string
 		export func(io.Writer, uint64, uint64) error
@@ -86,36 +83,27 @@ func TestCallbackExports(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var out bytes.Buffer
-			if err := tc.export(&out, 1, 3); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, tc.export(&out, 1, 3))
 			want := "{\"id\":1,\"name\":null}\n{\"id\":2,\"name\":\"Датчик\"}\n{\"id\":3,\"name\":\"Lamp\"}\n"
-			if out.String() != want {
-				t.Fatalf("export = %q, want %q", out.String(), want)
-			}
+			require.Equal(t, want, out.String())
 			out.Reset()
-			if err := tc.export(&out, 99, 100); err != nil || out.Len() != 0 {
-				t.Fatalf("empty export: %q, %v", out.String(), err)
-			}
+			require.NoError(t, tc.export(&out, 99, 100))
+			require.Empty(t, out.String(), "empty export")
 			failed := new(failingWriter)
-			if err := tc.export(failed, 1, 3); !errors.Is(err, io.ErrClosedPipe) || failed.calls != 1 {
-				t.Fatalf("failed export: writes=%d, error=%v", failed.calls, err)
-			}
+			err := tc.export(failed, 1, 3)
+			require.ErrorIs(t, err, io.ErrClosedPipe)
+			require.Equal(t, 1, failed.calls)
 		})
 	}
 	// No-parameter queries use the same callback API in both runtime profiles.
 	var ids []uint64
-	if err := nq.VisitAllDevices(db.Context, func(row native.VisitAllDevicesRow) error { ids = append(ids, row.ID); return nil }); err != nil {
-		t.Fatal(err)
-	}
-	if len(ids) != 4 || ids[0] != 1 || ids[3] != 4 {
-		t.Fatalf("native all: %v", ids)
-	}
+	require.NoError(t, nq.VisitAllDevices(db.Context, func(row native.VisitAllDevicesRow) error { ids = append(ids, row.ID); return nil }))
+	require.Len(t, ids, 4)
+	require.Equal(t, uint64(1), ids[0])
+	require.Equal(t, uint64(4), ids[3])
 	ids = nil
-	if err := sqlQueries.VisitAllDevices(db.Context, func(row sq.VisitAllDevicesRow) error { ids = append(ids, row.ID); return nil }); err != nil {
-		t.Fatal(err)
-	}
-	if len(ids) != 4 || ids[0] != 1 || ids[3] != 4 {
-		t.Fatalf("SQL all: %v", ids)
-	}
+	require.NoError(t, sqlQueries.VisitAllDevices(db.Context, func(row sq.VisitAllDevicesRow) error { ids = append(ids, row.ID); return nil }))
+	require.Len(t, ids, 4)
+	require.Equal(t, uint64(1), ids[0])
+	require.Equal(t, uint64(4), ids[3])
 }

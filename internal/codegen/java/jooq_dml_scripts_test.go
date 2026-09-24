@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -22,14 +23,10 @@ func TestJooqDMLScriptsRequireDeclaredExecution(t *testing.T) {
 	} {
 		t.Run(sql, func(t *testing.T) {
 			analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqDMLScriptSchema}}, []model.Source{{Name: "queries.sql", Text: "-- name: Change :exec\n" + sql}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			files, err := Generate(analysis, Options{Package: "scripts", Runtime: "jooq"})
 			const want = "Change: multi-statement queries require the jOOQ declared-query path; add an explicit DECLARE for one of the parameters, or use runtime: jdbc or ydb"
-			if files != nil || err == nil || err.Error() != want {
-				t.Fatalf("files=%v, error=%v; want no output and %q", files, err, want)
-			}
+			require.False(t, files != nil || err == nil || err.Error() != want, "files=%v, error=%v; want no output and %q", files, err, want)
 		})
 	}
 }
@@ -43,14 +40,10 @@ func TestJooqMixedScriptsRequireDeclaredExecution(t *testing.T) {
 		for _, command := range []string{":one", ":many"} {
 			t.Run(command+sql, func(t *testing.T) {
 				analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqDMLScriptSchema}}, []model.Source{{Name: "queries.sql", Text: "-- name: Change " + command + "\n" + sql}})
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 				files, err := Generate(analysis, Options{Package: "scripts", Runtime: "jooq"})
 				const want = "Change: multi-statement queries require the jOOQ declared-query path; add an explicit DECLARE for one of the parameters, or use runtime: jdbc or ydb"
-				if files != nil || err == nil || err.Error() != want {
-					t.Fatalf("files=%d, error=%v; want %q", len(files), err, want)
-				}
+				require.False(t, files != nil || err == nil || err.Error() != want, "files=%d, error=%v; want %q", len(files), err, want)
 			})
 		}
 	}
@@ -71,26 +64,18 @@ DELETE FROM children WHERE children.owner = $id;`
 
 func TestJooqDeclaredDMLScriptsPreserveWholeRequest(t *testing.T) {
 	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: "PRAGMA TablePathPrefix('/local/scripts');\n" + jooqDMLScriptSchema}}, []model.Source{{Name: "queries.sql", Text: jooqDeclaredDMLScripts}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	files, err := Generate(analysis, Options{Package: "scripts", Runtime: "jooq"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, file := range files {
 		if file.Name != "Queries.java" {
 			continue
 		}
 		code := string(file.Content)
 		for _, want := range []string{"DECLARE $label AS Utf8;", "DECLARE $id AS Uint64;", "PRAGMA TablePathPrefix('/local/scripts');", "dsl.render(LOCAL_SCRIPTS_RECORDS)", "dsl.render(LOCAL_SCRIPTS_CHILDREN)", "A semicolon inside this comment must not split the request: ;"} {
-			if !strings.Contains(code, want) {
-				t.Fatalf("missing %q in generated script:\n%s", want, code)
-			}
+			require.Contains(t, code, want, "missing %q in generated script:\n%s", want, code)
 		}
-		if strings.Count(code, ".prepareStatement(") != 2 || strings.Count(code, "_prepared.execute();") != 2 || strings.Contains(code, ".executeUpdate(") {
-			t.Fatalf("expected one JDBC execution per script:\n%s", code)
-		}
+		require.False(t, strings.Count(code, ".prepareStatement(") != 2 || strings.Count(code, "_prepared.execute();") != 2 || strings.Contains(code, ".executeUpdate("), "expected one JDBC execution per script:\n%s", code)
 	}
 	t.Run("published SDK", func(t *testing.T) { runJooqDMLScriptSDK(t, files) })
 }
@@ -105,26 +90,18 @@ DECLARE $id AS Uint64;
 SELECT id, label FROM records WHERE id = $id;
 DELETE FROM children WHERE owner = $id;`
 	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqDMLScriptSchema}}, []model.Source{{Name: "queries.sql", Text: queries}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	files, err := Generate(analysis, Options{Package: "scripts", Runtime: "jooq"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, file := range files {
 		if file.Name != "Queries.java" {
 			continue
 		}
 		code := string(file.Content)
 		for _, want := range []string{"DECLARE $label AS Utf8;", "UPDATE", "SELECT id, label FROM", "DELETE FROM", "dsl.render(RECORDS)", "dsl.render(CHILDREN)", "_prepared.getMoreResults()", "Expected one result set"} {
-			if !strings.Contains(code, want) {
-				t.Fatalf("missing %q in generated script:\n%s", want, code)
-			}
+			require.Contains(t, code, want, "missing %q in generated script:\n%s", want, code)
 		}
-		if strings.Count(code, ".prepareStatement(") != 2 || strings.Count(code, "_prepared.execute();") != 2 || strings.Contains(code, ".executeQuery(") {
-			t.Fatalf("expected one JDBC execution per mixed script:\n%s", code)
-		}
+		require.False(t, strings.Count(code, ".prepareStatement(") != 2 || strings.Count(code, "_prepared.execute();") != 2 || strings.Contains(code, ".executeQuery("), "expected one JDBC execution per mixed script:\n%s", code)
 	}
 }
 
@@ -138,32 +115,22 @@ func TestJooqStructuredDMLScriptsRetainBatchRestrictions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			sql := "-- name: Change :exec\nDECLARE $rows AS List<Struct<id:Uint64,label:Utf8>>;\n" + insert + tc.tail
 			analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqDMLScriptSchema}}, []model.Source{{Name: "queries.sql", Text: sql}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			files, err := Generate(analysis, Options{Package: "scripts", Runtime: "jooq"})
 			if tc.wantError != "" {
-				if files != nil || err == nil || err.Error() != tc.wantError {
-					t.Fatalf("files=%v, error=%v; want %q", files, err, tc.wantError)
-				}
+				require.False(t, files != nil || err == nil || err.Error() != tc.wantError, "files=%v, error=%v; want %q", files, err, tc.wantError)
 				return
 			}
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			for _, file := range files {
 				if file.Name != "Queries.java" {
 					continue
 				}
 				code := string(file.Content)
 				for _, want := range []string{"DECLARE $id AS Uint64;", "FROM AS_TABLE($rows)", "DELETE FROM", "WHERE owner = $id;", "dsl.render(RECORDS)", "dsl.render(CHILDREN)"} {
-					if !strings.Contains(code, want) {
-						t.Fatalf("missing %q:\n%s", want, code)
-					}
+					require.Contains(t, code, want, "missing %q:\n%s", want, code)
 				}
-				if strings.Count(code, ".prepareStatement(") != 1 || strings.Count(code, "_prepared.execute();") != 1 {
-					t.Fatalf("expected one execution for the complete batch script:\n%s", code)
-				}
+				require.False(t, strings.Count(code, ".prepareStatement(") != 1 || strings.Count(code, "_prepared.execute();") != 1, "expected one execution for the complete batch script:\n%s", code)
 			}
 		})
 	}
@@ -180,12 +147,10 @@ func runJooqDMLScriptSDK(t *testing.T, files []model.File) {
 	cmd := exec.Command(maven, "-q", "dependency:build-classpath", "-Dmdep.outputFile="+classpath)
 	cmd.Dir = filepath.Join("..", "..", "..", "tests", "examples", "java", "jooq")
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("SDK classpath: %v\n%s", err, out)
+		require.NoError(t, err, "SDK classpath: %v\n%s", err, out)
 	}
 	cp, err := os.ReadFile(classpath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	program := `package scripts;
 import java.lang.reflect.Proxy;
 import java.sql.Connection;
@@ -244,14 +209,12 @@ public class Main {
 	compile := []string{"-cp", strings.TrimSpace(string(cp)), "-d", dir}
 	for _, file := range files {
 		path := filepath.Join(dir, file.Name)
-		if err := os.WriteFile(path, file.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(path, file.Content, 0600))
 		compile = append(compile, path)
 	}
 	for _, args := range [][]string{append([]string{"javac"}, compile...), {"java", "-cp", dir + string(os.PathListSeparator) + strings.TrimSpace(string(cp)), "scripts.Main"}} {
 		if out, err := exec.Command(args[0], args[1:]...).CombinedOutput(); err != nil {
-			t.Fatalf("%s: %v\n%s", args[0], err, out)
+			require.NoError(t, err, "%s: %v\n%s", args[0], err, out)
 		}
 	}
 }

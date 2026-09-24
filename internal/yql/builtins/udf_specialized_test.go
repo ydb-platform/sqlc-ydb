@@ -5,6 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -54,15 +57,13 @@ func TestSpecializedUDFTypes(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			resolve := lookupSpecializedUDF(tc.name)
-			if resolve == nil {
-				t.Fatal("documented function was not registered")
-			}
+			require.NotNil(t, resolve)
 			got, err := resolve(tc.args)
-			if err != nil || got.String() != tc.want {
-				t.Fatalf("type = %s, error = %v; want %s", got.String(), err, tc.want)
-			}
-			if _, err := resolve(nil); err == nil || !strings.Contains(err.Error(), "expects") {
-				t.Fatalf("missing arguments: %v", err)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got.String())
+			{
+				_, err := resolve(nil)
+				require.ErrorContains(t, err, "expects")
 			}
 		})
 	}
@@ -93,9 +94,8 @@ func TestSpecializedUDFOptionalityAndDiagnostics(t *testing.T) {
 		{"Roaring::And", []model.Type{resource, model.Optional(resource)}, "Optional<" + roaringBitmapResource + ">"},
 	} {
 		got, err := lookupSpecializedUDF(tc.name)(tc.args)
-		if err != nil || got.String() != tc.want {
-			t.Fatalf("%s: type = %s, error = %v; want %s", tc.name, got.String(), err, tc.want)
-		}
+		require.NoError(t, err)
+		require.Equal(t, tc.want, got.String())
 	}
 	for _, tc := range []struct {
 		name string
@@ -111,9 +111,7 @@ func TestSpecializedUDFOptionalityAndDiagnostics(t *testing.T) {
 		{"Roaring::Cardinality", []model.Type{model.Optional(model.Optional(resource))}, "invalid Optional"},
 	} {
 		_, err := lookupSpecializedUDF(tc.name)(tc.args)
-		if err == nil || !strings.Contains(err.Error(), tc.want) {
-			t.Fatalf("%s(%v): error = %v; want %q", tc.name, tc.args, err, tc.want)
-		}
+		require.ErrorContains(t, err, tc.want)
 	}
 }
 
@@ -148,46 +146,41 @@ func TestRegexConstructorSignatures(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			resolve := lookupSpecializedUDF(tc.name)
-			if resolve == nil {
-				t.Fatal("documented regex constructor was not registered")
-			}
+			require.NotNil(t, resolve)
 			got, err := resolve([]model.Type{stringType})
-			if err != nil || got.Kind != "Callable" || got.Elem == nil || !got.Elem.Equal(tc.result) {
-				t.Fatalf("callable = %#v, error = %v", got, err)
-			}
+			require.NoError(t, err)
+			require.Equal(t, "Callable", got.Kind)
+			require.NotNil(t, got.Elem)
+			require.True(t, got.Elem.Equal(tc.result))
 			wantArgs := []model.Type{model.Optional(stringType)}
 			if tc.replace {
 				wantArgs = append(wantArgs, stringType)
 			}
-			if len(got.Items) != len(wantArgs) {
-				t.Fatalf("callable arguments = %#v, want %#v", got.Items, wantArgs)
-			}
+			require.Len(t, got.Items, len(wantArgs))
 			for i := range wantArgs {
-				if !got.Items[i].Equal(wantArgs[i]) {
-					t.Fatalf("argument %d = %s, want %s", i+1, got.Items[i].String(), wantArgs[i].String())
-				}
+				require.True(t, got.Items[i].Equal(wantArgs[i]))
 			}
-			if _, err := resolve(nil); err == nil || !strings.Contains(err.Error(), "expects") {
-				t.Fatalf("missing pattern: %v", err)
+			{
+				_, err := resolve(nil)
+				require.ErrorContains(t, err, "expects")
 			}
-			if _, err := resolve([]model.Type{model.Optional(stringType)}); err == nil || !strings.Contains(err.Error(), "non-optional String") {
-				t.Fatalf("optional pattern: %v", err)
+			{
+				_, err := resolve([]model.Type{model.Optional(stringType)})
+				require.ErrorContains(t, err, "non-optional String")
 			}
 		})
 	}
 	for _, name := range []string{"Re2::Grep", "Re2::Match", "Re2::Count", "Re2::FindAndConsume", "Re2::Replace"} {
 		got, err := lookupSpecializedUDF(name)([]model.Type{stringType, re2OptionsType()})
-		if err != nil || got.Kind != "Callable" {
-			t.Fatalf("%s with Options: %#v, %v", name, got, err)
-		}
+		require.NoError(t, err)
+		require.Equal(t, "Callable", got.Kind)
 	}
 }
 
 func TestRe2OptionsNamedSignature(t *testing.T) {
 	signatures := re2OptionsSignatures("Re2::Options")
-	if len(signatures) != 1 || re2OptionsSignatures("Re2::Missing") != nil {
-		t.Fatalf("Re2 options signatures = %#v", signatures)
-	}
+	require.Len(t, signatures, 1)
+	require.Nil(t, re2OptionsSignatures("Re2::Missing"))
 	for _, args := range [][]CallArgument{
 		nil,
 		{{Name: "CaseSensitive", Type: model.Type{Kind: "Bool"}}},
@@ -196,9 +189,8 @@ func TestRe2OptionsNamedSignature(t *testing.T) {
 		{{Name: "MaxMem", Type: model.Type{Kind: "Uint64"}}, {Name: "Utf8", Type: model.Type{Kind: "Bool"}}},
 	} {
 		got, err := resolveSignatures("Re2::Options", args, signatures)
-		if err != nil || !got.Equal(re2OptionsType()) {
-			t.Fatalf("Options(%#v) = %s, %v", args, got.String(), err)
-		}
+		require.NoError(t, err)
+		require.True(t, got.Equal(re2OptionsType()))
 	}
 	for _, tc := range []struct {
 		args []CallArgument
@@ -209,9 +201,7 @@ func TestRe2OptionsNamedSignature(t *testing.T) {
 		{[]CallArgument{{Name: "Utf8", Type: model.Type{Kind: "String"}}}, "must be Optional<Bool>"},
 	} {
 		_, err := resolveSignatures("Re2::Options", tc.args, signatures)
-		if err == nil || !strings.Contains(err.Error(), tc.want) {
-			t.Fatalf("Options(%#v): error = %v, want %q", tc.args, err, tc.want)
-		}
+		require.ErrorContains(t, err, tc.want)
 	}
 }
 
@@ -230,14 +220,10 @@ func TestLiteralDependentRegexTypes(t *testing.T) {
 			{"a\nb\n", "Callable<(Optional<String>)->Tuple<Bool,Bool,Bool>>"},
 		} {
 			got, handled, err := resolveSpecializedCall(name, []CallArgument{{Type: stringType, StringLiteral: &tc.pattern}})
-			if !handled || err != nil || got.String() != tc.want {
-				t.Errorf("%s(%q) = %s, handled %t, error %v; want %s", name, tc.pattern, got.String(), handled, err, tc.want)
-			}
+			assert.False(t, !handled || err != nil || got.String() != tc.want)
 		}
 		_, handled, err := resolveSpecializedCall(name, []CallArgument{{Type: stringType}})
-		if !handled || err == nil || !strings.Contains(err.Error(), "requires a string literal") {
-			t.Errorf("%s dynamic pattern: handled %t, error %v", name, handled, err)
-		}
+		assert.False(t, !handled || err == nil || !strings.Contains(err.Error(), "requires a string literal"))
 	}
 	for _, tc := range []struct {
 		pattern string
@@ -248,15 +234,11 @@ func TestLiteralDependentRegexTypes(t *testing.T) {
 		{"(?P<foo>x)(?<bar>a)", "Callable<(Optional<String>)->Struct<`_0`:Optional<String>,`bar`:Optional<String>,`foo`:Optional<String>>>"},
 	} {
 		got, handled, err := resolveSpecializedCall("Re2::Capture", []CallArgument{{Type: stringType, StringLiteral: &tc.pattern}})
-		if !handled || err != nil || got.String() != tc.want {
-			t.Errorf("Re2::Capture(%q) = %s, handled %t, error %v; want %s", tc.pattern, got.String(), handled, err, tc.want)
-		}
+		assert.False(t, !handled || err != nil || got.String() != tc.want)
 	}
 	pattern := "(?P<foo>x)(a)"
 	got, handled, err := resolveSpecializedCall("Re2::Capture", []CallArgument{{Type: stringType, StringLiteral: &pattern}, {Type: model.Optional(re2OptionsType())}})
-	if !handled || err != nil || got.Kind != "Callable" {
-		t.Errorf("Re2::Capture optional options = %s, handled %t, error %v", got.String(), handled, err)
-	}
+	assert.False(t, !handled || err != nil || got.Kind != "Callable")
 	for _, tc := range []struct {
 		pattern *string
 		want    string
@@ -266,18 +248,16 @@ func TestLiteralDependentRegexTypes(t *testing.T) {
 		{func() *string { s := "(?P<foo>x)(?P<foo>a)"; return &s }(), "duplicate capturing group name"},
 	} {
 		_, handled, err := resolveSpecializedCall("Re2::Capture", []CallArgument{{Type: stringType, StringLiteral: tc.pattern}})
-		if !handled || err == nil || !strings.Contains(err.Error(), tc.want) {
-			t.Errorf("Re2::Capture(%v): handled %t, error %v; want %q", tc.pattern, handled, err, tc.want)
-		}
+		assert.False(t, !handled || err == nil || !strings.Contains(err.Error(), tc.want))
 	}
 }
 
 func TestHistogramUDFSignatures(t *testing.T) {
 	histogram := histogramStructType()
 	doubleType := model.Type{Kind: "Double"}
-	if len(histogram.Fields) != 5 || histogram.Fields[0].Name != "Bins" || histogram.Fields[4].Name != "WeightsSum" {
-		t.Fatalf("histogram shape = %s", histogram.String())
-	}
+	require.Len(t, histogram.Fields, 5)
+	require.Equal(t, "Bins", histogram.Fields[0].Name)
+	require.Equal(t, "WeightsSum", histogram.Fields[4].Name)
 	for _, tc := range []struct {
 		name string
 		args []model.Type
@@ -299,35 +279,31 @@ func TestHistogramUDFSignatures(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			resolve := lookupSpecializedUDF(tc.name)
-			if resolve == nil {
-				t.Fatal("documented histogram function was not registered")
-			}
+			require.NotNil(t, resolve)
 			got, err := resolve(tc.args)
-			if err != nil || !got.Equal(tc.want) {
-				t.Fatalf("type = %s, error = %v; want %s", got.String(), err, tc.want.String())
-			}
-			if _, err := resolve(nil); err == nil {
-				t.Fatal("missing histogram argument accepted")
+			require.NoError(t, err)
+			require.True(t, got.Equal(tc.want))
+			{
+				_, err := resolve(nil)
+				require.Error(t, err)
 			}
 			optionalArgs := append([]model.Type(nil), tc.args...)
 			optionalArgs[0] = model.Optional(histogram)
 			optionalResult, err := resolve(optionalArgs)
-			if err != nil || !optionalResult.Equal(model.Optional(tc.want)) {
-				t.Fatalf("optional type = %s, error = %v; want Optional<%s>", optionalResult.String(), err, tc.want.String())
-			}
+			require.NoError(t, err)
+			require.True(t, optionalResult.Equal(model.Optional(tc.want)))
 		})
 	}
 	barCount := model.Type{Kind: "Int32"}
 	count := big.NewInt(50)
 	got, handled, err := resolveSpecializedCall("Histogram::Print", []CallArgument{{Type: histogram}, {Type: barCount, IntegerLiteral: count}})
-	if !handled || err != nil || got.Kind != "String" {
-		t.Fatalf("Print(histogram, 50) = %s, handled %t, error %v", got.String(), handled, err)
-	}
+	require.True(t, handled)
+	require.NoError(t, err)
+	require.Equal(t, "String", got.Kind)
 	count = big.NewInt(256)
 	_, handled, err = resolveSpecializedCall("Histogram::Print", []CallArgument{{Type: histogram}, {Type: barCount, IntegerLiteral: count}})
-	if !handled || err == nil {
-		t.Fatalf("Print(histogram, 256): handled %t, error %v", handled, err)
-	}
+	require.True(t, handled)
+	require.Error(t, err)
 }
 
 func TestHistogramAggregateResults(t *testing.T) {
@@ -339,12 +315,11 @@ func TestHistogramAggregateResults(t *testing.T) {
 		"LogHistogram", "LogHistogramCDF",
 	} {
 		got, handled, err := resolveHistogramAggregate(name, []model.Type{{Kind: "Double"}})
-		if !handled || err != nil || !got.Equal(model.Optional(histogramStructType())) {
-			t.Errorf("%s = %s, handled %t, error %v", name, got.String(), handled, err)
-		}
+		assert.False(t, !handled || err != nil || !got.Equal(model.Optional(histogramStructType())))
 	}
-	if _, handled, err := resolveHistogramAggregate("AVG", nil); handled || err != nil {
-		t.Errorf("AVG: handled %t, error %v", handled, err)
+	{
+		_, handled, err := resolveHistogramAggregate("AVG", nil)
+		assert.False(t, handled || err != nil)
 	}
 	for _, tc := range []struct {
 		name string
@@ -357,8 +332,6 @@ func TestHistogramAggregateResults(t *testing.T) {
 		{"LinearHistogram", []model.Type{{Kind: "Double"}, {Kind: "Double"}, {Kind: "Double"}, {Kind: "Double"}, {Kind: "Double"}}, "expects 1 to 4 arguments"},
 	} {
 		_, handled, err := resolveHistogramAggregate(tc.name, tc.args)
-		if !handled || err == nil || !strings.Contains(err.Error(), tc.want) {
-			t.Errorf("%s(%v): handled %t, error %v; want %q", tc.name, tc.args, handled, err, tc.want)
-		}
+		assert.False(t, !handled || err == nil || !strings.Contains(err.Error(), tc.want))
 	}
 }

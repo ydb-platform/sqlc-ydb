@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 const databaseConfigBase = "version: '2'\nsql:\n- engine: ydb\n  schema: s.sql\n  queries: q.sql\n"
@@ -23,12 +25,8 @@ func TestDatabaseAnalysisModes(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c, err := Parse([]byte(databaseConfigBase + tc.options))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got := c.SQL[0].DatabaseEnabled(); got != tc.enabled {
-				t.Fatalf("DatabaseEnabled() = %v, want %v", got, tc.enabled)
-			}
+			require.NoError(t, err)
+			require.Equal(t, tc.enabled, c.SQL[0].DatabaseEnabled())
 		})
 	}
 }
@@ -48,9 +46,7 @@ func TestRejectInvalidDatabaseConfiguration(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Parse([]byte(databaseConfigBase + tc.options))
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("got %v; want %q", err, tc.want)
-			}
+			require.False(t, err == nil || !strings.Contains(err.Error(), tc.want), "got %v; want %q", err, tc.want)
 		})
 	}
 }
@@ -60,16 +56,10 @@ func TestLoadDatabaseDefersEnvironmentResolution(t *testing.T) {
 	t.Setenv("SQLC_YDB_TEST_DEFERRED_TOKEN", "")
 	path := filepath.Join(t.TempDir(), "sqlc.yaml")
 	data := databaseConfigBase + "  database:\n    uri: '${SQLC_YDB_TEST_DEFERRED_URI}'\n    auth_token_env: SQLC_YDB_TEST_DEFERRED_TOKEN\n"
-	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(data), 0600))
 	c, err := Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c.SQL[0].Database.URI != "${SQLC_YDB_TEST_DEFERRED_URI}" {
-		t.Fatalf("Load expanded URI: %q", c.SQL[0].Database.URI)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "${SQLC_YDB_TEST_DEFERRED_URI}", c.SQL[0].Database.URI, "Load expanded URI: %q", c.SQL[0].Database.URI)
 }
 
 func TestResolveDatabase(t *testing.T) {
@@ -100,12 +90,8 @@ func TestResolveDatabase(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := tc.in.Resolve(baseDir)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got != tc.want {
-				t.Fatalf("resolved connection differs: %+v", got)
-			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got, "resolved connection differs: %+v", got)
 		})
 	}
 }
@@ -139,12 +125,8 @@ func TestResolveDatabaseRejectsInvalidConnections(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := tc.in.Resolve(t.TempDir())
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("got %v; want %q", err, tc.want)
-			}
-			if strings.Contains(err.Error(), "private-secret") {
-				t.Fatalf("error exposes URI contents: %v", err)
-			}
+			require.False(t, err == nil || !strings.Contains(err.Error(), tc.want), "got %v; want %q", err, tc.want)
+			require.False(t, strings.Contains(err.Error(), "private-secret"), "error exposes URI contents: %v", err)
 		})
 	}
 }
@@ -162,17 +144,13 @@ func TestDatabaseAnalysisSchemaRequirement(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Parse([]byte(withoutSchema + tc.options))
-			if !tc.wantError && err != nil {
-				t.Fatal(err)
+			if !tc.wantError {
+				require.NoError(t, err)
 			}
-			if tc.wantError && (err == nil || !strings.Contains(err.Error(), "schema and queries paths are required")) {
-				t.Fatalf("got %v; want required schema error", err)
-			}
+			require.False(t, tc.wantError && (err == nil || !strings.Contains(err.Error(), "schema and queries paths are required")), "got %v; want required schema error", err)
 		})
 	}
 	withoutQueries := strings.Replace(databaseConfigBase, "  queries: q.sql\n", "", 1)
 	_, err := Parse([]byte(withoutQueries + "  database: {uri: 'grpc://localhost:2136/local'}\n"))
-	if err == nil || !strings.Contains(err.Error(), "queries paths are required") {
-		t.Fatalf("got %v; want required queries error", err)
-	}
+	require.False(t, err == nil || !strings.Contains(err.Error(), "queries paths are required"), "got %v; want required queries error", err)
 }

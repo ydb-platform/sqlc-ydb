@@ -4,6 +4,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"example.com/sqlc-ydb-example-tests/internal/testdb"
 	sq "example.com/sqlc-ydb-examples/authors/go/database/sql"
 	native "example.com/sqlc-ydb-examples/authors/go/native"
@@ -15,9 +17,7 @@ func TestAuthorsPagination(t *testing.T) {
 	ctx := db.Context
 	n, s := native.New(db.Native), sq.New(db.SQL)
 	for _, id := range []uint64{40, 10, 30, 20} {
-		if err := n.UpsertAuthor(ctx, native.UpsertAuthorParams{AuthorID: id, AuthorName: "Автор"}); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, n.UpsertAuthor(ctx, native.UpsertAuthorParams{AuthorID: id, AuthorName: "Автор"}))
 	}
 	for _, runtime := range []struct {
 		name string
@@ -58,12 +58,8 @@ func TestAuthorsPagination(t *testing.T) {
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					got, err := runtime.page(tc.size, tc.offset)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if !slices.Equal(got, tc.want) {
-						t.Fatalf("page(%d, %d) = %v, want %v", tc.size, tc.offset, got, tc.want)
-					}
+					require.NoError(t, err)
+					require.True(t, slices.Equal(got, tc.want), "page(%d, %d) = %v, want %v", tc.size, tc.offset, got, tc.want)
 				})
 			}
 		})

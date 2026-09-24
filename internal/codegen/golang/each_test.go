@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -25,9 +26,7 @@ func TestEachRuntime(t *testing.T) {
 				filename = "sql.txt"
 			}
 			source, err := os.ReadFile(filepath.Join("testdata", "each", filename))
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			runGeneratedRuntimeTest(t, eachInput(), Options{Package: "db", Runtime: runtime, EmitInterface: true}, string(source))
 		})
 	}
@@ -55,12 +54,12 @@ func TestEachDecimalValidation(t *testing.T) {
 `)
 		in.Queries[0].ResultSets = nil
 		if _, err := Generate(in, Options{Runtime: runtime}); err == nil || !strings.Contains(err.Error(), "requires one non-empty result set") {
-			t.Fatalf("%s: %v", runtime, err)
+			require.FailNow(t, fmt.Sprintf("%s: %v", runtime, err))
 		}
 	}
 	in := eachInput()
 	in.Queries[0].Parameters = []model.Parameter{{Name: "row", Type: model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "id", Type: model.Type{Kind: "Uint64"}}}}}}
 	if _, err := Generate(in, Options{}); err == nil || !strings.Contains(err.Error(), "VisitRow") {
-		t.Fatalf("row/parameter declaration collision: %v", err)
+		require.FailNow(t, fmt.Sprintf("row/parameter declaration collision: %v", err))
 	}
 }

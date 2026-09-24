@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -14,17 +15,13 @@ func TestJavaTablePathsKeepNamespaceInNames(t *testing.T) {
 				{Name: "/local/tenant_a/users"}, {Name: "/local/tenant_b/users"},
 			}}}
 			files, err := Generate(a, Options{Runtime: runtime})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			if runtime == "jooq" {
 				for _, want := range []string{"LocalTenantAUsersTable", "LocalTenantBUsersTable", "LOCAL_TENANT_A_USERS", "LOCAL_TENANT_B_USERS", `"/local/tenant_a/users"`, `"/local/tenant_b/users"`} {
-					if !strings.Contains(string(files[0].Content), want) {
-						t.Fatalf("missing %s in %s", want, files[0].Content)
-					}
+					require.Contains(t, string(files[0].Content), want, "missing %s in %s", want, files[0].Content)
 				}
-			} else if files[0].Name != "LocalTenantAUsers.java" || files[1].Name != "LocalTenantBUsers.java" {
-				t.Fatalf("table namespaces lost: %v", files)
+			} else {
+				require.False(t, files[0].Name != "LocalTenantAUsers.java" || files[1].Name != "LocalTenantBUsers.java", "table namespaces lost: %v", files)
 			}
 		})
 	}
@@ -35,9 +32,7 @@ func TestJavaTablePathCollisions(t *testing.T) {
 		t.Run(runtime, func(t *testing.T) {
 			a := &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "tenant/users"}, {Name: "tenant_users"}}}}
 			files, err := Generate(a, Options{Runtime: runtime})
-			if files != nil || err == nil || !strings.Contains(err.Error(), "name collision") {
-				t.Fatalf("colliding table paths: files=%v, error=%v", files, err)
-			}
+			require.False(t, files != nil || err == nil || !strings.Contains(err.Error(), "name collision"), "colliding table paths: files=%v, error=%v", files, err)
 		})
 	}
 }

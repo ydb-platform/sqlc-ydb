@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -17,24 +18,18 @@ func TestJooqSubqueriesPublishedSDK(t *testing.T) {
 		t.Skip("set SQLC_YDB_TEST_MAVEN to compile and execute IN subqueries against the published dialect")
 	}
 	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqSubquerySchema}}, []model.Source{{Name: "queries.sql", Text: jooqSubqueryQueries + "\n-- name: ReadNegatedDistinct :many\nSELECT id FROM records WHERE NOT (id IN (SELECT DISTINCT id FROM selected));"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	files, err := Generate(analysis, Options{Package: "subqueries", Runtime: "jooq"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	classpath := filepath.Join(dir, "classpath")
 	cmd := exec.Command(maven, "-q", "dependency:build-classpath", "-Dmdep.outputFile="+classpath)
 	cmd.Dir = filepath.Join("..", "..", "..", "tests", "examples", "java", "jooq")
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("SDK classpath: %v\n%s", err, out)
+		require.NoError(t, err, "SDK classpath: %v\n%s", err, out)
 	}
 	cp, err := os.ReadFile(classpath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	program := `package subqueries;
 import java.util.*;
 import org.jooq.conf.*;
@@ -102,14 +97,12 @@ public class Main {
 	compile := []string{"-cp", strings.TrimSpace(string(cp)), "-d", dir}
 	for _, file := range files {
 		path := filepath.Join(dir, file.Name)
-		if err := os.WriteFile(path, file.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(path, file.Content, 0600))
 		compile = append(compile, path)
 	}
 	for _, args := range [][]string{append([]string{"javac"}, compile...), {"java", "-cp", dir + string(os.PathListSeparator) + strings.TrimSpace(string(cp)), "subqueries.Main"}} {
 		if out, err := exec.Command(args[0], args[1:]...).CombinedOutput(); err != nil {
-			t.Fatalf("%s: %v\n%s", args[0], err, out)
+			require.NoError(t, err, "%s: %v\n%s", args[0], err, out)
 		}
 	}
 }

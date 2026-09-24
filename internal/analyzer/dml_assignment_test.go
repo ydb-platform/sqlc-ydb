@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -22,12 +24,8 @@ func TestDMLAssignmentWideningAcrossForms(t *testing.T) {
 		}{{"1u", true}, {"1ul", false}, {"CAST(NULL AS Uint32?)", false}} {
 			sql := "-- name: Write :exec\n" + strings.Replace(form, "%s", tc.value, 1)
 			result, err := Analyze(schema, []model.Source{{Name: "q.sql", Text: sql}})
-			if (err == nil) != tc.valid {
-				t.Fatalf("%s: %v", sql, err)
-			}
-			if err == nil && result.Queries[0].SQL != sql {
-				t.Fatalf("SQL changed: %s", result.Queries[0].SQL)
-			}
+			require.Equal(t, tc.valid, (err == nil))
+			require.False(t, err == nil && result.Queries[0].SQL != sql)
 		}
 	}
 	for _, statement := range []string{
@@ -35,8 +33,9 @@ func TestDMLAssignmentWideningAcrossForms(t *testing.T) {
 		"UPSERT INTO counters (id, value, optional_value, enabled) SELECT id, small, maybe, true FROM source;",
 		"UPDATE counters ON SELECT id, small AS value, maybe AS optional_value FROM source;",
 	} {
-		if _, err := Analyze(schema, []model.Source{{Name: "q.sql", Text: "-- name: Write :exec\n" + statement}}); err != nil {
-			t.Fatalf("%s: %v", statement, err)
+		{
+			_, err := Analyze(schema, []model.Source{{Name: "q.sql", Text: "-- name: Write :exec\n" + statement}})
+			require.NoError(t, err)
 		}
 	}
 }
@@ -44,9 +43,7 @@ func TestDMLAssignmentWideningAcrossForms(t *testing.T) {
 func TestUnresolvedExpressionParameterSuggestsDeclaration(t *testing.T) {
 	for _, expr := range []string{"$delta", "($delta)", "1 + $delta", "1 + ($delta)", "ABS($delta)"} {
 		_, err := Analyze(nil, []model.Source{{Name: "q.sql", Text: "-- name: Read :one\nSELECT " + expr + " AS value;"}})
-		if err == nil || !strings.Contains(err.Error(), "cannot resolve type of parameter $delta; add DECLARE") {
-			t.Fatalf("%s: %v", expr, err)
-		}
+		require.ErrorContains(t, err, "cannot resolve type of parameter $delta; add DECLARE")
 	}
 }
 
@@ -59,9 +56,7 @@ func TestDMLPrimaryKeyWidening(t *testing.T) {
 		}{{"Uint32", true}, {"Uint64", true}, {"Uint32?", false}, {"Int32", false}} {
 			sql := "-- name: Write :exec\nDECLARE $key AS " + tc.typ + ";\n" + verb + " records ON SELECT $key AS id;"
 			_, err := Analyze(schema, []model.Source{{Name: "q.sql", Text: sql}})
-			if (err == nil) != tc.valid {
-				t.Fatalf("%s: %v", sql, err)
-			}
+			require.Equal(t, tc.valid, (err == nil))
 		}
 	}
 }

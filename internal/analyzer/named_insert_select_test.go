@@ -1,9 +1,9 @@
 package analyzer
 
 import (
-	"reflect"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -15,23 +15,15 @@ func TestNamedInsertSelect(t *testing.T) {
 			t.Run(verb+"/"+projection, func(t *testing.T) {
 				query := "-- name: Write :exec\nDECLARE $rows AS List<Struct<label:Utf8,id:Uint64,>>;\n" + verb + " INTO records SELECT " + projection + " FROM AS_TABLE($rows) AS r;"
 				got, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 				wantRows := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{
 					{Name: "label", Type: model.Type{Kind: "Utf8"}},
 					{Name: "id", Type: model.Type{Kind: "Uint64"}},
 				}}}
-				if !reflect.DeepEqual(got.Queries[0].Parameters, []model.Parameter{{Name: "rows", Type: wantRows}}) {
-					t.Fatalf("parameters: %#v", got.Queries[0].Parameters)
-				}
+				require.Equal(t, []model.Parameter{{Name: "rows", Type: wantRows}}, got.Queries[0].Parameters)
 				sql := got.Queries[0].SQL
-				if strings.Contains(sql, "*") {
-					t.Fatalf("wildcard was not expanded: %s", sql)
-				}
-				if !strings.Contains(sql, verb+" INTO records SELECT ") {
-					t.Fatalf("named mapping changed: %s", sql)
-				}
+				require.NotContains(t, sql, "*")
+				require.Contains(t, sql, verb+" INTO records SELECT ")
 			})
 		}
 	}
@@ -53,17 +45,12 @@ CREATE TABLE source_notes (id Uint32 NOT NULL, text Utf8, PRIMARY KEY(id));`}}
 			t.Run(verb+"/"+tt.name, func(t *testing.T) {
 				prefix := "-- name: Write :many\n" + verb + " INTO records "
 				result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: prefix + tt.selectSQL + " RETURNING *;"}})
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 				query := result.Queries[0]
 				wantSQL := prefix + tt.expandedSQL + " RETURNING `id`, `label`, `note`;"
-				if query.SQL != wantSQL {
-					t.Fatalf("SQL = %q, want %q", query.SQL, wantSQL)
-				}
-				if len(query.ResultSets) != 1 || !reflect.DeepEqual(query.ResultSets[0].Columns, result.Catalog.Tables[0].Columns) {
-					t.Fatalf("RETURNING must use destination types and column order: %#v", query.ResultSets)
-				}
+				require.Equal(t, wantSQL, query.SQL)
+				require.Len(t, query.ResultSets, 1)
+				require.Equal(t, result.Catalog.Tables[0].Columns, query.ResultSets[0].Columns)
 			})
 		}
 	}
@@ -73,13 +60,9 @@ func TestNamedInsertSelectInfersFilterParameters(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, label Utf8, PRIMARY KEY(id));"}}
 	sql := "-- name: Copy :exec\nINSERT INTO records SELECT * FROM records AS r WHERE r.id >= $minimum LIMIT $count;"
 	result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	want := []model.Parameter{{Name: "minimum", Type: model.Type{Kind: "Uint64"}}, {Name: "count", Type: model.Type{Kind: "Uint64"}}}
-	if !reflect.DeepEqual(result.Queries[0].Parameters, want) {
-		t.Fatalf("parameters = %#v, want %#v", result.Queries[0].Parameters, want)
-	}
+	require.Equal(t, want, result.Queries[0].Parameters)
 }
 
 func TestNamedInsertSelectDiagnostics(t *testing.T) {
@@ -101,9 +84,7 @@ func TestNamedInsertSelectDiagnostics(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Write :exec\nUPSERT INTO records " + tt.sql + ";"}})
-			if err == nil || !strings.Contains(err.Error(), tt.want) {
-				t.Fatalf("error=%v, want %q", err, tt.want)
-			}
+			require.ErrorContains(t, err, tt.want)
 		})
 	}
 }
@@ -113,24 +94,18 @@ func TestNamedInsertSelectAllowsGeneratedKey(t *testing.T) {
 	for _, verb := range []string{"INSERT", "UPSERT"} {
 		t.Run(verb, func(t *testing.T) {
 			result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Write :many\n" + verb + " INTO records SELECT 1ul AS tenant, NULL AS label RETURNING id;"}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			column := result.Queries[0].ResultSets[0].Columns[0]
-			if column.Name != "id" || column.Type.Kind != "Int32" || !column.SequenceGenerated {
-				t.Fatalf("generated key metadata = %#v", column)
-			}
+			require.Equal(t, "id", column.Name)
+			require.Equal(t, "Int32", column.Type.Kind)
+			require.True(t, column.SequenceGenerated)
 			_, err = Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Write :exec\n" + verb + " INTO records SELECT NULL AS label;"}})
-			if err == nil || !strings.Contains(err.Error(), `missing primary key column "tenant"`) {
-				t.Fatalf("error = %v, want missing ordinary key diagnostic", err)
-			}
+			require.ErrorContains(t, err, `missing primary key column "tenant"`)
 		})
 	}
 	for _, statement := range []string{"UPDATE records", "DELETE FROM records"} {
 		_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Write :exec\n" + statement + " ON SELECT 1ul AS tenant;"}})
-		if err == nil || !strings.Contains(err.Error(), `missing primary key column "id"`) {
-			t.Fatalf("%s error = %v, want missing generated key diagnostic", statement, err)
-		}
+		require.ErrorContains(t, err, `missing primary key column "id"`)
 	}
 }
 
@@ -139,17 +114,17 @@ func TestNamedInsertSelectRequiresNotNullColumns(t *testing.T) {
 	for _, verb := range []string{"INSERT", "UPSERT"} {
 		t.Run(verb, func(t *testing.T) {
 			_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Write :exec\n" + verb + " INTO records SELECT 1ul AS id;"}})
-			if err == nil || !strings.Contains(err.Error(), `missing required column "label"`) {
-				t.Fatalf("error = %v, want missing NOT NULL column diagnostic", err)
-			}
-			if _, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Write :exec\n" + verb + " INTO records SELECT 1ul AS id, 'hello'u AS label;"}}); err != nil {
-				t.Fatalf("omitting nullable note: %v", err)
+			require.ErrorContains(t, err, `missing required column "label"`)
+			{
+				_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Write :exec\n" + verb + " INTO records SELECT 1ul AS id, 'hello'u AS label;"}})
+				require.NoError(t, err)
 			}
 		})
 	}
 	for _, statement := range []string{"UPDATE records", "DELETE FROM records"} {
-		if _, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Write :exec\n" + statement + " ON SELECT 1ul AS id;"}}); err != nil {
-			t.Fatalf("%s without unrelated NOT NULL column: %v", statement, err)
+		{
+			_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Write :exec\n" + statement + " ON SELECT 1ul AS id;"}})
+			require.NoError(t, err)
 		}
 	}
 }
@@ -157,16 +132,13 @@ func TestNamedInsertSelectRequiresNotNullColumns(t *testing.T) {
 func TestTrailingStructComma(t *testing.T) {
 	for _, typ := range []string{"Struct<id:Uint64,>", "List<Struct<id:Uint64,note:Utf8?,>>", "Struct<inner:Struct<id:Uint64,>,>"} {
 		parsed, err := parseType(typ)
-		if err != nil {
-			t.Fatalf("%s: %v", typ, err)
-		}
-		if strings.Contains(parsed.String(), ",>") {
-			t.Fatalf("noncanonical type: %s", parsed.String())
-		}
+		require.NoError(t, err)
+		require.NotContains(t, parsed.String(), ",>")
 	}
 	for _, typ := range []string{"Struct<,>", "Struct<id:Uint64,,>", "Struct<id:Uint64,id:Utf8,>"} {
-		if _, err := parseType(typ); err == nil {
-			t.Fatalf("accepted malformed type %s", typ)
+		{
+			_, err := parseType(typ)
+			require.Error(t, err)
 		}
 	}
 }

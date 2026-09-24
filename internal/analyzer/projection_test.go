@@ -1,8 +1,9 @@
 package analyzer
 
 import (
-	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -23,11 +24,10 @@ func TestAnalyzeProjectionOrderAndAliases(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Rows :many\n" + tt.sql}})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if columns := got.Queries[0].ResultSets[0].Columns; !reflect.DeepEqual(columns, tt.want) {
-				t.Fatalf("columns = %#v, want %#v", columns, tt.want)
+			require.NoError(t, err)
+			{
+				columns := got.Queries[0].ResultSets[0].Columns
+				require.Equal(t, tt.want, columns)
 			}
 		})
 	}
@@ -54,9 +54,7 @@ func TestAnalyzeJoinKindsAndOrder(t *testing.T) {
 				projection += ", c.id"
 			}
 			got, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Joined :many\nSELECT " + projection + " FROM " + tt.from + ";"}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			var want []model.Column
 			for i, optional := range tt.optional {
 				typ := model.Type{Kind: "Uint64"}
@@ -68,8 +66,9 @@ func TestAnalyzeJoinKindsAndOrder(t *testing.T) {
 					want = append(want, model.Column{Name: "label", WireName: "b.label", Type: model.Optional(model.Type{Kind: "Utf8"}), Table: "records"})
 				}
 			}
-			if columns := got.Queries[0].ResultSets[0].Columns; !reflect.DeepEqual(columns, want) {
-				t.Fatalf("columns = %#v, want %#v", columns, want)
+			{
+				columns := got.Queries[0].ResultSets[0].Columns
+				require.Equal(t, want, columns)
 			}
 		})
 	}
@@ -80,11 +79,10 @@ func TestAnalyzeJoinStarOrder(t *testing.T) {
 CREATE TABLE first (id Uint64 NOT NULL, PRIMARY KEY (id));
 CREATE TABLE second (label Utf8 NOT NULL, PRIMARY KEY (label));`}},
 		[]model.Source{{Name: "query.sql", Text: "-- name: Rows :many\nSELECT * FROM second, first;"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	want := []model.Column{{Name: "label", Type: model.Type{Kind: "Utf8"}, Table: "second"}, {Name: "id", Type: model.Type{Kind: "Uint64"}, Table: "first"}}
-	if columns := got.Queries[0].ResultSets[0].Columns; !reflect.DeepEqual(columns, want) {
-		t.Fatalf("columns = %#v, want %#v", columns, want)
+	{
+		columns := got.Queries[0].ResultSets[0].Columns
+		require.Equal(t, want, columns)
 	}
 }

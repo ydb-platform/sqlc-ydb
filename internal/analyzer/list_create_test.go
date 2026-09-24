@@ -1,8 +1,9 @@
 package analyzer
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -18,11 +19,10 @@ func TestListCreateTypeExpressionAndContextualFallback(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			query := "-- name: Read :one\nSELECT " + tc.expr + " AS value;"
 			got, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: query}})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if value := got.Queries[0].ResultSets[0].Columns[0].Type.String(); value != tc.want {
-				t.Fatalf("type = %s, want %s", value, tc.want)
+			require.NoError(t, err)
+			{
+				value := got.Queries[0].ResultSets[0].Columns[0].Type.String()
+				require.Equal(t, tc.want, value)
 			}
 		})
 	}
@@ -32,19 +32,16 @@ func TestListCreateRequiresLiteralType(t *testing.T) {
 	for _, expr := range []string{"ListCreate()", "ListCreate($type)", "ListCreate(1)", "ListCreate(String, Uint64)"} {
 		query := "-- name: Read :one\nSELECT " + expr + " AS value;"
 		_, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: query}})
-		if err == nil || !strings.Contains(err.Error(), "ListCreate") {
-			t.Fatalf("%s error = %v", expr, err)
-		}
+		require.ErrorContains(t, err, "ListCreate")
 	}
 }
 
 func TestJsonSerializationFromList(t *testing.T) {
 	query := "-- name: Read :one\nDECLARE $items AS List<String>;\nSELECT Yson::SerializeJson(Json::From($items)) AS payload;"
 	got, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: query}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if value := got.Queries[0].ResultSets[0].Columns[0].Type.String(); value != "Optional<Json>" {
-		t.Fatalf("type = %s, want Optional<Json>", value)
+	require.NoError(t, err)
+	{
+		value := got.Queries[0].ResultSets[0].Columns[0].Type.String()
+		require.Equal(t, "Optional<Json>", value)
 	}
 }

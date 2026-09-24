@@ -3,6 +3,9 @@ package config
 import (
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFormatsAndDefaults(t *testing.T) {
@@ -21,12 +24,11 @@ sql:
 		`{"version":"2","sql":[{"engine":"ydb","schema":"schema.sql","queries":["a.sql","b.sql"],"gen":{"go":{"out":"db"}}}]}`,
 	} {
 		c, err := Parse([]byte(s))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if c.SQL[0].Gen.Go.Package != "db" || c.SQL[0].Gen.Go.SQLPackage != "database/sql" || len(c.SQL[0].Queries) != 2 {
-			t.Fatalf("unexpected config: %+v", c.SQL[0])
-		}
+		require.NoError(t, err)
+		require.Len(t, c.SQL, 1)
+		require.Equal(t, "db", c.SQL[0].Gen.Go.Package)
+		require.Equal(t, "database/sql", c.SQL[0].Gen.Go.SQLPackage)
+		require.Len(t, c.SQL[0].Queries, 2)
 	}
 }
 
@@ -47,9 +49,7 @@ func TestRejectUnsupportedConfiguration(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Parse([]byte(tc.input))
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("got %v; want %s", err, tc.want)
-			}
+			require.ErrorContains(t, err, tc.want)
 		})
 	}
 }
@@ -68,13 +68,16 @@ sql:
       - {name: mode, type: Uint32, optional: true}
       returns: Double
 `))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.Len(t, c.SQL, 1)
+	require.Len(t, c.SQL[0].Analyzer.Functions, 1)
 	got := c.SQL[0].Analyzer.Functions[0]
-	if got.Name != "Acme::Score" || got.Returns != "Double" || len(got.Args) != 2 || got.Args[0].Name != "value" || !got.Args[0].AutoMap || !got.Args[1].Optional {
-		t.Fatalf("unexpected function signature: %+v", got)
-	}
+	require.Equal(t, "Acme::Score", got.Name)
+	require.Equal(t, "Double", got.Returns)
+	require.Len(t, got.Args, 2)
+	require.Equal(t, "value", got.Args[0].Name)
+	require.True(t, got.Args[0].AutoMap)
+	require.True(t, got.Args[1].Optional)
 }
 
 func TestRejectInvalidFunctionSignatureConfiguration(t *testing.T) {
@@ -89,9 +92,7 @@ func TestRejectInvalidFunctionSignatureConfiguration(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Parse([]byte(base + tc.input))
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("got %v; want %q", err, tc.want)
-			}
+			require.ErrorContains(t, err, tc.want)
 		})
 	}
 }
@@ -99,42 +100,39 @@ func TestRejectInvalidFunctionSignatureConfiguration(t *testing.T) {
 func TestAdditionalBuiltinTargets(t *testing.T) {
 	base := "version: '2'\nsql:\n- engine: ydb\n  schema: s.sql\n  queries: q.sql\n  gen:\n"
 	c, err := Parse([]byte(base + "    cpp:\n      out: cpp\n    csharp:\n      out: cs\n    java:\n      out: java\n    typescript:\n      out: js\n    rust:\n      out: rust\n    php:\n      out: php\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	g := c.SQL[0].Gen
-	if g.CPP.Namespace != "db" || g.CPP.Runtime != "ydb" || g.CSharp.Namespace != "Db" || g.Java.Package != "db" || g.Java.Runtime != "ydb" {
-		t.Fatalf("unexpected defaults: %+v %+v %+v", g.CPP, g.CSharp, g.Java)
-	}
-	if g.CSharp.Runtime != "adonet" || g.TypeScript.Runtime != "ydb" || g.Rust.Runtime != "ydb" || g.PHP.Runtime != "ydb" || g.PHP.Namespace != "Db" {
-		t.Fatalf("unexpected new target defaults: %+v %+v %+v %+v", g.CSharp, g.TypeScript, g.Rust, g.PHP)
-	}
+	require.Equal(t, "db", g.CPP.Namespace)
+	require.Equal(t, "ydb", g.CPP.Runtime)
+	require.Equal(t, "Db", g.CSharp.Namespace)
+	require.Equal(t, "db", g.Java.Package)
+	require.Equal(t, "ydb", g.Java.Runtime)
+	require.Equal(t, "adonet", g.CSharp.Runtime)
+	require.Equal(t, "ydb", g.TypeScript.Runtime)
+	require.Equal(t, "ydb", g.Rust.Runtime)
+	require.Equal(t, "ydb", g.PHP.Runtime)
+	require.Equal(t, "Db", g.PHP.Namespace)
 	for _, runtime := range []string{"adonet", "dapper"} {
-		if _, err := Parse([]byte(base + "    csharp:\n      out: cs\n      runtime: " + runtime + "\n")); err != nil {
-			t.Fatalf("C# %s: %v", runtime, err)
-		}
+		_, err = Parse([]byte(base + "    csharp:\n      out: cs\n      runtime: " + runtime + "\n"))
+		require.NoError(t, err, "C# %s", runtime)
 	}
 	for _, target := range []string{"typescript", "rust", "php"} {
 		for _, options := range []string{"{}", "{out: output, runtime: imaginary}"} {
-			if _, err := Parse([]byte(base + "    " + target + ": " + options + "\n")); err == nil {
-				t.Errorf("accepted invalid %s options: %s", target, options)
-			}
+			_, err = Parse([]byte(base + "    " + target + ": " + options + "\n"))
+			assert.Error(t, err, "accepted invalid %s options: %s", target, options)
 		}
 	}
 	for _, runtime := range []string{"native", "ydb", "jdbc", "jooq"} {
-		if _, err := Parse([]byte(base + "    java:\n      out: java\n      runtime: " + runtime + "\n")); err != nil {
-			t.Fatalf("Java %s: %v", runtime, err)
-		}
+		_, err = Parse([]byte(base + "    java:\n      out: java\n      runtime: " + runtime + "\n"))
+		require.NoError(t, err, "Java %s", runtime)
 	}
 	for _, runtime := range []string{"spring", "hibernate"} {
-		if _, err := Parse([]byte(base + "    java:\n      out: java\n      runtime: " + runtime + "\n")); err == nil {
-			t.Errorf("accepted removed Java runtime %s", runtime)
-		}
+		_, err = Parse([]byte(base + "    java:\n      out: java\n      runtime: " + runtime + "\n"))
+		assert.Error(t, err, "accepted removed Java runtime %s", runtime)
 	}
 	for _, runtime := range []string{"native", "ydb", "userver"} {
-		if _, err := Parse([]byte(base + "    cpp:\n      out: cpp\n      runtime: " + runtime + "\n")); err != nil {
-			t.Fatalf("C++ %s: %v", runtime, err)
-		}
+		_, err = Parse([]byte(base + "    cpp:\n      out: cpp\n      runtime: " + runtime + "\n"))
+		require.NoError(t, err, "C++ %s", runtime)
 	}
 	for _, options := range []string{
 		"    cpp:\n      namespace: db\n",
@@ -144,9 +142,8 @@ func TestAdditionalBuiltinTargets(t *testing.T) {
 		"    java:\n      out: java\n      runtime: imaginary\n",
 		"    csharp:\n      out: cs\n      runtime: native\n",
 	} {
-		if _, err := Parse([]byte(base + options)); err == nil {
-			t.Errorf("expected invalid options to fail: %s", options)
-		}
+		_, err = Parse([]byte(base + options))
+		assert.Error(t, err, "expected invalid options to fail: %s", options)
 	}
 }
 
@@ -159,9 +156,7 @@ func TestKotlinConfiguration(t *testing.T) {
 				options += "      runtime: " + runtime + "\n      package: example.db\n"
 			}
 			c, err := Parse([]byte(base + options))
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			g := c.SQL[0].Gen.Kotlin
 			wantRuntime, wantPackage := runtime, "example.db"
 			if runtime == "" || runtime == "native" {
@@ -170,9 +165,9 @@ func TestKotlinConfiguration(t *testing.T) {
 			if runtime == "" {
 				wantPackage = "db"
 			}
-			if g.Out != "generated/kotlin" || g.Package != wantPackage || g.Runtime != wantRuntime {
-				t.Fatalf("unexpected Kotlin options: %+v", g)
-			}
+			require.Equal(t, "generated/kotlin", g.Out)
+			require.Equal(t, wantPackage, g.Package)
+			require.Equal(t, wantRuntime, g.Runtime)
 		})
 	}
 	for _, tc := range []struct{ name, options, want string }{
@@ -182,9 +177,7 @@ func TestKotlinConfiguration(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Parse([]byte(base + tc.options))
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("got %v; want %s", err, tc.want)
-			}
+			require.ErrorContains(t, err, tc.want)
 		})
 	}
 }

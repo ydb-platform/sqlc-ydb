@@ -1,9 +1,11 @@
 package analyzer
 
 import (
-	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -21,9 +23,7 @@ DECLARE $author_id AS Uint64;
 SELECT id, name, biography FROM authors WHERE id = $author_id;`}}
 
 	got, err := Analyze(schema, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	wantCatalog := model.Catalog{Tables: []model.Table{{
 		Name: "authors",
@@ -34,30 +34,17 @@ SELECT id, name, biography FROM authors WHERE id = $author_id;`}}
 		},
 		PrimaryKey: []string{"id"},
 	}}}
-	if !reflect.DeepEqual(got.Catalog, wantCatalog) {
-		t.Fatalf("Catalog = %#v, want %#v", got.Catalog, wantCatalog)
-	}
-	if len(got.Queries) != 1 {
-		t.Fatalf("len(Queries) = %d, want 1", len(got.Queries))
-	}
+	require.Equal(t, wantCatalog, got.Catalog)
+	require.Len(t, got.Queries, 1)
 	q := got.Queries[0]
-	if q.Name != "GetAuthor" || q.Command != model.One {
-		t.Fatalf("query identity = %q %q, want GetAuthor :one", q.Name, q.Command)
-	}
-	if q.Source != (model.Position{File: "query.sql", Line: 1, Column: 1}) {
-		t.Fatalf("Source = %#v", q.Source)
-	}
-	if !strings.Contains(q.SQL, "DECLARE $author_id AS Uint64;") {
-		t.Fatalf("SQL lost declaration: %q", q.SQL)
-	}
+	require.Equal(t, "GetAuthor", q.Name)
+	require.Equal(t, model.One, q.Command)
+	require.Equal(t, (model.Position{File: "query.sql", Line: 1, Column: 1}), q.Source)
+	require.Contains(t, q.SQL, "DECLARE $author_id AS Uint64;")
 	wantParams := []model.Parameter{{Name: "author_id", Type: model.Type{Kind: "Uint64"}}}
-	if !reflect.DeepEqual(q.Parameters, wantParams) {
-		t.Fatalf("Parameters = %#v, want %#v", q.Parameters, wantParams)
-	}
+	require.Equal(t, wantParams, q.Parameters)
 	wantResult := []model.ResultSet{{Columns: wantCatalog.Tables[0].Columns}}
-	if !reflect.DeepEqual(q.ResultSets, wantResult) {
-		t.Fatalf("ResultSets = %#v, want %#v", q.ResultSets, wantResult)
-	}
+	require.Equal(t, wantResult, q.ResultSets)
 }
 
 func TestAnalyzeMultipleQueriesAndDMLParameterTypes(t *testing.T) {
@@ -77,21 +64,15 @@ UPDATE authors SET name = $new_name WHERE id = $author_id;
 DELETE FROM authors WHERE id = $author_id;`}}
 
 	got, err := Analyze(schema, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
-	if len(got.Queries) != 3 {
-		t.Fatalf("len(Queries) = %d, want 3", len(got.Queries))
-	}
+	require.NoError(t, err)
+	require.Len(t, got.Queries, 3)
 	want := [][]model.Parameter{
 		{{Name: "id", Type: model.Type{Kind: "Uint64"}}, {Name: "name", Type: model.Type{Kind: "Utf8"}}, {Name: "bio", Type: model.Optional(model.Type{Kind: "Utf8"})}},
 		{{Name: "new_name", Type: model.Type{Kind: "Utf8"}}, {Name: "author_id", Type: model.Type{Kind: "Uint64"}}},
 		{{Name: "author_id", Type: model.Type{Kind: "Uint64"}}},
 	}
 	for i := range want {
-		if !reflect.DeepEqual(got.Queries[i].Parameters, want[i]) {
-			t.Fatalf("Queries[%d].Parameters = %#v, want %#v", i, got.Queries[i].Parameters, want[i])
-		}
+		require.Equal(t, want[i], got.Queries[i].Parameters)
 	}
 }
 
@@ -105,22 +86,16 @@ FROM authors AS a LEFT JOIN books AS b ON b.author_id = a.id
 WHERE a.id = $wanted_id;`}}
 
 	got, err := Analyze(schema, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	columns := got.Queries[0].ResultSets[0].Columns
 	want := []model.Column{
 		{Name: "author_id", Type: model.Type{Kind: "Uint64"}, Table: "authors"},
 		{Name: "name", WireName: "a.name", Type: model.Type{Kind: "Utf8"}, Table: "authors"},
 		{Name: "title", WireName: "b.title", Type: model.Optional(model.Type{Kind: "Utf8"}), Table: "books"},
 	}
-	if !reflect.DeepEqual(columns, want) {
-		t.Fatalf("columns = %#v, want %#v", columns, want)
-	}
+	require.Equal(t, want, columns)
 	wantParams := []model.Parameter{{Name: "wanted_id", Type: model.Type{Kind: "Uint64"}}}
-	if !reflect.DeepEqual(got.Queries[0].Parameters, wantParams) {
-		t.Fatalf("parameters = %#v, want %#v", got.Queries[0].Parameters, wantParams)
-	}
+	require.Equal(t, wantParams, got.Queries[0].Parameters)
 }
 
 func TestAnalyzeYDBResultWireNames(t *testing.T) {
@@ -139,9 +114,7 @@ SELECT x.* FROM left_table AS x JOIN right_table AS y ON x.id = y.id;
 SELECT x.id AS result FROM left_table AS x JOIN right_table AS y ON x.id = y.id;`}}
 
 	got, err := Analyze(schema, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	want := []model.Column{
 		{Name: "id", Type: model.Type{Kind: "Uint64"}, Table: "left_table"},
 		{Name: "id", Type: model.Type{Kind: "Uint64"}, Table: "left_table"},
@@ -149,14 +122,10 @@ SELECT x.id AS result FROM left_table AS x JOIN right_table AS y ON x.id = y.id;
 		{Name: "id", Type: model.Type{Kind: "Uint64"}, Table: "left_table"},
 		{Name: "result", Type: model.Type{Kind: "Uint64"}, Table: "left_table"},
 	}
-	if len(got.Queries) != len(want) {
-		t.Fatalf("got %d queries, want %d", len(got.Queries), len(want))
-	}
+	require.Len(t, got.Queries, len(want))
 	for i := range want {
 		column := got.Queries[i].ResultSets[0].Columns[0]
-		if !reflect.DeepEqual(column, want[i]) {
-			t.Errorf("query %s column = %#v, want %#v", got.Queries[i].Name, column, want[i])
-		}
+		assert.Equal(t, want[i], column)
 	}
 }
 
@@ -168,13 +137,9 @@ $local_id = $author_id;
 SELECT id FROM authors WHERE id = $local_id;`}}
 
 	got, err := Analyze(schema, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	want := []model.Parameter{{Name: "author_id", Type: model.Type{Kind: "Uint64"}}}
-	if !reflect.DeepEqual(got.Queries[0].Parameters, want) {
-		t.Fatalf("Parameters = %#v, want %#v", got.Queries[0].Parameters, want)
-	}
+	require.Equal(t, want, got.Queries[0].Parameters)
 }
 
 func TestAnalyzeValidatesColumnsOutsideProjection(t *testing.T) {
@@ -183,12 +148,10 @@ func TestAnalyzeValidatesColumnsOutsideProjection(t *testing.T) {
 SELECT id FROM authors WHERE missing = $id;`}}
 
 	result, err := Analyze(schema, queries)
-	if err == nil {
-		t.Fatal("Analyze() error = nil, want unknown-column error")
-	}
-	if result == nil || len(result.Diagnostics) == 0 || !strings.Contains(err.Error(), `query.sql:2:30: unknown column "missing"`) {
-		t.Fatalf("error = %v; diagnostics = %#v", err, result.Diagnostics)
-	}
+	require.Error(t, err)
+	require.NotNil(t, result)
+	require.NotEqual(t, 0, len(result.Diagnostics))
+	require.Contains(t, err.Error(), `query.sql:2:30: unknown column "missing"`)
 }
 
 func TestAnalyzeRejectsConflictingDeclare(t *testing.T) {
@@ -199,9 +162,7 @@ DECLARE $wanted AS Utf8;
 SELECT id FROM authors WHERE id = $wanted;`}}
 
 	_, err := Analyze(schema, queries)
-	if err == nil || !strings.Contains(err.Error(), "conflicting DECLARE types Uint64 and Utf8") {
-		t.Fatalf("error = %v", err)
-	}
+	require.ErrorContains(t, err, "conflicting DECLARE types Uint64 and Utf8")
 }
 
 func TestQueryAnnotationsComeOnlyFromLexerCommentTokens(t *testing.T) {
@@ -212,12 +173,9 @@ $text = @@ -- name: NotAQuery :many @@;
 SELECT id FROM authors WHERE id = $id;`}}
 
 	got, err := Analyze(schema, queries)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
-	if len(got.Queries) != 1 || got.Queries[0].Name != "GetAuthor" {
-		t.Fatalf("Queries = %#v", got.Queries)
-	}
+	require.NoError(t, err)
+	require.Len(t, got.Queries, 1)
+	require.Equal(t, "GetAuthor", got.Queries[0].Name)
 }
 
 func TestParseYQLRejectsBackslashEscapesInQuotedIdentifiers(t *testing.T) {
@@ -235,16 +193,10 @@ func TestParseYQLRejectsBackslashEscapesInQuotedIdentifiers(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, diagnostics := parseYQL("input.sql", tt.text, 2)
-			if len(diagnostics) != 1 {
-				t.Fatalf("diagnostics = %#v, want one", diagnostics)
-			}
+			require.Len(t, diagnostics, 1)
 			got := diagnostics[0]
-			if got.Position != (model.Position{File: "input.sql", Line: tt.line + 2, Column: tt.column}) {
-				t.Fatalf("position = %#v", got.Position)
-			}
-			if !strings.Contains(got.Message, "backslash escapes in quoted identifiers are unsupported") {
-				t.Fatalf("message = %q", got.Message)
-			}
+			require.Equal(t, (model.Position{File: "input.sql", Line: tt.line + 2, Column: tt.column}), got.Position)
+			require.Contains(t, got.Message, "backslash escapes in quoted identifiers are unsupported")
 		})
 	}
 }
@@ -253,9 +205,9 @@ func TestAnalyzeRejectsUnsupportedSchemaStatements(t *testing.T) {
 	result, err := Analyze([]model.Source{{Name: "schema.sql", Text: `
 CREATE TABLE authors (id Uint64 NOT NULL, PRIMARY KEY (id));
 UPSERT INTO authors (id) VALUES (1);`}}, nil)
-	if err == nil || result == nil || !strings.Contains(err.Error(), "unsupported schema statement") {
-		t.Fatalf("error = %v; result = %#v", err, result)
-	}
+	require.Error(t, err)
+	require.NotNil(t, result)
+	require.Contains(t, err.Error(), "unsupported schema statement")
 }
 
 func TestAnalyzeResolvesComparisonProjectionAsBool(t *testing.T) {
@@ -264,11 +216,10 @@ func TestAnalyzeResolvesComparisonProjectionAsBool(t *testing.T) {
 		[]model.Source{{Name: "query.sql", Text: `-- name: Matches :many
 SELECT id = 1 AS matches FROM authors;`}},
 	)
-	if err != nil {
-		t.Fatalf("error = %v", err)
-	}
-	if typ := result.Queries[0].ResultSets[0].Columns[0].Type; typ.Kind != "Bool" {
-		t.Fatalf("comparison type = %s, want Bool", typ.String())
+	require.NoError(t, err)
+	{
+		typ := result.Queries[0].ResultSets[0].Columns[0].Type
+		require.Equal(t, "Bool", typ.Kind)
 	}
 }
 
@@ -279,11 +230,10 @@ func TestAnalyzeComparisonProjectionDiffersFromParameterType(t *testing.T) {
 DECLARE $value AS Uint64;
 SELECT $value = 1ul AS matches FROM authors;`}},
 	)
-	if err != nil {
-		t.Fatalf("error = %v", err)
-	}
-	if typ := result.Queries[0].ResultSets[0].Columns[0].Type; typ.Kind != "Bool" {
-		t.Fatalf("comparison type = %s, want Bool", typ.String())
+	require.NoError(t, err)
+	{
+		typ := result.Queries[0].ResultSets[0].Columns[0].Type
+		require.Equal(t, "Bool", typ.Kind)
 	}
 }
 
@@ -294,12 +244,11 @@ func TestAnalyzeKeepsDirectParameterProjection(t *testing.T) {
 DECLARE $value AS Uint64;
 SELECT $value AS value FROM authors;`}},
 	)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	want := model.Type{Kind: "Uint64"}
-	if resultType := got.Queries[0].ResultSets[0].Columns[0].Type; !reflect.DeepEqual(resultType, want) {
-		t.Fatalf("result type = %#v, want %#v", resultType, want)
+	{
+		resultType := got.Queries[0].ResultSets[0].Columns[0].Type
+		require.Equal(t, want, resultType)
 	}
 }
 
@@ -336,11 +285,10 @@ func TestAnalyzeUsesYQLLiteralTypes(t *testing.T) {
 				[]model.Source{{Name: "schema.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, PRIMARY KEY (id));`}},
 				[]model.Source{{Name: "query.sql", Text: "-- name: Literal :many\nSELECT " + tt.expr + " AS value FROM authors;"}},
 			)
-			if err != nil {
-				t.Fatalf("Analyze() error = %v", err)
-			}
-			if kind := got.Queries[0].ResultSets[0].Columns[0].Type.Kind; kind != tt.kind {
-				t.Fatalf("literal %s type = %s, want %s", tt.expr, kind, tt.kind)
+			require.NoError(t, err)
+			{
+				kind := got.Queries[0].ResultSets[0].Columns[0].Type.Kind
+				require.Equal(t, tt.kind, kind)
 			}
 		})
 	}
@@ -352,9 +300,7 @@ func TestAnalyzeRejectsUnaryNumericLiteralUntilItsResultTypeIsSupported(t *testi
 			[]model.Source{{Name: "schema.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, PRIMARY KEY (id));`}},
 			[]model.Source{{Name: "query.sql", Text: "-- name: Literal :many\nSELECT " + expr + " AS value FROM authors;"}},
 		)
-		if err == nil || !strings.Contains(err.Error(), "unsupported result expression") {
-			t.Errorf("literal %s error = %v", expr, err)
-		}
+		assert.ErrorContains(t, err, "unsupported result expression")
 	}
 }
 
@@ -363,9 +309,7 @@ func TestAnalyzeRejectsIntegerLiteralOutsideItsYQLTypeRange(t *testing.T) {
 		[]model.Source{{Name: "schema.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, PRIMARY KEY (id));`}},
 		[]model.Source{{Name: "query.sql", Text: "-- name: Literal :many\nSELECT 256ut AS value FROM authors;"}},
 	)
-	if err == nil || !strings.Contains(err.Error(), `integer literal "256ut" is out of range for Uint8`) {
-		t.Fatalf("error = %v", err)
-	}
+	require.ErrorContains(t, err, `integer literal "256ut" is out of range for Uint8`)
 }
 
 func TestAnalyzeRejectsLiteralSuffixesWithoutDocumentedModelTypes(t *testing.T) {
@@ -374,9 +318,7 @@ func TestAnalyzeRejectsLiteralSuffixesWithoutDocumentedModelTypes(t *testing.T) 
 			[]model.Source{{Name: "schema.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, PRIMARY KEY (id));`}},
 			[]model.Source{{Name: "query.sql", Text: "-- name: Literal :many\nSELECT " + expr + " AS value FROM authors;"}},
 		)
-		if err == nil || !strings.Contains(err.Error(), "unsupported") {
-			t.Errorf("literal %s error = %v", expr, err)
-		}
+		assert.ErrorContains(t, err, "unsupported")
 	}
 }
 
@@ -387,9 +329,7 @@ func TestAnalyzeUsesLiteralTypeForLocalBinding(t *testing.T) {
 $value = 1ul;
 SELECT id FROM authors WHERE id = $value;`}},
 	)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 }
 
 func TestAnalyzeRejectsExplainQuery(t *testing.T) {
@@ -397,9 +337,7 @@ func TestAnalyzeRejectsExplainQuery(t *testing.T) {
 		[]model.Source{{Name: "schema.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, PRIMARY KEY (id));`}},
 		[]model.Source{{Name: "query.sql", Text: "-- name: Explained :many\nEXPLAIN SELECT id FROM authors;"}},
 	)
-	if err == nil || !strings.Contains(err.Error(), "EXPLAIN is unsupported in named queries") {
-		t.Fatalf("error = %v", err)
-	}
+	require.ErrorContains(t, err, "EXPLAIN is unsupported in named queries")
 }
 
 func TestAnalyzeTreatsYQLIdentifiersAsCaseSensitive(t *testing.T) {
@@ -418,9 +356,7 @@ func TestAnalyzeTreatsYQLIdentifiersAsCaseSensitive(t *testing.T) {
 				[]model.Source{{Name: "schema.sql", Text: `CREATE TABLE Authors (ID Uint64 NOT NULL, PRIMARY KEY (ID));`}},
 				[]model.Source{{Name: "query.sql", Text: "-- name: Lookup :many\n" + tt.query}},
 			)
-			if err == nil || !strings.Contains(err.Error(), tt.want) {
-				t.Fatalf("error = %v", err)
-			}
+			require.ErrorContains(t, err, tt.want)
 		})
 	}
 }
@@ -432,16 +368,12 @@ func TestAnalyzeTreatsYQLBindNamesAsCaseSensitive(t *testing.T) {
 DECLARE $Value AS Utf8;
 SELECT ID FROM Authors WHERE ID = $value;`}},
 	)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	want := []model.Parameter{
 		{Name: "Value", Type: model.Type{Kind: "Utf8"}},
 		{Name: "value", Type: model.Type{Kind: "Uint64"}},
 	}
-	if !reflect.DeepEqual(got.Queries[0].Parameters, want) {
-		t.Fatalf("parameters = %#v, want %#v", got.Queries[0].Parameters, want)
-	}
+	require.Equal(t, want, got.Queries[0].Parameters)
 }
 
 func TestAnalyzeResolvesVerifiedCastNullability(t *testing.T) {
@@ -450,12 +382,12 @@ func TestAnalyzeResolvesVerifiedCastNullability(t *testing.T) {
 		[]model.Source{{Name: "query.sql", Text: `-- name: IDs :many
 SELECT CAST(id AS String) AS id_text FROM authors;`}},
 	)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	want := model.Type{Kind: "String"}
-	if result := got.Queries[0].ResultSets[0].Columns[0]; result.Name != "id_text" || !reflect.DeepEqual(result.Type, want) {
-		t.Fatalf("result = %#v, want id_text %#v", result, want)
+	{
+		result := got.Queries[0].ResultSets[0].Columns[0]
+		require.Equal(t, "id_text", result.Name)
+		require.Equal(t, want, result.Type)
 	}
 }
 
@@ -465,13 +397,9 @@ func TestAnalyzeResolvesCountFunction(t *testing.T) {
 		[]model.Source{{Name: "query.sql", Text: `-- name: CountAuthors :one
 SELECT COUNT(*) AS count FROM authors;`}},
 	)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	want := []model.Column{{Name: "count", Type: model.Type{Kind: "Uint64"}}}
-	if !reflect.DeepEqual(got.Queries[0].ResultSets[0].Columns, want) {
-		t.Fatalf("columns = %#v, want %#v", got.Queries[0].ResultSets[0].Columns, want)
-	}
+	require.Equal(t, want, got.Queries[0].ResultSets[0].Columns)
 }
 
 func TestAnalyzeRejectsParameterConstrainedByDifferentColumnTypes(t *testing.T) {
@@ -480,9 +408,7 @@ func TestAnalyzeRejectsParameterConstrainedByDifferentColumnTypes(t *testing.T) 
 		[]model.Source{{Name: "query.sql", Text: `-- name: FindAuthor :many
 SELECT id FROM authors WHERE id = $value OR name = $value;`}},
 	)
-	if err == nil || !strings.Contains(err.Error(), "incompatible inferred types") {
-		t.Fatalf("error = %v", err)
-	}
+	require.ErrorContains(t, err, "incompatible inferred types")
 }
 
 func TestAnalyzeRejectsOptionalParameterForRequiredDMLColumn(t *testing.T) {
@@ -492,9 +418,7 @@ func TestAnalyzeRejectsOptionalParameterForRequiredDMLColumn(t *testing.T) {
 DECLARE $id AS Optional<Uint64>;
 INSERT INTO authors (id) VALUES ($id);`}},
 	)
-	if err == nil || !strings.Contains(err.Error(), "declared as Optional<Uint64> but used with Uint64") {
-		t.Fatalf("error = %v", err)
-	}
+	require.ErrorContains(t, err, "declared as Optional<Uint64> but used with Uint64")
 }
 
 func TestAnalyzeUpsertReturningSelectedColumns(t *testing.T) {
@@ -503,22 +427,18 @@ func TestAnalyzeUpsertReturningSelectedColumns(t *testing.T) {
 		[]model.Source{{Name: "query.sql", Text: `-- name: PutAuthor :one
 UPSERT INTO authors (id, name) VALUES ($id, $name) RETURNING id;`}},
 	)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
+	require.NoError(t, err)
 	wantColumns := []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}, Table: "authors"}}
-	if !reflect.DeepEqual(got.Queries[0].ResultSets[0].Columns, wantColumns) {
-		t.Fatalf("columns = %#v, want %#v", got.Queries[0].ResultSets[0].Columns, wantColumns)
-	}
+	require.Equal(t, wantColumns, got.Queries[0].ResultSets[0].Columns)
 }
 
 func TestAnalyzeRejectsQueryPreamble(t *testing.T) {
 	result, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: `DECLARE $id AS Uint64;
 -- name: GetAuthor :one
 SELECT $id AS id;`}})
-	if err == nil || result == nil || !strings.Contains(err.Error(), "query file preamble") {
-		t.Fatalf("error = %v; result = %#v", err, result)
-	}
+	require.Error(t, err)
+	require.NotNil(t, result)
+	require.Contains(t, err.Error(), "query file preamble")
 }
 
 func TestAnalyzeAllowsCommentsBeforeQueries(t *testing.T) {
@@ -527,24 +447,22 @@ func TestAnalyzeAllowsCommentsBeforeQueries(t *testing.T) {
 		{Name: "comments.sql", Text: "-- License header\n/* Комментарий */\n"},
 		{Name: "query.sql", Text: "-- License header\n/* Комментарий */\n\n" + query},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(result.Queries) != 1 || result.Queries[0].Name != "GetID" || result.Queries[0].SQL != query {
-		t.Fatalf("queries = %#v", result.Queries)
-	}
+	require.NoError(t, err)
+	require.Len(t, result.Queries, 1)
+	require.Equal(t, "GetID", result.Queries[0].Name)
+	require.Equal(t, query, result.Queries[0].SQL)
 }
 
 func TestAnalyzeReportsSyntaxPosition(t *testing.T) {
 	result, err := Analyze(nil, []model.Source{{Name: "broken.sql", Text: `-- name: Broken :many
 SELECT FROM;`}})
-	if err == nil || result == nil || len(result.Diagnostics) == 0 {
-		t.Fatalf("error = %v; result = %#v", err, result)
-	}
+	require.Error(t, err)
+	require.NotNil(t, result)
+	require.NotEqual(t, 0, len(result.Diagnostics))
 	position := result.Diagnostics[0].Position
-	if position.File != "broken.sql" || position.Line != 2 || position.Column < 1 {
-		t.Fatalf("position = %#v", position)
-	}
+	require.Equal(t, "broken.sql", position.File)
+	require.Equal(t, 2, position.Line)
+	require.False(t, position.Column < 1)
 }
 
 func TestAnalyzeRejectsDuplicateQueryNamesAcrossFiles(t *testing.T) {
@@ -555,9 +473,9 @@ func TestAnalyzeRejectsDuplicateQueryNamesAcrossFiles(t *testing.T) {
 			{Name: "two.sql", Text: "-- name: GetAuthor :many\nSELECT id FROM authors;"},
 		},
 	)
-	if err == nil || result == nil || !strings.Contains(err.Error(), `query "GetAuthor" is declared more than once`) {
-		t.Fatalf("error = %v; result = %#v", err, result)
-	}
+	require.Error(t, err)
+	require.NotNil(t, result)
+	require.Contains(t, err.Error(), `query "GetAuthor" is declared more than once`)
 }
 
 func TestAnalyzeRejectsMixedUnsupportedQueryStatement(t *testing.T) {
@@ -565,9 +483,7 @@ func TestAnalyzeRejectsMixedUnsupportedQueryStatement(t *testing.T) {
 		[]model.Source{{Name: "schema.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, PRIMARY KEY (id));`}},
 		[]model.Source{{Name: "query.sql", Text: "-- name: GetAuthor :one\nPRAGMA AnsiInForEmptyOrNullableItemsCollections;\nSELECT id FROM authors;"}},
 	)
-	if err == nil || !strings.Contains(err.Error(), "unsupported PRAGMA") {
-		t.Fatalf("error = %v", err)
-	}
+	require.ErrorContains(t, err, "unsupported PRAGMA")
 }
 
 func TestAnalyzeRejectsFlattenSourceInsteadOfIgnoringItsTypeEffect(t *testing.T) {
@@ -575,9 +491,7 @@ func TestAnalyzeRejectsFlattenSourceInsteadOfIgnoringItsTypeEffect(t *testing.T)
 		[]model.Source{{Name: "schema.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, tags List<Utf8>, PRIMARY KEY (id));`}},
 		[]model.Source{{Name: "query.sql", Text: "-- name: Tags :many\nSELECT tags FROM authors FLATTEN LIST BY tags;"}},
 	)
-	if err == nil || !strings.Contains(err.Error(), "FLATTEN sources are not yet supported") {
-		t.Fatalf("error = %v", err)
-	}
+	require.ErrorContains(t, err, "FLATTEN sources are not yet supported")
 }
 
 func TestAnalyzeChecksLocalBindingTypeAtUse(t *testing.T) {
@@ -587,9 +501,7 @@ func TestAnalyzeChecksLocalBindingTypeAtUse(t *testing.T) {
 $local_id = "wrong type";
 SELECT id FROM authors WHERE id = $local_id;`}},
 	)
-	if err == nil || !strings.Contains(err.Error(), "local $local_id has type String but is used with Uint64") {
-		t.Fatalf("error = %v", err)
-	}
+	require.ErrorContains(t, err, "local $local_id has type String but is used with Uint64")
 }
 
 func TestAnalyzeCountComparisonReturnsBool(t *testing.T) {
@@ -597,11 +509,10 @@ func TestAnalyzeCountComparisonReturnsBool(t *testing.T) {
 		[]model.Source{{Name: "schema.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, PRIMARY KEY (id));`}},
 		[]model.Source{{Name: "query.sql", Text: "-- name: HasAuthors :one\nSELECT COUNT(*) > 0 AS has_authors FROM authors;"}},
 	)
-	if err != nil {
-		t.Fatalf("error = %v", err)
-	}
-	if typ := result.Queries[0].ResultSets[0].Columns[0].Type; typ.Kind != "Bool" {
-		t.Fatalf("comparison type = %s, want Bool", typ.String())
+	require.NoError(t, err)
+	{
+		typ := result.Queries[0].ResultSets[0].Columns[0].Type
+		require.Equal(t, "Bool", typ.Kind)
 	}
 }
 
@@ -610,12 +521,8 @@ func TestAnalyzeInfersListTypeForINParameter(t *testing.T) {
 		[]model.Source{{Name: "schema.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, PRIMARY KEY (id));`}},
 		[]model.Source{{Name: "query.sql", Text: "-- name: FindAuthors :many\nSELECT id FROM authors WHERE id IN $ids;"}},
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Queries[0].Parameters[0].Type.String() != "List<Uint64>" {
-		t.Fatal(got.Queries[0].Parameters)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "List<Uint64>", got.Queries[0].Parameters[0].Type.String())
 }
 
 func TestAnalyzeResolvesTableAliasWithoutAS(t *testing.T) {
@@ -623,12 +530,8 @@ func TestAnalyzeResolvesTableAliasWithoutAS(t *testing.T) {
 		[]model.Source{{Name: "schema.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, PRIMARY KEY (id));`}},
 		[]model.Source{{Name: "query.sql", Text: "-- name: GetAuthor :one\nSELECT a.id FROM authors a WHERE a.id = $id;"}},
 	)
-	if err != nil {
-		t.Fatalf("Analyze() error = %v", err)
-	}
-	if got.Queries[0].ResultSets[0].Columns[0].Name != "id" {
-		t.Fatalf("query = %#v", got.Queries[0])
-	}
+	require.NoError(t, err)
+	require.Equal(t, "id", got.Queries[0].ResultSets[0].Columns[0].Name)
 }
 
 func TestAnalyzeReportsUnknownProjectionOnce(t *testing.T) {
@@ -636,18 +539,15 @@ func TestAnalyzeReportsUnknownProjectionOnce(t *testing.T) {
 		[]model.Source{{Name: "schema.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, PRIMARY KEY (id));`}},
 		[]model.Source{{Name: "query.sql", Text: "-- name: Broken :many\nSELECT missing FROM authors;"}},
 	)
-	if err == nil || result == nil {
-		t.Fatalf("error = %v; result = %#v", err, result)
-	}
+	require.Error(t, err)
+	require.NotNil(t, result)
 	count := 0
 	for _, diagnostic := range result.Diagnostics {
 		if strings.Contains(diagnostic.Message, `unknown column "missing"`) {
 			count++
 		}
 	}
-	if count != 1 {
-		t.Fatalf("unknown-column diagnostics = %d, want 1: %#v", count, result.Diagnostics)
-	}
+	require.Equal(t, 1, count)
 }
 
 func TestAnalyzeRejectsDMLLiteralWithoutGuessingAssignmentType(t *testing.T) {
@@ -655,9 +555,7 @@ func TestAnalyzeRejectsDMLLiteralWithoutGuessingAssignmentType(t *testing.T) {
 		[]model.Source{{Name: "schema.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, name Utf8 NOT NULL, PRIMARY KEY (id));`}},
 		[]model.Source{{Name: "query.sql", Text: "-- name: Broken :exec\nUPSERT INTO authors (id, name) VALUES ('wrong', 123);"}},
 	)
-	if err == nil || !strings.Contains(err.Error(), "cannot assign String to column \"id\" of type Uint64") {
-		t.Fatalf("error = %v", err)
-	}
+	require.ErrorContains(t, err, "cannot assign String to column \"id\" of type Uint64")
 }
 
 func TestAnalyzeRejectsLocalConstrainedByDifferentColumnTypes(t *testing.T) {
@@ -668,7 +566,5 @@ DECLARE $seed AS Uint64;
 $local = $seed;
 SELECT id FROM authors WHERE id = $local OR name = $local;`}},
 	)
-	if err == nil || !strings.Contains(err.Error(), "local $local is constrained by incompatible column types") {
-		t.Fatalf("error = %v", err)
-	}
+	require.ErrorContains(t, err, "local $local is constrained by incompatible column types")
 }

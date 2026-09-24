@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -16,17 +17,11 @@ func TestJooqImplicitColumnCollisionResultOrder(t *testing.T) {
 SELECT "z"u AS z, 2 AS column2, 3, 4;
 -- name: ReadMany :many
 SELECT "z"u AS z, 2 AS column2, 3, 4;`}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	files, err := Generate(analysis, Options{Package: "resultorder", Runtime: "jooq"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, file := range files {
-		if strings.HasSuffix(file.Name, "Row.java") && !strings.Contains(string(file.Content), "Integer column2, Integer column3, Integer column4, String z") {
-			t.Fatalf("unexpected resolved row: %s", file.Content)
-		}
+		require.False(t, strings.HasSuffix(file.Name, "Row.java") && !strings.Contains(string(file.Content), "Integer column2, Integer column3, Integer column4, String z"), "unexpected resolved row: %s", file.Content)
 	}
 	t.Run("published dialect", func(t *testing.T) {
 		maven := os.Getenv("SQLC_YDB_TEST_MAVEN")
@@ -38,12 +33,10 @@ SELECT "z"u AS z, 2 AS column2, 3, 4;`}})
 		cmd := exec.Command(maven, "-q", "dependency:build-classpath", "-Dmdep.outputFile="+classpath)
 		cmd.Dir = filepath.Join("..", "..", "..", "tests", "examples", "java", "jooq")
 		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("SDK classpath: %v\n%s", err, out)
+			require.NoError(t, err, "SDK classpath: %v\n%s", err, out)
 		}
 		cp, err := os.ReadFile(classpath)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		program := `package resultorder;
 import java.util.*;
 import org.jooq.tools.jdbc.*;
@@ -81,14 +74,12 @@ public class Main {
 		compile := []string{"-cp", strings.TrimSpace(string(cp)), "-d", dir}
 		for _, file := range files {
 			path := filepath.Join(dir, file.Name)
-			if err := os.WriteFile(path, file.Content, 0600); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, os.WriteFile(path, file.Content, 0600))
 			compile = append(compile, path)
 		}
 		for _, args := range [][]string{append([]string{"javac"}, compile...), {"java", "-cp", dir + string(os.PathListSeparator) + strings.TrimSpace(string(cp)), "resultorder.Main"}} {
 			if out, err := exec.Command(args[0], args[1:]...).CombinedOutput(); err != nil {
-				t.Fatalf("%s: %v\n%s", args[0], err, out)
+				require.NoError(t, err, "%s: %v\n%s", args[0], err, out)
 			}
 		}
 	})

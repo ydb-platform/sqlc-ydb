@@ -1,8 +1,9 @@
 package builtins
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -26,12 +27,8 @@ func TestResolveCollectionFunctions(t *testing.T) {
 		{"SetIsDisjoint", []model.Type{model.Optional(set), model.Optional(model.Type{Kind: "List", Elem: &stringType})}, model.Optional(model.Type{Kind: "Bool"})},
 	} {
 		got, err := Resolve(tc.name, tc.args)
-		if err != nil {
-			t.Fatalf("Resolve(%s): %v", tc.name, err)
-		}
-		if !got.Equal(tc.want) {
-			t.Fatalf("Resolve(%s) = %s, want %s", tc.name, got.String(), tc.want.String())
-		}
+		require.NoError(t, err)
+		require.True(t, got.Equal(tc.want))
 	}
 }
 
@@ -40,27 +37,22 @@ func TestResolveCollectionFunctionsKeepOptionalKeys(t *testing.T) {
 	optionalString := model.Optional(stringType)
 	list := model.Type{Kind: "List", Elem: &optionalString}
 	set, err := Resolve("ToSet", []model.Type{list})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if set.Kind != "Dict" || set.Key == nil || !set.Key.Equal(optionalString) {
-		t.Fatalf("ToSet(List<String?>) = %s", set.String())
-	}
+	require.NoError(t, err)
+	require.Equal(t, "Dict", set.Kind)
+	require.NotNil(t, set.Key)
+	require.True(t, set.Key.Equal(optionalString))
 	got, err := Resolve("SetIsDisjoint", []model.Type{set, list})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !got.Equal(model.Type{Kind: "Bool"}) {
-		t.Fatalf("SetIsDisjoint() = %s", got.String())
-	}
+	require.NoError(t, err)
+	require.True(t, got.Equal(model.Type{Kind: "Bool"}))
 }
 
 func TestResolveCollectionFunctionsRejectNestedOptionalKey(t *testing.T) {
 	stringType := model.Type{Kind: "String"}
 	nested := model.Optional(model.Optional(stringType))
 	list := model.Type{Kind: "List", Elem: &nested}
-	if _, err := Resolve("ToSet", []model.Type{list}); err == nil || !strings.Contains(err.Error(), "nested Optional") {
-		t.Fatalf("ToSet nested Optional key error = %v", err)
+	{
+		_, err := Resolve("ToSet", []model.Type{list})
+		require.ErrorContains(t, err, "nested Optional")
 	}
 }
 
@@ -71,24 +63,18 @@ func TestResolveToSetTupleKey(t *testing.T) {
 		model.Optional(inner),
 	} {
 		got, err := Resolve("ToSet", []model.Type{{Kind: "List", Elem: &key}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got.Key == nil || !got.Key.Equal(key) {
-			t.Fatalf("ToSet() = %s", got.String())
-		}
+		require.NoError(t, err)
+		require.NotNil(t, got.Key)
+		require.True(t, got.Key.Equal(key))
 	}
 }
 
 func TestResolveToSetDecimalKey(t *testing.T) {
 	key := model.Type{Kind: "Decimal", Precision: 22, Scale: 9}
 	got, err := Resolve("ToSet", []model.Type{{Kind: "List", Elem: &key}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Key == nil || !got.Key.Equal(key) {
-		t.Fatalf("ToSet() = %s", got.String())
-	}
+	require.NoError(t, err)
+	require.NotNil(t, got.Key)
+	require.True(t, got.Key.Equal(key))
 }
 
 func TestResolveCollectionFunctionsRejectInvalidCalls(t *testing.T) {
@@ -110,6 +96,7 @@ func TestResolveCollectionFunctionsRejectInvalidCalls(t *testing.T) {
 		{"ToSet", []model.Type{{Kind: "List"}}, "List"},
 		{"ToSet", []model.Type{{Kind: "List", Elem: &model.Type{Kind: "Optional"}}}, "Optional has no element"},
 		{"ToSet", []model.Type{{Kind: "List", Elem: &model.Type{Kind: "Tuple", Items: []model.Type{stringType}}}}, "at least two"},
+		{"ToSet", []model.Type{{Kind: "List", Elem: &model.Type{Kind: "Tuple", Items: []model.Type{stringType, {Kind: "Json"}}}}}, "unsupported dictionary key type Json"},
 		{"ToSet", []model.Type{{Kind: "List", Elem: &model.Type{Kind: "String", Elem: &stringType}}}, "invalid dictionary key"},
 		{"ToSet", []model.Type{{Kind: "List", Elem: &model.Type{Kind: "Json"}}}, "dictionary key"},
 		{"ToSet", []model.Type{{Kind: "List", Elem: &model.Type{Kind: "JsonDocument"}}}, "dictionary key"},
@@ -128,25 +115,19 @@ func TestResolveCollectionFunctionsRejectInvalidCalls(t *testing.T) {
 		{"Yson::ConvertToStringList", nil, "expects 1"},
 	} {
 		_, err := Resolve(tc.name, tc.args)
-		if err == nil || !strings.Contains(err.Error(), tc.want) {
-			t.Fatalf("Resolve(%s) error = %v, want %q", tc.name, err, tc.want)
-		}
+		require.ErrorContains(t, err, tc.want)
 	}
 }
 
 func TestRegistryRejectsCollectionFunctionOverride(t *testing.T) {
 	for _, name := range []string{"ToSet", "SetIsDisjoint", "Yson::ConvertToStringList"} {
 		_, err := NewRegistry([]Signature{{Name: name, Returns: model.Type{Kind: "Bool"}}})
-		if err == nil || !strings.Contains(err.Error(), "known built-in") {
-			t.Fatalf("NewRegistry(%s) error = %v", name, err)
-		}
+		require.ErrorContains(t, err, "known built-in")
 	}
 }
 
 func TestYsonConvertToStringListPreservesBaseTypeError(t *testing.T) {
 	inner := model.Type{Kind: "Optional", Elem: &model.Type{Kind: "String"}}
 	_, err := Resolve("Yson::ConvertToStringList", []model.Type{{Kind: "Optional", Elem: &inner}})
-	if err == nil || !strings.Contains(err.Error(), "nested Optional") {
-		t.Fatalf("error = %v, want nested Optional cause", err)
-	}
+	require.ErrorContains(t, err, "nested Optional")
 }

@@ -2,9 +2,9 @@ package golang
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -25,17 +25,13 @@ func TestStructParameterAPIAndBinding(t *testing.T) {
 	for _, runtime := range []string{"ydb", "database/sql"} {
 		t.Run(runtime, func(t *testing.T) {
 			files, err := Generate(in, Options{Package: "db", Runtime: runtime, EmitInterface: true, EmitJSONTags: true})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			source := ""
 			for _, f := range files {
 				source += string(f.Content)
 			}
 			for _, want := range []string{"type UpdateBookBook struct", "Title   *string", "Payload []byte", "Tags    string", "json:\"payload\"", "arg UpdateBookBook"} {
-				if !strings.Contains(source, want) {
-					t.Fatalf("missing %q:\n%s", want, source)
-				}
+				require.Contains(t, source, want, "missing %q:\n%s", want, source)
 			}
 			runGeneratedRuntimeTest(t, in, Options{Package: "db", Runtime: runtime}, `package db
 import("testing";"github.com/ydb-platform/ydb-go-sdk/v3/types")
@@ -91,9 +87,7 @@ func TestStructParameterRejectsUnsupportedFields(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, runtime := range []string{"ydb", "database/sql"} {
 				_, err := Generate(structInput(tc.fields...), Options{Runtime: runtime})
-				if err == nil || !strings.Contains(err.Error(), tc.want) {
-					t.Fatalf("%s: %v", runtime, err)
-				}
+				require.ErrorContains(t, err, tc.want, "%s: %v", runtime, err)
 			}
 		})
 	}
@@ -105,9 +99,7 @@ func TestStructParameterDeclarationCollision(t *testing.T) {
 	in.Queries[0].Parameters[0].Name = "row"
 	in.Queries[0].ResultSets = []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}}}}}
 	_, err := Generate(in, Options{Runtime: "ydb"})
-	if err == nil || !strings.Contains(err.Error(), "declaration UpdateBookRow collides") {
-		t.Fatalf("collision: %v", err)
-	}
+	require.ErrorContains(t, err, "declaration UpdateBookRow collides", "collision: %v", err)
 }
 
 func TestStructParameterDecimalMetadataValidated(t *testing.T) {
@@ -126,9 +118,7 @@ func TestStructListParameterAPIAndBinding(t *testing.T) {
 	for _, runtime := range []string{"ydb", "database/sql"} {
 		t.Run(runtime, func(t *testing.T) {
 			files, err := Generate(in, Options{Package: "db", Runtime: runtime, EmitInterface: true, EmitJSONTags: true})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			source := ""
 			for _, f := range files {
 				source += string(f.Content)
@@ -139,9 +129,7 @@ func TestStructListParameterAPIAndBinding(t *testing.T) {
 			}
 			sig += ") error"
 			for _, want := range []string{sig, "type CreateBooksBooksItem struct", "BookID uint64", "Tags   string", "Title  *string", "json:\"book_id\""} {
-				if !strings.Contains(source, want) {
-					t.Fatalf("missing %q:\n%s", want, source)
-				}
+				require.Contains(t, source, want, "missing %q:\n%s", want, source)
 			}
 			runGeneratedRuntimeTest(t, in, Options{Package: "db", Runtime: runtime, EmitInterface: true}, `package db
 import("testing";"github.com/ydb-platform/ydb-go-sdk/v3/types")
@@ -201,9 +189,7 @@ func TestStructListRejectsUnsupportedFields(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, runtime := range []string{"ydb", "database/sql"} {
 				_, err := Generate(batchInput(tc.fields...), Options{Runtime: runtime})
-				if err == nil || !strings.Contains(err.Error(), tc.want) {
-					t.Fatalf("%s: %v", runtime, err)
-				}
+				require.ErrorContains(t, err, tc.want, "%s: %v", runtime, err)
 			}
 		})
 	}
@@ -216,9 +202,7 @@ func TestStructListDeclarationCollision(t *testing.T) {
 	other.Parameters = []model.Parameter{{Name: "books_books", Type: in.Queries[0].Parameters[0].Type}}
 	in.Queries = append(in.Queries, other)
 	_, err := Generate(in, Options{Runtime: "ydb"})
-	if err == nil || !strings.Contains(err.Error(), "declaration CreateBooksBooksItem collides") {
-		t.Fatalf("collision: %v", err)
-	}
+	require.ErrorContains(t, err, "declaration CreateBooksBooksItem collides", "collision: %v", err)
 }
 
 func TestStructListDecimalMetadataValidated(t *testing.T) {
@@ -270,9 +254,7 @@ func TestStructListUnsupportedScalarDiagnostics(t *testing.T) {
 	} {
 		for _, runtime := range []string{"ydb", "database/sql"} {
 			_, err := Generate(batchInput(model.StructField{Name: "value", Type: tc.typ}), Options{Package: "db", Runtime: runtime})
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("%s %s: %v", runtime, tc.typ.String(), err)
-			}
+			require.ErrorContains(t, err, tc.want, "%s %s: %v", runtime, tc.typ.String(), err)
 		}
 	}
 }

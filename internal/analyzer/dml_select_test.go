@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -26,8 +28,11 @@ DECLARE $rows AS List<Struct<record_id:Utf8,payload:String,group_id:Utf8,attribu
 INSERT INTO records (owner_hash, record_id, owner_id, payload, group_id, attributes, created_at, updated_at)
 SELECT CAST($owner_id AS Uint64), r.record_id, $owner_id, r.payload, r.group_id, r.attributes, r.created_at, r.updated_at
 FROM AS_TABLE($rows) AS r;`
-	if _, err := Analyze(typedDMLSchema, []model.Source{{Name: "query.sql", Text: query}}); err != nil {
-		t.Fatal(err)
+	{
+		{
+			_, err := Analyze(typedDMLSchema, []model.Source{{Name: "query.sql", Text: query}})
+			require.NoError(t, err)
+		}
 	}
 }
 
@@ -36,8 +41,9 @@ func TestInsertSelectUsesAnySupportedRowSource(t *testing.T) {
 INSERT INTO records (owner_hash, record_id, owner_id, group_id, payload, attributes, created_at, updated_at)
 SELECT owner_hash, record_id, owner_id, group_id, payload, attributes, created_at, updated_at
 FROM records WHERE owner_hash = $owner_hash;`
-	if _, err := Analyze(typedDMLSchema, []model.Source{{Name: "query.sql", Text: query}}); err != nil {
-		t.Fatal(err)
+	{
+		_, err := Analyze(typedDMLSchema, []model.Source{{Name: "query.sql", Text: query}})
+		require.NoError(t, err)
 	}
 }
 
@@ -50,8 +56,9 @@ func TestInsertAndUpsertExplicitTargetsArePositional(t *testing.T) {
 				projection = "record_id AS owner_hash, owner_hash AS record_id"
 			}
 			query := "-- name: Write :exec\n" + verb + " INTO records (" + target + remaining + ") SELECT " + projection + remaining + " FROM records;"
-			if _, err := Analyze(typedDMLSchema, []model.Source{{Name: "query.sql", Text: query}}); err != nil {
-				t.Fatalf("%s (%s): %v", verb, target, err)
+			{
+				_, err := Analyze(typedDMLSchema, []model.Source{{Name: "query.sql", Text: query}})
+				require.NoError(t, err)
 			}
 		}
 	}
@@ -65,8 +72,9 @@ func TestDMLSelectContextualizesNullForOptionalTargets(t *testing.T) {
 		"UPDATE records ON SELECT 1ul AS id, NULL AS note",
 		"DELETE FROM records ON SELECT 1ul AS id, NULL AS note",
 	} {
-		if _, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Write :exec\n" + statement + ";"}}); err != nil {
-			t.Fatalf("%s: %v", statement, err)
+		{
+			_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Write :exec\n" + statement + ";"}})
+			require.NoError(t, err)
 		}
 	}
 }
@@ -80,9 +88,7 @@ func TestDMLSelectRejectsNullForRequiredTargets(t *testing.T) {
 		"DELETE FROM records ON SELECT NULL AS id",
 	} {
 		_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Write :exec\n" + statement + ";"}})
-		if err == nil || !strings.Contains(err.Error(), "requires") {
-			t.Fatalf("%s: %v", statement, err)
-		}
+		require.ErrorContains(t, err, "requires")
 	}
 }
 
@@ -91,8 +97,9 @@ func TestUpdateOnSelectMatchesColumnsByResultName(t *testing.T) {
 DECLARE $rows AS List<Struct<record_id:Utf8,owner_hash:Uint64,payload:String>>;
 UPDATE records ON
 SELECT r.owner_hash, r.record_id, r.payload FROM AS_TABLE($rows) AS r;`
-	if _, err := Analyze(typedDMLSchema, []model.Source{{Name: "query.sql", Text: query}}); err != nil {
-		t.Fatal(err)
+	{
+		_, err := Analyze(typedDMLSchema, []model.Source{{Name: "query.sql", Text: query}})
+		require.NoError(t, err)
 	}
 }
 
@@ -102,8 +109,9 @@ DECLARE $updated_at AS Timestamp;
 DECLARE $rows AS List<Struct<record_id:Utf8,owner_hash:Uint64,payload:String>>;
 UPDATE records ON
 SELECT r.*, $updated_at AS updated_at FROM AS_TABLE($rows) AS r;`
-	if _, err := Analyze(typedDMLSchema, []model.Source{{Name: "query.sql", Text: query}}); err != nil {
-		t.Fatal(err)
+	{
+		_, err := Analyze(typedDMLSchema, []model.Source{{Name: "query.sql", Text: query}})
+		require.NoError(t, err)
 	}
 }
 
@@ -113,9 +121,8 @@ func TestOnSelectStarMatchesNamesIndependentOfStructOrder(t *testing.T) {
 		"payload:String,owner_hash:Uint64,record_id:Utf8",
 	} {
 		query := "-- name: UpdateRecords :exec\nDECLARE $rows AS List<Struct<" + fields + ">>;\nUPDATE records ON SELECT r.* FROM AS_TABLE($rows) r;"
-		if _, err := Analyze(typedDMLSchema, []model.Source{{Name: "query.sql", Text: query}}); err != nil {
-			t.Fatalf("%s: %v", fields, err)
-		}
+		_, err := Analyze(typedDMLSchema, []model.Source{{Name: "query.sql", Text: query}})
+		require.NoError(t, err)
 	}
 }
 
@@ -123,8 +130,9 @@ func TestDeleteOnSelectAllowsNonKeyColumns(t *testing.T) {
 	query := `-- name: DeleteRecords :exec
 DELETE FROM records ON
 SELECT owner_hash, record_id, payload FROM records WHERE owner_hash = $owner_hash;`
-	if _, err := Analyze(typedDMLSchema, []model.Source{{Name: "query.sql", Text: query}}); err != nil {
-		t.Fatal(err)
+	{
+		_, err := Analyze(typedDMLSchema, []model.Source{{Name: "query.sql", Text: query}})
+		require.NoError(t, err)
 	}
 }
 
@@ -149,9 +157,7 @@ func TestOnSelectDiagnostics(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := Analyze(typedDMLSchema, []model.Source{{Name: "query.sql", Text: "-- name: Change :exec\n" + tt.statement + ";"}})
-			if err == nil || !strings.Contains(err.Error(), tt.want) {
-				t.Fatalf("error = %v, want %q", err, tt.want)
-			}
+			require.ErrorContains(t, err, tt.want)
 		})
 	}
 }
@@ -163,27 +169,19 @@ func TestOrdinaryDMLInfersINListParametersBeforeValidation(t *testing.T) {
 		"UPDATE records SET name = $name WHERE id IN $ids",
 	} {
 		got, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Change :exec\n" + statement + ";"}})
-		if err != nil {
-			t.Fatalf("%s: %v", statement, err)
-		}
+		require.NoError(t, err)
 		params := map[string]string{}
 		for _, parameter := range got.Queries[0].Parameters {
 			params[parameter.Name] = parameter.Type.String()
 		}
-		if params["ids"] != "List<Uint64>" {
-			t.Fatalf("%s: parameters %v", statement, params)
-		}
+		require.Equal(t, "List<Uint64>", params["ids"])
 	}
 }
 
 func TestOnSelectSourceErrorDoesNotCascade(t *testing.T) {
 	_, err := Analyze(typedDMLSchema, []model.Source{{Name: "query.sql", Text: "-- name: Change :exec\nDELETE FROM records ON SELECT missing FROM absent;"}})
-	if err == nil || !strings.Contains(err.Error(), `unknown table "absent"`) {
-		t.Fatal(err)
-	}
-	if strings.Contains(err.Error(), "missing primary key") {
-		t.Fatalf("unexpected cascade: %v", err)
-	}
+	require.ErrorContains(t, err, `unknown table "absent"`)
+	require.NotContains(t, err.Error(), "missing primary key")
 }
 
 func TestOnSelectQualifiedResultSuggestsAlias(t *testing.T) {
@@ -191,7 +189,5 @@ func TestOnSelectQualifiedResultSuggestsAlias(t *testing.T) {
 	query := `-- name: Write :exec
 UPDATE records ON SELECT r.id, r.note FROM records r JOIN records other ON r.id = other.id;`
 	_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
-	if err == nil || !strings.Contains(err.Error(), `unknown target column "r.id"; use AS id`) {
-		t.Fatalf("error = %v", err)
-	}
+	require.ErrorContains(t, err, `unknown target column "r.id"; use AS id`)
 }

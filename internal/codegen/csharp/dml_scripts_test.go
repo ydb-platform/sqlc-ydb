@@ -1,9 +1,9 @@
 package csharp
 
 import (
-	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -22,17 +22,13 @@ func TestOneScriptConsumesStreamBeforeReturningFirstRow(t *testing.T) {
 				[]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));"}},
 				[]model.Source{{Name: "query.sql", Text: "-- name: ReadRecords :one\n" + tc.sql}},
 			)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			_, queries := generated(t, analysis)
 			want := "        return ReadRecordsRowFrom(reader);\n"
 			if tc.multi {
 				want = "        var row = ReadRecordsRowFrom(reader);\n        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))\n        {\n        }\n        return row;\n"
 			}
-			if !strings.Contains(queries, want) {
-				t.Fatalf("generated first-row path missing %q:\n%s", want, queries)
-			}
+			require.Contains(t, queries, want, "generated first-row path missing %q:\n%s", want, queries)
 		})
 	}
 }

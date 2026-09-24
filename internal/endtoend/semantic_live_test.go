@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -72,7 +74,7 @@ func TestLiveYDBSemanticTypes(t *testing.T) {
 		sql := strings.ReplaceAll(q.SQL, "$TABLE", table)
 		a, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: schema}}, []model.Source{{Name: q.Name + ".sql", Text: "-- name: Check :many\n" + sql}})
 		if err != nil {
-			t.Errorf("%s: %v", q.Name, err)
+			assert.Fail(t, fmt.Sprintf("%s: %v", q.Name, err))
 			continue
 		}
 		c := liveCase{Name: q.Name, SQL: a.Queries[0].SQL}
@@ -88,9 +90,7 @@ func TestLiveYDBSemanticTypes(t *testing.T) {
 		Schema, Table string
 		Cases         []liveCase
 	}{schema, table, cases})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	const script = `import json, os, sys, urllib.parse
 import ydb
 payload = json.load(sys.stdin)
@@ -122,9 +122,7 @@ assert not errors, "\n".join(errors)
 	cmd := exec.CommandContext(ctx, "python3", "-c", script)
 	cmd.Stdin = bytes.NewReader(payload)
 	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("live semantic validation: %v\n%s", err, out)
-	}
+	require.NoError(t, err, "live semantic validation: %v\n%s", err, out)
 	t.Log(string(out))
 }
 
@@ -158,12 +156,10 @@ func TestDigestLiveQueriesAnalyzeOffline(t *testing.T) {
 	for _, probe := range digestLiveQueries() {
 		t.Run(probe.Name, func(t *testing.T) {
 			result, err := analyzer.Analyze(nil, []model.Source{{Name: probe.Name + ".sql", Text: "-- name: Check :one\n" + probe.SQL}})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(result.Queries) != 1 || len(result.Queries[0].ResultSets) != 1 || len(result.Queries[0].ResultSets[0].Columns) < 2 {
-				t.Fatalf("unexpected metadata probe result: %#v", result.Queries)
-			}
+			require.NoError(t, err)
+			require.Len(t, result.Queries, 1)
+			require.Len(t, result.Queries[0].ResultSets, 1)
+			require.GreaterOrEqual(t, len(result.Queries[0].ResultSets[0].Columns), 2)
 		})
 	}
 }

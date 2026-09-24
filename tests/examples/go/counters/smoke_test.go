@@ -10,6 +10,7 @@ import (
 	"example.com/sqlc-ydb-example-tests/internal/testdb"
 	sq "example.com/sqlc-ydb-examples/counters/go/database/sql"
 	native "example.com/sqlc-ydb-examples/counters/go/native"
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 	"github.com/ydb-platform/ydb-go-sdk/v3/retry"
 )
@@ -21,29 +22,39 @@ func TestCountersNative(t *testing.T) {
 	q := native.New(db.Native)
 	const id = "requests"
 	created, err := q.CreateCounter(ctx, id)
-	if err != nil || created.ID != id || created.Value != 0 || created.OptionalValue != nil || created.Label == nil || *created.Label != "pending" || !created.Enabled {
-		t.Fatalf("constant INSERT and RETURNING *: %+v, %v", created, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, id, created.ID)
+	require.Zero(t, created.Value)
+	require.Nil(t, created.OptionalValue)
+	require.NotNil(t, created.Label)
+	require.Equal(t, "pending", *created.Label)
+	require.True(t, created.Enabled)
 	incremented, err := q.IncrementCounter(ctx, native.IncrementCounterParams{ID: id, Delta: 5})
-	if err != nil || incremented.Value != 5 {
-		t.Fatalf("increment: %+v, %v", incremented, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, int64(5), incremented.Value)
 	transformed, err := q.TransformCounter(ctx, id)
 	// Every SET expression sees the original row: enabled uses 5, not 17.
-	if err != nil || transformed.Value != 17 || transformed.OptionalValue == nil || *transformed.OptionalValue != 1 || transformed.Label == nil || *transformed.Label != "done" || transformed.Enabled {
-		t.Fatalf("computed assignments: %+v, %v", transformed, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, int64(17), transformed.Value)
+	require.NotNil(t, transformed.OptionalValue)
+	require.Equal(t, int64(1), *transformed.OptionalValue)
+	require.NotNil(t, transformed.Label)
+	require.Equal(t, "done", *transformed.Label)
+	require.False(t, transformed.Enabled)
 	cleared, err := q.ClearOptional(ctx, id)
-	if err != nil || cleared.Value != 17 || cleared.OptionalValue != nil || cleared.Label != nil {
-		t.Fatalf("NULL assignments: %+v, %v", cleared, err)
-	}
-	if err := q.UpsertCounter(ctx, native.UpsertCounterParams{ID: id, Seed: 2}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, int64(17), cleared.Value)
+	require.Nil(t, cleared.OptionalValue)
+	require.Nil(t, cleared.Label)
+	require.NoError(t, q.UpsertCounter(ctx, native.UpsertCounterParams{ID: id, Seed: 2}))
 	row, err := q.ReadCounter(ctx, id)
-	if err != nil || row.Value != 12 || row.OptionalValue == nil || *row.OptionalValue != 5 || row.Label == nil || *row.Label != "reset" || !row.Enabled {
-		t.Fatalf("computed UPSERT: %+v, %v", row, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, int64(12), row.Value)
+	require.NotNil(t, row.OptionalValue)
+	require.Equal(t, int64(5), *row.OptionalValue)
+	require.NotNil(t, row.Label)
+	require.Equal(t, "reset", *row.Label)
+	require.True(t, row.Enabled)
 	aborted := errors.New("rollback counter increment")
 	err = db.Native.DoTx(ctx, func(ctx context.Context, tx query.TxActor) error {
 		txq := native.New(tx)
@@ -63,29 +74,25 @@ func TestCountersNative(t *testing.T) {
 		}
 		return aborted
 	})
-	if !errors.Is(err, aborted) {
-		t.Fatalf("rollback: %v", err)
-	}
+	require.ErrorIs(t, err, aborted)
 	row, err = q.ReadCounter(ctx, id)
-	if err != nil || row.Value != 12 {
-		t.Fatalf("after rollback: %+v, %v", row, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, int64(12), row.Value)
 	// The committed generated projections remain valid after an unrelated column is added.
-	if err := db.Native.Exec(ctx, "ALTER TABLE counters ADD COLUMN extra Utf8;"); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, db.Native.Exec(ctx, "ALTER TABLE counters ADD COLUMN extra Utf8;"))
 	rows, err := q.ListCounters(ctx)
-	if err != nil || len(rows) != 1 || rows[0].ID != id || rows[0].Value != 12 {
-		t.Fatalf("SELECT * after schema evolution: %+v, %v", rows, err)
-	}
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, id, rows[0].ID)
+	require.Equal(t, int64(12), rows[0].Value)
 	row, err = q.ReadCounter(ctx, id)
-	if err != nil || row.ID != id || row.Value != 12 {
-		t.Fatalf("alias.* after schema evolution: %+v, %v", row, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, id, row.ID)
+	require.Equal(t, int64(12), row.Value)
 	incremented, err = q.IncrementCounter(ctx, native.IncrementCounterParams{ID: id, Delta: 1})
-	if err != nil || incremented.ID != id || incremented.Value != 13 {
-		t.Fatalf("RETURNING * after schema evolution: %+v, %v", incremented, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, id, incremented.ID)
+	require.Equal(t, int64(13), incremented.Value)
 }
 
 func TestCountersDatabaseSQL(t *testing.T) {
@@ -95,29 +102,39 @@ func TestCountersDatabaseSQL(t *testing.T) {
 	q := sq.New(db.SQL)
 	const id = "requests"
 	created, err := q.CreateCounter(ctx, id)
-	if err != nil || created.ID != id || created.Value != 0 || created.OptionalValue != nil || created.Label == nil || *created.Label != "pending" || !created.Enabled {
-		t.Fatalf("constant INSERT and RETURNING *: %+v, %v", created, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, id, created.ID)
+	require.Zero(t, created.Value)
+	require.Nil(t, created.OptionalValue)
+	require.NotNil(t, created.Label)
+	require.Equal(t, "pending", *created.Label)
+	require.True(t, created.Enabled)
 	incremented, err := q.IncrementCounter(ctx, sq.IncrementCounterParams{ID: id, Delta: 5})
-	if err != nil || incremented.Value != 5 {
-		t.Fatalf("increment: %+v, %v", incremented, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, int64(5), incremented.Value)
 	transformed, err := q.TransformCounter(ctx, id)
 	// Every SET expression sees the original row: enabled uses 5, not 17.
-	if err != nil || transformed.Value != 17 || transformed.OptionalValue == nil || *transformed.OptionalValue != 1 || transformed.Label == nil || *transformed.Label != "done" || transformed.Enabled {
-		t.Fatalf("computed assignments: %+v, %v", transformed, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, int64(17), transformed.Value)
+	require.NotNil(t, transformed.OptionalValue)
+	require.Equal(t, int64(1), *transformed.OptionalValue)
+	require.NotNil(t, transformed.Label)
+	require.Equal(t, "done", *transformed.Label)
+	require.False(t, transformed.Enabled)
 	cleared, err := q.ClearOptional(ctx, id)
-	if err != nil || cleared.Value != 17 || cleared.OptionalValue != nil || cleared.Label != nil {
-		t.Fatalf("NULL assignments: %+v, %v", cleared, err)
-	}
-	if err := q.UpsertCounter(ctx, sq.UpsertCounterParams{ID: id, Seed: 2}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, int64(17), cleared.Value)
+	require.Nil(t, cleared.OptionalValue)
+	require.Nil(t, cleared.Label)
+	require.NoError(t, q.UpsertCounter(ctx, sq.UpsertCounterParams{ID: id, Seed: 2}))
 	row, err := q.ReadCounter(ctx, id)
-	if err != nil || row.Value != 12 || row.OptionalValue == nil || *row.OptionalValue != 5 || row.Label == nil || *row.Label != "reset" || !row.Enabled {
-		t.Fatalf("computed UPSERT: %+v, %v", row, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, int64(12), row.Value)
+	require.NotNil(t, row.OptionalValue)
+	require.Equal(t, int64(5), *row.OptionalValue)
+	require.NotNil(t, row.Label)
+	require.Equal(t, "reset", *row.Label)
+	require.True(t, row.Enabled)
 	aborted := errors.New("rollback counter increment")
 	err = retry.DoTx(ctx, db.SQL, func(ctx context.Context, tx *sql.Tx) error {
 		txq := sq.New(tx)
@@ -137,27 +154,23 @@ func TestCountersDatabaseSQL(t *testing.T) {
 		}
 		return aborted
 	})
-	if !errors.Is(err, aborted) {
-		t.Fatalf("rollback: %v", err)
-	}
+	require.ErrorIs(t, err, aborted)
 	row, err = q.ReadCounter(ctx, id)
-	if err != nil || row.Value != 12 {
-		t.Fatalf("after rollback: %+v, %v", row, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, int64(12), row.Value)
 	// The committed generated projections remain valid after an unrelated column is added.
-	if err := db.Native.Exec(ctx, "ALTER TABLE counters ADD COLUMN extra Utf8;"); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, db.Native.Exec(ctx, "ALTER TABLE counters ADD COLUMN extra Utf8;"))
 	rows, err := q.ListCounters(ctx)
-	if err != nil || len(rows) != 1 || rows[0].ID != id || rows[0].Value != 12 {
-		t.Fatalf("SELECT * after schema evolution: %+v, %v", rows, err)
-	}
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, id, rows[0].ID)
+	require.Equal(t, int64(12), rows[0].Value)
 	row, err = q.ReadCounter(ctx, id)
-	if err != nil || row.ID != id || row.Value != 12 {
-		t.Fatalf("alias.* after schema evolution: %+v, %v", row, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, id, row.ID)
+	require.Equal(t, int64(12), row.Value)
 	incremented, err = q.IncrementCounter(ctx, sq.IncrementCounterParams{ID: id, Delta: 1})
-	if err != nil || incremented.ID != id || incremented.Value != 13 {
-		t.Fatalf("RETURNING * after schema evolution: %+v, %v", incremented, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, id, incremented.ID)
+	require.Equal(t, int64(13), incremented.Value)
 }

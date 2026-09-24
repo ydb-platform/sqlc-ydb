@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -49,35 +50,25 @@ func TestJooqSubqueryTargetBoundaries(t *testing.T) {
 				command = ":exec"
 			}
 			analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: tc.schema}}, []model.Source{{Name: "queries.sql", Text: "-- name: Read " + command + "\n" + tc.sql}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			files, err := Generate(analysis, Options{Package: "subqueries", Runtime: "jooq"})
-			if files != nil || err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("files = %v, error = %v; want %q and no output", files, err, tc.want)
-			}
+			require.False(t, files != nil || err == nil || !strings.Contains(err.Error(), tc.want), "files = %v, error = %v; want %q and no output", files, err, tc.want)
 		})
 	}
 }
 
 func TestJooqSubqueryPreservesNegationAndDistinct(t *testing.T) {
 	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqSubquerySchema}}, []model.Source{{Name: "queries.sql", Text: "-- name: Read :many\nSELECT id FROM records WHERE NOT (id IN (SELECT DISTINCT id FROM selected));"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	files, err := Generate(analysis, Options{Package: "subqueries", Runtime: "jooq"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, file := range files {
 		if file.Name != "Queries.java" {
 			continue
 		}
 		text := string(file.Content)
-		if !strings.Contains(text, `"{0} IN ({1})"`) || !strings.Contains(text, "dsl.selectDistinct(SELECTED.ID)") || !strings.Contains(text, ").not()") {
-			t.Fatalf("inner DISTINCT or outer negation was lost:\n%s", text)
-		}
+		require.False(t, !strings.Contains(text, `"{0} IN ({1})"`) || !strings.Contains(text, "dsl.selectDistinct(SELECTED.ID)") || !strings.Contains(text, ").not()"), "inner DISTINCT or outer negation was lost:\n%s", text)
 		return
 	}
-	t.Fatal("Queries.java was not generated")
+	require.FailNow(t, "Queries.java was not generated")
 }

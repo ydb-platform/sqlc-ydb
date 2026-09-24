@@ -3,6 +3,7 @@ package golang
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -12,9 +13,7 @@ func TestDatabaseSQLMixedScriptReportsCompletionErrors(t *testing.T) {
 		[]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));"}},
 		[]model.Source{{Name: "queries.sql", Text: "-- name: ReadAndDelete :many\nSELECT id FROM records;\nDELETE FROM records WHERE id = 9ul;"}},
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	runGeneratedRuntimeTest(t, analysis, Options{Package: "db", Runtime: "database/sql"}, mixedScriptDatabaseSQLRuntime)
 }
 

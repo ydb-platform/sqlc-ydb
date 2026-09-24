@@ -1,8 +1,10 @@
 package builtins
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -10,16 +12,10 @@ import (
 func checkDocumentedUDF(t *testing.T, name string, args []model.Type, want model.Type) {
 	t.Helper()
 	resolver := lookupDateTimeDigestIpMath(name)
-	if resolver == nil {
-		t.Fatalf("%s has no resolver", name)
-	}
+	require.NotNil(t, resolver)
 	got, err := resolver(args)
-	if err != nil {
-		t.Fatalf("%s(%v): %v", name, args, err)
-	}
-	if !got.Equal(want) {
-		t.Errorf("%s(%v) = %s, want %s", name, args, got.String(), want.String())
-	}
+	require.NoError(t, err)
+	assert.True(t, got.Equal(want))
 }
 
 func TestDateTimeDocumentedResourceOverloads(t *testing.T) {
@@ -223,13 +219,9 @@ func TestDocumentedUDFArgumentErrorsAndNullability(t *testing.T) {
 		{"Math::NearbyInt", []model.Type{udfKind("Double"), udfKind("Uint32")}, "must be"},
 	} {
 		resolver := lookupDateTimeDigestIpMath(tc.name)
-		if resolver == nil {
-			t.Fatalf("%s has no resolver", tc.name)
-		}
+		require.NotNil(t, resolver)
 		_, err := resolver(tc.args)
-		if err == nil || !strings.Contains(err.Error(), tc.want) {
-			t.Errorf("%s(%v): expected error containing %q, got %v", tc.name, tc.args, tc.want, err)
-		}
+		assert.ErrorContains(t, err, tc.want)
 	}
 	checkDocumentedUDF(t, "DateTime::GetYear", []model.Type{model.Optional(udfKind(dateTimeTM64))}, model.Optional(udfKind("Int32")))
 	checkDocumentedUDF(t, "Digest::Argon2", []model.Type{model.Optional(udfKind("String")), udfKind("String")}, model.Optional(udfKind("String")))
@@ -242,23 +234,18 @@ func TestDateTimeNamedOptions(t *testing.T) {
 	result, err := defaultRegistry.ResolveCall("DateTime::Update", []CallArgument{
 		{Type: resource}, {Name: "Month", Type: udfKind("Uint8")}, {Name: "TimezoneId", Type: udfKind("Uint16")},
 	})
-	if err != nil || !result.Equal(model.Optional(resource)) {
-		t.Fatalf("DateTime::Update named options = %s, %v", result.String(), err)
-	}
+	require.NoError(t, err)
+	require.True(t, result.Equal(model.Optional(resource)))
 	_, err = defaultRegistry.ResolveCall("DateTime::Update", []CallArgument{{Type: resource}, {Name: "Timezone", Type: udfKind("String")}})
-	if err == nil || !strings.Contains(err.Error(), "unknown named argument") {
-		t.Fatalf("DateTime::Update obsolete Timezone option: %v", err)
-	}
+	require.ErrorContains(t, err, "unknown named argument")
 	result, err = defaultRegistry.ResolveCall("DateTime::Format", []CallArgument{
 		{Type: udfKind("String")}, {Name: "AlwaysWriteFractionalSeconds", Type: udfKind("Bool")},
 	})
-	if err != nil || result.Kind != "Callable" {
-		t.Fatalf("DateTime::Format named option = %s, %v", result.String(), err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "Callable", result.Kind)
 	result, err = defaultRegistry.ResolveCall("DateTime::Format", []CallArgument{
 		{Type: udfKind("String")}, {Name: "WriteOffsetWithColon", Type: udfKind("Bool")},
 	})
-	if err != nil || result.Kind != "Callable" {
-		t.Fatalf("DateTime::Format offset option = %s, %v", result.String(), err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "Callable", result.Kind)
 }

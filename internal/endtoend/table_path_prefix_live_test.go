@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/cli"
 	"github.com/ydb-platform/sqlc-ydb/internal/config"
@@ -30,9 +32,7 @@ func TestLiveYDBTablePathPrefix(t *testing.T) {
 	}
 	dir := t.TempDir()
 	settings, err := (config.Database{URI: dsn, Timeout: "30s"}).Resolve(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	root := path.Join(settings.Database, fmt.Sprintf("sqlc_prefixx%d", time.Now().UnixNano()))
 	a, b := root+"/a", root+"/b"
 	schemas := []model.Source{
@@ -44,17 +44,11 @@ func TestLiveYDBTablePathPrefix(t *testing.T) {
 	querySQL := strings.NewReplacer("$PREFIX_A", a, "$PREFIX_B", b, "$ROOT", root).Replace(tablePathPrefixQueries)
 	queries := []model.Source{{Name: "queries.sql", Text: querySQL}}
 	offline, err := analyzer.Analyze(schemas, queries)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	client, err := database.New(settings)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() {
-		if err := client.Close(); err != nil {
-			t.Error(err)
-		}
+		assert.NoError(t, client.Close())
 	})
 	for _, localSchema := range []bool{false, true} {
 		var local []model.Source
@@ -62,25 +56,17 @@ func TestLiveYDBTablePathPrefix(t *testing.T) {
 			local = schemas
 		}
 		connected, err := analyzer.AnalyzeWithDatabase(context.Background(), local, queries, analyzer.Options{}, client)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		var names []string
 		for _, table := range connected.Catalog.Tables {
 			names = append(names, table.Name)
 		}
 		slices.Sort(names)
-		if !slices.Equal(names, []string{a + "/users", b + "/users"}) {
-			t.Fatalf("discovered table identities = %v", names)
-		}
-		if len(connected.Queries) != len(offline.Queries) {
-			t.Fatalf("connected query count = %d", len(connected.Queries))
-		}
+		require.True(t, slices.Equal(names, []string{a + "/users", b + "/users"}), "discovered table identities = %v", names)
+		require.Equal(t, len(offline.Queries), len(connected.Queries), "connected query count = %d", len(connected.Queries))
 		for i, got := range connected.Queries {
 			want := offline.Queries[i]
-			if got.SQL != want.SQL || !reflect.DeepEqual(got.Parameters, want.Parameters) || !reflect.DeepEqual(got.ResultSets, want.ResultSets) {
-				t.Fatalf("local schema=%v: query %s lost offline/connected parity", localSchema, got.Name)
-			}
+			require.False(t, got.SQL != want.SQL || !reflect.DeepEqual(got.Parameters, want.Parameters) || !reflect.DeepEqual(got.ResultSets, want.ResultSets), "local schema=%v: query %s lost offline/connected parity", localSchema, got.Name)
 		}
 	}
 	for _, change := range []struct {
@@ -91,9 +77,7 @@ func TestLiveYDBTablePathPrefix(t *testing.T) {
 		changed[change.file].Text = strings.Replace(changed[change.file].Text, change.from, change.to, 1)
 		_, err := analyzer.AnalyzeWithDatabase(context.Background(), changed, queries, analyzer.Options{}, client)
 		wantTable := []string{a, b}[change.file] + "/users"
-		if err == nil || !strings.Contains(err.Error(), "database schema drift") || !strings.Contains(err.Error(), wantTable) {
-			t.Fatalf("drift for %s = %v", wantTable, err)
-		}
+		require.False(t, err == nil || !strings.Contains(err.Error(), "database schema drift") || !strings.Contains(err.Error(), wantTable), "drift for %s = %v", wantTable, err)
 	}
 
 	configuration := "version: '2'\nsql:\n"
@@ -104,14 +88,10 @@ func TestLiveYDBTablePathPrefix(t *testing.T) {
 		"a.sql": schemas[0].Text, "b.sql": schemas[1].Text, "queries.sql": querySQL, "sqlc.yaml": configuration,
 		"go.mod": "module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n",
 	} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0600))
 	}
 	var stdout, stderr bytes.Buffer
-	if code := cli.Run([]string{"generate", "-f", filepath.Join(dir, "sqlc.yaml")}, &stdout, &stderr); code != 0 {
-		t.Fatalf("generate namespace fixture: %s", stderr.String())
-	}
+	require.Zero(t, cli.Run([]string{"generate", "-f", filepath.Join(dir, "sqlc.yaml")}, &stdout, &stderr), "generate namespace fixture: %s", stderr.String())
 	for _, runtime := range []string{"ydb", "database/sql"} {
 		t.Run(runtime, func(t *testing.T) {
 			setup, imports := "q := New(driver.Query())", ""

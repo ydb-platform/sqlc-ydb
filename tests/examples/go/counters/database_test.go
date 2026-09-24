@@ -4,8 +4,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"example.com/sqlc-ydb-example-tests/internal/testdb"
 	native "example.com/sqlc-ydb-examples/counters/go/native"
@@ -15,18 +16,13 @@ func TestDatabaseAnalysis(t *testing.T) {
 	db := testdb.Open(t)
 	db.Apply(t, "../../../../examples/counters/schema.sql", "DROP TABLE counters;")
 	root, err := filepath.Abs("../../../..")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	binary := filepath.Join(root, "bin", "sqlc-ydb")
-	if _, err := os.Stat(binary); err != nil {
-		t.Fatalf("run make generate before live example tests: %v", err)
-	}
+	_, err = os.Stat(binary)
+	require.NoError(t, err, "run make generate before live example tests")
 	// Discovery writes only into this copy, leaving committed example outputs intact.
 	dir := t.TempDir()
-	if err := os.CopyFS(dir, os.DirFS(filepath.Join(root, "examples", "counters"))); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.CopyFS(dir, os.DirFS(filepath.Join(root, "examples", "counters"))))
 	run := func(config, command string, extra ...string) (string, error) {
 		t.Helper()
 		args := append([]string{command, "--no-remote", "-f", filepath.Join(dir, config)}, extra...)
@@ -40,41 +36,29 @@ func TestDatabaseAnalysis(t *testing.T) {
 		{"sqlc.discovery.yaml", "generate"},
 		{"sqlc.discovery.yaml", "diff"},
 	} {
-		if output, err := run(tc.config, tc.command); err != nil {
-			t.Fatalf("%s %s: %v\n%s", tc.command, tc.config, err, output)
-		}
+		output, err := run(tc.config, tc.command)
+		require.NoError(t, err, "%s %s:\n%s", tc.command, tc.config, output)
 	}
 	rows, err := native.New(db.Native).ListCounters(db.Context)
-	if err != nil || len(rows) != 0 {
-		t.Fatalf("analysis must not execute INSERT/UPSERT queries: %+v, %v", rows, err)
-	}
+	require.NoError(t, err)
+	require.Empty(t, rows, "analysis must not execute INSERT/UPSERT queries")
 	for _, name := range []string{"go.mod", "go.sum"} {
 		data, err := os.ReadFile(filepath.Join(root, "examples", name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, name), data, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), data, 0600))
 	}
-	if err := os.WriteFile(filepath.Join(dir, "build", "discovered", "smoke_test.go"), []byte(discoverySmoke), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "build", "discovered", "smoke_test.go"), []byte(discoverySmoke), 0600))
 	cmd := exec.CommandContext(db.Context, "go", "test", "-p", "1", "-count=1", "./build/discovered")
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GOWORK=off")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("discovered client: %v\n%s", err, output)
-	}
-	if err := db.Native.Exec(db.Context, "ALTER TABLE counters ADD COLUMN extra Utf8;"); err != nil {
-		t.Fatal(err)
-	}
-	if output, err := run("sqlc.database.yaml", "compile"); err == nil || !strings.Contains(output, "schema drift") {
-		t.Fatalf("expected schema drift, got %v\n%s", err, output)
-	}
-	if output, err := run("sqlc.database.yaml", "diff", "--no-database"); err != nil {
-		t.Fatalf("offline override: %v\n%s", err, output)
-	}
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, "discovered client:\n%s", output)
+	require.NoError(t, db.Native.Exec(db.Context, "ALTER TABLE counters ADD COLUMN extra Utf8;"))
+	driftOutput, driftErr := run("sqlc.database.yaml", "compile")
+	require.Error(t, driftErr, "expected schema drift:\n%s", driftOutput)
+	require.Contains(t, driftOutput, "schema drift")
+	offlineOutput, offlineErr := run("sqlc.database.yaml", "diff", "--no-database")
+	require.NoError(t, offlineErr, "offline override:\n%s", offlineOutput)
 }
 
 const discoverySmoke = `package counters

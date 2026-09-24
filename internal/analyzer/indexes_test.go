@@ -1,9 +1,10 @@
 package analyzer
 
 import (
-	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -20,16 +21,13 @@ func TestAnalyzeSecondaryIndexView(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: indexedRecordsSchema}}
 	sql := "-- name: Read :many\nSELECT r.* FROM records VIEW by_label AS r WHERE r.label = $label;"
 	result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	query := result.Queries[0]
-	if !strings.Contains(query.SQL, "FROM records VIEW by_label AS r") || strings.Contains(query.SQL, "r.*") {
-		t.Fatalf("index selection or wildcard projection changed: %s", query.SQL)
-	}
-	if len(query.Parameters) != 1 || query.Parameters[0].Type.String() != "Optional<Utf8>" || len(query.ResultSets[0].Columns) != 3 {
-		t.Fatalf("indexed query metadata = %#v", query)
-	}
+	require.Contains(t, query.SQL, "FROM records VIEW by_label AS r")
+	require.NotContains(t, query.SQL, "r.*")
+	require.Len(t, query.Parameters, 1)
+	require.Equal(t, "Optional<Utf8>", query.Parameters[0].Type.String())
+	require.Len(t, query.ResultSets[0].Columns, 3)
 }
 
 func TestCatalogSecondaryIndexDefinitions(t *testing.T) {
@@ -37,17 +35,13 @@ func TestCatalogSecondaryIndexDefinitions(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			sql := "CREATE TABLE records (INDEX `by label` " + kind + " ON (note, label) COVER (extra), id Uint64 NOT NULL, label Utf8, note Utf8, extra Utf8, PRIMARY KEY(id));"
 			result, err := Analyze([]model.Source{{Name: "schema.sql", Text: sql}}, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			wantKind := "GlobalSync"
 			if kind == "GLOBAL ASYNC" {
 				wantKind = "GlobalAsync"
 			}
 			want := []model.Index{{Name: "by label", Kind: wantKind, Columns: []string{"note", "label"}, DataColumns: []string{"extra"}}}
-			if !reflect.DeepEqual(result.Catalog.Tables[0].Indexes, want) {
-				t.Fatalf("indexes = %#v, want %#v", result.Catalog.Tables[0].Indexes, want)
-			}
+			require.Equal(t, want, result.Catalog.Tables[0].Indexes)
 		})
 	}
 }
@@ -58,16 +52,10 @@ ALTER TABLE records ADD INDEX by_note GLOBAL ASYNC ON (note);
 ALTER TABLE records DROP INDEX by_label;
 ALTER TABLE records RENAME TO archive;`
 	result, err := Analyze([]model.Source{{Name: "schema.sql", Text: sql}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\nSELECT * FROM archive VIEW by_note;"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	want := []model.Index{{Name: "by_note", Kind: "GlobalAsync", Columns: []string{"note"}}}
-	if !reflect.DeepEqual(result.Catalog.Tables[0].Indexes, want) {
-		t.Fatalf("indexes = %#v, want %#v", result.Catalog.Tables[0].Indexes, want)
-	}
-	if result.Queries[0].ResultSets[0].Columns[0].Table != "archive" {
-		t.Fatalf("index read lost renamed base table: %#v", result.Queries[0].ResultSets)
-	}
+	require.Equal(t, want, result.Catalog.Tables[0].Indexes)
+	require.Equal(t, "archive", result.Queries[0].ResultSets[0].Columns[0].Table)
 }
 
 func TestCatalogSecondaryIndexDiagnostics(t *testing.T) {
@@ -88,9 +76,7 @@ func TestCatalogSecondaryIndexDiagnostics(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := Analyze([]model.Source{{Name: "schema.sql", Text: strings.Replace(base, "%s", tt.definition, 1)}}, nil)
-			if err == nil || !strings.Contains(err.Error(), tt.want) {
-				t.Fatalf("error = %v, want %q", err, tt.want)
-			}
+			require.ErrorContains(t, err, tt.want)
 		})
 	}
 	for _, tt := range []struct{ statement, want string }{
@@ -103,23 +89,18 @@ func TestCatalogSecondaryIndexDiagnostics(t *testing.T) {
 	} {
 		t.Run(tt.statement, func(t *testing.T) {
 			_, err := Analyze([]model.Source{{Name: "schema.sql", Text: indexedRecordsSchema + " ALTER TABLE records " + tt.statement + ";"}}, nil)
-			if err == nil || !strings.Contains(err.Error(), tt.want) {
-				t.Fatalf("error = %v, want %q", err, tt.want)
-			}
+			require.ErrorContains(t, err, tt.want)
 		})
 	}
 }
 
 func TestCatalogIndexAlterIsAtomic(t *testing.T) {
 	base, diagnostics := buildCatalog([]model.Source{{Name: "schema.sql", Text: indexedRecordsSchema}})
-	if len(diagnostics) != 0 {
-		t.Fatal(diagnostics)
-	}
+	require.Len(t, diagnostics, 0)
 	for _, changes := range []string{"DROP INDEX by_label, DROP INDEX missing", "ADD INDEX by_note GLOBAL ON (note), DROP INDEX missing"} {
 		catalog, diagnostics := buildCatalog([]model.Source{{Name: "schema.sql", Text: indexedRecordsSchema + " ALTER TABLE records " + changes + ";"}})
-		if len(diagnostics) == 0 || !reflect.DeepEqual(catalog, base) {
-			t.Fatalf("%s: catalog = %#v, diagnostics = %v", changes, catalog, diagnostics)
-		}
+		require.NotEqual(t, 0, len(diagnostics))
+		require.Equal(t, base, catalog)
 	}
 }
 
@@ -127,13 +108,12 @@ func TestCatalogIndexAndColumnMigrationOrder(t *testing.T) {
 	sql := indexedRecordsSchema + `
 ALTER TABLE records DROP INDEX by_label, DROP COLUMN note, ADD COLUMN extra Utf8, ADD INDEX by_extra GLOBAL ON (extra);`
 	result, err := Analyze([]model.Source{{Name: "schema.sql", Text: sql}}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	table := result.Catalog.Tables[0]
-	if tableColumn(&table, "note") != nil || tableColumn(&table, "extra") == nil || len(table.Indexes) != 1 || table.Indexes[0].Name != "by_extra" {
-		t.Fatalf("index/column migration result = %#v", table)
-	}
+	require.Nil(t, tableColumn(&table, "note"))
+	require.NotNil(t, tableColumn(&table, "extra"))
+	require.Len(t, table.Indexes, 1)
+	require.Equal(t, "by_extra", table.Indexes[0].Name)
 }
 
 func TestAnalyzeIndexViewPreservesQualifiedSQL(t *testing.T) {
@@ -141,14 +121,11 @@ func TestAnalyzeIndexViewPreservesQualifiedSQL(t *testing.T) {
 	schemaSQL = strings.ReplaceAll(schemaSQL, "by_label", "`by label`")
 	sql := "-- name: Read :many\nSELECT r.* FROM `records/items` /* table */ VIEW /* index */ `by label` AS r WHERE r.label = $label;"
 	result, err := Analyze([]model.Source{{Name: "schema.sql", Text: schemaSQL}}, []model.Source{{Name: "query.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	want := strings.Replace(sql, "r.*", "r.`id` AS `id`, `r`.`label` AS `label`, `r`.`note` AS `note`", 1)
 	query := result.Queries[0]
-	if query.SQL != want || !reflect.DeepEqual(query.Syntax.Relations, []model.TableBinding{{Table: "records/items", Alias: "r"}}) {
-		t.Fatalf("SQL = %q, relations = %#v", query.SQL, query.Syntax.Relations)
-	}
+	require.Equal(t, want, query.SQL)
+	require.Equal(t, []model.TableBinding{{Table: "records/items", Alias: "r"}}, query.Syntax.Relations)
 }
 
 func TestAnalyzeIndexViewsInJoinsAndDML(t *testing.T) {
@@ -162,12 +139,8 @@ func TestAnalyzeIndexViewsInJoinsAndDML(t *testing.T) {
 		t.Run(tt.sql, func(t *testing.T) {
 			sql := "-- name: Read " + tt.command + "\n" + tt.sql + ";"
 			result, err := Analyze([]model.Source{{Name: "schema.sql", Text: indexedRecordsSchema}}, []model.Source{{Name: "query.sql", Text: sql}})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !strings.Contains(result.Queries[0].SQL, "records VIEW by_label") {
-				t.Fatalf("index selection lost: %s", result.Queries[0].SQL)
-			}
+			require.NoError(t, err)
+			require.Contains(t, result.Queries[0].SQL, "records VIEW by_label")
 		})
 	}
 }
@@ -176,13 +149,11 @@ func TestAnalyzeIndexViewKeepsBaseTableColumns(t *testing.T) {
 	schema := indexedRecordsSchema + " ALTER TABLE records ADD COLUMN payload String;"
 	query := "-- name: Read :many\nSELECT payload FROM records VIEW by_label;"
 	result, err := Analyze([]model.Source{{Name: "schema.sql", Text: schema}}, []model.Source{{Name: "query.sql", Text: query}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	column := result.Queries[0].ResultSets[0].Columns[0]
-	if column.Name != "payload" || column.Type.String() != "Optional<String>" || column.Table != "records" {
-		t.Fatalf("non-covering result = %#v", column)
-	}
+	require.Equal(t, "payload", column.Name)
+	require.Equal(t, "Optional<String>", column.Type.String())
+	require.Equal(t, "records", column.Table)
 }
 
 func TestAnalyzeIndexViewDiagnostics(t *testing.T) {
@@ -196,9 +167,7 @@ func TestAnalyzeIndexViewDiagnostics(t *testing.T) {
 	} {
 		t.Run(tt.sql, func(t *testing.T) {
 			_, err := Analyze([]model.Source{{Name: "schema.sql", Text: indexedRecordsSchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + tt.sql + ";"}})
-			if err == nil || !strings.Contains(err.Error(), tt.want) {
-				t.Fatalf("error = %v, want %q", err, tt.want)
-			}
+			require.ErrorContains(t, err, tt.want)
 		})
 	}
 }
@@ -206,7 +175,5 @@ func TestAnalyzeIndexViewDiagnostics(t *testing.T) {
 func TestAnalyzeSecondaryIndexViewWithoutMetadata(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));"}}
 	_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\nSELECT id FROM records VIEW missing;"}})
-	if err == nil || !strings.Contains(err.Error(), `unknown index "missing" on table "records"`) {
-		t.Fatalf("error = %v, want index diagnostic on the underlying table", err)
-	}
+	require.ErrorContains(t, err, `unknown index "missing" on table "records"`)
 }

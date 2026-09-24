@@ -1,12 +1,13 @@
 package rust
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -16,29 +17,21 @@ func structInput() *model.AnalysisResult {
 }
 func TestStructListGeneration(t *testing.T) {
 	files, err := Generate(structInput(), Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	models := generatedFile(t, files, "models.rs")
 	queries := generatedFile(t, files, "queries.rs")
 	for _, want := range []string{"pub struct CreateBooksBooksItem", "pub book_id: u64", "pub tags: String", "pub title: Option<String>"} {
-		if !strings.Contains(models, want) {
-			t.Fatalf("missing %s\n%s", want, models)
-		}
+		require.Contains(t, models, want, "missing %s\n%s", want, models)
 	}
 	for _, want := range []string{"books: impl IntoIterator<Item = impl std::borrow::Borrow<CreateBooksBooksItem>>", "impl From<CreateBooksBooksItem> for ydb::Value", "JsonParam(item.tags)", "create_books_books_item_type()"} {
-		if !strings.Contains(queries, want) {
-			t.Fatalf("missing %s\n%s", want, queries)
-		}
+		require.Contains(t, queries, want, "missing %s\n%s", want, queries)
 	}
 }
 func TestStructListRejectsNestedField(t *testing.T) {
 	in := structInput()
 	in.Queries[0].Parameters[0].Type.Elem.Fields[0].Type = model.Type{Kind: "List", Elem: &model.Type{Kind: "Uint64"}}
 	_, err := Generate(in, Options{})
-	if err == nil || !strings.Contains(err.Error(), "field book_id must be scalar") {
-		t.Fatalf("err=%v", err)
-	}
+	require.ErrorContains(t, err, "field book_id must be scalar", "err=%v", err)
 }
 func TestStructListSDK(t *testing.T) {
 	if os.Getenv("SQLC_YDB_RUST_SDK_CHECK") == "" {
@@ -53,17 +46,11 @@ func TestStructListSDK(t *testing.T) {
 		in.Queries = append(in.Queries, q)
 	}
 	files, err := Generate(in, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(dir, "src"), 0700); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "src"), 0700))
 	for _, f := range files {
-		if err := os.WriteFile(filepath.Join(dir, "src", f.Name), f.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "src", f.Name), f.Content, 0600))
 	}
 	// Execute real SDK values, including typed empty list construction, without a server.
 	runtime := `
@@ -102,44 +89,34 @@ mod struct_tests {
 `
 	qfile := filepath.Join(dir, "src", "queries.rs")
 	f, err := os.OpenFile(qfile, os.O_APPEND|os.O_WRONLY, 0600)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	_, err = f.WriteString(runtime)
 	if closeErr := f.Close(); closeErr != nil {
-		t.Fatal(closeErr)
+		require.NoError(t, closeErr, fmt.Sprint(closeErr))
 	}
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	mod := "[package]\nname=\"struct-batch-check\"\nversion=\"0.0.0\"\nedition=\"2024\"\n[dependencies]\nydb=\"=0.18.2\"\nbon=\"=3.10.1\"\n"
-	if err := os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte(mod), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte(mod), 0600))
 	cmd := exec.Command("cargo", "test", "--quiet", "--offline")
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("Rust SDK: %v\n%s", err, out)
+		require.NoError(t, err, "Rust SDK: %v\n%s", err, out)
 	}
 }
 
 func TestStructListRustfmt(t *testing.T) {
 	files, err := Generate(structInput(), Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	var paths []string
 	for _, f := range files {
 		path := filepath.Join(dir, f.Name)
-		if err := os.WriteFile(path, f.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(path, f.Content, 0600))
 		paths = append(paths, path)
 	}
 	args := append([]string{"--edition", "2024", "--check"}, paths...)
 	if out, err := exec.Command("rustfmt", args...).CombinedOutput(); err != nil {
-		t.Fatalf("rustfmt: %v\n%s", err, out)
+		require.NoError(t, err, "rustfmt: %v\n%s", err, out)
 	}
 }
 
@@ -159,9 +136,7 @@ func TestStructListFieldDiagnostics(t *testing.T) {
 			in := structInput()
 			in.Queries[0].Parameters[0].Type.Elem.Fields = tc.fields
 			_, err := Generate(in, Options{})
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("got %v, want %s", err, tc.want)
-			}
+			require.ErrorContains(t, err, tc.want, "got %v, want %s", err, tc.want)
 		})
 	}
 }
@@ -173,7 +148,5 @@ func TestStructListItemNameCollisionAcrossQueries(t *testing.T) {
 	other.Parameters[0].Name = "books_books"
 	in.Queries = append(in.Queries, other)
 	_, err := Generate(in, Options{})
-	if err == nil || !strings.Contains(err.Error(), "model name collision") {
-		t.Fatalf("err=%v", err)
-	}
+	require.ErrorContains(t, err, "model name collision", "err=%v", err)
 }

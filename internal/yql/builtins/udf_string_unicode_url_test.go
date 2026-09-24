@@ -4,6 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -76,31 +79,29 @@ func TestStringUnicodeUrlDocumentedFunctions(t *testing.T) {
 		for _, name := range strings.Fields(group.names) {
 			seen[name] = true
 			t.Run(name, func(t *testing.T) {
-				if len(stringUnicodeUrlSignatures(name)) == 0 {
-					t.Fatal("documented function has no resolver")
-				}
+				require.NotEqual(t, 0, len(stringUnicodeUrlSignatures(name)))
 				got, err := Resolve(name, group.args)
-				if err != nil || !got.Equal(group.want) {
-					t.Fatalf("resolve(%v) = %s, %v; want %s", group.args, got, err, group.want)
-				}
-				if _, err := Resolve(name, nil); err == nil {
-					t.Fatal("missing required argument was accepted")
+				require.NoError(t, err)
+				require.True(t, got.Equal(group.want))
+				{
+					_, err := Resolve(name, nil)
+					require.Error(t, err)
 				}
 				tooMany := append(append([]model.Type(nil), group.args...), boolean, boolean, boolean, boolean, boolean, boolean)
-				if _, err := Resolve(name, tooMany); err == nil {
-					t.Fatal("excess arguments were accepted")
+				{
+					_, err := Resolve(name, tooMany)
+					require.Error(t, err)
 				}
 				bad := append([]model.Type(nil), group.args...)
 				bad[0] = boolean
-				if _, err := Resolve(name, bad); err == nil {
-					t.Fatal("wrong first argument type was accepted")
+				{
+					_, err := Resolve(name, bad)
+					require.Error(t, err)
 				}
 			})
 		}
 	}
-	if len(seen) != 100 {
-		t.Fatalf("covered %d new documented names, want 100", len(seen))
-	}
+	require.Len(t, seen, 100)
 }
 
 func TestStringUnicodeUrlNullableAndNamedOptions(t *testing.T) {
@@ -121,18 +122,19 @@ func TestStringUnicodeUrlNullableAndNamedOptions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := defaultRegistry.ResolveCall(tt.name, tt.args)
-			if err != nil || !got.Equal(tt.want) {
-				t.Fatalf("resolve named = %s, %v; want %s", got, err, tt.want)
-			}
+			require.NoError(t, err)
+			require.True(t, got.Equal(tt.want))
 			bad := append([]CallArgument(nil), tt.args...)
 			bad[len(bad)-1].Name = "Unknown"
-			if _, err := defaultRegistry.ResolveCall(tt.name, bad); err == nil {
-				t.Fatal("unknown named option was accepted")
+			{
+				_, err := defaultRegistry.ResolveCall(tt.name, bad)
+				require.Error(t, err)
 			}
 			bad = append([]CallArgument(nil), tt.args...)
 			bad[len(bad)-1].Type = model.Type{Kind: "Json"}
-			if _, err := defaultRegistry.ResolveCall(tt.name, bad); err == nil {
-				t.Fatal("wrong named option type was accepted")
+			{
+				_, err := defaultRegistry.ResolveCall(tt.name, bad)
+				require.Error(t, err)
 			}
 		})
 	}
@@ -149,17 +151,13 @@ func TestStringUnicodeUrlNullableAndNamedOptions(t *testing.T) {
 		{"Url::Parse", []model.Type{model.Optional(str)}, model.Optional(stringUnicodeUrlSignatures("Url::Parse")[0].Returns)},
 	} {
 		got, err := Resolve(tt.name, tt.args)
-		if err != nil || !got.Equal(tt.want) {
-			t.Errorf("%s = %s, %v; want %s", tt.name, got, err, tt.want)
-		}
+		assert.False(t, err != nil || !got.Equal(tt.want))
 	}
 }
 
 func TestStringUnicodeUrlNamesCannotBeOverridden(t *testing.T) {
 	for _, name := range []string{"String::Base32Encode", "Unicode::Fold", "Url::GetDomain"} {
 		_, err := NewRegistry([]Signature{{Name: name, Returns: model.Type{Kind: "Bool"}}})
-		if err == nil || !strings.Contains(err.Error(), "known built-in") {
-			t.Errorf("NewRegistry(%s): %v", name, err)
-		}
+		assert.ErrorContains(t, err, "known built-in")
 	}
 }

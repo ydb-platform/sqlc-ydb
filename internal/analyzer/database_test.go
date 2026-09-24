@@ -3,10 +3,10 @@ package analyzer
 import (
 	"context"
 	"errors"
-	"reflect"
 	"slices"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 	"github.com/ydb-platform/sqlc-ydb/internal/yql/builtins"
@@ -55,15 +55,11 @@ func TestDatabaseAnalysisSendsOriginalSQLBeforeLocalResolution(t *testing.T) {
 		t.Run(sql, func(t *testing.T) {
 			database := &fakeAnalysisDatabase{validateError: errors.New("Unknown name: $id; add DECLARE with the parameter type")}
 			_, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: sql}}, Options{}, database)
-			if err == nil || !strings.Contains(err.Error(), "database query validation failed: Unknown name:") || !strings.Contains(err.Error(), "add DECLARE") {
-				t.Fatalf("server diagnostic was replaced by local analysis: %v", err)
-			}
-			if !reflect.DeepEqual(database.validated, []string{sql}) {
-				t.Fatalf("server SQL = %q, want original SQL once %q", database.validated, sql)
-			}
-			if len(database.described) != 0 {
-				t.Fatalf("server rejection did not precede discovery: %v", database.described)
-			}
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "database query validation failed: Unknown name:")
+			require.Contains(t, err.Error(), "add DECLARE")
+			require.Equal(t, []string{sql}, database.validated)
+			require.Len(t, database.described, 0)
 		})
 	}
 }
@@ -77,9 +73,9 @@ func TestDatabaseAnalysisKeepsAnnotationChecksBeforeServerCalls(t *testing.T) {
 		t.Run(sql, func(t *testing.T) {
 			database := &fakeAnalysisDatabase{}
 			_, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: sql}}, Options{}, database)
-			if err == nil || len(database.described) != 0 || len(database.validated) != 0 {
-				t.Fatalf("invalid annotation reached database: error=%v describes=%v validations=%v", err, database.described, database.validated)
-			}
+			require.Error(t, err)
+			require.Len(t, database.described, 0)
+			require.Len(t, database.validated, 0)
 		})
 	}
 }
@@ -87,13 +83,11 @@ func TestDatabaseAnalysisKeepsAnnotationChecksBeforeServerCalls(t *testing.T) {
 func TestOfflineAnalysisStillInfersUndeclaredParameters(t *testing.T) {
 	sql := "-- name: Read :one\nSELECT id FROM records WHERE id = $id;"
 	result, err := Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "query.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	query := result.Queries[0]
-	if !reflect.DeepEqual(query.Parameters, []model.Parameter{{Name: "id", Type: model.Type{Kind: "Uint64"}}}) || len(query.DeclaredParameters) != 0 || query.SQL != sql {
-		t.Fatalf("offline inferred parameter contract changed: %#v", query)
-	}
+	require.Equal(t, []model.Parameter{{Name: "id", Type: model.Type{Kind: "Uint64"}}}, query.Parameters)
+	require.Len(t, query.DeclaredParameters, 0)
+	require.Equal(t, sql, query.SQL)
 }
 
 func TestDatabaseAnalysisDiscoversReferencedTables(t *testing.T) {
@@ -121,23 +115,20 @@ SELECT id, name FROM ` + "`archive/writers`" + ` WHERE id = $id;
 DECLARE $rows AS List<Struct<id:Uint64,name:Utf8>>;
 UPSERT INTO authors (id, name) SELECT id, name FROM AS_TABLE($rows);`}}
 	result, err := AnalyzeWithDatabase(context.Background(), nil, queries, Options{}, database)
-	if err != nil {
-		t.Fatal(err)
+	require.NoError(t, err)
+	{
+		want := []string{"authors", "books", "archive/writers"}
+		require.Equal(t, want, database.described)
 	}
-	if want := []string{"authors", "books", "archive/writers"}; !reflect.DeepEqual(database.described, want) {
-		t.Fatalf("described %v, want %v", database.described, want)
-	}
-	if len(result.Queries) != 6 || len(database.validated) != 6 {
-		t.Fatalf("queries=%d validation calls=%d", len(result.Queries), len(database.validated))
-	}
-	if got := result.Queries[2].Parameters; !reflect.DeepEqual(got, []model.Parameter{{Name: "name", Type: model.Type{Kind: "Utf8"}}, {Name: "id", Type: model.Type{Kind: "Uint64"}}}) {
-		t.Fatalf("declared UPDATE parameters: %#v", got)
+	require.Len(t, result.Queries, 6)
+	require.Len(t, database.validated, 6)
+	{
+		got := result.Queries[2].Parameters
+		require.Equal(t, []model.Parameter{{Name: "name", Type: model.Type{Kind: "Utf8"}}, {Name: "id", Type: model.Type{Kind: "Uint64"}}}, got)
 	}
 	for _, table := range result.Catalog.Tables {
 		for _, column := range table.Columns {
-			if column.Table != table.Name {
-				t.Fatalf("column lost logical owner: %#v", column)
-			}
+			require.Equal(t, table.Name, column.Table)
 		}
 	}
 }
@@ -146,18 +137,16 @@ func TestDatabaseAnalysisPreservesSQLAndDeclarations(t *testing.T) {
 	sql := "-- name: Read :one\r\n-- DECLARE $fake AS Utf8;\r\nDECLARE $id AS Uint64;\r\nDECLARE $`имя` AS Utf8;\r\n$local = $id;\r\nSELECT name FROM authors WHERE id = $local AND name = $`имя`;"
 	database := &fakeAnalysisDatabase{tables: map[string]model.Table{"authors": databaseTestTable("name")}}
 	result, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: sql}}, Options{}, database)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	query := result.Queries[0]
-	if query.SQL != sql || !reflect.DeepEqual(query.DeclaredParameters, []string{"id", "имя"}) {
-		t.Fatalf("source changed: %#v", query)
-	}
-	if len(query.Parameters) != 2 || query.Parameters[1].Name != "имя" {
-		t.Fatalf("parameters include locals or lose names: %#v", query.Parameters)
-	}
-	if want := sql; len(database.validated) != 1 || database.validated[0] != want {
-		t.Fatalf("validation SQL = %q, want %q", database.validated, want)
+	require.Equal(t, sql, query.SQL)
+	require.Equal(t, []string{"id", "имя"}, query.DeclaredParameters)
+	require.Len(t, query.Parameters, 2)
+	require.Equal(t, "имя", query.Parameters[1].Name)
+	{
+		want := sql
+		require.Len(t, database.validated, 1)
+		require.Equal(t, want, database.validated[0])
 	}
 }
 
@@ -165,11 +154,10 @@ func TestDatabaseAnalysisPreservesFunctionContracts(t *testing.T) {
 	database := &fakeAnalysisDatabase{}
 	options := Options{Functions: []builtins.Signature{{Name: "IsReady", Returns: model.Type{Kind: "Bool"}}}}
 	result, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: "-- name: Ready :one\nSELECT IsReady() AS ready;"}}, options, database)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := result.Queries[0].ResultSets[0].Columns[0].Type; got.Kind != "Bool" {
-		t.Fatalf("configured function type = %#v", got)
+	require.NoError(t, err)
+	{
+		got := result.Queries[0].ResultSets[0].Columns[0].Type
+		require.Equal(t, "Bool", got.Kind)
 	}
 }
 
@@ -184,18 +172,15 @@ func TestDatabaseAnalysisFixesWildcardWireOrderInSQL(t *testing.T) {
 				Columns: []model.Column{{Name: "z", Type: model.Type{Kind: "Utf8"}}, {Name: "a", Type: model.Type{Kind: "Utf8"}}, {Name: "id", Type: model.Type{Kind: "Uint64"}}}, PrimaryKey: []string{"id"},
 			}}}
 			result, err := AnalyzeWithDatabase(context.Background(), schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\nSELECT * FROM records;"}}, Options{}, database)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			var names []string
 			for _, column := range result.Queries[0].ResultSets[0].Columns {
 				names = append(names, column.Name)
 			}
-			if !reflect.DeepEqual(names, []string{"z", "a", "id"}) {
-				t.Fatalf("wildcard column order = %v", names)
-			}
-			if sql := result.Queries[0].SQL; sql != "-- name: Read :many\nSELECT `z`, `a`, `id` FROM records;" {
-				t.Fatalf("wildcard SQL does not fix the wire order: %q", sql)
+			require.Equal(t, []string{"z", "a", "id"}, names)
+			{
+				sql := result.Queries[0].SQL
+				require.Equal(t, "-- name: Read :many\nSELECT `z`, `a`, `id` FROM records;", sql)
 			}
 		})
 	}
@@ -224,12 +209,11 @@ func TestDatabaseAnalysisRejectsSchemaDrift(t *testing.T) {
 			test.change(&table)
 			database := &fakeAnalysisDatabase{tables: map[string]model.Table{"records": table}}
 			result, err := AnalyzeWithDatabase(context.Background(), schema, queries, Options{}, database)
-			if err == nil || !strings.Contains(err.Error(), test.want) || !strings.Contains(err.Error(), "query.sql:2:") {
-				t.Fatalf("drift diagnostic = %v, want %q", err, test.want)
-			}
-			if !reflect.DeepEqual(database.validated, []string{queries[0].Text}) || len(result.Queries) != 0 {
-				t.Fatal("schema drift did not stop analysis after server query validation")
-			}
+			require.Error(t, err)
+			require.Contains(t, err.Error(), test.want)
+			require.Contains(t, err.Error(), "query.sql:2:")
+			require.Equal(t, []string{queries[0].Text}, database.validated)
+			require.Len(t, result.Queries, 0)
 		})
 	}
 }
@@ -252,16 +236,15 @@ SELECT id FROM records;`},
 	table.Columns[1].Type = model.Type{Kind: "String"}
 	database := &fakeAnalysisDatabase{tables: map[string]model.Table{"records": table}}
 	result, err := AnalyzeWithDatabase(context.Background(), schema, queries, Options{}, database)
-	if err == nil || len(result.Diagnostics) != 1 {
-		t.Fatalf("schema drift diagnostics = %v, error = %v", result.Diagnostics, err)
-	}
+	require.Error(t, err)
+	require.Len(t, result.Diagnostics, 1)
 	diagnostic := result.Diagnostics[0]
-	if want := (model.Position{File: "z-first.sql", Line: 6, Column: 6}); diagnostic.Position != want {
-		t.Fatalf("schema drift position = %#v, want first table reference %#v", diagnostic.Position, want)
+	{
+		want := (model.Position{File: "z-first.sql", Line: 6, Column: 6})
+		require.Equal(t, want, diagnostic.Position)
 	}
-	if !strings.Contains(diagnostic.Message, `database schema drift for table "records"`) || !strings.Contains(diagnostic.Message, "local type Utf8 and database type String") {
-		t.Fatalf("unexpected diagnostic at first table reference: %s", diagnostic.Message)
-	}
+	require.Contains(t, diagnostic.Message, `database schema drift for table "records"`)
+	require.Contains(t, diagnostic.Message, "local type Utf8 and database type String")
 }
 
 func TestDatabaseAnalysisChecksPrimaryKeyOrder(t *testing.T) {
@@ -270,12 +253,8 @@ func TestDatabaseAnalysisChecksPrimaryKeyOrder(t *testing.T) {
 	table.PrimaryKey = []string{"name", "id"}
 	database := &fakeAnalysisDatabase{tables: map[string]model.Table{"records": table}}
 	_, err := AnalyzeWithDatabase(context.Background(), schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nSELECT id FROM records;"}}, Options{}, database)
-	if err == nil || !strings.Contains(err.Error(), "local primary key [id name] differs from database primary key [name id]") {
-		t.Fatalf("primary key order diagnostic = %v", err)
-	}
-	if len(database.validated) != 1 {
-		t.Fatal("query did not reach server validation before primary key drift check")
-	}
+	require.ErrorContains(t, err, "local primary key [id name] differs from database primary key [name id]")
+	require.Len(t, database.validated, 1)
 }
 
 func TestDatabaseAnalysisRejectsUnsupportedSourcesBeforeDiscovery(t *testing.T) {
@@ -291,9 +270,9 @@ func TestDatabaseAnalysisRejectsUnsupportedSourcesBeforeDiscovery(t *testing.T) 
 		t.Run(sql, func(t *testing.T) {
 			database := &fakeAnalysisDatabase{}
 			_, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: sql}}, Options{}, database)
-			if err == nil || len(database.described) != 0 || !reflect.DeepEqual(database.validated, []string{sql}) {
-				t.Fatalf("err=%v describes=%v validations=%v", err, database.described, database.validated)
-			}
+			require.Error(t, err)
+			require.Len(t, database.described, 0)
+			require.Equal(t, []string{sql}, database.validated)
 		})
 	}
 }
@@ -302,9 +281,10 @@ func TestDatabaseAnalysisRejectsValuesSource(t *testing.T) {
 	const sql = "-- name: Read :one\nSELECT * FROM (VALUES (1u));"
 	database := &fakeAnalysisDatabase{}
 	_, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: sql}}, Options{}, database)
-	if err == nil || !strings.Contains(err.Error(), "unsupported FROM or JOIN source") || len(database.described) != 0 || !reflect.DeepEqual(database.validated, []string{sql}) {
-		t.Fatalf("err=%v describes=%v validations=%v", err, database.described, database.validated)
-	}
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unsupported FROM or JOIN source")
+	require.Len(t, database.described, 0)
+	require.Equal(t, []string{sql}, database.validated)
 }
 
 func TestDatabaseAnalysisPropagatesErrors(t *testing.T) {
@@ -321,24 +301,25 @@ func TestDatabaseAnalysisPropagatesErrors(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := AnalyzeWithDatabase(context.Background(), nil, queries, Options{}, &test.database)
-			if err == nil || !strings.Contains(err.Error(), test.want) || !strings.Contains(err.Error(), "query.sql:") {
-				t.Fatalf("diagnostic=%v, want %q", err, test.want)
-			}
+			require.Error(t, err)
+			require.Contains(t, err.Error(), test.want)
+			require.Contains(t, err.Error(), "query.sql:")
 		})
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	database := &fakeAnalysisDatabase{}
 	_, err := AnalyzeWithDatabase(ctx, nil, queries, Options{}, database)
-	if err == nil || !strings.Contains(err.Error(), "context canceled") || len(database.described) != 0 || len(database.validated) != 0 {
-		t.Fatalf("canceled analysis: %v, calls %v", err, database.described)
-	}
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "context canceled")
+	require.Len(t, database.described, 0)
+	require.Len(t, database.validated, 0)
 }
 
 func TestDatabaseAnalysisKeepsOfflineExpressionLimits(t *testing.T) {
 	database := &fakeAnalysisDatabase{tables: map[string]model.Table{"records": databaseTestTable("name")}}
 	_, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nSELECT id / 1 AS next FROM records;"}}, Options{}, database)
-	if err == nil || !strings.Contains(err.Error(), "unsupported arithmetic operator") || len(database.validated) != 1 {
-		t.Fatalf("unresolved expression bypassed semantic analysis: %v, calls %v", err, database.validated)
-	}
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unsupported arithmetic operator")
+	require.Len(t, database.validated, 1)
 }

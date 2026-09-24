@@ -1,13 +1,16 @@
 package cli
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestWindowsUpgradeInstructions(t *testing.T) {
 	code, out, stderr := invoke("version", "--upgrade")
-	if code != 0 || stderr != "" || !strings.Contains(out, "Get-FileHash") || !strings.Contains(out, "After this command exits") || !strings.Contains(out, "https://github.com/ydb-platform/sqlc-ydb/releases/latest") {
-		t.Fatalf("%d %q %q", code, out, stderr)
-	}
+	require.Zero(t, code, stderr)
+	require.Empty(t, stderr)
+	require.Contains(t, out, "Get-FileHash")
+	require.Contains(t, out, "After this command exits")
+	require.Contains(t, out, "https://github.com/ydb-platform/sqlc-ydb/releases/latest")
 }

@@ -1,8 +1,9 @@
 package authors_test
 
 import (
-	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"example.com/sqlc-ydb-example-tests/internal/testdb"
 	sq "example.com/sqlc-ydb-examples/authors/go/database/sql"
@@ -47,9 +48,9 @@ func TestAuthorExpressions(t *testing.T) {
 		}},
 	}
 	for _, reader := range readers {
-		if got, err := reader.stats(); err != nil || got != (statistics{}) {
-			t.Fatalf("%s empty aggregate: %#v, %v", reader.name, got, err)
-		}
+		got, err := reader.stats()
+		require.NoError(t, err, reader.name)
+		require.Equal(t, statistics{}, got, reader.name)
 	}
 	empty, bio := "", "biography"
 	for _, row := range []native.UpsertAuthorParams{
@@ -57,21 +58,19 @@ func TestAuthorExpressions(t *testing.T) {
 		{AuthorID: 2, AuthorName: "Alfred", Biography: &empty},
 		{AuthorID: ^uint64(0), AuthorName: "Bob", Biography: &bio},
 	} {
-		if err := n.UpsertAuthor(ctx, row); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, n.UpsertAuthor(ctx, row))
 	}
 	for _, reader := range readers {
 		t.Run(reader.name, func(t *testing.T) {
-			if got, err := reader.stats(); err != nil || got != (statistics{3, 2, 1, true}) {
-				t.Fatalf("aggregate: %#v, %v", got, err)
-			}
-			if got, err := reader.prefix("Al"); err != nil || !reflect.DeepEqual(got, []bool{false, true}) {
-				t.Fatalf("prefix: %v, %v", got, err)
-			}
-			if got, err := reader.prefix("missing"); err != nil || len(got) != 0 {
-				t.Fatalf("missing prefix: %v, %v", got, err)
-			}
+			got, err := reader.stats()
+			require.NoError(t, err)
+			require.Equal(t, statistics{3, 2, 1, true}, got)
+			prefix, err := reader.prefix("Al")
+			require.NoError(t, err)
+			require.Equal(t, []bool{false, true}, prefix)
+			missing, err := reader.prefix("missing")
+			require.NoError(t, err)
+			require.Empty(t, missing)
 		})
 	}
 	for _, id := range []uint64{1, ^uint64(0)} {
@@ -80,12 +79,12 @@ func TestAuthorExpressions(t *testing.T) {
 			want = 1
 		}
 		nativeRow, err := n.GetAuthorExportMetadata(ctx, id)
-		if err != nil || nativeRow.Column6 != want || nativeRow.ExportTimestamp.IsZero() {
-			t.Fatalf("native export %d: %#v, %v", id, nativeRow, err)
-		}
+		require.NoError(t, err)
+		require.Equal(t, want, nativeRow.Column6)
+		require.False(t, nativeRow.ExportTimestamp.IsZero())
 		sqlRow, err := s.GetAuthorExportMetadata(ctx, id)
-		if err != nil || sqlRow.Column6 != want || sqlRow.ExportTimestamp.IsZero() {
-			t.Fatalf("database/sql export %d: %#v, %v", id, sqlRow, err)
-		}
+		require.NoError(t, err)
+		require.Equal(t, want, sqlRow.Column6)
+		require.False(t, sqlRow.ExportTimestamp.IsZero())
 	}
 }

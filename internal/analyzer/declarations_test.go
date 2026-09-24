@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -25,9 +27,7 @@ func TestRejectsInvalidDecimalTypesAtAnalysisBoundary(t *testing.T) {
 						queries = []model.Source{{Name: "query.sql", Text: "-- name: Amount :one\nDECLARE $amount AS " + typ + ";\nSELECT $amount AS amount;"}}
 					}
 					_, err := Analyze(schemas, queries)
-					if err == nil || !strings.Contains(err.Error(), "Decimal") {
-						t.Fatalf("Analyze accepted invalid type %s: %v", typ, err)
-					}
+					require.ErrorContains(t, err, "Decimal")
 				})
 			}
 		})
@@ -41,14 +41,14 @@ func TestDecimalPrecisionAndScaleBoundaries(t *testing.T) {
 				[]model.Source{{Name: "schema.sql", Text: "CREATE TABLE t (id Uint64 NOT NULL, amount " + typ + " NOT NULL, PRIMARY KEY (id));"}},
 				[]model.Source{{Name: "query.sql", Text: "-- name: Amount :one\nDECLARE $amount AS " + typ + ";\nSELECT $amount AS amount;"}},
 			)
-			if err != nil {
-				t.Fatal(err)
+			require.NoError(t, err)
+			{
+				got := result.Catalog.Tables[0].Columns[1].Type.String()
+				require.Equal(t, typ, got)
 			}
-			if got := result.Catalog.Tables[0].Columns[1].Type.String(); got != typ {
-				t.Fatalf("schema type = %s, want %s", got, typ)
-			}
-			if got := result.Queries[0].Parameters[0].Type.String(); got != typ {
-				t.Fatalf("parameter type = %s, want %s", got, typ)
+			{
+				got := result.Queries[0].Parameters[0].Type.String()
+				require.Equal(t, typ, got)
 			}
 		})
 	}
@@ -61,25 +61,13 @@ func TestDeclarationsPreserveSourceAndMetadata(t *testing.T) {
 		"-- name: Pair :one\nDECLARE $one AS Uint64;\r\nDECLARE $two AS Optional<Utf8>;\nSELECT $one AS one, $two AS two;",
 	} {
 		result, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: sql}})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		q := result.Queries[0]
-		if q.SQL != sql {
-			t.Fatalf("SQL changed: %q", q.SQL)
-		}
-		if q.IsDeclaredParameter("other") {
-			t.Fatal("literal mistaken for declaration")
-		}
-		if strings.Contains(sql, "Greeting") && (!q.IsDeclaredParameter("name") || len(q.DeclaredParameters) != 1) {
-			t.Fatal(q.DeclaredParameters)
-		}
-		if strings.Contains(sql, "Answer") && len(q.DeclaredParameters) != 0 {
-			t.Fatal(q.DeclaredParameters)
-		}
-		if strings.Contains(sql, "Pair") && (!q.IsDeclaredParameter("one") || !q.IsDeclaredParameter("two") || len(q.DeclaredParameters) != 2) {
-			t.Fatal(q.DeclaredParameters)
-		}
+		require.Equal(t, sql, q.SQL)
+		require.False(t, q.IsDeclaredParameter("other"))
+		require.False(t, strings.Contains(sql, "Greeting") && (!q.IsDeclaredParameter("name") || len(q.DeclaredParameters) != 1))
+		require.False(t, strings.Contains(sql, "Answer") && len(q.DeclaredParameters) != 0)
+		require.False(t, strings.Contains(sql, "Pair") && (!q.IsDeclaredParameter("one") || !q.IsDeclaredParameter("two") || len(q.DeclaredParameters) != 2))
 	}
 }
 
@@ -101,12 +89,12 @@ func TestRejectsUnknownYQLTypesAtAnalysisBoundary(t *testing.T) {
 					queries = []model.Source{{Name: "query.sql", Text: "-- name: Value :one\nSELECT CAST(1 AS " + typ + ") AS value;"}}
 				}
 				got, err := Analyze(schema, queries)
-				if err == nil || !strings.Contains(err.Error(), "unsupported YQL type") || !strings.Contains(err.Error(), typ) {
-					t.Fatalf("error = %v, want unsupported type %s", err, typ)
-				}
-				if got == nil || len(got.Diagnostics) == 0 || got.Diagnostics[0].Position.Line < 1 {
-					t.Fatalf("missing source diagnostic: %#v", got)
-				}
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "unsupported YQL type")
+				require.Contains(t, err.Error(), typ)
+				require.NotNil(t, got)
+				require.NotEqual(t, 0, len(got.Diagnostics))
+				require.False(t, got.Diagnostics[0].Position.Line < 1)
 			})
 		}
 	}
@@ -114,14 +102,11 @@ func TestRejectsUnknownYQLTypesAtAnalysisBoundary(t *testing.T) {
 
 func TestDeclaredParameterMetadata(t *testing.T) {
 	result, err := Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE items (id Uint64 NOT NULL, name Utf8 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "query.sql", Text: "-- name: Put :exec\nDECLARE $id AS Uint64;\nUPSERT INTO items (id,name) VALUES ($id,$name);"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	q := result.Queries[0]
-	if len(q.DeclaredParameters) != 1 || q.DeclaredParameters[0] != "id" || !q.IsDeclaredParameter("id") || q.IsDeclaredParameter("name") {
-		t.Fatalf("declared parameter metadata: %#v", q.DeclaredParameters)
-	}
-	if len(q.Parameters) != 2 {
-		t.Fatalf("parameters: %#v", q.Parameters)
-	}
+	require.Len(t, q.DeclaredParameters, 1)
+	require.Equal(t, "id", q.DeclaredParameters[0])
+	require.True(t, q.IsDeclaredParameter("id"))
+	require.False(t, q.IsDeclaredParameter("name"))
+	require.Len(t, q.Parameters, 2)
 }

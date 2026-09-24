@@ -2,7 +2,10 @@ module example.com/sqlc-ydb-example-tests
 
 go 1.26.0
 
-require github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1
+require (
+	github.com/stretchr/testify v1.11.1
+	github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1
+)
 
 require (
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect

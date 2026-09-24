@@ -2,9 +2,10 @@ package analyzer
 
 import (
 	"context"
-	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -23,24 +24,21 @@ func TestMixedScriptPreservesOneResultInEveryPosition(t *testing.T) {
 				t.Run(string(command)+statements, func(t *testing.T) {
 					sql := "-- name: Change " + string(command) + "\n" + statements
 					result, err := Analyze(dmlScriptSchema, []model.Source{{Name: "query.sql", Text: sql}})
-					if err != nil {
-						t.Fatal(err)
-					}
-					if len(result.Queries) != 1 {
-						t.Fatalf("queries=%d", len(result.Queries))
-					}
+					require.NoError(t, err)
+					require.Len(t, result.Queries, 1)
 					q := result.Queries[0]
-					if q.SQL != sql || q.Command != command || len(q.ResultSets) != 1 || !q.MultipleStatements {
-						t.Fatalf("query=%#v", q)
-					}
+					require.Equal(t, sql, q.SQL)
+					require.Equal(t, command, q.Command)
+					require.Len(t, q.ResultSets, 1)
+					require.True(t, q.MultipleStatements)
 					got := q.ResultSets[0].Columns
-					if len(got) != 2 || got[0].Name != "id" || got[0].Type.Kind != "Uint64" || got[1].Name != "payload" || got[1].Type.Kind != "Utf8" {
-						t.Fatalf("result columns=%#v", got)
-					}
+					require.Len(t, got, 2)
+					require.Equal(t, "id", got[0].Name)
+					require.Equal(t, "Uint64", got[0].Type.Kind)
+					require.Equal(t, "payload", got[1].Name)
+					require.Equal(t, "Utf8", got[1].Type.Kind)
 					want := []model.Parameter{{Name: "id", Type: model.Type{Kind: "Uint64"}}}
-					if !reflect.DeepEqual(q.Parameters, want) {
-						t.Fatalf("parameters=%#v", q.Parameters)
-					}
+					require.Equal(t, want, q.Parameters)
 				})
 			}
 		}
@@ -59,9 +57,9 @@ func TestMixedScriptRejectsResultCountAndCommand(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := Analyze(dmlScriptSchema, []model.Source{{Name: "query.sql", Text: "-- name: Change " + tc.command + "\n" + tc.sql}})
-			if err == nil || len(result.Diagnostics) != 1 || result.Diagnostics[0].Message != tc.want {
-				t.Fatalf("diagnostics=%#v, error=%v; want %q", result.Diagnostics, err, tc.want)
-			}
+			require.Error(t, err)
+			require.Len(t, result.Diagnostics, 1)
+			require.Equal(t, tc.want, result.Diagnostics[0].Message)
 		})
 	}
 }
@@ -69,28 +67,26 @@ func TestMixedScriptRejectsResultCountAndCommand(t *testing.T) {
 func TestMixedScriptWildcardAndEmptyResultMetadata(t *testing.T) {
 	const sql = "-- name: Change :many\nDECLARE $id AS Uint64;\nUPSERT INTO copies SELECT * FROM records;\nSELECT r.* FROM records AS r WHERE false;\nDELETE FROM copies WHERE id=$id;"
 	result, err := Analyze(dmlScriptSchema, []model.Source{{Name: "query.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	q := result.Queries[0]
-	if len(q.ResultSets) != 1 || len(q.ResultSets[0].Columns) != 2 || len(q.Syntax.Selects) != 2 || strings.Contains(q.SQL, "SELECT *") || strings.Contains(q.SQL, "r.*") || !strings.HasSuffix(q.SQL, "DELETE FROM copies WHERE id=$id;") {
-		t.Fatalf("query=%#v", q)
-	}
+	require.Len(t, q.ResultSets, 1)
+	require.Len(t, q.ResultSets[0].Columns, 2)
+	require.Len(t, q.Syntax.Selects, 2)
+	require.NotContains(t, q.SQL, "SELECT *")
+	require.NotContains(t, q.SQL, "r.*")
+	require.True(t, strings.HasSuffix(q.SQL, "DELETE FROM copies WHERE id=$id;"))
 }
 
 func TestMixedScriptDatabaseValidatesOriginalSQLOnce(t *testing.T) {
 	const sql = "-- name: Change :many\nPRAGMA TablePathPrefix='/local/tenant';\nDECLARE $id AS Uint64;\nUPDATE records SET name='changed'u WHERE id=$id;\nSELECT * FROM records WHERE id=$id;\nDELETE FROM copies WHERE id=$id;"
 	database := &fakeAnalysisDatabase{tables: map[string]model.Table{"/local/tenant/records": databaseTestTable("name"), "/local/tenant/copies": databaseTestTable("name")}}
 	result, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: sql}}, Options{}, database)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(database.validated, []string{sql}) || !reflect.DeepEqual(database.described, []string{"/local/tenant/records", "/local/tenant/copies"}) {
-		t.Fatalf("validated=%q described=%q", database.validated, database.described)
-	}
-	if len(result.Queries) != 1 || len(result.Queries[0].ResultSets) != 1 || result.Queries[0].ResultSets[0].Columns[0].Table != "/local/tenant/records" {
-		t.Fatalf("queries=%#v", result.Queries)
-	}
+	require.NoError(t, err)
+	require.Equal(t, []string{sql}, database.validated)
+	require.Equal(t, []string{"/local/tenant/records", "/local/tenant/copies"}, database.described)
+	require.Len(t, result.Queries, 1)
+	require.Len(t, result.Queries[0].ResultSets, 1)
+	require.Equal(t, "/local/tenant/records", result.Queries[0].ResultSets[0].Columns[0].Table)
 }
 
 func TestMixedScriptRejectsLateParameterRefinementOfResult(t *testing.T) {
@@ -100,28 +96,23 @@ func TestMixedScriptRejectsLateParameterRefinementOfResult(t *testing.T) {
 	const write = "UPDATE records SET payload=$p;"
 	result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Change :many\n" + read + write}})
 	const want = "parameter $p changes inferred type from Optional<Utf8> to Utf8 after the result statement; add DECLARE before the script to keep its result type stable"
-	if err == nil || len(result.Diagnostics) != 1 || result.Diagnostics[0].Message != want {
-		t.Fatalf("diagnostics=%#v error=%v; want %q", result.Diagnostics, err, want)
-	}
+	require.Error(t, err)
+	require.Len(t, result.Diagnostics, 1)
+	require.Equal(t, want, result.Diagnostics[0].Message)
 	for _, sql := range []string{"DECLARE $p AS Utf8; " + read + write, write + read} {
 		result, err = Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Change :many\n" + sql}})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		q := result.Queries[0]
-		if len(q.Parameters) != 1 || q.Parameters[0].Type.Kind != "Utf8" || q.ResultSets[0].Columns[0].Type.Kind != "Utf8" {
-			t.Fatalf("parameter/result type mismatch: %#v", q)
-		}
+		require.Len(t, q.Parameters, 1)
+		require.Equal(t, "Utf8", q.Parameters[0].Type.Kind)
+		require.Equal(t, "Utf8", q.ResultSets[0].Columns[0].Type.Kind)
 	}
 	sql := "UPDATE loose SET payload=$p; SELECT id FROM copies WHERE id=$id; " + write
 	result, err = Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Change :many\n" + sql}})
-	if err != nil {
-		t.Fatalf("unrelated parameter refinement changed result: %v", err)
-	}
+	require.NoError(t, err)
 	wantParameters := []model.Parameter{{Name: "p", Type: model.Type{Kind: "Utf8"}}, {Name: "id", Type: model.Type{Kind: "Uint64"}}}
-	if result.Queries[0].ResultSets[0].Columns[0].Type.Kind != "Uint64" || !reflect.DeepEqual(result.Queries[0].Parameters, wantParameters) {
-		t.Fatalf("result=%#v", result.Queries[0])
-	}
+	require.Equal(t, "Uint64", result.Queries[0].ResultSets[0].Columns[0].Type.Kind)
+	require.Equal(t, wantParameters, result.Queries[0].Parameters)
 }
 
 func TestMixedScriptRejectsIncompatibleSharedParameters(t *testing.T) {
@@ -130,18 +121,14 @@ func TestMixedScriptRejectsIncompatibleSharedParameters(t *testing.T) {
 		"DELETE FROM texts WHERE id=$id; SELECT id FROM records WHERE id=$id;",
 	} {
 		result, err := Analyze(dmlScriptSchema, []model.Source{{Name: "query.sql", Text: "-- name: Change :many\n" + sql}})
-		if err == nil {
-			t.Fatalf("accepted %s", sql)
-		}
+		require.Error(t, err)
 		found := false
 		for _, d := range result.Diagnostics {
 			if d.Message == "external parameter $id has incompatible inferred types; add DECLARE to specify its intended type" {
 				found = true
 			}
 		}
-		if !found {
-			t.Fatalf("diagnostics=%#v", result.Diagnostics)
-		}
+		require.True(t, found)
 	}
 }
 
@@ -155,13 +142,11 @@ func TestMixedScriptReturningPreservesOneResult(t *testing.T) {
 		for _, sql := range []string{returning + "DELETE FROM copies WHERE id=$id;", "DELETE FROM copies WHERE id=$id;" + returning, "DELETE FROM texts;" + returning + "DELETE FROM copies WHERE id=$id;"} {
 			for _, command := range []string{":one", ":many"} {
 				result, err := Analyze(dmlScriptSchema, []model.Source{{Name: "query.sql", Text: "-- name: Change " + command + "\n" + sql}})
-				if err != nil {
-					t.Fatalf("%s: %v", sql, err)
-				}
+				require.NoError(t, err)
 				q := result.Queries[0]
-				if len(q.ResultSets) != 1 || !reflect.DeepEqual(q.ResultSets[0].Columns, result.Catalog.Tables[0].Columns) || !strings.Contains(q.SQL, "RETURNING `id`, `payload`") {
-					t.Fatalf("query=%#v", q)
-				}
+				require.Len(t, q.ResultSets, 1)
+				require.Equal(t, result.Catalog.Tables[0].Columns, q.ResultSets[0].Columns)
+				require.Contains(t, q.SQL, "RETURNING `id`, `payload`")
 			}
 		}
 	}
@@ -172,23 +157,24 @@ func TestMixedScriptReturningTypeDoesNotDependOnParameterRefinement(t *testing.T
 	schema = append(schema, model.Source{Name: "loose.sql", Text: "CREATE TABLE loose(id Uint64 NOT NULL,payload Utf8,PRIMARY KEY(id));"})
 	const sql = "-- name: Change :many\nUPDATE loose SET payload=$p RETURNING payload; UPDATE records SET payload=$p;"
 	result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	q := result.Queries[0]
-	if len(q.Parameters) != 1 || q.Parameters[0].Type.Kind != "Utf8" || !q.ResultSets[0].Columns[0].Type.Equal(model.Optional(model.Type{Kind: "Utf8"})) {
-		t.Fatalf("query=%#v", q)
-	}
+	require.Len(t, q.Parameters, 1)
+	require.Equal(t, "Utf8", q.Parameters[0].Type.Kind)
+	require.True(t, q.ResultSets[0].Columns[0].Type.Equal(model.Optional(model.Type{Kind: "Utf8"})))
 }
 
 func TestMixedScriptUsesNamedTabularBindings(t *testing.T) {
 	const sql = "-- name: Change :many\n$selection=(SELECT id FROM records); DELETE FROM copies; SELECT id FROM $selection;"
 	result, err := Analyze(dmlScriptSchema, []model.Source{{Name: "query.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if q := result.Queries[0]; q.SQL != sql || !q.MultipleStatements || len(q.ResultSets) != 1 || len(q.ResultSets[0].Columns) != 1 || q.ResultSets[0].Columns[0].Type.Kind != "Uint64" {
-		t.Fatalf("query=%#v", q)
+	require.NoError(t, err)
+	{
+		q := result.Queries[0]
+		require.Equal(t, sql, q.SQL)
+		require.True(t, q.MultipleStatements)
+		require.Len(t, q.ResultSets, 1)
+		require.Len(t, q.ResultSets[0].Columns, 1)
+		require.Equal(t, "Uint64", q.ResultSets[0].Columns[0].Type.Kind)
 	}
 }
 
@@ -203,13 +189,14 @@ func TestMixedScriptInferenceGuardPreservesSingleQueryTypes(t *testing.T) {
 		{"DECLARE $p AS Utf8?; $local=$p; SELECT $local AS projected FROM loose WHERE payload=$local;", model.Optional(model.Type{Kind: "Utf8"})},
 	} {
 		result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + tc.sql}})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		q := result.Queries[0]
-		if q.MultipleStatements || len(q.Parameters) != 1 || q.Parameters[0].Name != "p" || !q.Parameters[0].Type.Equal(tc.typ) || len(q.ResultSets) != 1 || !q.ResultSets[0].Columns[0].Type.Equal(tc.typ) {
-			t.Fatalf("query=%#v, want parameter/result %s", q, tc.typ.String())
-		}
+		require.False(t, q.MultipleStatements)
+		require.Len(t, q.Parameters, 1)
+		require.Equal(t, "p", q.Parameters[0].Name)
+		require.True(t, q.Parameters[0].Type.Equal(tc.typ))
+		require.Len(t, q.ResultSets, 1)
+		require.True(t, q.ResultSets[0].Columns[0].Type.Equal(tc.typ))
 	}
 }
 
@@ -221,9 +208,9 @@ func TestMixedScriptUnresolvedResultParameterKeepsOriginalDiagnostic(t *testing.
 			sql := "-- name: Change :many\nSELECT " + projection + " FROM loose; UPDATE records SET payload=$p;"
 			result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
 			const want = "cannot resolve type of parameter $p; add DECLARE"
-			if err == nil || len(result.Diagnostics) != 1 || result.Diagnostics[0].Message != want {
-				t.Fatalf("diagnostics=%#v error=%v; want only %q", result.Diagnostics, err, want)
-			}
+			require.Error(t, err)
+			require.Len(t, result.Diagnostics, 1)
+			require.Equal(t, want, result.Diagnostics[0].Message)
 		})
 	}
 }

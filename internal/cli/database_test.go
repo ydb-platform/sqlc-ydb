@@ -4,21 +4,21 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestNoDatabaseFlag(t *testing.T) {
 	for _, command := range []string{"generate", "compile", "diff"} {
 		for _, args := range [][]string{{command, "--no-database"}, {"--no-database", command}} {
 			got, err := parseArgs(args)
-			if err != nil || !got.noDatabase {
-				t.Fatalf("%v: parsed %#v: %v", args, got, err)
-			}
+			require.NoError(t, err, "%v", args)
+			require.True(t, got.noDatabase, "%v", args)
 		}
 	}
 	for _, command := range []string{"version", "init"} {
-		if _, err := parseArgs([]string{command, "--no-database"}); err == nil || !strings.Contains(err.Error(), "only valid") {
-			t.Fatalf("%s accepted --no-database: %v", command, err)
-		}
+		_, err := parseArgs([]string{command, "--no-database"})
+		require.ErrorContains(t, err, "only valid", "%s accepted --no-database", command)
 	}
 }
 
@@ -32,23 +32,21 @@ func TestDatabaseAnalysisCanBeDisabledWithoutCredentials(t *testing.T) {
 	t.Setenv("SQLC_YDB_UNSET_TEST_TOKEN", "")
 	put(t, cfg, base)
 	for _, command := range []string{"compile", "generate", "diff"} {
-		if code, _, stderr := invoke(command, "--no-database", "-f", cfg); code != 0 {
-			t.Fatalf("%s --no-database: %s", command, stderr)
-		}
+		code, _, stderr := invoke(command, "--no-database", "-f", cfg)
+		require.Zero(t, code, "%s --no-database: %s", command, stderr)
 	}
 	put(t, cfg, base+"  analyzer:\n    database: false\n")
-	if code, _, stderr := invoke("compile", "-f", cfg); code != 0 {
-		t.Fatal(stderr)
-	}
+	code, _, stderr := invoke("compile", "-f", cfg)
+	require.Zero(t, code, stderr)
 	put(t, cfg, base)
-	if code, _, stderr := invoke("compile", "-f", cfg); code == 0 || !strings.Contains(stderr, "SQLC_YDB_UNSET_TEST_URI") {
-		t.Fatalf("enabled database skipped missing configuration: %d %s", code, stderr)
-	}
+	code, _, stderr = invoke("compile", "-f", cfg)
+	require.NotZero(t, code, stderr)
+	require.Contains(t, stderr, "SQLC_YDB_UNSET_TEST_URI")
 	put(t, cfg, strings.Replace(base, "  schema: schema.sql\n", "", 1))
-	if code, _, stderr := invoke("compile", "-f", cfg); code == 0 || !strings.Contains(stderr, "SQLC_YDB_UNSET_TEST_URI") {
-		t.Fatalf("schema discovery did not reach database configuration: %d %s", code, stderr)
-	}
-	if code, _, stderr := invoke("compile", "--no-database", "-f", cfg); code == 0 || !strings.Contains(stderr, "schema is required") {
-		t.Fatalf("missing offline schema: %d %s", code, stderr)
-	}
+	code, _, stderr = invoke("compile", "-f", cfg)
+	require.NotZero(t, code, stderr)
+	require.Contains(t, stderr, "SQLC_YDB_UNSET_TEST_URI")
+	code, _, stderr = invoke("compile", "--no-database", "-f", cfg)
+	require.NotZero(t, code, stderr)
+	require.Contains(t, stderr, "schema is required")
 }

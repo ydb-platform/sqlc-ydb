@@ -1,9 +1,10 @@
 package analyzer
 
 import (
-	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -21,13 +22,11 @@ const sharedExpressionSchema = `CREATE TABLE records (
 func TestParenthesizedColumnRetainsIdentity(t *testing.T) {
 	for _, expression := range []string{"(id)", "((r.id))"} {
 		result, err := Analyze([]model.Source{{Name: "schema.sql", Text: sharedExpressionSchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\nSELECT " + expression + " FROM records AS r;"}})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		column := result.Queries[0].ResultSets[0].Columns[0]
-		if column.Name != "id" || column.Table != "records" || column.Type.Kind != "Uint64" {
-			t.Fatalf("parenthesized column lost identity: %#v", column)
-		}
+		require.Equal(t, "id", column.Name)
+		require.Equal(t, "records", column.Table)
+		require.Equal(t, "Uint64", column.Type.Kind)
 	}
 }
 
@@ -38,9 +37,7 @@ func TestOrderByProjectionAliasesAreScoped(t *testing.T) {
 		"SELECT id, id + 1ul AS next_id FROM records ORDER BY next_id, id;",
 	} {
 		_, err := Analyze([]model.Source{{Name: "schema.sql", Text: sharedExpressionSchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + statement}})
-		if err != nil {
-			t.Fatalf("ORDER BY result name: %v", err)
-		}
+		require.NoError(t, err)
 	}
 	for _, statement := range []string{
 		"SELECT id + 1ul AS next_id FROM records WHERE next_id > 0ul;",
@@ -48,9 +45,7 @@ func TestOrderByProjectionAliasesAreScoped(t *testing.T) {
 		"SELECT id + 1ul AS next_id FROM records ORDER BY records.next_id;",
 	} {
 		_, err := Analyze([]model.Source{{Name: "schema.sql", Text: sharedExpressionSchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + statement}})
-		if err == nil || !strings.Contains(err.Error(), "unknown column") {
-			t.Fatalf("out-of-scope result name: %v", err)
-		}
+		require.ErrorContains(t, err, "unknown column")
 	}
 }
 
@@ -83,13 +78,10 @@ func TestSharedBooleanExpressions(t *testing.T) {
 		t.Run(tc.expression, func(t *testing.T) {
 			sql := "-- name: Read :many\nSELECT " + tc.expression + " AS value FROM records;"
 			result, err := Analyze([]model.Source{{Name: "schema.sql", Text: sharedExpressionSchema}}, []model.Source{{Name: "query.sql", Text: sql}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			query := result.Queries[0]
-			if query.ResultSets[0].Columns[0].Type.String() != tc.typ || query.SQL != sql {
-				t.Fatalf("query = %#v; want type %s and unchanged SQL", query, tc.typ)
-			}
+			require.Equal(t, tc.typ, query.ResultSets[0].Columns[0].Type.String())
+			require.Equal(t, sql, query.SQL)
 		})
 	}
 }
@@ -105,26 +97,19 @@ func TestSharedBooleanBindingsAndDML(t *testing.T) {
 			sql = strings.Replace(sql, ":exec", ":one", 1)
 		}
 		result, err := Analyze([]model.Source{{Name: "schema.sql", Text: sharedExpressionSchema}}, []model.Source{{Name: "query.sql", Text: sql}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if result.Queries[0].SQL != sql || !reflect.DeepEqual(result.Queries[0].Parameters, []model.Parameter{{Name: "id", Type: model.Type{Kind: "Uint64"}}, {Name: "flag", Type: model.Optional(model.Type{Kind: "Bool"})}}) {
-			t.Fatalf("query = %#v", result.Queries[0])
-		}
+		require.NoError(t, err)
+		require.Equal(t, sql, result.Queries[0].SQL)
+		require.Equal(t, []model.Parameter{{Name: "id", Type: model.Type{Kind: "Uint64"}}, {Name: "flag", Type: model.Optional(model.Type{Kind: "Bool"})}}, result.Queries[0].Parameters)
 	}
 }
 
 func TestSharedBooleanExpressionsRejectNonBooleans(t *testing.T) {
 	for _, expression := range []string{"enabled AND id", "id OR optional_flag", "enabled XOR label", "NOT id", "NOT id = 1ul"} {
 		_, err := Analyze([]model.Source{{Name: "schema.sql", Text: sharedExpressionSchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\nSELECT " + expression + " AS value FROM records;"}})
-		if err == nil || !strings.Contains(err.Error(), "want Bool") {
-			t.Fatalf("expression %s: error = %v", expression, err)
-		}
+		require.ErrorContains(t, err, "want Bool")
 	}
 	_, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nDECLARE $flag AS Optional<Optional<Bool>>; SELECT $flag AND true AS value;"}})
-	if err == nil || !strings.Contains(err.Error(), "want Bool or Optional<Bool>") {
-		t.Fatalf("nested optional Boolean error = %v", err)
-	}
+	require.ErrorContains(t, err, "want Bool or Optional<Bool>")
 }
 
 func TestSharedConcatenationOperands(t *testing.T) {
@@ -140,49 +125,36 @@ func TestSharedConcatenationOperands(t *testing.T) {
 		}
 		sql := "-- name: Read " + command + "\nDECLARE $prefix AS String; " + statement
 		result, err := Analyze([]model.Source{{Name: "schema.sql", Text: sharedExpressionSchema}}, []model.Source{{Name: "query.sql", Text: sql}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if result.Queries[0].SQL != sql {
-			t.Fatal("concatenation SQL changed")
-		}
-		if strings.HasPrefix(statement, "SELECT label") && result.Queries[0].ResultSets[0].Columns[0].Type.String() != "Optional<String>" {
-			t.Fatalf("columns = %#v", result.Queries[0].ResultSets[0].Columns)
-		}
+		require.NoError(t, err)
+		require.Equal(t, sql, result.Queries[0].SQL)
+		require.False(t, strings.HasPrefix(statement, "SELECT label") && result.Queries[0].ResultSets[0].Columns[0].Type.String() != "Optional<String>")
 	}
 }
 
 func TestSharedEmptyStringLiterals(t *testing.T) {
 	for _, literal := range []string{"''", `""`, "@@@@"} {
 		result, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: "-- name: Empty :one\nSELECT " + literal + " || 'value' AS value;"}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if typ := result.Queries[0].ResultSets[0].Columns[0].Type; typ.Kind != "String" {
-			t.Fatalf("literal %s: type %s", literal, typ.String())
+		require.NoError(t, err)
+		{
+			typ := result.Queries[0].ResultSets[0].Columns[0].Type
+			require.Equal(t, "String", typ.Kind)
 		}
 	}
 }
 
 func TestSharedConcatenationRejectsUnresolvedOperands(t *testing.T) {
 	_, err := Analyze([]model.Source{{Name: "schema.sql", Text: sharedExpressionSchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\nSELECT id FROM records WHERE label LIKE Unknown::Pattern() || '%';"}})
-	if err == nil || !strings.Contains(err.Error(), `unsupported YQL function "Unknown::Pattern"`) {
-		t.Fatalf("concat operand error = %v", err)
-	}
+	require.ErrorContains(t, err, `unsupported YQL function "Unknown::Pattern"`)
 }
 
 func TestSharedNullPredicatesAndConcatenation(t *testing.T) {
 	for _, predicate := range []string{"NULL", "NOT NULL", "enabled OR NULL", "NULL = NULL", "NULL IS DISTINCT FROM NULL"} {
 		_, err := Analyze([]model.Source{{Name: "schema.sql", Text: sharedExpressionSchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\nSELECT id FROM records WHERE " + predicate + ";"}})
-		if err != nil {
-			t.Fatalf("predicate %s: %v", predicate, err)
-		}
+		require.NoError(t, err)
 	}
 	for _, expression := range []string{"NULL || 'x'", "'x' || NULL", "NULL || NULL"} {
 		_, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nSELECT " + expression + " AS value;"}})
-		if err == nil || !strings.Contains(err.Error(), "unresolved Null type") {
-			t.Fatalf("concat %s must retain its Null result: %v", expression, err)
-		}
+		require.ErrorContains(t, err, "unresolved Null type")
 	}
 }
 
@@ -193,13 +165,9 @@ func TestCountIfAggregateSemantics(t *testing.T) {
 		"SELECT enabled, COUNT_IF(id > 0ul) AS total FROM records GROUP BY enabled HAVING COUNT_IF(optional_flag) > 0ul;",
 	} {
 		result, err := Analyze([]model.Source{{Name: "schema.sql", Text: sharedExpressionSchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + statement}})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		columns := result.Queries[0].ResultSets[0].Columns
-		if columns[len(columns)-1].Type.String() != "Uint64" {
-			t.Fatalf("COUNT_IF columns = %#v", columns)
-		}
+		require.Equal(t, "Uint64", columns[len(columns)-1].Type.String())
 	}
 	for _, tc := range []struct{ statement, message string }{
 		{"SELECT id, COUNT_IF(enabled) AS total FROM records;", "must appear in GROUP BY"},
@@ -212,9 +180,7 @@ func TestCountIfAggregateSemantics(t *testing.T) {
 			command = ":exec"
 		}
 		_, err := Analyze([]model.Source{{Name: "schema.sql", Text: sharedExpressionSchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read " + command + "\n" + tc.statement}})
-		if err == nil || !strings.Contains(err.Error(), tc.message) {
-			t.Fatalf("%s: error = %v, want %q", tc.statement, err, tc.message)
-		}
+		require.ErrorContains(t, err, tc.message)
 	}
 }
 
@@ -229,9 +195,7 @@ func TestAggregateFunctionsRequireAggregationContext(t *testing.T) {
 		"SELECT a.id FROM records AS a JOIN records AS b ON COUNT_IF(a.enabled) = b.id;",
 	} {
 		_, err := Analyze([]model.Source{{Name: "schema.sql", Text: sharedExpressionSchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + statement}})
-		if err == nil || !strings.Contains(err.Error(), "aggregate") {
-			t.Fatalf("invalid aggregate context %s: %v", statement, err)
-		}
+		require.ErrorContains(t, err, "aggregate")
 	}
 }
 
@@ -249,11 +213,10 @@ func TestCoalesceUsesIntegerLiteralValues(t *testing.T) {
 		{"COALESCE(counter, 1l + 1l)", "Int64"},
 	} {
 		result, err := Analyze([]model.Source{{Name: "schema.sql", Text: sharedExpressionSchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\nDECLARE $fallback AS Int64; SELECT " + tc.expression + " AS value FROM records;"}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if typ := result.Queries[0].ResultSets[0].Columns[0].Type; typ.Kind != tc.typ {
-			t.Fatalf("%s: type = %s, want %s", tc.expression, typ.String(), tc.typ)
+		require.NoError(t, err)
+		{
+			typ := result.Queries[0].ResultSets[0].Columns[0].Type
+			require.Equal(t, tc.typ, typ.Kind)
 		}
 	}
 }

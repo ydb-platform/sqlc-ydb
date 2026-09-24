@@ -3,6 +3,8 @@ package builtins
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -15,9 +17,8 @@ func TestBooleanAndTimestampCasts(t *testing.T) {
 					source, want = model.Optional(source), model.Optional(want)
 				}
 				got, err := Cast(source, scalar(pair[1]))
-				if err != nil || !got.Equal(want) {
-					t.Fatalf("CAST %s AS %s = %s, %v; want %s", source.String(), pair[1], got.String(), err, want.String())
-				}
+				require.NoError(t, err)
+				require.True(t, got.Equal(want))
 			}
 		}
 	}
@@ -38,9 +39,8 @@ func TestBooleanAndTimestampCasts(t *testing.T) {
 				want = model.Optional(want)
 			}
 			got, err := Cast(source, scalar(tc.target))
-			if err != nil || !got.Equal(want) {
-				t.Fatalf("CAST %s AS %s = %s, %v; want %s", source.String(), tc.target, got.String(), err, want.String())
-			}
+			require.NoError(t, err)
+			require.True(t, got.Equal(want))
 		}
 	}
 }

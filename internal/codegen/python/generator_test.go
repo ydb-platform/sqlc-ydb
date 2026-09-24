@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -49,19 +50,15 @@ func TestGenerateProfilesCompile(t *testing.T) {
 		a.Catalog.Tables = append(a.Catalog.Tables, model.Table{Name: "авторы", Columns: []model.Column{{Name: "имя", Type: model.Type{Kind: "Utf8"}}}})
 		a.Queries[0].Name = "получить_автора"
 		files, err := Generate(a, Options{Runtime: runtime})
-		if err != nil {
-			t.Fatalf("%s: %v", runtime, err)
-		}
+		require.NoError(t, err, "%s: %v", runtime, err)
 		dir := t.TempDir()
 		for _, f := range files {
-			if err := os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600))
 		}
 		cmd := exec.Command("python3", "-m", "py_compile", filepath.Join(dir, "models.py"), filepath.Join(dir, "queries.py"))
 		cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
 		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("%s generated invalid Python: %v\n%s\n%s", runtime, err, out, files[1].Content)
+			require.NoError(t, err, "%s generated invalid Python: %v\n%s\n%s", runtime, err, out, files[1].Content)
 		}
 	}
 }
@@ -71,7 +68,7 @@ func TestRejectsInvalidPythonNames(t *testing.T) {
 		t.Run("model_"+name, func(t *testing.T) {
 			a := &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: name}}}}
 			if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), "generated Python name") {
-				t.Fatalf("name %q: %v", name, err)
+				require.FailNow(t, fmt.Sprintf("name %q: %v", name, err))
 			}
 		})
 	}
@@ -90,7 +87,7 @@ func TestRejectsInvalidPythonNames(t *testing.T) {
 				a.Catalog.Tables[0].Columns[0].Name = "123id"
 			}
 			if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), "generated Python name") {
-				t.Fatalf("invalid %s: %v", scope, err)
+				require.FailNow(t, fmt.Sprintf("invalid %s: %v", scope, err))
 			}
 		})
 	}
@@ -103,23 +100,19 @@ func TestSQLAlchemyLexicalRewriteExact(t *testing.T) {
 	}
 	want := "-- name\\: Пример \\:one\nDECLARE $author_id AS Uint64;\n$local = :author_id;\nSELECT '\\:ghost', @@\\:ghost $author_id@@, `\\:column`, $local FROM authors WHERE id = :author_id;"
 	got, err := sqlalchemySQL(q)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != want {
-		t.Fatalf("SQL rewrite:\n got: %s\nwant: %s", got, want)
-	}
+	require.NoError(t, err)
+	require.Equal(t, want, got, "SQL rewrite:\n got: %s\nwant: %s", got, want)
 }
 
 func TestYDBRejectsExecRows(t *testing.T) {
 	if _, err := Generate(sampleAnalysis(), Options{Runtime: "ydb"}); err == nil || !strings.Contains(err.Error(), "execrows") {
-		t.Fatalf("unexpected error: %v", err)
+		require.FailNow(t, fmt.Sprintf("unexpected error: %v", err))
 	}
 }
 
 func TestRejectsUnsupportedAsyncQuerier(t *testing.T) {
 	if _, err := Generate(sampleAnalysis(), Options{Runtime: "sqlalchemy", EmitAsyncQuerier: true}); err == nil || !strings.Contains(err.Error(), "async querier is unsupported") {
-		t.Fatalf("unexpected error: %v", err)
+		require.FailNow(t, fmt.Sprintf("unexpected error: %v", err))
 	}
 }
 
@@ -127,13 +120,13 @@ func TestGenerateRejectsUnknownType(t *testing.T) {
 	a := sampleAnalysis()
 	a.Queries[0].Parameters[0].Type = model.Type{Kind: "Any"}
 	if _, err := Generate(a, Options{Runtime: "ydb"}); err == nil || !strings.Contains(err.Error(), "unsupported YQL type") {
-		t.Fatalf("unexpected error: %v", err)
+		require.FailNow(t, fmt.Sprintf("unexpected error: %v", err))
 	}
 }
 
 func TestYDBTypeExpressionRejectsUnknownType(t *testing.T) {
 	if _, err := ydbTypeExpr(model.Type{Kind: "Any"}); err == nil || !strings.Contains(err.Error(), "unsupported YQL type") {
-		t.Fatalf("unexpected error: %v", err)
+		require.FailNow(t, fmt.Sprintf("unexpected error: %v", err))
 	}
 }
 
@@ -144,14 +137,14 @@ func TestRejectsParameterNamedSelf(t *testing.T) {
 		Parameters: []model.Parameter{{Name: "self", Type: model.Type{Kind: "Uint64"}}},
 	}}}
 	if _, err := Generate(a, Options{Runtime: "ydb"}); err == nil || !strings.Contains(err.Error(), `parameter name "self" conflicts with the generated method receiver`) {
-		t.Fatalf("unexpected error: %v", err)
+		require.FailNow(t, fmt.Sprintf("unexpected error: %v", err))
 	}
 }
 
 func TestIdenticalTableProjectionsReuseRowModel(t *testing.T) {
 	a := liveAnalysis("authors")
 	if _, err := Generate(a, Options{Runtime: "dbapi"}); err != nil {
-		t.Fatalf("identical table projections should reuse a model: %v", err)
+		require.NoError(t, err, "identical table projections should reuse a model: %v", err)
 	}
 }
 
@@ -159,13 +152,9 @@ func TestSQLAlchemyParameterScannerPreservesLiterals(t *testing.T) {
 	a := sampleAnalysis()
 	a.Queries = a.Queries[:3]
 	files, err := Generate(a, Options{Runtime: "sqlalchemy"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	s := string(files[1].Content)
-	if !strings.Contains(s, "'$id'") || !strings.Contains(s, "`x`") {
-		t.Fatalf("generated SQL lost literal/identifier: %s", s)
-	}
+	require.False(t, !strings.Contains(s, "'$id'") || !strings.Contains(s, "`x`"), "generated SQL lost literal/identifier: %s", s)
 }
 
 func TestGeneratedMultilineSQLLiteralIsReadableAndRoundTrips(t *testing.T) {
@@ -184,26 +173,16 @@ func TestGeneratedMultilineSQLLiteralIsReadableAndRoundTrips(t *testing.T) {
 		a.Queries = append(a.Queries, model.AnalyzedQuery{Name: q.name, Command: model.Exec, SQL: q.sql})
 	}
 	files, err := Generate(a, Options{Runtime: "dbapi"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	source := string(files[1].Content)
-	if strings.Contains(source, "SQL_MULTILINE_SQL =") || !strings.Contains(source, "cursor.execute(\n") {
-		t.Fatalf("expected inline SQL: %s", source)
-	}
+	require.False(t, strings.Contains(source, "SQL_MULTILINE_SQL =") || !strings.Contains(source, "cursor.execute(\n"), "expected inline SQL: %s", source)
 	dir := t.TempDir()
 	pkg := filepath.Join(dir, "db")
-	if err := os.Mkdir(pkg, 0700); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Mkdir(pkg, 0700))
 	for _, f := range files {
-		if err := os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600))
 	}
-	if err := os.WriteFile(filepath.Join(dir, "ydb.py"), []byte(""), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "ydb.py"), []byte(""), 0600))
 	script := fmt.Sprintf("import ast, pathlib\ntree = ast.parse(pathlib.Path(%q).read_text())\nvalues = {node.name: next(ast.literal_eval(call.args[0]) for call in ast.walk(node) if isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and call.func.attr == 'execute') for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and not node.name.startswith('_')}\n", filepath.Join(pkg, "queries.py"))
 	for _, q := range queries {
 		script += fmt.Sprintf("assert values[%q] == %q, repr(values[%q])\n", q.name, q.sql, q.name)
@@ -211,7 +190,7 @@ func TestGeneratedMultilineSQLLiteralIsReadableAndRoundTrips(t *testing.T) {
 	cmd := exec.Command("python3", "-c", script)
 	cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("multiline SQL did not round-trip through Python: %v\n%s\n%s", err, out, source)
+		require.NoError(t, err, "multiline SQL did not round-trip through Python: %v\n%s\n%s", err, out, source)
 	}
 }
 
@@ -239,35 +218,23 @@ func TestGeneratedSQLLiteralsRoundTripSpecialCharacters(t *testing.T) {
 			expected["SQL_"+strings.ToUpper(q.name)] = q.sql
 		}
 		files, err := Generate(a, Options{Runtime: runtime})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		dir := t.TempDir()
 		pkg := filepath.Join(dir, "db")
-		if err := os.Mkdir(pkg, 0700); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.Mkdir(pkg, 0700))
 		for _, f := range files {
-			if err := os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600))
 		}
-		if err := os.WriteFile(filepath.Join(dir, "ydb.py"), []byte(""), 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "ydb.py"), []byte(""), 0600))
 		expectedJSON, err := json.Marshal(expected)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		expectedPath := filepath.Join(dir, "expected.json")
-		if err := os.WriteFile(expectedPath, expectedJSON, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(expectedPath, expectedJSON, 0600))
 		script := fmt.Sprintf("import ast, inspect, json, sys; sys.path.insert(0, %q); from db import queries\ntree = ast.parse(inspect.getsource(queries))\nwith open(%q, encoding='utf-8') as f: expected = json.load(f)\nfor name, want in expected.items():\n    node = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == name.removeprefix('SQL_').lower())\n    call = next(c for c in ast.walk(node) if isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute) and c.func.attr in ('_execute', 'execute', 'execute_with_retries'))\n    got = ast.literal_eval(call.args[0])\n    assert got == want, (name, repr(got), repr(want))\n", dir, expectedPath)
 		cmd := exec.Command("python3", "-c", script)
 		cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
 		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("%s inline SQL expressions did not round-trip through Python: %v\n%s", runtime, err, out)
+			require.NoError(t, err, "%s inline SQL expressions did not round-trip through Python: %v\n%s", runtime, err, out)
 		}
 	}
 
@@ -281,18 +248,12 @@ func TestGeneratedSQLAlchemySQLLiteralRoundTripsLexicalRewrite(t *testing.T) {
 	want := "-- comment $author_id \\:note\nDECLARE $author_id AS Uint64;\n$local = :author_id;\nSELECT '\\:ghost', @@\\:ghost $author_id@@, `\\:column`, $local FROM authors WHERE id = :author_id;"
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "find_author", Command: model.Exec, SQL: sql, Parameters: []model.Parameter{{Name: "author_id", Type: model.Type{Kind: "Uint64"}}}}}}
 	files, err := Generate(a, Options{Runtime: "sqlalchemy"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	pkg := filepath.Join(dir, "db")
-	if err := os.Mkdir(pkg, 0700); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Mkdir(pkg, 0700))
 	for _, f := range files {
-		if err := os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600))
 	}
 	for path, content := range map[string]string{
 		"ydb.py":                 "",
@@ -300,26 +261,18 @@ func TestGeneratedSQLAlchemySQLLiteralRoundTripsLexicalRewrite(t *testing.T) {
 		"sqlalchemy/engine.py":   "class Connection: pass\n",
 	} {
 		full := filepath.Join(dir, path)
-		if err := os.MkdirAll(filepath.Dir(full), 0700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(full, []byte(content), 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.MkdirAll(filepath.Dir(full), 0700))
+		require.NoError(t, os.WriteFile(full, []byte(content), 0600))
 	}
 	expectedJSON, err := json.Marshal(map[string]string{"SQL_FIND_AUTHOR": want})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	expectedPath := filepath.Join(dir, "expected.json")
-	if err := os.WriteFile(expectedPath, expectedJSON, 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(expectedPath, expectedJSON, 0600))
 	script := fmt.Sprintf("import ast, inspect, json, sys; sys.path.insert(0, %q); from db import queries\ntree = ast.parse(inspect.getsource(queries))\nwith open(%q, encoding='utf-8') as f: expected = json.load(f)\ncall = next(c for c in ast.walk(tree) if isinstance(c, ast.Call) and isinstance(c.func, ast.Name) and c.func.id == '_text')\ngot = ast.literal_eval(call.args[0])\nassert got == expected['SQL_FIND_AUTHOR'], (repr(got), repr(expected['SQL_FIND_AUTHOR']))\n", dir, expectedPath)
 	cmd := exec.Command("python3", "-c", script)
 	cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("SQLAlchemy inline SQL expression did not round-trip through Python: %v\n%s", err, out)
+		require.NoError(t, err, "SQLAlchemy inline SQL expression did not round-trip through Python: %v\n%s", err, out)
 	}
 }
 
@@ -332,20 +285,14 @@ func TestGeneratedYDBQuerierWithMockAdapter(t *testing.T) {
 	a.Queries[0].ResultSets[0].Columns[0].WireName = "a.id"
 	a.Queries[1].ResultSets[0].Columns[0].WireName = "a.id"
 	files, err := Generate(a, Options{Runtime: "ydb"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	pkg := filepath.Join(dir, "db")
-	if err := os.Mkdir(pkg, 0700); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Mkdir(pkg, 0700))
 	for _, f := range files {
-		if err := os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600))
 	}
-	if err := os.WriteFile(filepath.Join(dir, "ydb.py"), []byte(""+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "ydb.py"), []byte(""+
 		`class PrimitiveType:
     Uint64 = "Uint64"
 class OptionalType:
@@ -359,9 +306,7 @@ class RetrySettings:
     def __init__(self, max_retries): self.max_retries = max_retries
 class QuerySessionPool: pass
 class QueryTxContext: pass
-`), 0600); err != nil {
-		t.Fatal(err)
-	}
+`), 0600))
 	script := fmt.Sprintf(`import sys
 sys.path.insert(0, %q)
 from db.queries import Querier
@@ -434,7 +379,7 @@ else:
 	cmd := exec.Command("python3", "-c", script)
 	cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("mock YDB execution failed: %v\n%s", err, out)
+		require.NoError(t, err, "mock YDB execution failed: %v\n%s", err, out)
 	}
 }
 
@@ -448,18 +393,12 @@ func TestGeneratedSQLAlchemyClosesResultsWithMockAdapter(t *testing.T) {
 	a.Queries[1].ResultSets[0].Columns[0].WireName = "a.id"
 	a.Queries[0].SQL = "-- name: get_author :one\nDECLARE $id AS Uint64; SELECT '$ghost', `x` FROM authors WHERE id = $id;"
 	files, err := Generate(a, Options{Runtime: "sqlalchemy"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	pkg := filepath.Join(dir, "db")
-	if err := os.Mkdir(pkg, 0700); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Mkdir(pkg, 0700))
 	for _, f := range files {
-		if err := os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600))
 	}
 	for path, content := range map[string]string{
 		"sqlalchemy/__init__.py":             "def text(s): return s\n",
@@ -468,16 +407,10 @@ func TestGeneratedSQLAlchemyClosesResultsWithMockAdapter(t *testing.T) {
 		"sqlalchemy/ext/asyncio/__init__.py": "class AsyncConnection: pass\n",
 	} {
 		full := filepath.Join(dir, path)
-		if err := os.MkdirAll(filepath.Dir(full), 0700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(full, []byte(content), 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.MkdirAll(filepath.Dir(full), 0700))
+		require.NoError(t, os.WriteFile(full, []byte(content), 0600))
 	}
-	if err := os.WriteFile(filepath.Join(dir, "ydb.py"), []byte("class PrimitiveType:\n    Uint64 = 'Uint64'\nclass OptionalType:\n    def __init__(self, item): self.item=item\nclass TypedValue: pass\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "ydb.py"), []byte("class PrimitiveType:\n    Uint64 = 'Uint64'\nclass OptionalType:\n    def __init__(self, item): self.item=item\nclass TypedValue: pass\n"), 0600))
 	script := fmt.Sprintf(`import sys
 sys.path.insert(0, %q)
 from db.queries import Querier
@@ -515,7 +448,7 @@ assert c.result.closed
 	cmd := exec.Command("python3", "-c", script)
 	cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("mock SQLAlchemy execution failed: %v\n%s", err, out)
+		require.NoError(t, err, "mock SQLAlchemy execution failed: %v\n%s", err, out)
 	}
 }
 
@@ -527,22 +460,14 @@ func TestGeneratedDBAPIClosesCursorAndPreservesTransaction(t *testing.T) {
 	}
 	a.Queries[0].ResultSets[0].Columns[0].WireName = "a.id"
 	files, err := Generate(a, Options{Runtime: "dbapi"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	pkg := filepath.Join(dir, "db")
-	if err := os.Mkdir(pkg, 0700); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Mkdir(pkg, 0700))
 	for _, f := range files {
-		if err := os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600))
 	}
-	if err := os.WriteFile(filepath.Join(dir, "ydb.py"), []byte("class PrimitiveType:\n    Uint64 = 'Uint64'\nclass OptionalType:\n    def __init__(self, item): self.item=item\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "ydb.py"), []byte("class PrimitiveType:\n    Uint64 = 'Uint64'\nclass OptionalType:\n    def __init__(self, item): self.item=item\n"), 0600))
 	script := fmt.Sprintf(`import sys
 sys.path.insert(0, %q)
 from db.queries import Querier
@@ -568,7 +493,7 @@ assert [connection.cur.params['$' + name][0] for name in ('ydb', 'models', 'text
 	cmd := exec.Command("python3", "-c", script)
 	cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("mock DBAPI execution failed: %v\n%s", err, out)
+		require.NoError(t, err, "mock DBAPI execution failed: %v\n%s", err, out)
 	}
 }
 
@@ -583,17 +508,11 @@ func TestLiveYDBGeneratedRuntimes(t *testing.T) {
 	paths := map[string]string{}
 	for _, runtime := range []string{"ydb", "dbapi", "sqlalchemy"} {
 		dir := filepath.Join(root, runtime)
-		if err := os.Mkdir(dir, 0700); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.Mkdir(dir, 0700))
 		files, err := Generate(a, Options{Runtime: runtime})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		for _, f := range files {
-			if err := os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, os.WriteFile(filepath.Join(dir, f.Name), f.Content, 0600))
 		}
 		paths[runtime] = dir
 	}
@@ -635,9 +554,7 @@ finally:
 `, filepath.Join(paths["ydb"], ".."), paths["ydb"], paths["dbapi"], paths["sqlalchemy"], table)
 	// Rename package directories so their relative imports remain isolated and unambiguous.
 	for _, pair := range []struct{ from, to string }{{paths["ydb"], filepath.Join(root, "ydb_generated")}, {paths["dbapi"], filepath.Join(root, "dbapi_generated")}, {paths["sqlalchemy"], filepath.Join(root, "sa_generated")}} {
-		if err := os.Rename(pair.from, pair.to); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.Rename(pair.from, pair.to))
 	}
 	// The script uses the final package paths after the rename.
 	script = strings.ReplaceAll(script, paths["ydb"], filepath.Join(root, "ydb_generated"))
@@ -648,7 +565,7 @@ finally:
 	cmd := exec.CommandContext(ctx, "python3", "-c", script)
 	cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(root, "pycache"))
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("live YDB validation failed: %v\n%s", err, out)
+		require.NoError(t, err, "live YDB validation failed: %v\n%s", err, out)
 	}
 }
 
@@ -662,30 +579,20 @@ func TestGeneratedParameterAnnotationsResolve(t *testing.T) {
 	for _, runtime := range []string{"ydb", "dbapi", "sqlalchemy"} {
 		t.Run(runtime, func(t *testing.T) {
 			files, err := Generate(&model.AnalysisResult{Queries: []model.AnalyzedQuery{query}}, Options{Runtime: runtime})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			dir := t.TempDir()
 			for _, file := range files {
 				path := filepath.Join(dir, "db", file.Name)
-				if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(path, file.Content, 0600); err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, os.MkdirAll(filepath.Dir(path), 0700))
+				require.NoError(t, os.WriteFile(path, file.Content, 0600))
 			}
 			// These stubs only let Python import the module; no SDK code is called.
 			for name, content := range map[string]string{
 				"ydb.py": "", "sqlalchemy/__init__.py": "def text(value): return value\n", "sqlalchemy/engine.py": "class Connection: pass\n",
 			} {
 				path := filepath.Join(dir, name)
-				if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(path, []byte(content), 0600); err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, os.MkdirAll(filepath.Dir(path), 0700))
+				require.NoError(t, os.WriteFile(path, []byte(content), 0600))
 			}
 			script := `from datetime import date, datetime, timedelta
 from typing import Optional, get_type_hints
@@ -699,7 +606,7 @@ assert get_type_hints(Querier.write_types) == {
 			cmd.Dir = dir
 			cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
 			if out, err := cmd.CombinedOutput(); err != nil {
-				t.Fatalf("generated annotations cannot be resolved: %v\n%s", err, out)
+				require.NoError(t, err, "generated annotations cannot be resolved: %v\n%s", err, out)
 			}
 		})
 	}

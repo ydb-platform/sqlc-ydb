@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/cli"
 )
 
@@ -25,9 +27,7 @@ func TestLiveYDBWildcardSchemaEvolution(t *testing.T) {
 	t.Cleanup(func() { runDatabasePython(t, dir, wildcardFixturePython, "drop", table) })
 	write := func(name, source string) {
 		t.Helper()
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(source), 0o600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(source), 0o600))
 	}
 	write("schema.sql", "CREATE TABLE "+table+" (ztext Utf8, id Uint64 NOT NULL, amount Int32, PRIMARY KEY(id));")
 	queries := strings.ReplaceAll(`-- name: ReadWildcard :one
@@ -68,22 +68,14 @@ DELETE FROM records WHERE id = $id RETURNING *;
 	for _, profile := range profiles {
 		write(profile.name+".yaml", "version: '2'\nsql:\n- engine: ydb\n  queries: queries.sql\n"+profile.settings+"  gen:\n    go:\n      package: db\n      sql_package: database/sql\n      out: "+profile.name+"\n")
 		var stdout, stderr bytes.Buffer
-		if code := cli.Run([]string{"generate", "--no-remote", "-f", filepath.Join(dir, profile.name+".yaml")}, &stdout, &stderr); code != 0 {
-			t.Fatalf("generate %s: %s", profile.name, stderr.String())
-		}
+		require.Zero(t, cli.Run([]string{"generate", "--no-remote", "-f", filepath.Join(dir, profile.name+".yaml")}, &stdout, &stderr), "generate %s: %s", profile.name, stderr.String())
 		generated := string(mustRead(t, filepath.Join(dir, profile.name, "queries.sql.go")))
 		for _, wildcard := range []string{"SELECT *", "SELECT r.*", "RETURNING *"} {
-			if strings.Contains(generated, wildcard) {
-				t.Errorf("%s still emits %q; saved SQL will change result shape after ALTER TABLE", profile.name, wildcard)
-			}
+			assert.False(t, strings.Contains(generated, wildcard), "%s still emits %q; saved SQL will change result shape after ALTER TABLE", profile.name, wildcard)
 		}
-		if !strings.Contains(generated, "-- Preserve this * comment.") {
-			t.Errorf("%s changed an unrelated SQL comment", profile.name)
-		}
+		assert.True(t, strings.Contains(generated, "-- Preserve this * comment."), "%s changed an unrelated SQL comment", profile.name)
 	}
-	if got := string(mustRead(t, filepath.Join(dir, "queries.sql"))); got != queries {
-		t.Fatal("generation modified the query source")
-	}
+	require.Equal(t, queries, string(mustRead(t, filepath.Join(dir, "queries.sql"))), "generation modified the query source")
 
 	runDatabasePython(t, dir, wildcardFixturePython, "alter", table)
 	for index, profile := range profiles {

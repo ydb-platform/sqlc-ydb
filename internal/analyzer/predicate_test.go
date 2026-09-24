@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -19,9 +21,7 @@ func TestPredicateValidationCoversJoinAndDMLWhere(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: test.query}})
-			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("error = %v, want %q", err, test.want)
-			}
+			require.ErrorContains(t, err, test.want)
 		})
 	}
 }
@@ -38,8 +38,9 @@ func TestPredicateValidationAcceptsBooleanCompositionAndTypedIN(t *testing.T) {
 		"CASE WHEN id = 1u THEN true ELSE false END",
 	} {
 		query := "-- name: Read :many\nDECLARE $ids AS List<Uint64>;\nSELECT id FROM records WHERE " + predicate + ";"
-		if _, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}}); err != nil {
-			t.Fatalf("%s: %v", predicate, err)
+		{
+			_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
+			require.NoError(t, err)
 		}
 	}
 }
@@ -55,9 +56,8 @@ func TestPredicateOperatorsRejectIncompatibleOperands(t *testing.T) {
 	} {
 		query := "-- name: Read :many\nSELECT id FROM records WHERE " + predicate + ";"
 		_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
-		if err == nil || (!strings.Contains(err.Error(), "incompatible types") && !strings.Contains(err.Error(), "NOT operand has type") && !strings.Contains(err.Error(), "unsupported scalar expression") && !strings.Contains(err.Error(), "requires primitive numeric operands")) {
-			t.Fatalf("%s: %v", predicate, err)
-		}
+		require.Error(t, err)
+		require.False(t, (!strings.Contains(err.Error(), "incompatible types") && !strings.Contains(err.Error(), "NOT operand has type") && !strings.Contains(err.Error(), "unsupported scalar expression") && !strings.Contains(err.Error(), "requires primitive numeric operands")))
 	}
 }
 
@@ -65,14 +65,13 @@ func TestNotPrecedenceMatchesYDB(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, flag Bool NOT NULL, other Bool NOT NULL, PRIMARY KEY(id));`}}
 	for _, predicate := range []string{"NOT flag = other", "NOT (id = 1u)"} {
 		query := "-- name: Read :many\nSELECT id FROM records WHERE " + predicate + ";"
-		if _, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}}); err != nil {
-			t.Fatalf("%s: %v", predicate, err)
+		{
+			_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
+			require.NoError(t, err)
 		}
 	}
 	_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\nSELECT id FROM records WHERE NOT id = 1u;"}})
-	if err == nil || !strings.Contains(err.Error(), "NOT operand has type Uint64") {
-		t.Fatalf("numeric NOT must be rejected before comparison: %v", err)
-	}
+	require.ErrorContains(t, err, "NOT operand has type Uint64")
 }
 
 func TestPredicateINValidatesItsActualOperands(t *testing.T) {
@@ -86,9 +85,7 @@ func TestPredicateINValidatesItsActualOperands(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			query := "-- name: Read :many\n" + test.declaration + " SELECT id FROM records WHERE " + test.predicate + ";"
 			_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
-			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("error = %v, want %q", err, test.want)
-			}
+			require.ErrorContains(t, err, test.want)
 		})
 	}
 }
@@ -105,9 +102,7 @@ func TestPredicateRejectsBareAndNegatedNonBooleanValues(t *testing.T) {
 		t.Run(test.predicate, func(t *testing.T) {
 			query := "-- name: Read :many\nSELECT id FROM records WHERE " + test.predicate + ";"
 			_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
-			if err == nil || !strings.Contains(err.Error(), "invalid predicate: "+test.want) {
-				t.Fatalf("error = %v, want Boolean requirement %q", err, test.want)
-			}
+			require.ErrorContains(t, err, "invalid predicate: "+test.want)
 		})
 	}
 }
@@ -122,9 +117,7 @@ func TestPredicateINRejectsIncompatibleAndUnsupportedCollections(t *testing.T) {
 		t.Run(test.predicate, func(t *testing.T) {
 			query := "-- name: Read :many\n" + test.declaration + " SELECT id FROM records WHERE " + test.predicate + ";"
 			_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
-			if err == nil || !strings.Contains(err.Error(), "invalid predicate: "+test.want) {
-				t.Fatalf("error = %v, want collection diagnostic %q", err, test.want)
-			}
+			require.ErrorContains(t, err, "invalid predicate: "+test.want)
 		})
 	}
 }
@@ -143,14 +136,13 @@ func TestPredicateComparisonFamiliesUseResolvedOperands(t *testing.T) {
 		t.Run(predicate, func(t *testing.T) {
 			query := "-- name: Read :many\nSELECT id FROM records WHERE " + predicate + ";"
 			result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			analyzed := result.Queries[0]
 			columns := analyzed.ResultSets[0].Columns
-			if analyzed.SQL != query || len(columns) != 1 || columns[0].Name != "id" || columns[0].Type.String() != "Uint64" {
-				t.Fatalf("predicate changed result shape or SQL: %+v", analyzed)
-			}
+			require.Equal(t, query, analyzed.SQL)
+			require.Len(t, columns, 1)
+			require.Equal(t, "id", columns[0].Name)
+			require.Equal(t, "Uint64", columns[0].Type.String())
 		})
 	}
 }

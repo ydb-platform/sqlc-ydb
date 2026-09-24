@@ -4,6 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -75,22 +78,22 @@ func TestDocumentedYsonUDFTypes(t *testing.T) {
 			seen[name] = true
 			t.Run(name, func(t *testing.T) {
 				got, handled, err := resolveYsonCall(name, group.args)
-				if !handled || err != nil || !got.Equal(group.want) {
-					t.Fatalf("resolve(%s) = %s, handled=%t, %v; want %s", name, got, handled, err, group.want)
-				}
+				require.True(t, handled)
+				require.NoError(t, err)
+				require.True(t, got.Equal(group.want))
 				if name != "Yson::Options" {
-					if _, _, err := resolveYsonCall(name, nil); err == nil {
-						t.Fatal("missing required argument was accepted")
+					{
+						_, _, err := resolveYsonCall(name, nil)
+						require.Error(t, err)
 					}
 				}
 			})
 		}
 	}
-	if len(seen) != 57 {
-		t.Fatalf("covered %d documented Yson names, want 57", len(seen))
-	}
-	if _, handled, _ := resolveYsonCall("Yson::Unlisted", nil); handled {
-		t.Fatal("undocumented Yson function was accepted")
+	require.Len(t, seen, 57)
+	{
+		_, handled, _ := resolveYsonCall("Yson::Unlisted", nil)
+		require.False(t, handled)
 	}
 }
 
@@ -124,15 +127,12 @@ func TestYsonUDFOverloadsAndDiagnostics(t *testing.T) {
 		{"Yson::From", []CallArgument{{Type: model.Type{Kind: "Null"}}}, ysonNodeResource},
 	} {
 		got, _, err := resolveYsonCall(tt.name, tt.args)
-		if err != nil || got.String() != tt.want {
-			t.Errorf("%s = %s, %v; want %s", tt.name, got, err, tt.want)
-		}
+		assert.False(t, err != nil || got.String() != tt.want)
 	}
 	target := model.Type{Kind: "Dict", Key: &str, Elem: &js}
 	got, _, err := resolveYsonCall("Yson::ConvertTo", []CallArgument{{Type: node}, {TypeArgument: &target}, {Type: options}})
-	if err != nil || !got.Equal(target) {
-		t.Fatalf("Yson::ConvertTo target = %s, %v; want %s", got, err, target)
-	}
+	require.NoError(t, err)
+	require.True(t, got.Equal(target))
 	for _, tt := range []struct {
 		name string
 		args []CallArgument
@@ -160,8 +160,6 @@ func TestYsonUDFOverloadsAndDiagnostics(t *testing.T) {
 		{"Yson::GetHash", []CallArgument{{Type: options}}, "Yson node"},
 	} {
 		_, handled, err := resolveYsonCall(tt.name, tt.args)
-		if !handled || err == nil || !strings.Contains(err.Error(), tt.want) {
-			t.Errorf("%s error = %v, handled=%t; want %q", tt.name, err, handled, tt.want)
-		}
+		assert.False(t, !handled || err == nil || !strings.Contains(err.Error(), tt.want))
 	}
 }

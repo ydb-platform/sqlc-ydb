@@ -1,12 +1,14 @@
 package csharp
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -17,9 +19,7 @@ func batchAnalysis() *model.AnalysisResult {
 func TestStructListParameters(t *testing.T) {
 	for _, runtime := range []string{"adonet", "dapper"} {
 		models, queries := generatedRuntime(t, batchAnalysis(), runtime)
-		if !strings.Contains(models, "record CreateBooksBooksItem") || !strings.Contains(queries, "IReadOnlyList<CreateBooksBooksItem> books") {
-			t.Fatal(models, queries)
-		}
+		require.False(t, !strings.Contains(models, "record CreateBooksBooksItem") || !strings.Contains(queries, "IReadOnlyList<CreateBooksBooksItem> books"), models, queries)
 	}
 }
 func TestStructListPublishedSDK(t *testing.T) {
@@ -32,13 +32,9 @@ func TestStructListPublishedSDK(t *testing.T) {
 		in := batchAnalysis()
 		in.Queries[0].Parameters = append(in.Queries[0].Parameters, model.Parameter{Name: "limit", Type: model.Type{Kind: "Uint64"}})
 		files, err := Generate(in, Options{Namespace: runtime, Runtime: runtime})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		for _, f := range files {
-			if err := os.WriteFile(filepath.Join(dir, runtime+f.Name), f.Content, 0600); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, os.WriteFile(filepath.Join(dir, runtime+f.Name), f.Content, 0600))
 		}
 	}
 	project := `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup><ItemGroup><PackageReference Include="Ydb.Sdk" Version="0.35.0" /><PackageReference Include="Dapper" Version="2.1.79" /></ItemGroup></Project>`
@@ -63,15 +59,13 @@ class Program {
  }
 }`
 	for name, content := range map[string]string{"wire.csproj": project, "Program.cs": program} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0600))
 	}
 	cmd := exec.Command(dotnet, "run", "--project", "wire.csproj", "--nologo")
 	cmd.Dir = dir
 	cmd.Env = dotnetEnv(dir)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("SDK wire test: %v\n%s", err, out)
+		require.NoError(t, err, "SDK wire test: %v\n%s", err, out)
 	}
 }
 
@@ -80,9 +74,7 @@ func TestStructListRejectsSDKTypeNameCollision(t *testing.T) {
 	analysis.Catalog.Tables = []model.Table{{Name: "ydbTypeId", Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}}}}}
 	for _, runtime := range []string{"adonet", "dapper"} {
 		_, err := Generate(analysis, Options{Runtime: runtime})
-		if err == nil || !strings.Contains(err.Error(), "model name collision") {
-			t.Fatalf("%s: expected SDK type name collision, got %v", runtime, err)
-		}
+		require.ErrorContains(t, err, "model name collision", "%s: expected SDK type name collision, got %v", runtime, err)
 	}
 }
 
@@ -101,9 +93,7 @@ func TestStructListRejectsUnsupportedFieldShapes(t *testing.T) {
 				in := batchAnalysis()
 				in.Queries[0].Parameters[0].Type.Elem.Fields = tc.fields
 				_, err := Generate(in, Options{Runtime: runtime})
-				if err == nil || !strings.Contains(err.Error(), tc.want) {
-					t.Fatalf("got %v, want diagnostic %q", err, tc.want)
-				}
+				require.ErrorContains(t, err, tc.want, "got %v, want diagnostic %q", err, tc.want)
 			})
 		}
 	}
@@ -115,14 +105,14 @@ func TestStructListItemNamesAreValidated(t *testing.T) {
 			in := batchAnalysis()
 			in.Catalog.Tables = []model.Table{{Name: "create_books_books_item"}}
 			if _, err := Generate(in, Options{Runtime: runtime}); err == nil || !strings.Contains(err.Error(), "model name collision") {
-				t.Fatalf("got %v", err)
+				require.FailNow(t, fmt.Sprintf("got %v", err))
 			}
 		})
 		t.Run(runtime+"/field collision", func(t *testing.T) {
 			in := batchAnalysis()
 			in.Queries[0].Parameters[0].Type.Elem.Fields = []model.StructField{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, {Name: "book_ID", Type: model.Type{Kind: "Uint64"}}}
 			if _, err := Generate(in, Options{Runtime: runtime}); err == nil || !strings.Contains(err.Error(), "column name collision") {
-				t.Fatalf("got %v", err)
+				require.FailNow(t, fmt.Sprintf("got %v", err))
 			}
 		})
 	}
@@ -134,13 +124,9 @@ func TestStructListAndScalarParameters(t *testing.T) {
 		in.Queries[0].Parameters = append(in.Queries[0].Parameters, model.Parameter{Name: "limit", Type: model.Type{Kind: "Uint64"}})
 		models, queries := generatedRuntime(t, in, runtime)
 		for _, want := range []string{"record CreateBooksParams", "IReadOnlyList<CreateBooksBooksItem> Books", "ulong Limit"} {
-			if !strings.Contains(models, want) {
-				t.Fatalf("missing %q in %s", want, models)
-			}
+			require.Contains(t, models, want, "missing %q in %s", want, models)
 		}
-		if !strings.Contains(queries, "BindCreateBooksBooksItem(args.Books)") {
-			t.Fatal(queries)
-		}
+		require.Contains(t, queries, "BindCreateBooksBooksItem(args.Books)", queries)
 	}
 }
 
@@ -151,9 +137,7 @@ func TestStructListSchemaUsesIndentedMemberBlocks(t *testing.T) {
 			"                    new global::Ydb.StructMember\n                    {\n                        Name = \"book_id\",\n                        Type = new global::Ydb.Type\n",
 			"                            OptionalType = new global::Ydb.OptionalType\n                            {\n                                Item = new global::Ydb.Type\n",
 		} {
-			if !strings.Contains(queries, want) {
-				t.Fatalf("%s: missing structured schema layout %q", runtime, want)
-			}
+			require.Contains(t, queries, want, "%s: missing structured schema layout %q", runtime, want)
 		}
 	}
 }

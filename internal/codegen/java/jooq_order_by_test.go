@@ -1,12 +1,15 @@
 package java
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -31,31 +34,23 @@ func TestJooqOrderByResolvedOutputNames(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqOrderBySchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + tc.sql}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			files, err := Generate(analysis, Options{Package: "orderby", Runtime: "jooq"})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			var queries string
 			for _, file := range files {
 				if file.Name == "Queries.java" {
 					queries = string(file.Content)
 				}
 			}
-			if queries == "" {
-				t.Fatal("Queries.java was not generated")
-			}
-			if strings.Count(queries, ".orderBy(") != 1 {
-				t.Fatalf("expected one ORDER BY call:\n%s", queries)
-			}
+			require.NotEqual(t, "", queries, "Queries.java was not generated")
+			require.Equal(t, 1, strings.Count(queries, ".orderBy("), "expected one ORDER BY call:\n%s", queries)
 			ordering := queries[strings.Index(queries, ".orderBy("):]
 			ordering = ordering[:strings.Index(ordering, ".coerce(")]
 			for _, order := range tc.orders {
 				index := strings.Index(ordering, order)
 				if index < 0 {
-					t.Errorf("missing typed ORDER BY %s:\n%s", order, queries)
+					assert.Fail(t, fmt.Sprintf("missing typed ORDER BY %s:\n%s", order, queries))
 					continue
 				}
 				ordering = ordering[index+len(order):]
@@ -72,19 +67,13 @@ func TestJooqOrderByDoesNotInventOutputReferences(t *testing.T) {
 	} {
 		t.Run(tc.sql, func(t *testing.T) {
 			_, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqOrderBySchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + tc.sql}})
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("error = %v, want %q", err, tc.want)
-			}
+			require.ErrorContains(t, err, tc.want, "error = %v, want %q", err, tc.want)
 		})
 	}
 	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqOrderBySchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\nSELECT id IS NOT NULL AS `true` FROM records ORDER BY true;"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	files, err := Generate(analysis, Options{Package: "orderby", Runtime: "jooq"})
-	if files != nil || err == nil || err.Error() != `Read: unsupported jOOQ syntax "true"` {
-		t.Fatalf("literal was treated as a reference to the quoted output: files=%v, error=%v", files, err)
-	}
+	require.False(t, files != nil || err == nil || err.Error() != `Read: unsupported jOOQ syntax "true"`, "literal was treated as a reference to the quoted output: files=%v, error=%v", files, err)
 }
 
 const jooqOrderByQueries = `-- name: Implicit :many
@@ -110,24 +99,18 @@ func TestJooqOrderByPublishedSDK(t *testing.T) {
 		t.Skip("set SQLC_YDB_TEST_MAVEN to compile and execute ORDER BY references against the published dialect")
 	}
 	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqOrderBySchema}}, []model.Source{{Name: "queries.sql", Text: jooqOrderByQueries}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	files, err := Generate(analysis, Options{Package: "orderby", Runtime: "jooq"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	classpath := filepath.Join(dir, "classpath")
 	cmd := exec.Command(maven, "-q", "dependency:build-classpath", "-Dmdep.outputFile="+classpath)
 	cmd.Dir = filepath.Join("..", "..", "..", "tests", "examples", "java", "jooq")
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("SDK classpath: %v\n%s", err, out)
+		require.NoError(t, err, "SDK classpath: %v\n%s", err, out)
 	}
 	cp, err := os.ReadFile(classpath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	program := `package orderby;
 import java.util.*;
 import org.jooq.tools.jdbc.*;
@@ -200,14 +183,12 @@ public class Main {
 	compile := []string{"-cp", strings.TrimSpace(string(cp)), "-d", dir}
 	for _, file := range files {
 		path := filepath.Join(dir, file.Name)
-		if err := os.WriteFile(path, file.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(path, file.Content, 0600))
 		compile = append(compile, path)
 	}
 	for _, args := range [][]string{append([]string{"javac"}, compile...), {"java", "-cp", dir + string(os.PathListSeparator) + strings.TrimSpace(string(cp)), "orderby.Main"}} {
 		if out, err := exec.Command(args[0], args[1:]...).CombinedOutput(); err != nil {
-			t.Fatalf("%s: %v\n%s", args[0], err, out)
+			require.NoError(t, err, "%s: %v\n%s", args[0], err, out)
 		}
 	}
 }

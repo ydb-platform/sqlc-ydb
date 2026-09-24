@@ -18,6 +18,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewer(t *testing.T) {
@@ -33,9 +36,7 @@ func TestNewer(t *testing.T) {
 		{"bad", "1.0.0", false}, {"1.01.0", "1.0.0", false},
 		{"1.0.0-rc2", "1.0.0-rc2", false}, {"1.0.0", "2.0.0", false},
 	} {
-		if got := Newer(tc.latest, tc.current); got != tc.want {
-			t.Errorf("Newer(%q, %q) = %v", tc.latest, tc.current, got)
-		}
+		assert.Equal(t, tc.want, Newer(tc.latest, tc.current), "Newer(%q, %q)", tc.latest, tc.current)
 	}
 }
 
@@ -56,21 +57,14 @@ func archive(t *testing.T, entries ...entry) []byte {
 			h.Size = 0
 			h.Linkname = "elsewhere"
 		}
-		if err := w.WriteHeader(h); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, w.WriteHeader(h))
 		if !e.symlink {
-			if _, err := io.WriteString(w, e.body); err != nil {
-				t.Fatal(err)
-			}
+			_, err := io.WriteString(w, e.body)
+			require.NoError(t, err)
 		}
 	}
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := gz.Close(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, w.Close())
+	require.NoError(t, gz.Close())
 	return out.Bytes()
 }
 
@@ -91,50 +85,37 @@ func TestExtraction(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				var out bytes.Buffer
 				err := extract(&out, archive(t, tc.entries...), "base/sqlc-ydb")
-				if (err == nil) != tc.valid {
-					t.Fatalf("extract: %v", err)
-				}
-				if tc.valid && out.String() != "binary" {
-					t.Fatalf("unexpected bytes: %q", out.String())
-				}
+				require.Equal(t, tc.valid, (err == nil), "extract: %v", err)
+				require.False(t, tc.valid && out.String() != "binary", "unexpected bytes: %q", out.String())
 			})
 		}
-		if err := extract(io.Discard, []byte("broken"), "base/sqlc-ydb"); err == nil {
-			t.Fatal("accepted broken archive")
-		}
+		require.Error(t, extract(io.Discard, []byte("broken"), "base/sqlc-ydb"), "accepted broken archive")
 	}
 }
 
 func TestChecksums(t *testing.T) {
 	valid := strings.Repeat("ab", 32) + "  artifact\n"
 	for _, sums := range []string{"", "bad  artifact\n", valid + valid, strings.Repeat("a", 63) + " artifact\n"} {
-		if _, err := checksum([]byte(sums), "artifact"); err == nil {
-			t.Fatalf("accepted %q", sums)
-		}
+		_, err := checksum([]byte(sums), "artifact")
+		require.Error(t, err, "accepted %q", sums)
 	}
-	if got, err := checksum([]byte(valid+"other garbage\n"), "artifact"); err != nil || len(got) != 32 {
-		t.Fatalf("%x %v", got, err)
-	}
+	got, err := checksum([]byte(valid+"other garbage\n"), "artifact")
+	require.NoError(t, err)
+	require.Len(t, got, 32)
 }
 
 func TestConcurrentInstallation(t *testing.T) {
 	target := writeTarget(t)
 	f, err := os.Open(target)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	original, err := f.Stat()
 	_ = f.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	start := make(chan struct{})
 	results := make(chan error, 2)
 	for i := range 2 {
 		staged := filepath.Join(filepath.Dir(target), fmt.Sprint("staged", i))
-		if err := os.WriteFile(staged, []byte("new binary"), 0755); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(staged, []byte("new binary"), 0755))
 		go func() { <-start; results <- install(staged, target, original) }()
 	}
 	close(start)
@@ -144,34 +125,23 @@ func TestConcurrentInstallation(t *testing.T) {
 			successes++
 		}
 	}
-	if successes != 1 {
-		t.Fatalf("installed %d concurrent updates; want exactly one", successes)
-	}
-	if _, err := os.Stat(target + ".update-lock"); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("lock not released: %v", err)
-	}
+	require.Equal(t, 1, successes, "installed %d concurrent updates; want exactly one", successes)
+	_, err = os.Stat(target + ".update-lock")
+	require.ErrorIs(t, err, os.ErrNotExist, "lock not released")
 }
 
 func TestInstallationLockPreservesFiles(t *testing.T) {
 	target := writeTarget(t)
 	info, err := os.Stat(target)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	lock := target + ".update-lock"
-	if err := os.Mkdir(lock, 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := install("unused-stage", target, info); err == nil || !strings.Contains(err.Error(), "update lock") {
-		t.Fatalf("%v", err)
-	}
+	require.NoError(t, os.Mkdir(lock, 0700))
+	require.ErrorContains(t, install("unused-stage", target, info), "update lock")
 	data, err := os.ReadFile(target)
-	if err != nil || string(data) != "old executable" {
-		t.Fatalf("%q %v", data, err)
-	}
-	if _, err := os.Stat(lock); err != nil {
-		t.Fatalf("removed another updater's lock: %v", err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "old executable", string(data))
+	_, err = os.Stat(lock)
+	require.NoError(t, err, "removed another updater's lock")
 }
 
 type failingTransport struct {
@@ -191,76 +161,61 @@ func TestDownloadFailuresKeepInstallation(t *testing.T) {
 		t.Skip("automatic upgrades are not supported on Windows")
 	}
 	_, _, extension, err := artifact("0.2.0", runtime.GOOS, runtime.GOARCH)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, suffix := range []string{"SHA256SUMS", extension} {
 		t.Run(suffix, func(t *testing.T) {
 			target := writeTarget(t)
 			client := fixture(t, target, nil)
 			client.HTTP.Transport = failingTransport{client.HTTP.Transport, suffix}
-			if _, err := client.Update(context.Background(), "0.1.0"); !errors.Is(err, io.ErrUnexpectedEOF) {
-				t.Fatalf("unexpected failure: %v", err)
-			}
+			_, err := client.Update(context.Background(), "0.1.0")
+			require.ErrorIs(t, err, io.ErrUnexpectedEOF)
 			data, err := os.ReadFile(target)
-			if err != nil || string(data) != "old executable" {
-				t.Fatalf("%q %v", data, err)
-			}
+			require.NoError(t, err)
+			require.Equal(t, "old executable", string(data))
 			staged, err := filepath.Glob(filepath.Join(filepath.Dir(target), ".sqlc-ydb-update-*"))
-			if err != nil || len(staged) != 0 {
-				t.Fatalf("staging files leaked: %v %v", staged, err)
-			}
+			require.NoError(t, err)
+			require.Empty(t, staged, "staging files leaked")
 		})
 	}
 }
 
 func TestRejectInvalidReleaseURLAndRedirectLoop(t *testing.T) {
 	client := NewClient()
-	if _, err := client.get(context.Background(), "https://invalid\x00host"); err == nil {
-		t.Fatal("accepted invalid URL")
-	}
+	_, err := client.get(context.Background(), "https://invalid\x00host")
+	require.Error(t, err, "accepted invalid URL")
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/latest", http.StatusFound)
 	}))
 	defer server.Close()
 	client.HTTP.Transport = server.Client().Transport
 	client.ReleasesURL = server.URL
-	if _, err := client.Latest(context.Background()); err == nil || !strings.Contains(err.Error(), "excessive release redirect") {
-		t.Fatalf("%v", err)
-	}
+	_, err = client.Latest(context.Background())
+	require.ErrorContains(t, err, "excessive release redirect")
 }
 
 func TestMalformedTarBody(t *testing.T) {
 	var data bytes.Buffer
 	gz := gzip.NewWriter(&data)
-	if _, err := gz.Write([]byte("truncated tar header")); err != nil {
-		t.Fatal(err)
-	}
-	if err := gz.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := extract(io.Discard, data.Bytes(), "sqlc-ydb"); err == nil {
-		t.Fatal("accepted invalid tar body")
-	}
+	_, err := gz.Write([]byte("truncated tar header"))
+	require.NoError(t, err)
+	require.NoError(t, gz.Close())
+	require.Error(t, extract(io.Discard, data.Bytes(), "sqlc-ydb"), "accepted invalid tar body")
 }
 
 func TestArtifactMatrix(t *testing.T) {
 	for _, osName := range []string{"linux", "darwin"} {
 		for _, arch := range []string{"amd64", "arm64"} {
 			base, bin, ext, err := artifact("1.2.3", osName, arch)
-			if err != nil || base != "sqlc-ydb_1.2.3_"+osName+"_"+arch {
-				t.Fatal(base, err)
-			}
+			require.NoError(t, err)
+			require.Equal(t, "sqlc-ydb_1.2.3_"+osName+"_"+arch, base)
 
-			if bin != "sqlc-ydb" || ext != ".tar.gz" {
-				t.Fatal(bin, ext)
-			}
+			require.Equal(t, "sqlc-ydb", bin)
+			require.Equal(t, ".tar.gz", ext)
 		}
 	}
 	for _, pair := range [][2]string{{"linux", "386"}, {"freebsd", "amd64"}, {"windows", "amd64"}} {
-		if _, _, _, err := artifact("1.2.3", pair[0], pair[1]); err == nil {
-			t.Fatal("unsupported platform")
-		}
+		_, _, _, err := artifact("1.2.3", pair[0], pair[1])
+		require.Error(t, err, "unsupported platform")
 	}
 }
 
@@ -300,9 +255,7 @@ func fixture(t *testing.T, target string, mutate func(string, []byte) []byte) *C
 func writeTarget(t *testing.T) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "binary with spaces")
-	if err := os.WriteFile(p, []byte("old executable"), 0751); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(p, []byte("old executable"), 0751))
 	return p
 }
 
@@ -322,26 +275,23 @@ func TestUpdate(t *testing.T) {
 			}
 			c := fixture(t, path, nil)
 			result, err := c.Update(context.Background(), "0.1.0")
-			realTarget, resolveErr := filepath.EvalSymlinks(target)
-			if err != nil || resolveErr != nil || !result.Updated || result.Path != realTarget || result.Version != "0.2.0" {
-				t.Fatalf("%+v %v", result, err)
-			}
+			require.NoError(t, err)
+			realTarget, err := filepath.EvalSymlinks(target)
+			require.NoError(t, err)
+			require.True(t, result.Updated)
+			require.Equal(t, realTarget, result.Path)
+			require.Equal(t, "0.2.0", result.Version)
 			data, err := os.ReadFile(target)
-			if err != nil || string(data) != "new executable" {
-				t.Fatalf("%q %v", data, err)
-			}
+			require.NoError(t, err)
+			require.Equal(t, "new executable", string(data))
 			if symlink {
-				if dest, err := os.Readlink(path); err != nil || dest != filepath.Base(target) {
-					t.Fatal(dest, err)
-				}
+				dest, err := os.Readlink(path)
+				require.NoError(t, err)
+				require.Equal(t, filepath.Base(target), dest)
 			}
 			info, err := os.Stat(target)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if runtime.GOOS != "windows" && info.Mode().Perm() != 0751 {
-				t.Fatal(info.Mode())
-			}
+			require.NoError(t, err)
+			require.False(t, runtime.GOOS != "windows" && info.Mode().Perm() != 0751, info.Mode())
 		})
 	}
 }
@@ -355,12 +305,8 @@ func TestUpdateFailuresPreserveExecutable(t *testing.T) {
 			target := writeTarget(t)
 			c := fixture(t, target, func(path string, data []byte) []byte {
 				if failure == "changed" && strings.HasSuffix(path, "SHA256SUMS") {
-					if err := os.Rename(target, target+".saved"); err != nil {
-						t.Error(err)
-					}
-					if err := os.WriteFile(target, []byte("other installation"), 0755); err != nil {
-						t.Error(err)
-					}
+					assert.NoError(t, os.Rename(target, target+".saved"))
+					assert.NoError(t, os.WriteFile(target, []byte("other installation"), 0755))
 				}
 				if failure == "checksum" && strings.HasSuffix(path, "SHA256SUMS") {
 					return []byte("missing")
@@ -389,26 +335,21 @@ func TestUpdateFailuresPreserveExecutable(t *testing.T) {
 					t.Skip("requires Unix directory permissions")
 				}
 				dir := filepath.Dir(target)
-				if err := os.Chmod(dir, 0555); err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, os.Chmod(dir, 0555))
 				t.Cleanup(func() { _ = os.Chmod(dir, 0755) })
 			}
-			if _, err := c.Update(context.Background(), "0.1.0"); err == nil {
-				t.Fatal("expected error")
-			}
+			_, err := c.Update(context.Background(), "0.1.0")
+			require.Error(t, err)
 			data, err := os.ReadFile(target)
 			want := "old executable"
 			if failure == "changed" {
 				want = "other installation"
 			}
-			if err != nil || string(data) != want {
-				t.Fatalf("%q %v", data, err)
-			}
+			require.NoError(t, err)
+			require.Equal(t, want, string(data))
 			files, err := filepath.Glob(filepath.Join(filepath.Dir(target), ".sqlc-ydb-update-*"))
-			if err != nil || len(files) != 0 {
-				t.Fatal(files, err)
-			}
+			require.NoError(t, err)
+			require.Empty(t, files)
 		})
 	}
 }
@@ -418,12 +359,12 @@ func TestNoDowngradeOrUnnecessaryInstall(t *testing.T) {
 		t.Skip("automatic upgrades are not supported on Windows")
 	}
 	for _, version := range []string{"0.2.0", "0.3.0", "0.3.0-rc1"} {
-		c := fixture(t, "", func(string, []byte) []byte { t.Error("downloaded an unnecessary update"); return nil })
-		c.Executable = func() (string, error) { t.Error("looked up executable unnecessarily"); return "", nil }
+		c := fixture(t, "", func(string, []byte) []byte { assert.Fail(t, "downloaded an unnecessary update"); return nil })
+		c.Executable = func() (string, error) { assert.Fail(t, "looked up executable unnecessarily"); return "", nil }
 		result, err := c.Update(context.Background(), version)
-		if err != nil || result.Updated || result.Version != version {
-			t.Fatal(result, err)
-		}
+		require.NoError(t, err)
+		require.False(t, result.Updated)
+		require.Equal(t, version, result.Version)
 	}
 }
 
@@ -441,11 +382,10 @@ func TestLatestAndNetworkErrors(t *testing.T) {
 			c.ReleasesURL = server.URL
 			version, err := c.Latest(context.Background())
 			if location == "/tag/v0.2.0" {
-				if err != nil || version != "0.2.0" {
-					t.Fatal(version, err)
-				}
-			} else if err == nil {
-				t.Fatal("accepted invalid release")
+				require.NoError(t, err)
+				require.Equal(t, "0.2.0", version)
+			} else {
+				require.Error(t, err, "accepted invalid release")
 			}
 		})
 	}
@@ -460,33 +400,28 @@ func TestLatestAndNetworkErrors(t *testing.T) {
 	c := NewClient()
 	c.HTTP.Transport = server.Client().Transport
 	c.ReleasesURL = server.URL
-	if _, err := c.Latest(context.Background()); err == nil {
-		t.Fatal("accepted HTTP 503")
-	}
+	_, err := c.Latest(context.Background())
+	require.Error(t, err, "accepted HTTP 503")
 	c.ReleasesURL = server.URL + "/wait"
 	start := time.Now()
-	if _, err := c.Latest(context.Background()); !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatal(err)
-	}
-	if time.Since(start) > CheckTimeout+time.Second {
-		t.Fatal("check exceeded deadline")
-	}
+	_, err = c.Latest(context.Background())
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.False(t, time.Since(start) > CheckTimeout+time.Second, "check exceeded deadline")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := c.Update(ctx, "0.1.0"); runtime.GOOS != "windows" && !errors.Is(err, context.Canceled) {
-		t.Fatal(err)
+	_, err = c.Update(ctx, "0.1.0")
+	if runtime.GOOS != "windows" {
+		require.ErrorIs(t, err, context.Canceled)
 	}
 	c.ReleasesURL = "http://example.invalid"
-	if _, err := c.Latest(context.Background()); err == nil {
-		t.Fatal("accepted HTTP")
-	}
+	_, err = c.Latest(context.Background())
+	require.Error(t, err, "accepted HTTP")
 }
 
 func TestDownloadSizeLimit(t *testing.T) {
 	c := fixture(t, "", nil)
-	if _, err := c.download(context.Background(), c.ReleasesURL+"/data", 1); err == nil {
-		t.Fatal("accepted oversized download")
-	}
+	_, err := c.download(context.Background(), c.ReleasesURL+"/data", 1)
+	require.Error(t, err, "accepted oversized download")
 }
 
 // Exercise replacement while the target executable is actually running,
@@ -501,31 +436,22 @@ func TestRunningExecutable(t *testing.T) {
 		pool := httptest.NewTLSServer(http.NotFoundHandler())
 		c.HTTP.Transport = pool.Client().Transport
 		pool.Close()
-		if _, err := c.Update(context.Background(), "0.1.0"); err != nil {
-			t.Fatal(err)
-		}
+		_, err := c.Update(context.Background(), "0.1.0")
+		require.NoError(t, err)
 		return
 	}
 	source, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	data, err := os.ReadFile(source)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	target := filepath.Join(t.TempDir(), "running.exe")
-	if err := os.WriteFile(target, data, 0755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(target, data, 0755))
 	c := fixture(t, target, nil)
 	command := exec.Command(target, "-test.run=^TestRunningExecutable$")
 	command.Env = append(os.Environ(), "SQLC_UPDATE_TEST_SERVER="+c.ReleasesURL)
-	if out, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("%v\n%s", err, out)
-	}
+	out, err := command.CombinedOutput()
+	require.NoError(t, err, string(out))
 	got, err := os.ReadFile(target)
-	if err != nil || string(got) != "new executable" {
-		t.Fatalf("update not installed: %v", err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "new executable", string(got), "update not installed")
 }

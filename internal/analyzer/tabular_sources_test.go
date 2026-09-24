@@ -2,9 +2,9 @@ package analyzer
 
 import (
 	"context"
-	"reflect"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -13,24 +13,28 @@ func TestNamedTabularSource(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, label Utf8, PRIMARY KEY (id));"}}
 	const sql = "-- name: Read :many\n$selected = (SELECT id, label FROM records); SELECT s.id AS id, s.label AS label FROM $selected AS s WHERE s.id = $id;"
 	result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	q := result.Queries[0]
-	if q.SQL != sql || len(q.ResultSets) != 1 || len(q.ResultSets[0].Columns) != 2 || q.ResultSets[0].Columns[0].Type.Kind != "Uint64" || len(q.Parameters) != 1 || q.Parameters[0].Name != "id" || q.Parameters[0].Type.Kind != "Uint64" {
-		t.Fatalf("query = %#v", q)
-	}
+	require.Equal(t, sql, q.SQL)
+	require.Len(t, q.ResultSets, 1)
+	require.Len(t, q.ResultSets[0].Columns, 2)
+	require.Equal(t, "Uint64", q.ResultSets[0].Columns[0].Type.Kind)
+	require.Len(t, q.Parameters, 1)
+	require.Equal(t, "id", q.Parameters[0].Name)
+	require.Equal(t, "Uint64", q.Parameters[0].Type.Kind)
 }
 
 func TestNamedTabularSourceWithoutParentheses(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY (id));"}}
 	const sql = "-- name: Read :many\n$selected = SELECT id FROM records; SELECT id FROM $selected;"
 	result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if q := result.Queries[0]; q.SQL != sql || len(q.ResultSets) != 1 || len(q.ResultSets[0].Columns) != 1 || q.ResultSets[0].Columns[0].Type.Kind != "Uint64" {
-		t.Fatalf("query = %#v", q)
+	require.NoError(t, err)
+	{
+		q := result.Queries[0]
+		require.Equal(t, sql, q.SQL)
+		require.Len(t, q.ResultSets, 1)
+		require.Len(t, q.ResultSets[0].Columns, 1)
+		require.Equal(t, "Uint64", q.ResultSets[0].Columns[0].Type.Kind)
 	}
 }
 
@@ -38,24 +42,26 @@ func TestTabularWildcardExpansion(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, label Utf8, PRIMARY KEY (id));"}}
 	const sql = "-- name: Read :many\n$selected = (SELECT * FROM records); SELECT s.* FROM $selected AS s;"
 	result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	q := result.Queries[0]
-	if strings.Contains(q.SQL, "*") || len(q.ResultSets[0].Columns) != 2 || q.ResultSets[0].Columns[0].Name != "id" || q.ResultSets[0].Columns[1].Name != "label" {
-		t.Fatalf("query = %#v", q)
-	}
+	require.NotContains(t, q.SQL, "*")
+	require.Len(t, q.ResultSets[0].Columns, 2)
+	require.Equal(t, "id", q.ResultSets[0].Columns[0].Name)
+	require.Equal(t, "label", q.ResultSets[0].Columns[1].Name)
 }
 
 func TestChainedTabularBindings(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, label Utf8, PRIMARY KEY (id));"}}
 	const sql = "-- name: Read :many\n$first = (SELECT id, label FROM records WHERE id=$id); $second = (SELECT id, label FROM $first); SELECT label FROM $second;"
 	result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if q := result.Queries[0]; q.SQL != sql || len(q.Parameters) != 1 || q.Parameters[0].Type.Kind != "Uint64" || len(q.ResultSets[0].Columns) != 1 || q.ResultSets[0].Columns[0].Type.UnwrapOptional().Kind != "Utf8" {
-		t.Fatalf("query = %#v", q)
+	require.NoError(t, err)
+	{
+		q := result.Queries[0]
+		require.Equal(t, sql, q.SQL)
+		require.Len(t, q.Parameters, 1)
+		require.Equal(t, "Uint64", q.Parameters[0].Type.Kind)
+		require.Len(t, q.ResultSets[0].Columns, 1)
+		require.Equal(t, "Utf8", q.ResultSets[0].Columns[0].Type.UnwrapOptional().Kind)
 	}
 }
 
@@ -63,11 +69,12 @@ func TestTabularBindingUsesComputedLocal(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY (id));"}}
 	const sql = "-- name: Read :many\n$minimum = 1ul; $next = $minimum + 1ul; $selected = (SELECT id FROM records WHERE id > $next); SELECT id FROM $selected;"
 	result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if q := result.Queries[0]; len(q.Parameters) != 0 || len(q.ResultSets) != 1 || q.ResultSets[0].Columns[0].Type.Kind != "Uint64" {
-		t.Fatalf("query = %#v", q)
+	require.NoError(t, err)
+	{
+		q := result.Queries[0]
+		require.Len(t, q.Parameters, 0)
+		require.Len(t, q.ResultSets, 1)
+		require.Equal(t, "Uint64", q.ResultSets[0].Columns[0].Type.Kind)
 	}
 }
 
@@ -75,11 +82,12 @@ func TestTabularBindingRetainsQualifiedResultName(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY (id));"}}
 	const sql = "-- name: Read :many\n$selected = (SELECT r.id FROM records AS r JOIN records AS other ON r.id = other.id); SELECT s.`r.id` AS id FROM $selected AS s;"
 	result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if columns := result.Queries[0].ResultSets[0].Columns; len(columns) != 1 || columns[0].Name != "id" || columns[0].Type.Kind != "Uint64" {
-		t.Fatalf("columns = %#v", columns)
+	require.NoError(t, err)
+	{
+		columns := result.Queries[0].ResultSets[0].Columns
+		require.Len(t, columns, 1)
+		require.Equal(t, "id", columns[0].Name)
+		require.Equal(t, "Uint64", columns[0].Type.Kind)
 	}
 }
 
@@ -87,23 +95,20 @@ func TestTabularBindingWithNestedMembership(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY (id));"}}
 	const sql = "-- name: Read :many\n$selected = (SELECT id FROM records WHERE id IN (SELECT id FROM records)); SELECT id FROM $selected;"
 	result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(result.Queries[0].ResultSets[0].Columns) != 1 {
-		t.Fatalf("query = %#v", result.Queries[0])
-	}
+	require.NoError(t, err)
+	require.Len(t, result.Queries[0].ResultSets[0].Columns, 1)
 }
 
 func TestNamedTabularDMLSource(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, label Utf8, PRIMARY KEY (id)); CREATE TABLE copies (id Uint64 NOT NULL, label Utf8, PRIMARY KEY (id));"}}
 	const sql = "-- name: Copy :exec\n$selected = (SELECT id, label FROM records); UPSERT INTO copies SELECT id, label FROM $selected;"
 	result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if q := result.Queries[0]; q.SQL != sql || len(q.ResultSets) != 0 || len(q.Parameters) != 0 {
-		t.Fatalf("query = %#v", q)
+	require.NoError(t, err)
+	{
+		q := result.Queries[0]
+		require.Equal(t, sql, q.SQL)
+		require.Len(t, q.ResultSets, 0)
+		require.Len(t, q.Parameters, 0)
 	}
 }
 
@@ -111,47 +116,39 @@ func TestTabularSourcesWithDatabaseDiscovery(t *testing.T) {
 	const sql = "-- name: Read :many\n$selected = (SELECT id, label FROM records); SELECT s.id AS id, d.label AS label FROM $selected AS s JOIN (SELECT id, label FROM records) AS d ON s.id = d.id;"
 	database := &fakeAnalysisDatabase{tables: map[string]model.Table{"records": databaseTestTable("label")}}
 	result, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: sql}}, Options{}, database)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(database.validated, []string{sql}) || !reflect.DeepEqual(database.described, []string{"records"}) || len(result.Queries) != 1 || len(result.Queries[0].ResultSets[0].Columns) != 2 {
-		t.Fatalf("validated = %q, described = %q, queries = %#v", database.validated, database.described, result.Queries)
-	}
+	require.NoError(t, err)
+	require.Equal(t, []string{sql}, database.validated)
+	require.Equal(t, []string{"records"}, database.described)
+	require.Len(t, result.Queries, 1)
+	require.Len(t, result.Queries[0].ResultSets[0].Columns, 2)
 }
 
 func TestGroupedTabularBindingOuterJoin(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, label Utf8, PRIMARY KEY (id));"}}
 	const sql = "-- name: Read :many\n$grouped = (SELECT id, AGGREGATE_LIST(label) AS labels FROM records GROUP BY id); SELECT g.id AS id, g.labels AS labels FROM records AS r LEFT JOIN $grouped AS g ON r.id = g.id;"
 	result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	columns := result.Queries[0].ResultSets[0].Columns
-	if len(columns) != 2 || !columns[0].Type.IsOptional() || !columns[1].Type.IsOptional() || columns[1].Type.UnwrapOptional().Kind != "List" {
-		t.Fatalf("columns = %#v", columns)
-	}
+	require.Len(t, columns, 2)
+	require.True(t, columns[0].Type.IsOptional())
+	require.True(t, columns[1].Type.IsOptional())
+	require.Equal(t, "List", columns[1].Type.UnwrapOptional().Kind)
 	_, err = Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nSELECT AGGREGATE_LIST(1ul) AS values;"}})
-	if err == nil || !strings.Contains(err.Error(), "aggregate functions require a FROM source") {
-		t.Fatalf("aggregate without source: %v", err)
-	}
+	require.ErrorContains(t, err, "aggregate functions require a FROM source")
 }
 
 func TestYsonResourceRequiresSerialization(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, label Utf8, PRIMARY KEY (id));"}}
 	_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nSELECT Json::From(AGGREGATE_LIST(label)) AS payload FROM records;"}})
-	if err == nil || !strings.Contains(err.Error(), "nonpersistable type Resource<'Yson2.Node'>") {
-		t.Fatalf("direct resource result: %v", err)
-	}
+	require.ErrorContains(t, err, "nonpersistable type Resource<'Yson2.Node'>")
 	_, err = Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nSELECT AGGREGATE_LIST(Json::From(label)) AS payload FROM records;"}})
-	if err == nil || !strings.Contains(err.Error(), "nonpersistable type List<Resource<'Yson2.Node'>>") {
-		t.Fatalf("nested resource result: %v", err)
-	}
+	require.ErrorContains(t, err, "nonpersistable type List<Resource<'Yson2.Node'>>")
 	result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\nSELECT Yson::SerializeJson(Json::From(AGGREGATE_LIST(label))) AS payload FROM records;"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if columns := result.Queries[0].ResultSets[0].Columns; len(columns) != 1 || columns[0].Type.String() != "Optional<Json>" {
-		t.Fatalf("columns = %#v", columns)
+	require.NoError(t, err)
+	{
+		columns := result.Queries[0].ResultSets[0].Columns
+		require.Len(t, columns, 1)
+		require.Equal(t, "Optional<Json>", columns[0].Type.String())
 	}
 }
 
@@ -159,11 +156,12 @@ func TestDerivedJoinSource(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, label Utf8, PRIMARY KEY (id));"}}
 	const sql = "-- name: Read :many\nSELECT l.id AS id, r.label AS label FROM records AS l JOIN (SELECT id, label FROM records) AS r ON l.id = r.id;"
 	result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if columns := result.Queries[0].ResultSets[0].Columns; len(columns) != 2 || columns[0].Type.Kind != "Uint64" || columns[1].Type.UnwrapOptional().Kind != "Utf8" {
-		t.Fatalf("columns = %#v", columns)
+	require.NoError(t, err)
+	{
+		columns := result.Queries[0].ResultSets[0].Columns
+		require.Len(t, columns, 2)
+		require.Equal(t, "Uint64", columns[0].Type.Kind)
+		require.Equal(t, "Utf8", columns[1].Type.UnwrapOptional().Kind)
 	}
 }
 
@@ -193,8 +191,8 @@ func TestTabularSourceDiagnostics(t *testing.T) {
 		{"SELECT id WITHOUT id FROM records;", "SELECT WITHOUT is not yet supported"},
 	} {
 		result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + tc.sql}})
-		if err == nil || len(result.Diagnostics) == 0 || !strings.Contains(result.Diagnostics[0].Message, tc.want) {
-			t.Fatalf("%s: diagnostics = %#v, error = %v; want %q", tc.sql, result.Diagnostics, err, tc.want)
-		}
+		require.Error(t, err)
+		require.NotEqual(t, 0, len(result.Diagnostics))
+		require.Contains(t, result.Diagnostics[0].Message, tc.want)
 	}
 }

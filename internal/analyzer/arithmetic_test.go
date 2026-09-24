@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -22,12 +24,8 @@ func TestAnalyzeRejectsNonScalarParentheses(t *testing.T) {
 	} {
 		t.Run(expression, func(t *testing.T) {
 			_, err := Analyze(nil, []model.Source{{Name: "q.sql", Text: "-- name: Read :one\nSELECT " + expression + " AS value;"}})
-			if err == nil {
-				t.Fatal("accepted a non-scalar expression as scalar parentheses")
-			}
-			if !strings.Contains(err.Error(), "unsupported result expression") && !strings.Contains(err.Error(), "computed result expression") {
-				t.Fatalf("unexpected diagnostic: %v", err)
-			}
+			require.Error(t, err)
+			require.False(t, !strings.Contains(err.Error(), "unsupported result expression") && !strings.Contains(err.Error(), "computed result expression"))
 		})
 	}
 }
@@ -39,14 +37,8 @@ func TestAnalyzeNestedArithmeticPreservesScopeAndTypes(t *testing.T) {
 	}
 	sql := "-- name: Write :exec\nUPDATE counters SET value = " + expression + ";"
 	result, err := Analyze([]model.Source{{Name: "schema.sql", Text: computedDMLSchema}}, []model.Source{{Name: "q.sql", Text: sql}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Queries[0].SQL != sql {
-		t.Fatal("nested arithmetic SQL changed")
-	}
+	require.NoError(t, err)
+	require.Equal(t, sql, result.Queries[0].SQL)
 	_, err = Analyze([]model.Source{{Name: "schema.sql", Text: computedDMLSchema}}, []model.Source{{Name: "q.sql", Text: strings.Replace(sql, "value + 1l", "missing + 1l", 1)}})
-	if err == nil || !strings.Contains(err.Error(), `unknown column "missing"`) {
-		t.Fatalf("lost nested column validation: %v", err)
-	}
+	require.ErrorContains(t, err, `unknown column "missing"`)
 }

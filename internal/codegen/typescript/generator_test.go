@@ -2,6 +2,7 @@ package typescript
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 	"github.com/ydb-platform/sqlc-ydb/internal/source"
@@ -23,28 +26,16 @@ func TestApprovedExamples(t *testing.T) {
 				schemaPath, queryPath = "schema", "query"
 			}
 			schema, err := source.Read(base, []string{schemaPath}, true)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			queries, err := source.Read(base, []string{queryPath}, false)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			a, err := analyzer.Analyze(schema, queries)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			files, err := Generate(a, Options{})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			want, err := os.ReadFile(filepath.Join(base, "typescript/native/queries.ts"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if string(want) != string(files[0].Content) {
-				t.Fatal("generated source differs from maintainer-approved example")
-			}
+			require.NoError(t, err)
+			require.Equal(t, string(files[0].Content), string(want), "generated source differs from maintainer-approved example")
 		})
 	}
 }
@@ -56,19 +47,13 @@ func TestSDKNativeTypes(t *testing.T) {
 		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "created", Type: model.Type{Kind: "Timestamp"}}, {Name: "payload", Type: model.Optional(model.Type{Kind: "Json"})}}}},
 	}}}
 	files, err := Generate(a, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	got := fileContent(t, files, "queries.ts")
 	for _, want := range []string{"readonly created: Date;", "readonly payload: string | null;", "readonly payload: JSValue;", "new Timestamp(args.created)", "new Optional(args.payload === null ? null : new Json(args.payload), new JsonType())", "this.#sql<[EchoRow]>"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("missing %s", want)
-		}
+		assert.Contains(t, got, want, "missing %s", want)
 	}
 	for _, unwanted := range []string{".raw()", "function _", "_SQL", "Record<string, unknown>"} {
-		if strings.Contains(got, unwanted) {
-			t.Errorf("unexpected %s", unwanted)
-		}
+		assert.False(t, strings.Contains(got, unwanted), "unexpected %s", unwanted)
 	}
 }
 
@@ -80,23 +65,17 @@ func TestResultKeysAreNotNormalized(t *testing.T) {
 	}
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Rows", Command: model.Many, SQL: "SELECT 1;", ResultSets: []model.ResultSet{{Columns: columns}}}}}
 	files, err := Generate(a, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	got := fileContent(t, files, "queries.ts")
 	for _, field := range []string{"book_id", "bookId", `"b.book_id"`, `"default"`, `"имя"`, `"two words"`} {
-		if !strings.Contains(got, "readonly "+field+": string;") {
-			t.Errorf("missing exact result key %s", field)
-		}
+		assert.Contains(t, got, "readonly "+field+": string;", "missing exact result key %s", field)
 	}
 	for _, unwanted := range []string{"WireRow", "rows.map", " AS "} {
-		if strings.Contains(got, unwanted) {
-			t.Errorf("unexpected %s", unwanted)
-		}
+		assert.False(t, strings.Contains(got, unwanted), "unexpected %s", unwanted)
 	}
 	a.Queries[0].ResultSets[0].Columns = append(columns, columns[0])
 	if _, err := Generate(a, Options{}); err == nil {
-		t.Fatal("duplicate exact result key accepted")
+		require.Error(t, err, "duplicate exact result key accepted")
 	}
 }
 
@@ -107,16 +86,10 @@ func TestProjectionPreservesSQLAndWireNames(t *testing.T) {
 		{"SELECT display_name FROM authors UNION ALL SELECT display_name FROM authors;", "readonly display_name: string;"},
 	} {
 		a, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE authors (id Uint64 NOT NULL, display_name Utf8 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "query.sql", Text: "-- name: List :many\n" + tc.sql}})
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		files, err := Generate(a, Options{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := fileContent(t, files, "queries.ts"); !strings.Contains(got, tc.want) {
-			t.Errorf("%s: missing %q\n%s", tc.sql, tc.want, got)
-		}
+		require.NoError(t, err)
+		assert.Contains(t, fileContent(t, files, "queries.ts"), tc.want, "SQL %s", tc.sql)
 	}
 }
 
@@ -157,18 +130,14 @@ func fileContent(t *testing.T, files []model.File, name string) string {
 			return string(file.Content)
 		}
 	}
-	t.Fatalf("missing generated file %s", name)
+	require.FailNow(t, fmt.Sprintf("missing generated file %s", name))
 	return ""
 }
 
 func TestGenerateTypeScript(t *testing.T) {
 	files, err := Generate(testAnalysis(), Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(files) != 1 {
-		t.Fatalf("got %d files, want 1", len(files))
-	}
+	require.NoError(t, err)
+	require.Equal(t, 1, len(files), "got %d files, want 1", len(files))
 	ts := fileContent(t, files, "queries.ts")
 	for _, want := range []string{
 		`import type { Query, SQL } from "@ydbjs/query";`,
@@ -184,9 +153,7 @@ func TestGenerateTypeScript(t *testing.T) {
 		`return rows[0] ?? null;`,
 		`return rows;`,
 	} {
-		if !strings.Contains(ts, want) {
-			t.Errorf("queries.ts missing %q\n%s", want, ts)
-		}
+		assert.Contains(t, ts, want, "queries.ts missing %q\n%s", want, ts)
 	}
 	for _, want := range []string{
 		`constructor(sql: SQL) {`,
@@ -195,9 +162,7 @@ func TestGenerateTypeScript(t *testing.T) {
 		`readonly display_name: string;`,
 		`readonly bio: string | null;`,
 	} {
-		if !strings.Contains(ts, want) {
-			t.Errorf("queries.ts missing %q\n%s", want, ts)
-		}
+		assert.Contains(t, ts, want, "queries.ts missing %q\n%s", want, ts)
 	}
 }
 
@@ -207,9 +172,7 @@ func TestConfigureQueryAndSQLNamesCannotShadowGeneratedBindings(t *testing.T) {
 		{Name: "ByConfigure", Command: model.Exec, SQL: "SELECT $configure;", Parameters: []model.Parameter{{Name: "configure", Type: model.Type{Kind: "Utf8"}}}},
 	}}
 	files, err := Generate(a, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	ts := fileContent(t, files, "queries.ts")
 	for _, want := range []string{
 		`async bySQL(sql_: string, configure?: ConfigureQuery): Promise<void>`,
@@ -217,9 +180,7 @@ func TestConfigureQueryAndSQLNamesCannotShadowGeneratedBindings(t *testing.T) {
 		`new Utf8(sql_)`,
 		`new Utf8(configure_)`,
 	} {
-		if !strings.Contains(ts, want) {
-			t.Errorf("queries.ts missing %q\n%s", want, ts)
-		}
+		assert.Contains(t, ts, want, "queries.ts missing %q\n%s", want, ts)
 	}
 }
 
@@ -230,19 +191,11 @@ func TestExecutableSQLAppearsOnlyAtCall(t *testing.T) {
 		Parameters: []model.Parameter{{Name: "value", Type: model.Type{Kind: "Utf8"}}},
 	}}}
 	files, err := Generate(a, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	ts := fileContent(t, files, "queries.ts")
-	if strings.Contains(ts, "_ECHO_SQL_EXEC") {
-		t.Fatalf("equal executable SQL produced a duplicate private constant:\n%s", ts)
-	}
-	if strings.Count(ts, `"SELECT $value;"`) != 1 {
-		t.Fatalf("got %d SQL literals, want 1:\n%s", strings.Count(ts, `"SELECT $value;"`), ts)
-	}
-	if !strings.Contains(ts, "const stmt = this.#sql") {
-		t.Fatalf("method does not construct an inline SQL statement:\n%s", ts)
-	}
+	require.False(t, strings.Contains(ts, "_ECHO_SQL_EXEC"), "equal executable SQL produced a duplicate private constant:\n%s", ts)
+	require.Equal(t, 1, strings.Count(ts, `"SELECT $value;"`), "got %d SQL literals, want 1:\n%s", strings.Count(ts, `"SELECT $value;"`), ts)
+	require.Contains(t, ts, "const stmt = this.#sql", "method does not construct an inline SQL statement:\n%s", ts)
 }
 
 func TestSQLLiteralRoundTripsThroughNode(t *testing.T) {
@@ -258,17 +211,11 @@ func TestSQLLiteralRoundTripsThroughNode(t *testing.T) {
 	want += "😀\U0001D173';"
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "Exact", Command: model.Exec, SQL: want}}}
 	files, err := Generate(a, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	generated := fileContent(t, files, "queries.ts")
-	if !strings.Contains(generated, "\n      "+strconv.Quote("    -- a readable query\n")+" +\n") {
-		t.Fatal("SQL lines must retain source indentation inside literals aligned with the call")
-	}
+	require.Contains(t, generated, "\n      "+strconv.Quote("    -- a readable query\n")+" +\n", "SQL lines must retain source indentation inside literals aligned with the call")
 	for lineNumber, line := range strings.Split(generated, "\n") {
-		if strings.HasSuffix(line, " ") || strings.HasSuffix(line, "\t") {
-			t.Fatalf("generated TypeScript line %d has trailing whitespace: %q", lineNumber+1, line)
-		}
+		require.False(t, strings.HasSuffix(line, " ") || strings.HasSuffix(line, "\t"), "generated TypeScript line %d has trailing whitespace: %q", lineNumber+1, line)
 	}
 	dir := t.TempDir()
 	module := filepath.Join(dir, "queries.mjs")
@@ -276,7 +223,7 @@ func TestSQLLiteralRoundTripsThroughNode(t *testing.T) {
 	expected, _ := json.Marshal(want)
 	script := `import { Queries } from ` + string(mustJSON(module)) + `; let actual; await new Queries((parts) => { actual = parts; return Promise.resolve([]); }).exact(); if (actual !== ` + string(expected) + `) { throw new Error(JSON.stringify(actual)); }`
 	if out, err := exec.Command(node, "--input-type=module", "--eval", script).CombinedOutput(); err != nil {
-		t.Fatalf("generated literal did not round-trip: %v\n%s", err, out)
+		require.NoError(t, err, "generated literal did not round-trip: %v\n%s", err, out)
 	}
 }
 
@@ -291,9 +238,7 @@ func mustJSON(value string) []byte {
 func transpileModule(t *testing.T, node, source, output string) {
 	t.Helper()
 	compiler, err := filepath.Abs("../../../tests/examples/typescript/node_modules/typescript/lib/typescript.js")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	if _, err := os.Stat(compiler); err != nil {
 		t.Skip("the pinned TypeScript compiler is unavailable; run npm ci --prefix tests/examples/typescript")
 	}
@@ -304,12 +249,8 @@ process.stdout.write(ts.transpileModule(source, { compilerOptions: { target: ts.
 	cmd := exec.Command(node, "--input-type=module", "--eval", script)
 	cmd.Stdin = strings.NewReader(source)
 	generated, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("transpile generated TypeScript: %v", err)
-	}
-	if err := os.WriteFile(output, generated, 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err, "transpile generated TypeScript: %v", err)
+	require.NoError(t, os.WriteFile(output, generated, 0600))
 }
 
 func TestGeneratedModuleBindsAndDecodesWithoutShapeFallbacks(t *testing.T) {
@@ -327,9 +268,7 @@ func TestGeneratedModuleBindsAndDecodesWithoutShapeFallbacks(t *testing.T) {
 		a.Queries = append(a.Queries, q)
 	}
 	files, err := Generate(a, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	module := filepath.Join(dir, "queries.mjs")
 	transpileModule(t, node, fileContent(t, files, "queries.ts"), module)
@@ -351,9 +290,7 @@ export async function load(url, context, nextLoad) {
   if (url === 'stub:optional') return { format: 'module', shortCircuit: true, source: 'export class Optional {}' };
   return nextLoad(url, context);
 }`
-	if err := os.WriteFile(loader, []byte(loaderSource), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(loader, []byte(loaderSource), 0600))
 	program := filepath.Join(dir, "main.mjs")
 	programSource := `
 import { Queries } from './queries.mjs';
@@ -379,13 +316,11 @@ for (const [method, name] of [['pending', 'pending'], ['resultSets', 'result_set
   if (row.display_name !== 'Ada' || params[0][0] !== name || params[0][1] !== 7n) throw new Error('shadowed parameter: ' + name);
 }
 `
-	if err := os.WriteFile(program, []byte(programSource), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(program, []byte(programSource), 0600))
 	cmd := exec.Command(node, "--experimental-loader", loader, program)
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("generated module contract failed: %v\n%s", err, out)
+		require.NoError(t, err, "generated module contract failed: %v\n%s", err, out)
 	}
 }
 
@@ -425,9 +360,7 @@ func TestRejectsUnsupportedInputsAndNameCollisions(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Generate(tc.a, tc.o)
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("got %v, want error containing %q", err, tc.want)
-			}
+			require.ErrorContains(t, err, tc.want, "got %v, want error containing %q", err, tc.want)
 		})
 	}
 }
@@ -446,7 +379,7 @@ func TestSupportedExampleTypes(t *testing.T) {
 	}
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "AllTypes", Command: model.One, SQL: "SELECT 1;", Parameters: params, ResultSets: []model.ResultSet{{Columns: cols}}}}}
 	if _, err := Generate(a, Options{}); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err, fmt.Sprint(err))
 	}
 }
 
@@ -456,42 +389,32 @@ func TestQualifiedProjectionUsesExactWireName(t *testing.T) {
 		ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "book_id", WireName: "b.book_id", Type: model.Type{Kind: "Uint64"}}}}},
 	}}}
 	files, err := Generate(a, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	ts := fileContent(t, files, "queries.ts")
 	for _, want := range []string{
 		`readonly "b.book_id": bigint;`,
 		`readonly "b.book_id": bigint;`,
 	} {
-		if !strings.Contains(ts, want) {
-			t.Errorf("queries.ts missing %q\n%s", want, ts)
-		}
+		assert.Contains(t, ts, want, "queries.ts missing %q\n%s", want, ts)
 	}
-	if strings.Contains(ts, `Object.hasOwn(row, "book_id")`) {
-		t.Fatalf("generated decoder guessed an unqualified fallback:\n%s", ts)
-	}
+	require.False(t, strings.Contains(ts, `Object.hasOwn(row, "book_id")`), "generated decoder guessed an unqualified fallback:\n%s", ts)
 }
 
 func TestStructListParameter(t *testing.T) {
 	typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, {Name: "tags", Type: model.Optional(model.Type{Kind: "Json"})}}}}
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
 	files, err := Generate(a, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	var output strings.Builder
 	for _, f := range files {
 		output.Write(f.Content)
 	}
 	for _, want := range []string{"CreateBooksBooksItem", "ReadonlyArray<CreateBooksBooksItem>", "new ListType(type)", "new StructType(\n          [\n            \"book_id\",\n            \"tags\",\n", "new OptionalType(new JsonType())", "item.bookId"} {
-		if !strings.Contains(output.String(), want) {
-			t.Errorf("missing %s", want)
-		}
+		assert.Contains(t, output.String(), want, "missing %s", want)
 	}
 	a.Queries[0].Parameters[0].Type.Elem.Fields[1].Type = model.Type{Kind: "List", Elem: &model.Type{Kind: "Utf8"}}
 	if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), "unsupported YQL type") {
-		t.Fatalf("nested list: %v", err)
+		require.FailNow(t, fmt.Sprintf("nested list: %v", err))
 	}
 }
 
@@ -499,7 +422,7 @@ func TestStructFieldCollision(t *testing.T) {
 	typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, {Name: "bookId", Type: model.Type{Kind: "Uint64"}}}}}
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
 	if _, err := Generate(a, Options{}); err == nil || !strings.Contains(err.Error(), "collision") {
-		t.Fatalf("field collision: %v", err)
+		require.FailNow(t, fmt.Sprintf("field collision: %v", err))
 	}
 }
 
@@ -507,12 +430,8 @@ func TestStructPrototypeMember(t *testing.T) {
 	typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "__proto__", Type: model.Type{Kind: "Uint64"}}}}}
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $books;", Parameters: []model.Parameter{{Name: "books", Type: typ}}}}}
 	files, err := Generate(a, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(files[0].Content), `["__proto__"]: new Uint64(item.proto)`) {
-		t.Fatal("struct member must be an own property, not an object prototype setter")
-	}
+	require.NoError(t, err)
+	require.Contains(t, string(files[0].Content), `["__proto__"]: new Uint64(item.proto)`, "struct member must be an own property, not an object prototype setter")
 }
 
 func TestStructListsEncodeWithPinnedSDK(t *testing.T) {
@@ -521,25 +440,17 @@ func TestStructListsEncodeWithPinnedSDK(t *testing.T) {
 		t.Skip("node unavailable")
 	}
 	modules, err := filepath.Abs("../../../tests/examples/typescript/node_modules")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	if _, err := os.Stat(filepath.Join(modules, "@ydbjs/value")); err != nil {
 		t.Skip("run npm ci --prefix tests/examples/typescript")
 	}
 	typ := model.Type{Kind: "List", Elem: &model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "__proto__", Type: model.Type{Kind: "Uint64"}}, {Name: "tags", Type: model.Optional(model.Type{Kind: "Json"})}}}}
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "CreateBooks", Command: model.Exec, SQL: "SELECT $struct_list;", Parameters: []model.Parameter{{Name: "struct_list", Type: typ}}}}}
 	files, err := Generate(a, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(files[0].Content), "structList(\n        structList_.map(") {
-		t.Fatal("list argument shadows SDK binding helper")
-	}
+	require.NoError(t, err)
+	require.Contains(t, string(files[0].Content), "structList(\n        structList_.map(", "list argument shadows SDK binding helper")
 	dir := t.TempDir()
-	if err := os.Symlink(modules, filepath.Join(dir, "node_modules")); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Symlink(modules, filepath.Join(dir, "node_modules")))
 	module := filepath.Join(dir, "queries.mjs")
 	transpileModule(t, node, string(files[0].Content), module)
 	script := `import assert from 'node:assert/strict'; import { Queries } from ` + string(mustJSON(module)) + `;
@@ -558,7 +469,7 @@ for(const books of [[], [{proto:18446744073709551615n,tags:null},{proto:1n,tags:
  }
 }`
 	if out, err := exec.Command(node, "--input-type=module", "--eval", script).CombinedOutput(); err != nil {
-		t.Fatalf("SDK struct-list serialization: %v\n%s", err, out)
+		require.NoError(t, err, "SDK struct-list serialization: %v\n%s", err, out)
 	}
 }
 
@@ -568,9 +479,7 @@ func TestDeclaredSQLReachesPinnedSDKWithoutDuplicateDeclarations(t *testing.T) {
 		t.Skip("node unavailable")
 	}
 	modules, err := filepath.Abs("../../../tests/examples/typescript/node_modules")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	if _, err := os.Stat(filepath.Join(modules, "@ydbjs/query")); err != nil {
 		t.Skip("run npm ci --prefix tests/examples/typescript")
 	}
@@ -582,18 +491,12 @@ func TestDeclaredSQLReachesPinnedSDKWithoutDuplicateDeclarations(t *testing.T) {
 		{Name: "MixedBooks", Command: model.Exec, SQL: mixed, DeclaredParameters: []string{"books"}, Parameters: []model.Parameter{{Name: "books", Type: typ}, {Name: "minimum", Type: model.Type{Kind: "Uint64"}}}},
 	}}
 	files, err := Generate(a, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
-	if err := os.Symlink(modules, filepath.Join(dir, "node_modules")); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Symlink(modules, filepath.Join(dir, "node_modules")))
 	module := filepath.Join(dir, "queries.mjs")
 	transpileModule(t, node, string(files[0].Content), module)
-	if !strings.Contains(string(files[0].Content), "DECLARE $books AS List<Struct<") {
-		t.Fatal("SQL declaration brackets must remain readable")
-	}
+	require.Contains(t, string(files[0].Content), "DECLARE $books AS List<Struct<", "SQL declaration brackets must remain readable")
 	expected := sql
 	expectedMixed := "DECLARE $minimum AS Uint64;\n" + mixed
 	script := `import assert from 'node:assert/strict';
@@ -661,11 +564,9 @@ try {
 } finally {await client[Symbol.asyncDispose]();}
 `
 	program := filepath.Join(dir, "probe.mjs")
-	if err := os.WriteFile(program, []byte(script), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(program, []byte(script), 0600))
 	if out, err := exec.Command(node, program).CombinedOutput(); err != nil {
-		t.Fatalf("SDK declaration transport: %v\n%s", err, out)
+		require.NoError(t, err, "SDK declaration transport: %v\n%s", err, out)
 	}
 }
 
@@ -685,7 +586,7 @@ func TestStructListRejectsInvalidFieldsAndAmbiguousTypeNames(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, err := Generate(&model.AnalysisResult{Queries: tc.queries}, Options{}); err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("got %v, want %s", err, tc.want)
+				require.FailNow(t, fmt.Sprintf("got %v, want %s", err, tc.want))
 			}
 		})
 	}

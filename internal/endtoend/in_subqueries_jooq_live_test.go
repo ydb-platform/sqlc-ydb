@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/codegen/java"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
@@ -23,38 +24,28 @@ func inSubqueriesJooq(t *testing.T) {
 	table := fmt.Sprintf("sqlc_jooq_in_t%d", time.Now().UnixNano())
 	schema := strings.NewReplacer("records", table, "selected", table+"_selected", "small_keys", table+"_small").Replace(inSubqueriesJooqSchema)
 	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: inSubqueriesJooqSchema}}, []model.Source{{Name: "queries.sql", Text: inSubqueriesJooqQueries}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	files, err := java.Generate(analysis, java.Options{Package: "insubquerieslive", Runtime: "jooq"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	classpath := filepath.Join(dir, "classpath")
 	cmd := exec.Command(maven, "-q", "dependency:build-classpath", "-Dmdep.outputFile="+classpath)
 	cmd.Dir = filepath.Join("..", "..", "tests", "examples", "java", "jooq")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("jOOQ SDK classpath: %v\n%s", err, out)
-	}
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "jOOQ SDK classpath:\n%s", out)
 	cp, err := os.ReadFile(classpath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	program := strings.NewReplacer("$SCHEMA", strconv.Quote(schema), "$TABLE", strconv.Quote(table)).Replace(inSubqueriesJooqProgram)
 	files = append(files, model.File{Name: "Main.java", Content: []byte(program)})
 	compile := []string{"-cp", strings.TrimSpace(string(cp)), "-d", dir}
 	for _, file := range files {
 		filename := filepath.Join(dir, file.Name)
-		if err := os.WriteFile(filename, file.Content, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(filename, file.Content, 0600))
 		compile = append(compile, filename)
 	}
 	for _, args := range [][]string{append([]string{"javac"}, compile...), {"java", "-cp", dir + string(os.PathListSeparator) + strings.TrimSpace(string(cp)), "insubquerieslive.Main"}} {
-		if out, err := exec.Command(args[0], args[1:]...).CombinedOutput(); err != nil {
-			t.Fatalf("jOOQ IN subqueries %s: %v\n%s", args[0], err, out)
-		}
+		out, err := exec.Command(args[0], args[1:]...).CombinedOutput()
+		require.NoError(t, err, "jOOQ IN subqueries %s:\n%s", args[0], out)
 	}
 }
 

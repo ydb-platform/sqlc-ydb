@@ -3,6 +3,8 @@ package builtins
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -20,20 +22,21 @@ func TestArithmetic(t *testing.T) {
 					want = model.Optional(want)
 				}
 				got, err := Arithmetic(op, left, right)
-				if err != nil || !got.Equal(want) {
-					t.Fatalf("%s %s %s: %s, %v; want %s", left, op, right, got, err, want)
-				}
+				require.NoError(t, err)
+				require.True(t, got.Equal(want))
 			}
 		}
 	}
 	for _, kind := range []string{"Null", "Bool", "Utf8", "Date", "Decimal"} {
-		if _, err := Arithmetic("+", model.Type{Kind: kind}, model.Type{Kind: "Int64"}); err == nil {
-			t.Fatalf("accepted %s operand", kind)
+		{
+			_, err := Arithmetic("+", model.Type{Kind: kind}, model.Type{Kind: "Int64"})
+			require.Error(t, err)
 		}
 	}
 	for _, op := range []string{"/", "%", "||"} {
-		if _, err := Arithmetic(op, model.Type{Kind: "Int64"}, model.Type{Kind: "Int64"}); err == nil {
-			t.Fatalf("accepted %s", op)
+		{
+			_, err := Arithmetic(op, model.Type{Kind: "Int64"}, model.Type{Kind: "Int64"})
+			require.Error(t, err)
 		}
 	}
 }
@@ -57,8 +60,9 @@ func TestCanWidenInteger(t *testing.T) {
 				if optionalTarget {
 					d = model.Optional(d)
 				}
-				if got := CanWidenInteger(s, d); got != (tc.want && (!optionalSource || optionalTarget)) {
-					t.Fatalf("%s -> %s: %v", s, d, got)
+				{
+					got := CanWidenInteger(s, d)
+					require.Equal(t, (tc.want && (!optionalSource || optionalTarget)), got)
 				}
 			}
 		}
