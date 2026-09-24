@@ -75,8 +75,28 @@ func lookupCore(name string) functionResolver {
 		return func(args []model.Type) (model.Type, error) { return resolveAffix(name, args) }
 	case "ABS":
 		return resolveAbs
+	case "UNWRAP":
+		return resolveUnwrap
 	case "TOSET":
 		return resolveToSet
+	case "ASLIST":
+		return resolveAsList
+	case "ASTUPLE":
+		return resolveAsTuple
+	case "ASSTRUCT":
+		return func(args []model.Type) (model.Type, error) {
+			return model.Type{}, fmt.Errorf("AsStruct requires named fields with AS")
+		}
+	case "LISTLENGTH":
+		return resolveListLength
+	case "LISTHAS":
+		return resolveListHas
+	case "LISTMAP", "LISTFILTER":
+		return func(args []model.Type) (model.Type, error) { return resolveListTransform(name, args) }
+	case "TODICT":
+		return resolveToDict
+	case "DICTCONTAINS", "DICTLOOKUP":
+		return func(args []model.Type) (model.Type, error) { return resolveDictAccess(name, args) }
 	case "LISTCREATE":
 		return resolveListCreate
 	case "SETISDISJOINT":
@@ -96,6 +116,25 @@ func lookupCore(name string) functionResolver {
 	default:
 		return nil
 	}
+}
+
+func resolveUnwrap(args []model.Type) (model.Type, error) {
+	if len(args) != 1 && len(args) != 2 {
+		return model.Type{}, fmt.Errorf("UNWRAP expects 1 or 2 arguments, got %d", len(args))
+	}
+	if err := validateConcreteOrNull(args[0]); err != nil {
+		return model.Type{}, fmt.Errorf("UNWRAP argument 1: %w", err)
+	}
+	if args[0].Kind == "Null" {
+		return model.Type{}, fmt.Errorf("UNWRAP argument 1 requires a concrete type; bare NULL has no type")
+	}
+	if len(args) == 2 && !args[1].Equal(model.Type{Kind: "String"}) && !args[1].Equal(model.Type{Kind: "Utf8"}) {
+		return model.Type{}, fmt.Errorf("UNWRAP argument 2 must be String or Utf8, got %s", args[1].String())
+	}
+	if args[0].Kind == "Optional" {
+		return *args[0].Elem, nil
+	}
+	return args[0], nil
 }
 
 // Clock and random arguments control evaluation dependencies, not result

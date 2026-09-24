@@ -236,6 +236,40 @@ func sameJSONStrings(value *string, want ...string) bool {
 	return reflect.DeepEqual(got, want)
 }
 
+func TestGeneratedBookTagFilter(t *testing.T) {
+	db := testdb.Open(t)
+	db.Apply(t, "../../../../examples/booktest/schema.sql", "DROP TABLE books;", "DROP TABLE authors;")
+	ctx := db.Context
+	n := native.New(db.Native)
+	s := sq.New(db.SQL)
+
+	_, err := n.CreateAuthor(ctx, native.CreateAuthorParams{AuthorID: 1, Name: "Author"})
+	require.NoError(t, err)
+	for _, bookID := range []uint64{1, 2} {
+		_, err := n.CreateBook(ctx, native.CreateBookParams{
+			BookID: bookID, AuthorID: 1, Isbn: "isbn", BookType: "FICTION",
+			Title: "Book", PublicationYear: 2026, Available: time.Now().UTC(),
+			Tags: `["keep","remove","keep"]`,
+		})
+		require.NoError(t, err)
+	}
+
+	require.NoError(t, n.RemoveBookTag(ctx, native.RemoveBookTagParams{BookID: 1, Tag: []byte("remove")}))
+	book, err := s.GetBook(ctx, 1)
+	require.NoError(t, err)
+	require.JSONEq(t, `["keep","keep"]`, book.Tags)
+
+	require.NoError(t, s.RemoveBookTag(ctx, sq.RemoveBookTagParams{BookID: 2, Tag: []byte("remove")}))
+	bookNative, err := n.GetBook(ctx, 2)
+	require.NoError(t, err)
+	require.JSONEq(t, `["keep","keep"]`, bookNative.Tags)
+
+	require.NoError(t, n.RemoveBookTag(ctx, native.RemoveBookTagParams{BookID: 1, Tag: []byte("keep")}))
+	book, err = s.GetBook(ctx, 1)
+	require.NoError(t, err)
+	require.JSONEq(t, `[]`, book.Tags)
+}
+
 func TestGeneratedMixedScripts(t *testing.T) {
 	db := testdb.Open(t)
 	db.Apply(t, "../../../../examples/booktest/schema.sql", "DROP TABLE books;", "DROP TABLE authors;")

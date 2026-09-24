@@ -179,6 +179,28 @@ public final class Queries {
                 .execute();
     }
 
+    // -- name: RemoveBookTag :exec
+    public void removeBookTag(ULong bookId, byte[] tag) {
+        dsl.connection(_connection -> {
+            try (var _prepared = _connection.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+                DECLARE $book_id AS Uint64;
+                DECLARE $tag AS String;
+                UPDATE\s\
+                """ + dsl.render(BOOKS) + """
+
+                SET tags = UNWRAP(Yson::SerializeJson(Json::From(ListFilter(
+                    Yson::ConvertToStringList(tags),
+                    ($item) -> ($item != $tag)
+                ))))
+                WHERE book_id = $book_id;\
+                """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+                _prepared.setObject("book_id", tech.ydb.table.values.PrimitiveValue.newUint64(bookId.longValue()));
+                _prepared.setBytes("tag", tag);
+                _prepared.execute();
+            }
+        });
+    }
+
     // -- name: UpdateBookISBN :exec
     public void updateBookISBN(
             String title,

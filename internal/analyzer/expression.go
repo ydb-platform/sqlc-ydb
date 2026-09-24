@@ -13,6 +13,7 @@ import (
 type expressionScope struct {
 	relations    []relation
 	bindings     map[string]model.Type
+	lambdas      map[string]lambdaBinding
 	grouped      bool
 	functions    *builtins.Registry
 	inSubqueries map[int]model.Type
@@ -29,6 +30,9 @@ func resolveExpression(expr parser.IExprContext, scope expressionScope) (model.T
 		return typ, err
 	}
 	if typ, ok, err := resolveBoolean(expr, scope); ok {
+		return typ, err
+	}
+	if typ, ok, err := resolveStructLiteral(expr, scope); ok {
 		return typ, err
 	}
 	if typ, ok, err := resolveMemberAccess(expr, scope); ok {
@@ -71,6 +75,44 @@ func resolveExpression(expr parser.IExprContext, scope expressionScope) (model.T
 		return model.Type{}, fmt.Errorf("computed result expression %q is not supported", expr.GetText())
 	}
 	return model.Type{}, fmt.Errorf("unsupported result expression %q", expr.GetText())
+}
+
+func resolveStructLiteral(expr parser.IExprContext, scope expressionScope) (model.Type, bool, error) {
+	var literal parser.IStruct_literalContext
+	descendants(expr, func(node antlr.Tree) {
+		if ctx, ok := node.(parser.IStruct_literalContext); ok && sameSpan(expr, ctx) {
+			literal = ctx
+		}
+	})
+	if literal == nil {
+		return model.Type{}, false, nil
+	}
+	if literal.Expr_struct_list() == nil {
+		return model.Type{}, true, fmt.Errorf("empty struct literal has no fields")
+	}
+	fields := literal.Expr_struct_list().AllExpr()
+	if len(fields)%2 != 0 {
+		return model.Type{}, true, fmt.Errorf("struct literal requires field names and values")
+	}
+	args := make([]builtins.CallArgument, 0, len(fields)/2)
+	for i := 0; i < len(fields); i += 2 {
+		var name parser.IId_exprContext
+		descendants(fields[i], func(node antlr.Tree) {
+			if ctx, ok := node.(parser.IId_exprContext); ok && sameSpan(fields[i], ctx) {
+				name = ctx
+			}
+		})
+		if name == nil {
+			return model.Type{}, true, fmt.Errorf("struct literal field name %q must be an identifier", fields[i].GetText())
+		}
+		value, err := resolveExpression(fields[i+1], scope)
+		if err != nil {
+			return model.Type{}, true, fmt.Errorf("struct literal field %q: %w", identifier(name.GetText()), err)
+		}
+		args = append(args, builtins.CallArgument{Name: identifier(name.GetText()), Type: value})
+	}
+	typ, err := scope.functions.ResolveCall("AsStruct", args)
+	return typ, true, err
 }
 
 func resolveComparison(expr antlr.ParserRuleContext, scope expressionScope) (model.Type, bool, error) {
@@ -428,9 +470,27 @@ func resolveCallChain(name string, invokes []*parser.Invoke_exprContext, scope e
 	var err error
 	if strings.HasPrefix(name, "$") {
 		var ok bool
-		result, ok = scope.bindings[strings.TrimPrefix(name, "$")]
+		bindingName := strings.TrimPrefix(name, "$")
+		result, ok = scope.bindings[bindingName]
 		if !ok {
 			return model.Type{}, fmt.Errorf("unknown callable binding %s", name)
+		}
+		if result.Kind == "Lambda" && len(invokes) != 0 {
+			binding := scope.lambdas[bindingName]
+			if binding.lambda == nil {
+				return model.Type{}, fmt.Errorf("unknown lambda binding %s", name)
+			}
+			provided, err := invocationTypes(invokes[0], scope)
+			if err != nil {
+				return model.Type{}, err
+			}
+			captured := scope
+			captured.bindings = binding.bindings
+			captured.lambdas = binding.lambdas
+			result, err = resolveLambda(binding.lambda, provided, captured)
+			if err != nil {
+				return model.Type{}, err
+			}
 		}
 	} else {
 		result, err = resolveFunction(name, invokes[0], scope)
@@ -443,21 +503,9 @@ func resolveCallChain(name string, invokes []*parser.Invoke_exprContext, scope e
 		if result.Kind != "Callable" || result.Elem == nil {
 			return model.Type{}, fmt.Errorf("%s is not callable", result.String())
 		}
-		if invoke.ASTERISK() != nil || invoke.Opt_set_quantifier() != nil && invoke.Opt_set_quantifier().GetText() != "" {
-			return model.Type{}, fmt.Errorf("callable invocation requires positional arguments")
-		}
-		var provided []model.Type
-		if list := invoke.Named_expr_list(); list != nil {
-			for _, arg := range list.AllNamed_expr() {
-				if arg.AS() != nil {
-					return model.Type{}, fmt.Errorf("callable invocation does not support named arguments")
-				}
-				typ, err := resolveExpression(arg.Expr(), scope)
-				if err != nil {
-					return model.Type{}, err
-				}
-				provided = append(provided, typ)
-			}
+		provided, err := invocationTypes(invoke, scope)
+		if err != nil {
+			return model.Type{}, err
 		}
 		if len(provided) != len(result.Items) {
 			return model.Type{}, fmt.Errorf("callable expects %d arguments, got %d", len(result.Items), len(provided))
@@ -483,6 +531,26 @@ func resolveCallChain(name string, invokes []*parser.Invoke_exprContext, scope e
 		}
 	}
 	return result, nil
+}
+
+func invocationTypes(invoke *parser.Invoke_exprContext, scope expressionScope) ([]model.Type, error) {
+	if invoke.ASTERISK() != nil || invoke.Opt_set_quantifier() != nil && invoke.Opt_set_quantifier().GetText() != "" {
+		return nil, fmt.Errorf("callable invocation requires positional arguments")
+	}
+	var provided []model.Type
+	if list := invoke.Named_expr_list(); list != nil {
+		for _, arg := range list.AllNamed_expr() {
+			if arg.AS() != nil {
+				return nil, fmt.Errorf("callable invocation does not support named arguments")
+			}
+			typ, err := resolveExpression(arg.Expr(), scope)
+			if err != nil {
+				return nil, err
+			}
+			provided = append(provided, typ)
+		}
+	}
+	return provided, nil
 }
 
 func dateTimeFormatInput(value model.Type) bool {
@@ -521,7 +589,33 @@ func resolveFunction(name string, invoke *parser.Invoke_exprContext, scope expre
 				callArgs = append(callArgs, builtins.CallArgument{TypeArgument: &target})
 				continue
 			}
-			typeValue, err := resolveExpression(named.Expr(), scope)
+			var typeValue model.Type
+			var err error
+			if (name == "Json::From" || name == "Yson::From") && len(callArgs) == 0 && directEmptyAsList(named.Expr()) {
+				typeValue = model.Type{Kind: "EmptyList"}
+			} else if (strings.EqualFold(name, "ListMap") || strings.EqualFold(name, "ListFilter")) && len(callArgs) == 1 {
+				if lambda := directLambda(named.Expr()); lambda != nil {
+					listType := callArgs[0].Type.UnwrapOptional()
+					if listType.Kind != "List" || listType.Elem == nil {
+						return model.Type{}, fmt.Errorf("%s first argument must be a typed List", name)
+					}
+					typeValue, err = resolveLambda(lambda, []model.Type{*listType.Elem}, scope)
+				} else if bind := directBind(named.Expr()); bind != nil && scope.bindings[bindName(bind)].Kind == "Lambda" && scope.lambdas[bindName(bind)].lambda != nil {
+					listType := callArgs[0].Type.UnwrapOptional()
+					if listType.Kind != "List" || listType.Elem == nil {
+						return model.Type{}, fmt.Errorf("%s first argument must be a typed List", name)
+					}
+					binding := scope.lambdas[bindName(bind)]
+					captured := scope
+					captured.bindings = binding.bindings
+					captured.lambdas = binding.lambdas
+					typeValue, err = resolveLambda(binding.lambda, []model.Type{*listType.Elem}, captured)
+				} else {
+					typeValue, err = resolveExpression(named.Expr(), scope)
+				}
+			} else {
+				typeValue, err = resolveExpression(named.Expr(), scope)
+			}
 			if err != nil {
 				return model.Type{}, fmt.Errorf("cannot resolve argument of %s: %w", name, err)
 			}
@@ -554,6 +648,12 @@ func resolveFunction(name string, invoke *parser.Invoke_exprContext, scope expre
 		result = result.UnwrapOptional()
 	}
 	return result, nil
+}
+
+func directEmptyAsList(expr parser.IExprContext) bool {
+	name, invoke, ok := directFunctionCall(expr)
+	return ok && strings.EqualFold(name, "AsList") && invoke.ASTERISK() == nil && invoke.Named_expr_list() == nil &&
+		(invoke.Opt_set_quantifier() == nil || invoke.Opt_set_quantifier().GetText() == "")
 }
 
 func resolveListCreateType(invoke *parser.Invoke_exprContext) (model.Type, error) {

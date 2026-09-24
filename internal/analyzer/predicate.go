@@ -42,7 +42,7 @@ func validatePredicateContexts(block queryBlock, root antlr.Tree, relations []re
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, predicate, "aggregate functions are not allowed in WHERE or JOIN predicates; use HAVING after aggregation"))
 			continue
 		}
-		if err := validatePredicate(predicate, expressionScope{relations: relations, bindings: bindings, functions: block.functions, inSubqueries: subqueries}); err != nil {
+		if err := validatePredicate(predicate, expressionScope{relations: relations, bindings: bindings, lambdas: block.lambdas, functions: block.functions, inSubqueries: subqueries}); err != nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, predicate, fmt.Sprintf("invalid predicate: %v", err)))
 		}
 	}

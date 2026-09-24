@@ -30,6 +30,7 @@ public:
     std::optional<CreateAuthorRow> CreateAuthor(std::uint64_t author_id, const ::userver::ydb::Utf8& name) const;
     std::optional<CreateBookRow> CreateBook(std::uint64_t book_id, std::uint64_t author_id, const ::userver::ydb::Utf8& isbn, const ::userver::ydb::Utf8& book_type, const ::userver::ydb::Utf8& title, std::int32_t publication_year, const std::chrono::system_clock::time_point& available, const ::userver::formats::json::Value& tags) const;
     void UpdateBook(const ::userver::ydb::Utf8& title, const ::userver::formats::json::Value& tags, std::uint64_t book_id) const;
+    void RemoveBookTag(std::uint64_t book_id, const std::string& tag) const;
     void UpdateBookISBN(const ::userver::ydb::Utf8& title, const ::userver::formats::json::Value& tags, const ::userver::ydb::Utf8& isbn, std::uint64_t book_id) const;
     void DeleteAuthorBeforeYear(std::int32_t publication_year, std::uint64_t author_id) const;
     std::optional<SayHelloRow> SayHello(const ::userver::ydb::Utf8& name) const;

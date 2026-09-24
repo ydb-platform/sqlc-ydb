@@ -482,6 +482,44 @@ final class Queries
         });
     }
 
+    // -- name: RemoveBookTag :exec
+    public function removeBookTag(RemoveBookTagParams $params): void
+    {
+        $parameters = [
+            '$book_id' => YdbValueCodec::typedUint64($params->bookId, 'book_id'),
+            '$tag' => YdbValueCodec::typedBytes($params->tag, 'tag'),
+        ];
+
+        $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                DECLARE $book_id AS Uint64;
+                DECLARE $tag AS String;
+                UPDATE books
+                SET tags = UNWRAP(Yson::SerializeJson(Json::From(ListFilter(
+                    Yson::ConvertToStringList(tags),
+                    ($item) -> ($item != $tag)
+                ))))
+                WHERE book_id = $book_id;
+                SQLC_YDB_YQL)
+                ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0);
+            if ($this->txId !== null) {
+                $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
+            } else {
+                $query->beginTx('serializable_read_write');
+            }
+            if ($this->configure !== null) {
+                ($this->configure)($query);
+            }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
+
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
+        });
+    }
+
     // -- name: UpdateBookISBN :exec
     public function updateBookIsbn(UpdateBookIsbnParams $params): void
     {

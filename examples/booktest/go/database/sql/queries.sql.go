@@ -219,6 +219,24 @@ func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams) error {
 	return err
 }
 
+// -- name: RemoveBookTag :exec
+func (q *Queries) RemoveBookTag(ctx context.Context, arg RemoveBookTagParams) error {
+	_, err := q.db.ExecContext(ctx, ""+
+		"DECLARE $book_id AS Uint64;\n"+
+		"DECLARE $tag AS String;\n"+
+		"UPDATE books\n"+
+		"SET tags = UNWRAP(Yson::SerializeJson(Json::From(ListFilter(\n"+
+		"    Yson::ConvertToStringList(tags),\n"+
+		"    ($item) -> ($item != $tag)\n"+
+		"))))\n"+
+		"WHERE book_id = $book_id;",
+		sql.Named("book_id", arg.BookID),
+		sql.Named("tag", arg.Tag),
+	)
+
+	return err
+}
+
 // -- name: UpdateBookISBN :exec
 func (q *Queries) UpdateBookISBN(ctx context.Context, arg UpdateBookISBNParams) error {
 	_, err := q.db.ExecContext(ctx, ""+

@@ -198,6 +198,24 @@ class Queries(private val client: org.jetbrains.exposed.v1.jdbc.JdbcTransaction)
         }
     }
 
+    // -- name: RemoveBookTag :exec
+    fun removeBookTag(bookId: Long, tag: ByteArray): Unit {
+        val _connection = client.connection.connection as java.sql.Connection
+        _connection.unwrap(tech.ydb.jdbc.YdbConnection::class.java).prepareStatement(
+            "DECLARE \$book_id AS Uint64;\n" +
+            "DECLARE \$tag AS String;\n" +
+            "UPDATE books\n" +
+            "SET tags = UNWRAP(Yson::SerializeJson(Json::From(ListFilter(\n" +
+            "    Yson::ConvertToStringList(tags),\n" +
+            "    (\$item) -> (\$item != \$tag)\n" +
+            "))))\n" +
+            "WHERE book_id = \$book_id;", tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY).use { _prepared ->
+            _prepared.setObject("book_id", PrimitiveValue.newUint64(bookId))
+            _prepared.setBytes("tag", tag)
+            _prepared.execute()
+        }
+    }
+
     // -- name: UpdateBookISBN :exec
     fun updateBookISBN(title: String, tags: String, isbn: String, bookId: Long): Unit {
         val _connection = client.connection.connection as java.sql.Connection

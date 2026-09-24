@@ -326,6 +326,30 @@ func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams, opts ...
 	return xerrors.WithStackTrace(err)
 }
 
+// -- name: RemoveBookTag :exec
+func (q *Queries) RemoveBookTag(ctx context.Context, arg RemoveBookTagParams, opts ...query.ExecuteOption) error {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$book_id").Uint64(arg.BookID)
+	parameters = parameters.Param("$tag").Bytes(arg.Tag)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	err := q.db.Exec(ctx, ""+
+		"DECLARE $book_id AS Uint64;\n"+
+		"DECLARE $tag AS String;\n"+
+		"UPDATE books\n"+
+		"SET tags = UNWRAP(Yson::SerializeJson(Json::From(ListFilter(\n"+
+		"    Yson::ConvertToStringList(tags),\n"+
+		"    ($item) -> ($item != $tag)\n"+
+		"))))\n"+
+		"WHERE book_id = $book_id;",
+		callOptions...,
+	)
+
+	return xerrors.WithStackTrace(err)
+}
+
 // -- name: UpdateBookISBN :exec
 func (q *Queries) UpdateBookISBN(ctx context.Context, arg UpdateBookISBNParams, opts ...query.ExecuteOption) error {
 	parameters := ydb.ParamsBuilder()

@@ -208,6 +208,23 @@ public final class Queries {
             """, _params).execute().join().getStatus().expectSuccess();
     }
 
+    // -- name: RemoveBookTag :exec
+    public void removeBookTag(long bookId, byte[] tag) {
+        var _params = Params.create();
+        _params.put("$book_id", PrimitiveValue.newUint64(bookId));
+        _params.put("$tag", PrimitiveValue.newBytes(tag));
+        client.createQuery("""
+            DECLARE $book_id AS Uint64;
+            DECLARE $tag AS String;
+            UPDATE books
+            SET tags = UNWRAP(Yson::SerializeJson(Json::From(ListFilter(
+                Yson::ConvertToStringList(tags),
+                ($item) -> ($item != $tag)
+            ))))
+            WHERE book_id = $book_id;\
+            """, _params).execute().join().getStatus().expectSuccess();
+    }
+
     // -- name: UpdateBookISBN :exec
     public void updateBookISBN(String title, String tags, String isbn, long bookId) {
         var _params = Params.create();

@@ -64,6 +64,16 @@ UPDATE books
 SET title = $title, tags = $tags
 WHERE book_id = $book_id;
 
+-- name: RemoveBookTag :exec
+DECLARE $book_id AS Uint64;
+DECLARE $tag AS String;
+UPDATE books
+SET tags = UNWRAP(Yson::SerializeJson(Json::From(ListFilter(
+    Yson::ConvertToStringList(tags),
+    ($item) -> ($item != $tag)
+))))
+WHERE book_id = $book_id;
+
 -- name: UpdateBookISBN :exec
 UPDATE books
 SET title = $title, tags = $tags, isbn = $isbn

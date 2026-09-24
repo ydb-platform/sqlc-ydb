@@ -159,6 +159,7 @@ type queryBlock struct {
 	wildcards       *wildcardRewrites
 	tablePathPrefix string
 	tabular         map[string]*model.Table
+	lambdas         map[string]lambdaBinding
 }
 
 func queryBlocks(source model.Source) ([]queryBlock, []model.Diagnostic) {

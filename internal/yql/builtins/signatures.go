@@ -78,6 +78,9 @@ func NewRegistry(custom []Signature) (*Registry, error) {
 // ResolveCall validates named/positional arguments and returns one concrete
 // result type. Library and user function names are case-sensitive.
 func (r *Registry) ResolveCall(name string, args []CallArgument) (model.Type, error) {
+	if strings.EqualFold(name, "AsStruct") {
+		return resolveAsStruct(args)
+	}
 	if result, handled, err := resolveYsonCall(name, args); handled {
 		return result, err
 	}

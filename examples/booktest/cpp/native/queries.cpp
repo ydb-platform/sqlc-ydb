@@ -400,6 +400,39 @@ void Queries::UpdateBook(const std::string& title, const std::string& tags, std:
     NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
 }
 
+// -- name: RemoveBookTag :exec
+void Queries::RemoveBookTag(std::uint64_t book_id, const std::string& tag) const {
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_params = NYdb::TParamsBuilder()
+            .AddParam("$book_id").Uint64(book_id).Build()
+            .AddParam("$tag").String(tag).Build()
+            .Build();
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            "DECLARE $book_id AS Uint64;\n"
+            "DECLARE $tag AS String;\n"
+            "UPDATE books\n"
+            "SET tags = UNWRAP(Yson::SerializeJson(Json::From(ListFilter(\n"
+            "    Yson::ConvertToStringList(tags),\n"
+            "    ($item) -> ($item != $tag)\n"
+            "))))\n"
+            "WHERE book_id = $book_id;",
+            sqlc_tx,
+            sqlc_params,
+            this->execute_settings_
+        ).GetValueSync();
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+}
+
 // -- name: UpdateBookISBN :exec
 void Queries::UpdateBookISBN(const std::string& title, const std::string& tags, const std::string& isbn, std::uint64_t book_id) const {
     const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {

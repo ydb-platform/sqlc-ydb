@@ -4,7 +4,7 @@ This inventory is pinned to upstream YDB commit `1415fed8104201c5e973dd8bbf12c71
 
 A resolved subset means that the offline analyzer has explicit type rules for the stated forms. It does not imply every overload, SQL context, or output SDK is supported. Argument resolution, callable/type/resource values, aggregate/window context, and selected-runtime binding/decoding remain independent requirements. Unknown names or unsupported forms fail with diagnostics; catalog presence is never a fallback return type.
 
-The current implementation keeps one shared semantic pass before code generation. Full reference coverage requires further work on scoped lambdas, type-valued expressions, variants/resources, window frames, collection/struct overloads, SQL/JSON clauses, and compile-time code generation. Those prerequisites must be implemented and verified before the corresponding entries can be marked supported.
+The current implementation keeps one shared semantic pass before code generation. Full reference coverage requires further work on lambda and callable forms outside the supported subset, type-valued expressions, variants/resources, window frames, collection/struct overloads, SQL/JSON clauses, and compile-time code generation. Those prerequisites must be implemented and verified before the corresponding entries can be marked supported.
 
 Prerequisite labels below are work still required, not supported overloads: **S** scalar overload/type rule; **C** collection/struct construction or reconciliation; **L** scoped lambda/callable analysis; **T** type-valued expressions; **V** Variant/Enum/Tagged value types; **R** resource/code/world values; **M** table/provider metadata context; **W** window/frame context; **A** aggregate state, arguments and empty/grouped semantics; **K** literal-name/option metadata; **J** SQL/JSON grammar and ON EMPTY/ERROR rules; **F** provider feature or external-file context.
 
@@ -29,7 +29,7 @@ Prerequisite labels below are work still required, not supported overloads: **S*
 | RemoveTimezone | Not implemented — S: timezone-family conversion. |
 | Version | Resolved subset: Zero arguments; String result. |
 | MAX_OF, MIN_OF, GREATEST, and LEAST | Not implemented — S: common-type and NULL behavior. |
-| AsTuple, AsStruct, AsList, AsDict, AsSet, AsListStrict, AsDictStrict and AsSetStrict | Not implemented — C, K: constructor fields, empty-container identity and strict/common-type rules. |
+| AsTuple, AsStruct, AsList, AsDict, AsSet, AsListStrict, AsDictStrict and AsSetStrict | Resolved subset: Nonempty AsTuple, named-field AsStruct and common-type AsList; empty AsList is accepted directly inside Json::From/Yson::From. Other constructors remain C, K. |
 | Container literals | Parser syntax is not general typed container-expression support. |
 | Variant | Not implemented — T, V, K: variant alternatives and selected member. |
 | AsVariant | Not implemented — V, K: alternative identity. |
@@ -57,7 +57,7 @@ Prerequisite labels below are work still required, not supported overloads: **S*
 | ...Bit | Not implemented — S: integer widths, shifts and rotations. |
 | Abs | Resolved subset: Supported primitive numeric/Decimal input. |
 | Just | Not implemented — S: Optional construction including nested levels. |
-| Unwrap | Not implemented — S: Optional removal and error-message argument. |
+| Unwrap | Resolved subset: One Optional layer removed; an optional message argument must have String or Utf8 type. |
 | Nothing | Not implemented — T: target Optional type. |
 | Callable | Not implemented — T, L: callable signature and scoped parameters. |
 | Pickle, Unpickle | Not implemented — T, R: serialization and requested target type. |
@@ -107,8 +107,8 @@ Prerequisite labels below are work still required, not supported overloads: **S*
 | Reference section | Current coverage / prerequisite |
 | --- | --- |
 | ListCreate | Resolved subset: Literal element type and contextual empty-list fallback in COALESCE/NVL. |
-| AsList and AsListStrict | Not implemented — C: element types, Optional/empty behavior and operation-specific arguments. |
-| ListLength | Not implemented — C: element types, Optional/empty behavior and operation-specific arguments. |
+| AsList and AsListStrict | Resolved subset: AsList with common element type; empty AsList only directly inside Json::From/Yson::From. AsListStrict remains C. |
+| ListLength | Resolved subset: List<T> and Optional<List<T>>; nullable input produces Optional<Uint64>. |
 | ListHasItems | Not implemented — C: element types, Optional/empty behavior and operation-specific arguments. |
 | ListCollect | Not implemented — C: element types, Optional/empty behavior and operation-specific arguments. |
 | ListSort, ListSortAsc, and ListSortDesc | Not implemented — C, L: comparable elements and optional key-selector lambda. |
@@ -122,12 +122,12 @@ Prerequisite labels below are work still required, not supported overloads: **S*
 | ListSample and ListSampleN | Not implemented — C: element types, Optional/empty behavior and operation-specific arguments. |
 | ListShuffle | Not implemented — C: element types, Optional/empty behavior and operation-specific arguments. |
 | ListIndexOf | Not implemented — C: element types, Optional/empty behavior and operation-specific arguments. |
-| ListMap, ListFilter, and ListFlatMap | Not implemented — C, L: scoped element/accumulator types and callback result. |
+| ListMap, ListFilter, and ListFlatMap | Resolved subset: Single-argument typed lambda or local callable for ListMap/ListFilter; ListFlatMap remains C, L. |
 | ListNotNull | Not implemented — C: element types, Optional/empty behavior and operation-specific arguments. |
 | ListFlatten | Not implemented — C: element types, Optional/empty behavior and operation-specific arguments. |
 | ListUniq | Not implemented — C: element types, Optional/empty behavior and operation-specific arguments. |
 | ListAny and ListAll | Not implemented — C: element types, Optional/empty behavior and operation-specific arguments. |
-| ListHas | Not implemented — C: element types, Optional/empty behavior and operation-specific arguments. |
+| ListHas | Resolved subset: Equatable typed list element with matching or String/Utf8 search type, including optional search values; NULL outer list returns Bool false. |
 | ListHead, ListLast | Not implemented — C: element types, Optional/empty behavior and operation-specific arguments. |
 | ListMin, ListMax, ListSum and ListAvg | Not implemented — C: element types, Optional/empty behavior and operation-specific arguments. |
 | ListFold, ListFold1 | Not implemented — C, L: scoped element/accumulator types and callback result. |
@@ -138,7 +138,7 @@ Prerequisite labels below are work still required, not supported overloads: **S*
 | ListExtract | Not implemented — C, K: literal Struct member and output element type. |
 | ListTakeWhile, ListSkipWhile | Not implemented — C, L: scoped element/accumulator types and callback result. |
 | ListAggregate | Not implemented — C, A, R: typed aggregation factory. |
-| ToDict and ToMultiDict | Not implemented — C: element types, Optional/empty behavior and operation-specific arguments. |
+| ToDict and ToMultiDict | Resolved subset: List<Tuple<K,V>> to Dict<K,V>, preserving outer optionality; ToMultiDict remains C. |
 | ToSet | Resolved subset: Concrete list keys; supported dictionary-key subset. |
 | ListTop, ListTopAsc, ListTopDesc, ListTopSort, ListTopSortAsc и ListTopSortDesc | Not implemented — C, L: comparable elements and optional key-selector lambda. |
 
@@ -155,8 +155,8 @@ Prerequisite labels below are work still required, not supported overloads: **S*
 | DictItems | Not implemented — C: key/payload types and lookup/set nullability. |
 | DictKeys | Not implemented — C: key/payload types and lookup/set nullability. |
 | DictPayloads | Not implemented — C: key/payload types and lookup/set nullability. |
-| DictLookup | Not implemented — C: key/payload types and lookup/set nullability. |
-| DictContains | Not implemented — C: key/payload types and lookup/set nullability. |
+| DictLookup | Resolved subset: Matching or String/Utf8 key search type, including optional search values; preserves nested payload optionality and adds one Optional layer for lookup. |
+| DictContains | Resolved subset: Matching or String/Utf8 key search type, including optional search values; NULL outer dictionary returns Bool false. |
 | DictAggregate | Not implemented — C, A, L: aggregation callbacks and output payload. |
 | SetIsDisjoint | Resolved subset: Resolved matching key types. |
 | SetIntersection | Not implemented — C: key/payload types and lookup/set nullability. |

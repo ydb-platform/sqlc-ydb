@@ -83,6 +83,12 @@ func resolveMemberAccess(root antlr.ParserRuleContext, scope expressionScope) (m
 		var col model.Column
 		col, err = resolveColumn(scope.relations, ref)
 		typ = col.Type
+	} else if atom := casual.Atom_expr(); atom != nil && atom.Lambda() != nil && atom.Lambda().ARROW() == nil {
+		if inner := parenthesizedExpression(atom.Lambda().Smart_parenthesis()); inner != nil {
+			typ, err = resolveExpression(inner, scope)
+		} else {
+			return model.Type{}, true, fmt.Errorf("unsupported member base %q", casual.GetText())
+		}
 	} else {
 		return model.Type{}, true, fmt.Errorf("unsupported member base %q", casual.GetText())
 	}
@@ -90,9 +96,8 @@ func resolveMemberAccess(root antlr.ParserRuleContext, scope expressionScope) (m
 		return model.Type{}, true, err
 	}
 	for _, field := range fields {
-		if typ.IsOptional() {
-			return model.Type{}, true, fmt.Errorf("member access on Optional<Struct> is not yet supported")
-		}
+		optional := typ.IsOptional()
+		typ = typ.UnwrapOptional()
 		if typ.Kind != "Struct" {
 			return model.Type{}, true, fmt.Errorf("member access requires Struct, got %s", typ.String())
 		}
@@ -101,6 +106,9 @@ func resolveMemberAccess(root antlr.ParserRuleContext, scope expressionScope) (m
 		for _, member := range typ.Fields {
 			if member.Name == name {
 				typ = member.Type
+				if optional && !typ.IsOptional() {
+					typ = model.Optional(typ)
+				}
 				found = true
 				break
 			}

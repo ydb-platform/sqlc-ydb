@@ -204,6 +204,24 @@ public final class Queries {
         }
     }
 
+    // -- name: RemoveBookTag :exec
+    public void removeBookTag(long bookId, byte[] tag) throws java.sql.SQLException {
+        try (var _prepared = client.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+            DECLARE $book_id AS Uint64;
+            DECLARE $tag AS String;
+            UPDATE books
+            SET tags = UNWRAP(Yson::SerializeJson(Json::From(ListFilter(
+                Yson::ConvertToStringList(tags),
+                ($item) -> ($item != $tag)
+            ))))
+            WHERE book_id = $book_id;\
+            """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+            _prepared.setObject("book_id", PrimitiveValue.newUint64(bookId));
+            _prepared.setBytes("tag", tag);
+            _prepared.execute();
+        }
+    }
+
     // -- name: UpdateBookISBN :exec
     public void updateBookISBN(String title, String tags, String isbn, long bookId) throws java.sql.SQLException {
         try (var _prepared = client.prepareStatement("""

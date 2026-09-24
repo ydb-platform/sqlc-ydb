@@ -230,6 +230,25 @@ class Querier:
         )
         return None
 
+    # -- name: RemoveBookTag :exec
+    def remove_book_tag(self, book_id: int, tag: bytes) -> None:
+        parameters = {
+            "$book_id": _ydb.TypedValue(book_id, _ydb.PrimitiveType.Uint64),
+            "$tag": _ydb.TypedValue(tag, _ydb.PrimitiveType.String),
+        }
+        result_sets = self._execute(
+            ("DECLARE $book_id AS Uint64;\n"
+             "DECLARE $tag AS String;\n"
+             "UPDATE books\n"
+             "SET tags = UNWRAP(Yson::SerializeJson(Json::From(ListFilter(\n"
+             "    Yson::ConvertToStringList(tags),\n"
+             "    ($item) -> ($item != $tag)\n"
+             "))))\n"
+             "WHERE book_id = $book_id;"),
+            parameters,
+        )
+        return None
+
     # -- name: UpdateBookISBN :exec
     def update_book_i_s_b_n(self, title: str, tags: str, isbn: str, book_id: int) -> None:
         parameters = {

@@ -32,6 +32,7 @@ public:
     std::optional<CreateAuthorRow> CreateAuthor(std::uint64_t author_id, const std::string& name) const;
     std::optional<CreateBookRow> CreateBook(std::uint64_t book_id, std::uint64_t author_id, const std::string& isbn, const std::string& book_type, const std::string& title, std::int32_t publication_year, const TInstant& available, const std::string& tags) const;
     void UpdateBook(const std::string& title, const std::string& tags, std::uint64_t book_id) const;
+    void RemoveBookTag(std::uint64_t book_id, const std::string& tag) const;
     void UpdateBookISBN(const std::string& title, const std::string& tags, const std::string& isbn, std::uint64_t book_id) const;
     void DeleteAuthorBeforeYear(std::int32_t publication_year, std::uint64_t author_id) const;
     std::optional<SayHelloRow> SayHello(const std::string& name) const;
