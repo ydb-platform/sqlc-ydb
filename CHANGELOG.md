@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.2.9
+
 ### Added
 
 - Resolve named and derived SELECT sources, including joins and SELECT-backed DML, and grouped `AGGREGATE_LIST` results. Add an end-to-end booktest query across generated runtime profiles.
