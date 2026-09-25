@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.2.12
+
 ### Added
 
 - Resolve typed `IN` and `NOT IN` in projections, conditionals, HAVING and lambdas, including List-valued expressions and nullable Boolean results.
