@@ -107,3 +107,52 @@ func TestDatabaseAnalysisNeedsTypesForAllUndeclaredParameters(t *testing.T) {
 	require.Equal(t, []string{"DECLARE $`id` AS Uint64; DECLARE $`opaque` AS Utf8; " + sql}, database.validated)
 	require.Equal(t, []model.Parameter{{Name: "opaque", Type: model.Type{Kind: "Utf8"}}, {Name: "id", Type: model.Type{Kind: "Uint64"}}}, result.Queries[0].Parameters)
 }
+
+func TestDatabaseAnalysisRejectsMalformedQueryBeforeValidationWithConfiguredParameter(t *testing.T) {
+	const sql = "-- name: Read :one\nSELECT ($value AS value;"
+	database := &fakeAnalysisDatabase{}
+	options := Options{Parameters: map[string]map[string]model.Type{"Read": {"value": {Kind: "Utf8"}}}}
+
+	result, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: sql}}, options, database)
+	require.Error(t, err)
+	require.NotEmpty(t, result.Diagnostics)
+	require.Equal(t, "query.sql", result.Diagnostics[0].Position.File)
+	require.Equal(t, 2, result.Diagnostics[0].Position.Line)
+	require.Empty(t, database.validated)
+}
+
+func TestDatabaseAnalysisRejectsConflictingParameterTypeBeforeValidation(t *testing.T) {
+	const sql = "-- name: Read :one\nDECLARE $value AS Uint64; SELECT $value AS value;"
+	database := &fakeAnalysisDatabase{}
+	options := Options{Parameters: map[string]map[string]model.Type{"Read": {"value": {Kind: "Utf8"}}}}
+
+	result, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: sql}}, options, database)
+	require.ErrorContains(t, err, "conflicts with DECLARE")
+	require.Len(t, result.Diagnostics, 1)
+	require.Equal(t, model.Position{File: "query.sql", Line: 1, Column: 1}, result.Diagnostics[0].Position)
+	require.Empty(t, database.validated)
+}
+
+func TestConfiguredParameterRejectsInvalidProgrammaticTypeBeforeDatabaseValidation(t *testing.T) {
+	const sql = "-- name: Echo :one\nSELECT $value AS value;"
+	for _, tc := range []struct {
+		name      string
+		typeValue model.Type
+	}{
+		{name: "unknown type", typeValue: model.Type{Kind: "UnknownYQLType"}},
+		{name: "invalid type structure", typeValue: model.Type{Kind: "Utf8", Elem: &model.Type{Kind: "Uint64"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			options := Options{Parameters: map[string]map[string]model.Type{"Echo": {"value": tc.typeValue}}}
+			queries := []model.Source{{Name: "query.sql", Text: sql}}
+
+			_, err := AnalyzeWithOptions(nil, queries, options)
+			require.ErrorContains(t, err, "configured parameter $value has unsupported YQL type")
+
+			database := &fakeAnalysisDatabase{}
+			_, err = AnalyzeWithDatabase(context.Background(), nil, queries, options, database)
+			require.ErrorContains(t, err, "configured parameter $value has unsupported YQL type")
+			require.Empty(t, database.validated)
+		})
+	}
+}
