@@ -79,6 +79,16 @@ func TestConfiguredParameterTypeRejectsMismatchAndUnusedNames(t *testing.T) {
 	}
 }
 
+func TestConfiguredParameterDoesNotHideUnknownInsertColumn(t *testing.T) {
+	const schema = "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));"
+	const sql = "-- name: Insert :exec\nINSERT INTO records (missing) VALUES ($value);"
+	options := Options{Parameters: map[string]map[string]model.Type{"Insert": {"value": {Kind: "Uint64"}}}}
+
+	result, err := AnalyzeWithOptions([]model.Source{{Name: "schema.sql", Text: schema}}, []model.Source{{Name: "query.sql", Text: sql}}, options)
+	require.ErrorContains(t, err, `unknown column "missing"`)
+	require.Empty(t, result.Queries)
+}
+
 func TestConfiguredParameterUnknownQueryPreservesPreviousDiagnostics(t *testing.T) {
 	queries := []model.Source{
 		{Name: "first.sql", Text: "-- name: Read :one\nSELECT 1 AS value;"},
