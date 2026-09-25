@@ -27,6 +27,7 @@ internal static class Program
         "examples/ondeck/schema/0003_rename_venue.sql",
         "examples/ondeck/schema/0004_add_created_at.sql",
         "examples/ondeck/schema/0005_drop_column.sql",
+        "examples/ondeck/schema/0006_drop_playlist_not_null.sql",
     ];
 
     public static async Task<int> Main(string[] args)
@@ -315,12 +316,12 @@ internal static class Program
         const ulong id = ulong.MaxValue;
         var at = TestTimestamp();
         await queries.CreateCityAsync(new OndeckDapper.CreateCityParams("London", "london"), cancellationToken);
-        await queries.CreateVenueAsync(new OndeckDapper.CreateVenueParams(id, "roundhouse", "Roundhouse", "london", at, "playlist", "open", "[\"open\"]", null), cancellationToken);
+        await queries.CreateVenueAsync(new OndeckDapper.CreateVenueParams(id, "roundhouse", "Roundhouse", "london", at, null, "open", "[\"open\"]", null), cancellationToken);
         await queries.CreateVenueAsync(new OndeckDapper.CreateVenueParams(id - 1, "forum", "Forum", "london", null, "playlist", "open", null, "[\"rock\"]"), cancellationToken);
         var venue = await queries.GetVenueAsync(new OndeckDapper.GetVenueParams("roundhouse", "london"), cancellationToken);
         var count = (await queries.VenueCountByCityAsync(cancellationToken)).Single();
         var updated = await queries.UpdateVenueNameAsync(new OndeckDapper.UpdateVenueNameParams("The Roundhouse", "roundhouse"), cancellationToken);
-        if (venue.ID != id || venue.CreatedAt != at || venue.Statuses != "[\"open\"]" || venue.Tags is not null || count.VenueCount != 2 || updated.ID != id)
+        if (venue.ID != id || venue.CreatedAt != at || venue.SpotifyPlaylist is not null || venue.Statuses != "[\"open\"]" || venue.Tags is not null || count.VenueCount != 2 || updated.ID != id)
             throw new InvalidOperationException("ondeck Dapper migration/optional/aggregate mapping changed");
         await queries.DeleteVenueAsync("roundhouse", cancellationToken);
         await AssertMissingAsync(() => queries.GetVenueAsync(new OndeckDapper.GetVenueParams("roundhouse", "london"), cancellationToken));
