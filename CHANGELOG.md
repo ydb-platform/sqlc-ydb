@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.2.10
+
 ### Added
 
 - Support typed local lambdas, `ListMap`/`ListFilter`, `ListLength`/`ListHas`, `ToDict`/`DictContains`/`DictLookup`, `UNWRAP`, empty `AsList()` in `Json::From`/`Yson::From`, and member access on `Optional<Struct>` across generated runtimes.
