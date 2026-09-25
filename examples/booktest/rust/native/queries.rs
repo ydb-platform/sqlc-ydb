@@ -242,6 +242,25 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
             .await
     }
 
+    // -- name: RemoveBookTag :exec
+    #[builder(on(String, into))]
+    pub async fn remove_book_tag(&mut self, book_id: u64, tag: ydb::Bytes) -> ydb::YdbResult<()> {
+        self.client
+            .exec(concat!(
+                "DECLARE $book_id AS Uint64;\n",
+                "DECLARE $tag AS String;\n",
+                "UPDATE books\n",
+                "SET tags = UNWRAP(Yson::SerializeJson(Json::From(ListFilter(\n",
+                "    Yson::ConvertToStringList(tags),\n",
+                "    ($item) -> ($item != $tag)\n",
+                "))))\n",
+                "WHERE book_id = $book_id;",
+            ))
+            .param("$book_id", book_id)
+            .param("$tag", ydb::Bytes::from(tag))
+            .await
+    }
+
     // -- name: UpdateBookISBN :exec
     #[builder(on(String, into))]
     pub async fn update_book_isbn(

@@ -81,6 +81,11 @@ type UpdateBookParams struct {
 	BookID uint64
 }
 
+type RemoveBookTagParams struct {
+	BookID uint64
+	Tag    []byte
+}
+
 type UpdateBookISBNParams struct {
 	Title  string
 	Tags   string

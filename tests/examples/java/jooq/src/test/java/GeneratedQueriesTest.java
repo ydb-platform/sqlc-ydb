@@ -71,6 +71,10 @@ class GeneratedQueriesTest {
                         assertTrue(sql.contains("Yson::ConvertToStringList"), sql);
                         assertTrue(sql.toLowerCase().contains("left outer join") || sql.toLowerCase().contains("left join"), sql);
                     }
+                    if (method.getName().equals("removeBookTag")) {
+                        assertTrue(sql.contains("UPDATE `books`"), sql);
+                        assertTrue(sql.contains("ListFilter("), sql);
+                    }
                     if (method.getName().equals("updateAuthorAndListBooks")) {
                         assertEquals("DECLARE $author_id AS Uint64;\nDECLARE $name AS Utf8;\nUPDATE `authors` SET name = $name WHERE author_id = $author_id;\nSELECT book_id, title FROM `books` AS `books` WHERE author_id = $author_id ORDER BY book_id;", sql);
                     }
@@ -83,7 +87,7 @@ class GeneratedQueriesTest {
                 }
             }
         }
-        assertEquals(63, statements.size());
+        assertEquals(64, statements.size());
     }
     @Test
     void declaredQueryReadsDialectCarriers() throws Exception {

@@ -18,7 +18,10 @@ func TestStructuredMemberExpressions(t *testing.T) {
 		{"nested", "Struct<inner:Struct<id:Uint64>>", "SELECT $key.inner.id AS value;", "Uint64", ""},
 		{"quoted field", "Struct<`record-id`:Uint64>", "SELECT $key.`record-id` AS value;", "Uint64", ""},
 		{"optional field", "Struct<id:Optional<Uint64>>", "SELECT $key.id AS value;", "Optional<Uint64>", ""},
-		{"optional struct", "Optional<Struct<id:Uint64>>", "SELECT $key.id AS value;", "", "Optional<Struct>"},
+		{"optional struct", "Optional<Struct<id:Uint64>>", "SELECT $key.id AS value;", "Optional<Uint64>", ""},
+		{"optional struct and field", "Optional<Struct<id:Optional<Uint64>>>", "SELECT $key.id AS value;", "Optional<Uint64>", ""},
+		{"optional nested struct", "Optional<Struct<inner:Struct<id:Uint64>>>", "SELECT $key.inner.id AS value;", "Optional<Uint64>", ""},
+		{"parenthesized optional struct", "Optional<Struct<id:Uint64>>", "SELECT ($key).id AS value;", "Optional<Uint64>", ""},
 		{"missing", "Struct<id:Uint64>", "SELECT id FROM records WHERE id=$key.missing;", "", "unknown struct field"},
 		{"wrong type", "Struct<id:Utf8>", "SELECT id FROM records WHERE id=$key.id;", "", "incompatible"},
 		{"wrong base", "Uint64", "SELECT $key.id AS value;", "", "requires Struct"},
@@ -86,11 +89,23 @@ func TestStructuredMemberBasesAndSuffixes(t *testing.T) {
 		{"indexed suffix", "DECLARE $key AS Struct<id:Uint64>; SELECT $key.id[0] AS value;", "unsupported member access"},
 		{"invocation after field", "DECLARE $key AS Struct<id:Uint64>; SELECT $key.id() AS value;", "unsupported member invocation"},
 		{"literal base", "SELECT 1u.field AS value;", "unsupported member base"},
+		{"tuple base", "SELECT (1u, 2u).field AS value;", "unsupported member base"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\n" + test.query}})
 			require.ErrorContains(t, err, test.want)
 		})
+	}
+}
+
+func TestStructLiteralDiagnostics(t *testing.T) {
+	for _, tc := range []struct{ sql, want string }{
+		{`SELECT <| status: 1ul, status: 2ul |> AS value;`, `duplicate field name "status"`},
+		{`SELECT <| 1ul: "ready" |> AS value;`, `field name "1ul" must be an identifier`},
+		{`SELECT <| status: $missing |> AS value;`, `struct literal field "status": cannot resolve type of parameter $missing`},
+	} {
+		_, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\n" + tc.sql}})
+		require.ErrorContains(t, err, tc.want)
 	}
 }
 

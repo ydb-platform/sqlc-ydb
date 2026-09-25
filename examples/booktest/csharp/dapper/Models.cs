@@ -97,6 +97,11 @@ public sealed record UpdateBookParams(
     ulong BookID
 );
 
+public sealed record RemoveBookTagParams(
+    ulong BookID,
+    byte[] Tag
+);
+
 public sealed record UpdateBookISBNParams(
     string Title,
     string Tags,

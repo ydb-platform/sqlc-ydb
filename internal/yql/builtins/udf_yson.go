@@ -80,8 +80,8 @@ func resolveYsonCall(name string, args []CallArgument) (model.Type, bool, error)
 		if name != "Yson::Parse" {
 			typed = "Json"
 		}
-		if base.Kind != typed && base.Kind != "String" && base.Kind != ysonNodeResource {
-			return model.Type{}, true, fmt.Errorf("%s argument 1 must be %s or String, including Optional forms", name, typed)
+		if base.Kind != typed && base.Kind != "String" && base.Kind != "Utf8" && base.Kind != ysonNodeResource && base.Kind != "Null" {
+			return model.Type{}, true, fmt.Errorf("%s argument 1 must be %s or String or Utf8 or Null, including Optional forms", name, typed)
 		}
 		if len(args) == 2 {
 			if err := ysonOptionArgument(name, plain[1], 2); err != nil {
@@ -89,7 +89,7 @@ func resolveYsonCall(name string, args []CallArgument) (model.Type, bool, error)
 			}
 		}
 		result := model.Type{Kind: ysonNodeResource}
-		return withOptional(result, nullable || base.Kind == "String"), true, nil
+		return withOptional(result, nullable || base.Kind == "String" || base.Kind == "Utf8" || base.Kind == ysonNodeResource || base.Kind == "Null"), true, nil
 	}
 	result, _ := ysonDocumentedResult(name)
 	var err error
@@ -261,6 +261,9 @@ func ysonOptionArgument(name string, value model.Type, index int) error {
 }
 
 func validateYsonCompatible(value model.Type, source bool) error {
+	if source && value.Kind == "EmptyList" {
+		return nil
+	}
 	if err := validateConcreteOrNull(value); err != nil {
 		return err
 	}

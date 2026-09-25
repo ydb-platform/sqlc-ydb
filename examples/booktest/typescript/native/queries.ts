@@ -83,6 +83,11 @@ export type UpdateBookParams = {
   readonly bookId: bigint;
 };
 
+export type RemoveBookTagParams = {
+  readonly bookId: bigint;
+  readonly tag: Uint8Array;
+};
+
 export type UpdateBookISBNParams = {
   readonly title: string;
   readonly tags: string;
@@ -297,6 +302,27 @@ export class Queries {
       .parameter("title", new Utf8(args.title))
       .parameter("tags", new Json(args.tags))
       .parameter("book_id", new Uint64(args.bookId));
+    configure?.(stmt);
+    await stmt;
+  }
+
+  // -- name: RemoveBookTag :exec
+  async removeBookTag(args: RemoveBookTagParams, configure?: ConfigureQuery): Promise<void> {
+    const stmt = this.#sql(
+      "DECLARE $book_id AS Uint64;\n" +
+      "DECLARE $tag AS String;\n" +
+      "UPDATE books\n" +
+      "SET tags = UNWRAP(Yson::SerializeJson(Json::From(ListFilter(\n" +
+      "    Yson::ConvertToStringList(tags),\n" +
+      "    ($item) -> ($item != $tag)\n" +
+      "))))\n" +
+      "WHERE book_id = $book_id;"
+    );
+    // Keep explicit DECLARE statements; the SDK otherwise prepends duplicates.
+    Object.defineProperty(stmt, "text", { value: stmt.text, writable: false });
+    stmt
+      .parameter("book_id", new Uint64(args.bookId))
+      .parameter("tag", new Bytes(args.tag));
     configure?.(stmt);
     await stmt;
   }

@@ -228,6 +228,27 @@ void Queries::UpdateBook(const ::userver::ydb::Utf8& title, const ::userver::for
     );
 }
 
+// -- name: RemoveBookTag :exec
+void Queries::RemoveBookTag(std::uint64_t book_id, const std::string& tag) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "DECLARE $book_id AS Uint64;\n"
+        "DECLARE $tag AS String;\n"
+        "UPDATE books\n"
+        "SET tags = UNWRAP(Yson::SerializeJson(Json::From(ListFilter(\n"
+        "    Yson::ConvertToStringList(tags),\n"
+        "    ($item) -> ($item != $tag)\n"
+        "))))\n"
+        "WHERE book_id = $book_id;",
+        ::userver::ydb::Query::Name{"RemoveBookTag"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    static_cast<void>(
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$book_id", book_id, "$tag", tag)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$book_id", book_id, "$tag", tag)
+    );
+}
+
 // -- name: UpdateBookISBN :exec
 void Queries::UpdateBookISBN(const ::userver::ydb::Utf8& title, const ::userver::formats::json::Value& tags, const ::userver::ydb::Utf8& isbn, std::uint64_t book_id) const {
     const auto sqlc_query = ::userver::ydb::Query{

@@ -109,9 +109,16 @@ func TestYsonUDFOverloadsAndDiagnostics(t *testing.T) {
 		want string
 	}{
 		{"Yson::Parse", []CallArgument{{Type: str}}, "Optional<" + ysonNodeResource + ">"},
+		{"Yson::Parse", []CallArgument{{Type: model.Type{Kind: "Utf8"}}}, "Optional<" + ysonNodeResource + ">"},
+		{"Yson::Parse", []CallArgument{{Type: model.Type{Kind: "Null"}}}, "Optional<" + ysonNodeResource + ">"},
 		{"Yson::ParseJson", []CallArgument{{Type: str}, {Type: model.Type{Kind: "Null"}}}, "Optional<" + ysonNodeResource + ">"},
+		{"Yson::ParseJson", []CallArgument{{Type: model.Type{Kind: "Utf8"}}}, "Optional<" + ysonNodeResource + ">"},
+		{"Yson::ParseJson", []CallArgument{{Type: model.Type{Kind: "Null"}}}, "Optional<" + ysonNodeResource + ">"},
 		{"Yson::ParseJson", []CallArgument{{Type: js}, {Type: options}}, ysonNodeResource},
+		{"Yson::ParseJson", []CallArgument{{Type: node}}, "Optional<" + ysonNodeResource + ">"},
 		{"Yson::ParseJsonDecodeUtf8", []CallArgument{{Type: str}}, "Optional<" + ysonNodeResource + ">"},
+		{"Yson::ParseJsonDecodeUtf8", []CallArgument{{Type: model.Type{Kind: "Utf8"}}}, "Optional<" + ysonNodeResource + ">"},
+		{"Yson::ParseJsonDecodeUtf8", []CallArgument{{Type: model.Type{Kind: "Null"}}}, "Optional<" + ysonNodeResource + ">"},
 		{"Yson::Serialize", []CallArgument{{Type: model.Optional(node)}}, "Optional<Yson>"},
 		{"Yson::Serialize", []CallArgument{{Type: model.Type{Kind: "Null"}}}, "Optional<Yson>"},
 		{"Yson::GetHash", []CallArgument{{Type: model.Optional(node)}}, "Optional<Uint64>"},
@@ -120,11 +127,13 @@ func TestYsonUDFOverloadsAndDiagnostics(t *testing.T) {
 		{"Yson::ConvertToStringList", []CallArgument{{Type: model.Type{Kind: "Null"}}}, "List<String>"},
 		{"Yson::LookupString", []CallArgument{{Type: ys}, {Type: str}, {Type: options}}, "Optional<String>"},
 		{"Yson::Options", []CallArgument{{Name: "Strict", Type: model.Type{Kind: "Bool"}}}, ysonOptionsResource},
+		{"Yson::Options", []CallArgument{{Name: "AutoConvert", Type: model.Type{Kind: "Bool"}}, {Name: "Strict", Type: model.Type{Kind: "Bool"}}}, ysonOptionsResource},
 		{"Yson::SerializeJson", []CallArgument{{Type: js}, {Name: "EncodeUtf8", Type: model.Type{Kind: "Bool"}}}, "Optional<Json>"},
 		{"Yson::SerializeJson", []CallArgument{{Type: model.Optional(node)}, {Type: options}, {Name: "WriteNanAsString", Type: model.Type{Kind: "Bool"}}}, "Optional<Json>"},
 		{"Yson::From", []CallArgument{{Type: model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "x", Type: str}}}}}, ysonNodeResource},
 		{"Yson::From", []CallArgument{{Type: model.Type{Kind: "Void"}}}, ysonNodeResource},
 		{"Yson::From", []CallArgument{{Type: model.Type{Kind: "Null"}}}, ysonNodeResource},
+		{"Yson::From", []CallArgument{{Type: model.Type{Kind: "EmptyList"}}}, ysonNodeResource},
 	} {
 		got, _, err := resolveYsonCall(tt.name, tt.args)
 		assert.False(t, err != nil || got.String() != tt.want)
@@ -133,6 +142,10 @@ func TestYsonUDFOverloadsAndDiagnostics(t *testing.T) {
 	got, _, err := resolveYsonCall("Yson::ConvertTo", []CallArgument{{Type: node}, {TypeArgument: &target}, {Type: options}})
 	require.NoError(t, err)
 	require.True(t, got.Equal(target))
+	malformed := "{"
+	got, _, err = resolveYsonCall("Yson::ParseJson", []CallArgument{{Type: str, StringLiteral: &malformed}, {Type: options}})
+	require.NoError(t, err)
+	require.Equal(t, "Optional<"+ysonNodeResource+">", got.String())
 	for _, tt := range []struct {
 		name string
 		args []CallArgument
@@ -162,4 +175,10 @@ func TestYsonUDFOverloadsAndDiagnostics(t *testing.T) {
 		_, handled, err := resolveYsonCall(tt.name, tt.args)
 		assert.False(t, !handled || err == nil || !strings.Contains(err.Error(), tt.want))
 	}
+}
+
+func TestJsonFromContextualEmptyList(t *testing.T) {
+	got, err := Resolve("Json::From", []model.Type{{Kind: "EmptyList"}})
+	require.NoError(t, err)
+	require.Equal(t, ysonNodeResource, got.String())
 }

@@ -195,7 +195,7 @@ func validateGrouping(block queryBlock, core *parser.Select_coreContext, relatio
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, ref.ctx, fmt.Sprintf("HAVING column %q must appear in GROUP BY or an aggregate function", qualifiedName(ref))))
 			}
 		}
-		typeValue, err := resolveExpression(having, expressionScope{relations: relations, bindings: bindings, grouped: core.Group_by_clause() != nil, functions: block.functions})
+		typeValue, err := resolveExpression(having, expressionScope{relations: relations, bindings: bindings, lambdas: block.lambdas, grouped: core.Group_by_clause() != nil, functions: block.functions})
 		if err != nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, having, fmt.Sprintf("cannot resolve HAVING expression: %v", err)))
 		} else if typeValue.UnwrapOptional().Kind != "Bool" {
@@ -322,7 +322,7 @@ func validateLimitOffset(block queryBlock, partial parser.ISelect_kind_partialCo
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, expr, clause+" expressions cannot contain aggregate functions"))
 			continue
 		}
-		typ, err := resolveExpression(expr, expressionScope{bindings: bindings, functions: block.functions})
+		typ, err := resolveExpression(expr, expressionScope{bindings: bindings, lambdas: block.lambdas, functions: block.functions})
 		if err != nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, expr, fmt.Sprintf("cannot resolve %s expression: %v", clause, err)))
 			continue

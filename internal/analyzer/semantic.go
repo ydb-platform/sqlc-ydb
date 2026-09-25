@@ -27,11 +27,17 @@ func collectQueryTree(tree antlr.Tree) queryTree {
 	descendants(tree, func(node antlr.Tree) {
 		switch ctx := node.(type) {
 		case *parser.Sql_stmtContext:
-			out.statements = append(out.statements, ctx)
+			if !insideLambda(ctx) {
+				out.statements = append(out.statements, ctx)
+			}
 		case *parser.Declare_stmtContext:
-			out.declares = append(out.declares, ctx)
+			if !insideLambda(ctx) {
+				out.declares = append(out.declares, ctx)
+			}
 		case *parser.Named_nodes_stmtContext:
-			out.named = append(out.named, ctx)
+			if !insideLambda(ctx) {
+				out.named = append(out.named, ctx)
+			}
 		case *parser.Into_table_stmtContext:
 			out.insert = append(out.insert, ctx)
 		case *parser.Update_stmtContext:
@@ -43,6 +49,15 @@ func collectQueryTree(tree antlr.Tree) queryTree {
 		}
 	})
 	return out
+}
+
+func insideLambda(ctx antlr.ParserRuleContext) bool {
+	for parent := ctx.GetParent(); parent != nil; parent = parent.GetParent() {
+		if lambda, ok := parent.(*parser.LambdaContext); ok && lambda.ARROW() != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery, []model.Diagnostic) {
@@ -66,6 +81,7 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	}
 	query.Syntax = &model.QuerySyntax{Root: parsed.tree, Columns: map[int]model.ColumnBinding{}, Selects: map[int]model.SelectBinding{}, Tables: resolvedTableReferences(parsed.tree, block.tablePathPrefix), TablePathPrefix: block.tablePathPrefix}
 	tree := collectQueryTree(parsed.tree)
+	lambdaPositions := lambdaLocalBindPositions(parsed.tree)
 	if diagnostics = unsupportedSQLCMacroDiagnostics(block, parsed.tokens); len(diagnostics) != 0 {
 		return query, diagnostics
 	}
@@ -90,9 +106,10 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	}
 	diagnostics = append(diagnostics, declarationDiagnostics...)
 	inferred := map[string]model.Type{}
-	localPositions, localNames, localTypes, tabular, localDiagnostics := localBindings(catalog, block, tree, declared, inferred, query.Syntax)
+	localPositions, localNames, localTypes, tabular, lambdas, localDiagnostics := localBindings(catalog, block, tree, declared, inferred, query.Syntax)
 	diagnostics = append(diagnostics, localDiagnostics...)
 	block.tabular = tabular
+	block.lambdas = lambdas
 
 	bindings := make(map[string]model.Type, len(declared)+len(localTypes))
 	for name, typeValue := range declared {
@@ -119,6 +136,9 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 			resultColumns = columns
 			if core.Select_stmt() != nil {
 				for _, bind := range collectQueryTree(statement).binds {
+					if lambdaPositions[bind.GetStart().GetStart()] {
+						continue
+					}
 					name := bindName(bind)
 					if _, explicit := declared[name]; !explicit && !localNames[name] {
 						resultParameters[name] = inferred[name]
@@ -144,6 +164,9 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		}
 	}
 
+	for position := range lambdaPositions {
+		localPositions[position] = true
+	}
 	parameters, parameterDiagnostics := externalParameters(block, tree.binds, declared, inferred, declarationPositions, localPositions, localNames)
 	diagnostics = append(diagnostics, parameterDiagnostics...)
 	query.Parameters = parameters
@@ -177,7 +200,7 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 }
 
 func nonpersistableType(value model.Type) bool {
-	if strings.HasPrefix(value.Kind, "Resource<") || value.Kind == "Callable" || value.Kind == "Tagged" {
+	if strings.HasPrefix(value.Kind, "Resource<") || value.Kind == "Callable" || value.Kind == "Lambda" || value.Kind == "Tagged" {
 		return true
 	}
 	if value.Elem != nil && nonpersistableType(*value.Elem) {
@@ -485,13 +508,15 @@ func declarations(block queryBlock, tree queryTree) (map[string]model.Type, map[
 	return declared, positions, diagnostics
 }
 
-func localBindings(catalog model.Catalog, block queryBlock, tree queryTree, declared, inferred map[string]model.Type, syntax *model.QuerySyntax) (map[int]bool, map[string]bool, map[string]model.Type, map[string]*model.Table, []model.Diagnostic) {
+func localBindings(catalog model.Catalog, block queryBlock, tree queryTree, declared, inferred map[string]model.Type, syntax *model.QuerySyntax) (map[int]bool, map[string]bool, map[string]model.Type, map[string]*model.Table, map[string]lambdaBinding, []model.Diagnostic) {
 	positions := map[int]bool{}
 	names := map[string]bool{}
 	types := map[string]model.Type{}
 	tabular := map[string]*model.Table{}
+	lambdas := map[string]lambdaBinding{}
 	var diagnostics []model.Diagnostic
 	block.tabular = tabular
+	block.lambdas = lambdas
 	for _, statement := range tree.named {
 		if statement.Bind_parameter_list() == nil {
 			continue
@@ -544,6 +569,18 @@ func localBindings(catalog model.Catalog, block queryBlock, tree queryTree, decl
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement, "only scalar expressions or SELECT local assignments are supported"))
 			continue
 		}
+		if lambda := directLambda(statement.Expr()); lambda != nil {
+			bindings := maps.Clone(declared)
+			maps.Copy(bindings, types)
+			for bindingName, typeValue := range inferred {
+				if _, exists := bindings[bindingName]; !exists && typeValue.Kind != "" {
+					bindings[bindingName] = typeValue
+				}
+			}
+			lambdas[name] = lambdaBinding{lambda: lambda, bindings: bindings, lambdas: maps.Clone(lambdas)}
+			types[name] = model.Type{Kind: "Lambda"}
+			continue
+		}
 		if containsAggregate(statement.Expr()) {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement.Expr(), "aggregate functions are not allowed in scalar local assignments"))
 			continue
@@ -554,7 +591,7 @@ func localBindings(catalog model.Catalog, block queryBlock, tree queryTree, decl
 				rhsBinds = append(rhsBinds, bind)
 			}
 		})
-		if len(rhsBinds) == 1 && statement.Expr().GetText() == rhsBinds[0].GetText() {
+		if len(rhsBinds) == 1 && sameOrWrappedExpression(statement.Expr(), rhsBinds[0]) {
 			rhsName := bindName(rhsBinds[0])
 			typeValue, ok := types[rhsName]
 			if !ok {
@@ -565,6 +602,9 @@ func localBindings(catalog model.Catalog, block queryBlock, tree queryTree, decl
 				continue
 			}
 			types[name] = typeValue
+			if typeValue.Kind == "Lambda" {
+				lambdas[name] = lambdas[rhsName]
+			}
 			continue
 		}
 		bindings := make(map[string]model.Type, len(declared)+len(types))
@@ -574,14 +614,14 @@ func localBindings(catalog model.Catalog, block queryBlock, tree queryTree, decl
 		for bindingName, typeValue := range types {
 			bindings[bindingName] = typeValue
 		}
-		typeValue, err := resolveExpression(statement.Expr(), expressionScope{bindings: bindings, functions: block.functions})
+		typeValue, err := resolveExpression(statement.Expr(), expressionScope{bindings: bindings, lambdas: lambdas, functions: block.functions})
 		if err == nil {
 			types[name] = typeValue
 			continue
 		}
 		diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, statement.Expr(), fmt.Sprintf("cannot resolve type of local $%s: %v", name, err)))
 	}
-	return positions, names, types, tabular, diagnostics
+	return positions, names, types, tabular, lambdas, diagnostics
 }
 
 func localSelectCore(statement *parser.Named_nodes_stmtContext) (*parser.Select_coreContext, parser.ISelect_kind_partialContext, bool, error) {
@@ -605,11 +645,7 @@ func localSelectCore(statement *parser.Named_nodes_stmtContext) (*parser.Select_
 		if selected == nil {
 			return nil, nil, false, nil
 		}
-		text := statement.Expr().GetText()
-		for len(text) >= 2 && text[0] == '(' && text[len(text)-1] == ')' {
-			text = text[1 : len(text)-1]
-		}
-		if text != selected.GetText() {
+		if !sameOrWrappedExpression(statement.Expr(), selected) {
 			return nil, nil, false, nil
 		}
 		compound := selected.Select_subexpr_core()
@@ -617,6 +653,9 @@ func localSelectCore(statement *parser.Named_nodes_stmtContext) (*parser.Select_
 			return nil, nil, true, fmt.Errorf("tabular local assignments support one SELECT input without CTE, UNION, or INTERSECT")
 		}
 		partial = compound.Select_subexpr_intersect(0).Select_or_expr(0).Select_kind_partial()
+		if partial == nil {
+			return nil, nil, false, nil
+		}
 	} else {
 		return nil, nil, false, nil
 	}
@@ -830,7 +869,7 @@ func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContex
 			continue
 		}
 		expr := result.Expr()
-		column, pure, err := expressionColumn(expr, relations, declared, selectCore.Group_by_clause() != nil, block.functions)
+		column, pure, err := expressionColumn(expr, relations, declared, selectCore.Group_by_clause() != nil, block.functions, block.lambdas)
 		if err != nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, expr, err.Error()))
 			continue
@@ -863,11 +902,11 @@ func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContex
 	return columns, diagnostics
 }
 
-func expressionColumn(expr parser.IExprContext, relations []relation, declared map[string]model.Type, grouped bool, functions *builtins.Registry) (model.Column, bool, error) {
+func expressionColumn(expr parser.IExprContext, relations []relation, declared map[string]model.Type, grouped bool, functions *builtins.Registry, lambdas map[string]lambdaBinding) (model.Column, bool, error) {
 	for inner := parenthesizedExpression(expr); inner != nil; inner = parenthesizedExpression(expr) {
 		expr = inner
 	}
-	scope := expressionScope{relations: relations, bindings: declared, grouped: grouped, functions: functions}
+	scope := expressionScope{relations: relations, bindings: declared, lambdas: lambdas, grouped: grouped, functions: functions}
 	if typeValue, ok, err := resolveMemberAccess(expr, scope); ok {
 		return model.Column{Type: typeValue}, false, err
 	}
@@ -931,7 +970,7 @@ func columnRefs(root antlr.Tree) []columnRef {
 	var refs []columnRef
 	scopeDescendants(root, func(node antlr.Tree) {
 		ctx, ok := node.(*parser.Unary_subexprContext)
-		if !ok {
+		if !ok || structFieldLabel(ctx) {
 			return
 		}
 		casual := ctx.Unary_casual_subexpr()
@@ -955,6 +994,22 @@ func columnRefs(root antlr.Tree) []columnRef {
 		}
 	})
 	return refs
+}
+
+func structFieldLabel(root antlr.ParserRuleContext) bool {
+	for parent := root.GetParent(); parent != nil; parent = parent.GetParent() {
+		list, ok := parent.(*parser.Expr_struct_listContext)
+		if !ok {
+			continue
+		}
+		for i, expr := range list.AllExpr() {
+			if i%2 == 0 && expr.GetStart().GetStart() <= root.GetStart().GetStart() && root.GetStop().GetStop() <= expr.GetStop().GetStop() {
+				return true
+			}
+		}
+		return false
+	}
+	return false
 }
 
 func functionTypeArgument(ref *parser.Unary_subexprContext) bool {
@@ -1134,7 +1189,7 @@ func inferInsert(block queryBlock, statement *parser.Into_table_stmtContext, tab
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, id, fmt.Sprintf("unknown column %q", id.GetText())))
 				continue
 			}
-			if err := validateDMLValue(expressions[i], *column, expressionScope{bindings: bindings, functions: block.functions}, inferred); err != nil {
+			if err := validateDMLValue(expressions[i], *column, expressionScope{bindings: bindings, lambdas: block.lambdas, functions: block.functions}, inferred); err != nil {
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, expressions[i], err.Error()))
 			}
 		}
@@ -1169,7 +1224,7 @@ func inferUpdate(block queryBlock, statement *parser.Update_stmtContext, table *
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, clause, fmt.Sprintf("unknown column %q", name)))
 			continue
 		}
-		if err := validateDMLValue(clause.Expr(), *column, expressionScope{relations: []relation{{table: table, alias: simpleTableName(statement.Simple_table_ref())}}, bindings: bindings, functions: block.functions}, inferred); err != nil {
+		if err := validateDMLValue(clause.Expr(), *column, expressionScope{relations: []relation{{table: table, alias: simpleTableName(statement.Simple_table_ref())}}, bindings: bindings, lambdas: block.lambdas, functions: block.functions}, inferred); err != nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, clause.Expr(), err.Error()))
 		}
 	}

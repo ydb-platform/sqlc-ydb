@@ -331,6 +331,33 @@ public sealed class Queries
         await _connection.ExecuteAsync(command).ConfigureAwait(false);
     }
 
+    // -- name: RemoveBookTag :exec
+    public async Task RemoveBookTagAsync(RemoveBookTagParams args, CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var parameters = new YdbParameters(
+            new YdbParameter("$book_id", DbType.UInt64, args.BookID),
+            new YdbParameter("$tag", DbType.Binary, args.Tag)
+        );
+
+        var command = new CommandDefinition(
+            commandText: """
+            DECLARE $book_id AS Uint64;
+            DECLARE $tag AS String;
+            UPDATE books
+            SET tags = UNWRAP(Yson::SerializeJson(Json::From(ListFilter(
+                Yson::ConvertToStringList(tags),
+                ($item) -> ($item != $tag)
+            ))))
+            WHERE book_id = $book_id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        await _connection.ExecuteAsync(command).ConfigureAwait(false);
+    }
+
     // -- name: UpdateBookISBN :exec
     public async Task UpdateBookISBNAsync(UpdateBookISBNParams args, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {

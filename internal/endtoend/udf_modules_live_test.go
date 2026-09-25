@@ -47,6 +47,19 @@ func TestLiveYDBUDFModules(t *testing.T) {
 		    Yson::ConvertTo(Yson::From(42u), Uint32) AS converted,
 		    Yson::GetLength(Yson::From(String::SplitToList("a,b", ","))) AS length;`,
 			map[string]any{"is_string": true, "name": "book", "numbers": []any{"a", "b"}, "converted": 42, "length": 2}},
+		{"document_options", `SELECT Yson::SerializeJson(Yson::ParseJson("{", Yson::Options(false AS Strict))) AS malformed,
+		    Yson::SerializeJson(Json::From(AsList())) AS empty_list,
+		    Yson::SerializeJson(Yson::ParseJson(NULL)) AS null_parse;`,
+			map[string]any{"malformed": nil, "empty_list": []any{}, "null_parse": nil}},
+		{"document_struct_lambda", `$parse = ($raw) -> {
+            $stored = Yson::ConvertTo(Yson::ParseJson($raw), Struct<status:String?>);
+            RETURN <| status: COALESCE($stored.status, "unknown") |>;
+        };
+        $get = ($raw) -> (($parse($raw)).status);
+        $maybe = Yson::ConvertTo(Yson::ParseJson("{\"status\":\"ready\"}"), Struct<status:String?>);
+        SELECT $get(doc) AS resolved, $maybe.status AS optional_status
+        FROM (SELECT "{\"status\":\"ready\"}" AS doc) AS source;`,
+			map[string]any{"resolved": "ready", "optional_status": "ready"}},
 		{"regex", `SELECT Pire::Grep("bo")("book") AS pire,
             Re2::Grep("bo")("book") AS re2,
             Re2::Capture("(?P<word>bo+)")("book").word AS capture;`,
@@ -63,10 +76,11 @@ func TestLiveYDBUDFModules(t *testing.T) {
 		Type string `json:"type"`
 	}
 	type liveCase struct {
-		Name    string         `json:"name"`
-		SQL     string         `json:"sql"`
-		Columns []column       `json:"columns"`
-		Values  map[string]any `json:"values"`
+		Name      string         `json:"name"`
+		SQL       string         `json:"sql"`
+		Columns   []column       `json:"columns"`
+		Values    map[string]any `json:"values"`
+		ErrorText string         `json:"error_text,omitempty"`
 	}
 	live := make([]liveCase, 0, len(cases))
 	for _, tc := range cases {
@@ -82,6 +96,10 @@ func TestLiveYDBUDFModules(t *testing.T) {
 		}
 		live = append(live, entry)
 	}
+	strictSQL := `SELECT Yson::SerializeJson(Yson::ParseJson("{")) AS malformed;`
+	strict, err := analyzer.Analyze(nil, []model.Source{{Name: "document_strict.sql", Text: "-- name: Check :one\n" + strictSQL}})
+	require.NoError(t, err)
+	live = append(live, liveCase{Name: "document_strict", SQL: strict.Queries[0].SQL, ErrorText: "JSON"})
 	for _, tc := range []struct{ sql, errorText string }{
 		{`SELECT String::Base32Encode(42u) AS bad;`, "String"},
 		{`DECLARE $text AS String; SELECT Unicode::IsAlpha($text) AS bad;`, "Utf8"},
@@ -118,6 +136,13 @@ with ydb.Driver(ydb.DriverConfig(u.scheme+"://"+u.netloc,u.path,credentials=ydb.
     with ydb.QuerySessionPool(driver) as pool:
         for case in cases:
             try:
+                if case.get("error_text"):
+                    try: pool.execute_with_retries(case["sql"])
+                    except Exception as e:
+                        assert case["error_text"].lower() in str(e).lower(), "error: %s" % e
+                        print(case["name"]+": expected server error", flush=True)
+                    else: raise AssertionError("expected server error")
+                    continue
                 result = pool.execute_with_retries(case["sql"])[0]
                 actual_types = [{"name": c.name, "type": typename(c.type)} for c in result.columns]
                 assert actual_types == case["columns"], "types: expected %s, got %s" % (case["columns"], actual_types)

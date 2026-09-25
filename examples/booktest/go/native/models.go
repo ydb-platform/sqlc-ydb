@@ -85,6 +85,11 @@ type UpdateBookParams struct {
 	BookID uint64 `json:"book_id"`
 }
 
+type RemoveBookTagParams struct {
+	BookID uint64 `json:"book_id"`
+	Tag    []byte `json:"tag"`
+}
+
 type UpdateBookISBNParams struct {
 	Title  string `json:"title"`
 	Tags   string `json:"tags"`
@@ -156,6 +161,7 @@ type Querier interface {
 	CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts ...query.ExecuteOption) (CreateAuthorRow, error)
 	CreateBook(ctx context.Context, arg CreateBookParams, opts ...query.ExecuteOption) (CreateBookRow, error)
 	UpdateBook(ctx context.Context, arg UpdateBookParams, opts ...query.ExecuteOption) error
+	RemoveBookTag(ctx context.Context, arg RemoveBookTagParams, opts ...query.ExecuteOption) error
 	UpdateBookISBN(ctx context.Context, arg UpdateBookISBNParams, opts ...query.ExecuteOption) error
 	DeleteAuthorBeforeYear(ctx context.Context, arg DeleteAuthorBeforeYearParams, opts ...query.ExecuteOption) error
 	SayHello(ctx context.Context, arg string, opts ...query.ExecuteOption) (SayHelloRow, error)
