@@ -35,7 +35,7 @@ type ListVenuesRow struct {
 	City            string
 	Status          string
 	Statuses        *string
-	SpotifyPlaylist string
+	SpotifyPlaylist *string
 	SongkickID      *string
 	Tags            *string
 	CreatedAt       *time.Time
@@ -48,7 +48,7 @@ type GetVenueRow struct {
 	City            string
 	Status          string
 	Statuses        *string
-	SpotifyPlaylist string
+	SpotifyPlaylist *string
 	SongkickID      *string
 	Tags            *string
 	CreatedAt       *time.Time
@@ -69,7 +69,7 @@ type CreateVenueParams struct {
 	Name            string
 	City            string
 	CreatedAt       *time.Time
-	SpotifyPlaylist string
+	SpotifyPlaylist *string
 	Status          string
 	Statuses        *string
 	Tags            *string

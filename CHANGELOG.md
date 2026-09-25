@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- Resolve typed `IN` and `NOT IN` in projections, conditionals, HAVING and lambdas, including List-valued expressions and nullable Boolean results.
+- Apply `ALTER COLUMN ... DROP NOT NULL` in the offline schema catalog, including repeated actions, nullable primary keys and connected drift checks.
+
 ## v0.2.11
 
 ### Added

@@ -128,7 +128,7 @@ async function runJets() {
 }
 
 async function runOndeck() {
-  for (const migration of ["0001_city.sql", "0002_venue.sql", "0003_rename_venue.sql", "0004_add_created_at.sql", "0005_drop_column.sql"]) {
+  for (const migration of ["0001_city.sql", "0002_venue.sql", "0003_rename_venue.sql", "0004_add_created_at.sql", "0005_drop_column.sql", "0006_drop_playlist_not_null.sql"]) {
     await executeFile(`../../../examples/ondeck/schema/${migration}`);
   }
   try {
@@ -138,9 +138,11 @@ async function runOndeck() {
     await queries.updateCityName({ name: "Greater London", slug: "london" });
     assert.equal((await queries.listCities())[0].name, "Greater London");
     const createdAt = new Date(1788948672345);
-    const venue = await queries.createVenue({ id: 7n, slug: "roundhouse", name: "Roundhouse", city: "london", createdAt, spotifyPlaylist: "spotify:playlist:1", status: "open", statuses: '["open"]', tags: '{"genre":"rock"}' });
+    const venue = await queries.createVenue({ id: 7n, slug: "roundhouse", name: "Roundhouse", city: "london", createdAt, spotifyPlaylist: null, status: "open", statuses: '["open"]', tags: '{"genre":"rock"}' });
     assert.deepEqual(venue, { id: 7n });
-    assert.deepEqual((await queries.getVenue({ slug: "roundhouse", city: "london" })).created_at, createdAt);
+    const loaded = await queries.getVenue({ slug: "roundhouse", city: "london" });
+    assert.deepEqual(loaded.created_at, createdAt);
+    assert.equal(loaded.spotify_playlist, null);
     assert.equal((await queries.listVenues("london"))[0].id, 7n);
     assert.deepEqual(await queries.venueCountByCity(), [{ city: "london", venue_count: 1n }]);
     assert.deepEqual(await queries.updateVenueName({ name: "The Roundhouse", slug: "roundhouse" }), { id: 7n });

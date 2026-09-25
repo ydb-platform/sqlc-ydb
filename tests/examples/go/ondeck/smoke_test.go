@@ -32,12 +32,15 @@ func TestLive(t *testing.T) {
 	venueTable = "venue"
 	db.Apply(t, "../../../../examples/ondeck/schema/0004_add_created_at.sql")
 	db.Apply(t, "../../../../examples/ondeck/schema/0005_drop_column.sql")
+	db.Apply(t, "../../../../examples/ondeck/schema/0006_drop_playlist_not_null.sql")
 
 	native := ondecknative.New(db.Native)
 	legacy, err := native.GetVenue(db.Context, ondecknative.GetVenueParams{Slug: "legacy", City: "old-city"})
 	require.NoError(t, err)
 	require.Nil(t, legacy.CreatedAt)
 	require.Nil(t, legacy.SongkickID)
+	require.NotNil(t, legacy.SpotifyPlaylist)
+	require.Equal(t, "spotify:legacy", *legacy.SpotifyPlaylist)
 	require.NoError(t, native.DeleteVenue(db.Context, "legacy"))
 	createdCity, err := native.CreateCity(db.Context, ondecknative.CreateCityParams{Name: "New York", Slug: "nyc"})
 	require.NoError(t, err)
@@ -57,7 +60,7 @@ func TestLive(t *testing.T) {
 	tags := `["jazz","live"]`
 	createdVenue, err := native.CreateVenue(db.Context, ondecknative.CreateVenueParams{
 		ID: 7, Slug: "blue-note", Name: "Blue Note", City: "nyc",
-		CreatedAt: &now, SpotifyPlaylist: "spotify:playlist:example", Status: "op!en",
+		CreatedAt: &now, Status: "op!en",
 		Statuses: &statuses, Tags: &tags,
 	})
 	require.NoError(t, err)
@@ -67,11 +70,13 @@ func TestLive(t *testing.T) {
 	require.NotNil(t, venue.CreatedAt)
 	require.True(t, venue.CreatedAt.Equal(now))
 	require.Nil(t, venue.SongkickID)
+	require.Nil(t, venue.SpotifyPlaylist)
 	require.Equal(t, &statuses, venue.Statuses)
 	require.Equal(t, &tags, venue.Tags)
 	venues, err := native.ListVenues(db.Context, "nyc")
 	require.NoError(t, err)
 	require.Len(t, venues, 1)
+	require.Nil(t, venues[0].SpotifyPlaylist)
 	counts, err := portable.VenueCountByCity(db.Context)
 	require.NoError(t, err)
 	require.Len(t, counts, 1)
@@ -85,4 +90,12 @@ func TestLive(t *testing.T) {
 	require.NoError(t, portable.DeleteVenue(db.Context, "blue-note"))
 	_, err = native.GetVenue(db.Context, ondecknative.GetVenueParams{Slug: "blue-note", City: "nyc"})
 	require.Error(t, err, "deleted venue is still readable")
+	playlist := "spotify:new"
+	_, err = native.CreateVenue(db.Context, ondecknative.CreateVenueParams{
+		ID: 8, Slug: "with-playlist", Name: "With Playlist", City: "nyc", Status: "op!en", SpotifyPlaylist: &playlist,
+	})
+	require.NoError(t, err)
+	populated, err := native.GetVenue(db.Context, ondecknative.GetVenueParams{Slug: "with-playlist", City: "nyc"})
+	require.NoError(t, err)
+	require.Equal(t, &playlist, populated.SpotifyPlaylist)
 }

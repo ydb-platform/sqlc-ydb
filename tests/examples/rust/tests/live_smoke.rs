@@ -248,6 +248,7 @@ async fn ondeck_smoke(client: &mut ydb::QueryClient) -> ydb::YdbResult<()> {
         include_str!("../../../../examples/ondeck/schema/0003_rename_venue.sql"),
         include_str!("../../../../examples/ondeck/schema/0004_add_created_at.sql"),
         include_str!("../../../../examples/ondeck/schema/0005_drop_column.sql"),
+        include_str!("../../../../examples/ondeck/schema/0006_drop_playlist_not_null.sql"),
     ] {
         exec(client, migration).await?;
     }
@@ -270,7 +271,7 @@ async fn ondeck_smoke(client: &mut ydb::QueryClient) -> ydb::YdbResult<()> {
             .name("Club")
             .city("moscow")
             .created_at(created_at)
-            .spotify_playlist("playlist")
+            .spotify_playlist(None)
             .status("open")
             .statuses(None)
             .tags(Some(String::from("[\"music\"]")))
@@ -279,6 +280,7 @@ async fn ondeck_smoke(client: &mut ydb::QueryClient) -> ydb::YdbResult<()> {
         assert_eq!(venue.id, 1);
         let loaded = queries.venue().slug("club").city("moscow").call().await?;
         assert_eq!(loaded.created_at, Some(created_at));
+        assert_eq!(loaded.spotify_playlist, None);
         assert_eq!(loaded.statuses, None);
         assert_eq!(loaded.tags.as_deref(), Some("[\"music\"]"));
         assert_eq!(

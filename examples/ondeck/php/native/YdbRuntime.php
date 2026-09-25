@@ -108,6 +108,11 @@ final class YdbValueCodec
         return self::typed(PrimitiveTypeId::TIMESTAMP, 'uint64_value', (string) $value);
     }
 
+    public static function typedOptionalUtf8(?string $value, string $where): TypedValue
+    {
+        return self::typedOptional($value === null ? null : self::typedUtf8($value, $where), PrimitiveTypeId::UTF8);
+    }
+
     public static function typedOptionalJson(?string $value, string $where): TypedValue
     {
         return self::typedOptional($value === null ? null : self::typedJson($value, $where), PrimitiveTypeId::JSON);

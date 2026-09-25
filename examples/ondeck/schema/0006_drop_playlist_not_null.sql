@@ -1,0 +1,1 @@
+ALTER TABLE venue ALTER COLUMN spotify_playlist DROP NOT NULL;

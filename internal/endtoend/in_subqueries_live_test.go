@@ -63,6 +63,12 @@ CREATE TABLE nullable_keys (id Uint64, code Utf8, PRIMARY KEY(id,code));`
 const inSubqueriesQueries = `-- name: ListRecords :many
 SELECT id,code,value,active FROM records ORDER BY id,code;
 
+-- name: TypedInExpressions :many
+DECLARE $ids AS List<Uint64>;
+SELECT id, id IN $ids AS in_list, id IN [1ul, 3ul] AS in_literal,
+    CASE WHEN id IN AsList(1ul, 3ul) THEN 1u ELSE 0u END AS in_case
+FROM records ORDER BY id;
+
 -- name: ScalarKeys :many
 DECLARE $keys AS List<Struct<id:Uint64>>;
 DECLARE $minimum AS Uint64;
@@ -153,6 +159,13 @@ func TestInSubqueries(t *testing.T) {
 	$SETUP
 	all := []string{"1:a","2:b","3:c","18446744073709551615:max"}
 	pair := []string{"1:a","18446744073709551615:max"}
+	typed,err := q.TypedInExpressions(ctx,[]uint64{1,3})
+	if err != nil {t.Fatal(err)}
+	if len(typed)!=4 {t.Fatalf("typed IN rows: %+v",typed)}
+	for i,want := range []struct{id uint64; matched bool; selected uint32}{{1,true,1},{2,false,0},{3,true,1},{^uint64(0),false,0}} {
+		row:=typed[i]
+		if row.ID!=want.id || row.InList!=want.matched || row.InLiteral!=want.matched || row.InCase!=want.selected {t.Fatalf("typed IN row %d: %+v, want %+v",i,row,want)}
+	}
 	for _,keys := range [][]ScalarKeysKeysItem{nil,{}} {
 		rows,err := q.ScalarKeys(ctx,ScalarKeysParams{Keys:keys,Minimum:0})
 		checkKeys(t,rows,err,nil)

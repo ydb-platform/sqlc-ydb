@@ -30,7 +30,7 @@ struct ListVenuesRow final {
     std::string city;
     std::string status;
     std::optional<std::string> statuses;
-    std::string spotify_playlist;
+    std::optional<std::string> spotify_playlist;
     std::optional<std::string> songkick_id;
     std::optional<std::string> tags;
     std::optional<TInstant> created_at;
@@ -43,7 +43,7 @@ struct GetVenueRow final {
     std::string city;
     std::string status;
     std::optional<std::string> statuses;
-    std::string spotify_playlist;
+    std::optional<std::string> spotify_playlist;
     std::optional<std::string> songkick_id;
     std::optional<std::string> tags;
     std::optional<TInstant> created_at;

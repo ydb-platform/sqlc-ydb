@@ -32,7 +32,7 @@ struct ListVenuesRow final {
     ::userver::ydb::Utf8 city;
     ::userver::ydb::Utf8 status;
     std::optional<::userver::formats::json::Value> statuses;
-    ::userver::ydb::Utf8 spotify_playlist;
+    std::optional<::userver::ydb::Utf8> spotify_playlist;
     std::optional<::userver::ydb::Utf8> songkick_id;
     std::optional<::userver::formats::json::Value> tags;
     std::optional<std::chrono::system_clock::time_point> created_at;
@@ -45,7 +45,7 @@ struct GetVenueRow final {
     ::userver::ydb::Utf8 city;
     ::userver::ydb::Utf8 status;
     std::optional<::userver::formats::json::Value> statuses;
-    ::userver::ydb::Utf8 spotify_playlist;
+    std::optional<::userver::ydb::Utf8> spotify_playlist;
     std::optional<::userver::ydb::Utf8> songkick_id;
     std::optional<::userver::formats::json::Value> tags;
     std::optional<std::chrono::system_clock::time_point> created_at;

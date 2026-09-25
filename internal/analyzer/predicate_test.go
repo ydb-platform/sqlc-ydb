@@ -110,8 +110,8 @@ func TestPredicateRejectsBareAndNegatedNonBooleanValues(t *testing.T) {
 func TestPredicateINRejectsIncompatibleAndUnsupportedCollections(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));`}}
 	for _, test := range []struct{ declaration, predicate, want string }{
-		{`DECLARE $labels AS List<Utf8>;`, "id IN $labels", "predicate operands have incompatible types"},
-		{"", `id IN ("text"u)`, "predicate operands have incompatible types"},
+		{`DECLARE $labels AS List<Utf8>;`, "id IN $labels", "IN operands have incompatible types"},
+		{"", `id IN ("text"u)`, "IN operands have incompatible types"},
 		{"", "id IN []", `unsupported IN operand "[]"`},
 	} {
 		t.Run(test.predicate, func(t *testing.T) {

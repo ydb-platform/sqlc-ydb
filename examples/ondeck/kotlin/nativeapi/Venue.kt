@@ -8,7 +8,7 @@ data class Venue(
     val slug: String,
     val name: String,
     val city: String,
-    val spotifyPlaylist: String,
+    val spotifyPlaylist: String?,
     val songkickId: String?,
     val tags: String?,
     val createdAt: java.time.Instant?

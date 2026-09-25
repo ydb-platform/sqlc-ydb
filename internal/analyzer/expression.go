@@ -149,7 +149,8 @@ func resolveComparison(expr antlr.ParserRuleContext, scope expressionScope) (mod
 			if inSubquery(condition.In_expr()) != nil {
 				return model.Type{}, true, fmt.Errorf("IN subqueries are supported only in WHERE predicates; they are not yet supported in projections, CASE, IF, or HAVING")
 			}
-			return model.Type{}, true, fmt.Errorf("typed IN expressions are supported only in WHERE and JOIN predicates; they are not yet supported in projections, CASE, IF, or HAVING")
+			typ, err := resolveINCondition(xor, scope)
+			return typ, true, err
 		}
 		operands = append(operands, xor.Eq_subexpr())
 		for _, operand := range condition.AllEq_subexpr() {

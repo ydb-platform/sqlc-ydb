@@ -278,6 +278,7 @@ function runOndeck(Table $table): void
         $createdTables[array_key_last($createdTables)] = 'venue';
         scheme($table, source('ondeck/schema/0004_add_created_at.sql'));
         scheme($table, source('ondeck/schema/0005_drop_column.sql'));
+        scheme($table, source('ondeck/schema/0006_drop_playlist_not_null.sql'));
 
         $queries = new Ondeck\Native\Queries($table);
         $city = $queries->createCity(new Ondeck\Native\CreateCityParams(
@@ -297,7 +298,7 @@ function runOndeck(Table $table): void
             name: 'Roundhouse',
             city: 'london',
             createdAt: $createdAt,
-            spotifyPlaylist: 'spotify:playlist:1',
+            spotifyPlaylist: null,
             status: 'open',
             statuses: '["open"]',
             tags: '{"genre":"rock"}',
@@ -307,7 +308,7 @@ function runOndeck(Table $table): void
             slug: 'roundhouse',
             city: 'london',
         ));
-        check($loaded?->createdAt === $createdAt && $loaded->statuses === '["open"]' && $loaded->tags === '{"genre":"rock"}', 'ondeck: optional exact values failed');
+        check($loaded?->createdAt === $createdAt && $loaded->spotifyPlaylist === null && $loaded->statuses === '["open"]' && $loaded->tags === '{"genre":"rock"}', 'ondeck: optional exact values failed');
         check($queries->listVenues('london')[0]->id === '7', 'ondeck: venue list failed');
         check($queries->venueCountByCity()[0]->venueCount === '1', 'ondeck: grouped COUNT failed');
         check($queries->updateVenueName(new Ondeck\Native\UpdateVenueNameParams(

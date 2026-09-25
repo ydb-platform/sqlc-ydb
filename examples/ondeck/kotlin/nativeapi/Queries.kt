@@ -160,7 +160,7 @@ class Queries {
             val _value3: String = _rows.getColumn(3).getText()
             val _value4: String = _rows.getColumn(4).getText()
             val _value5: String? = _rows.getColumn(5).getJson()
-            val _value6: String = _rows.getColumn(6).getText()
+            val _value6: String? = _rows.getColumn(6).getText()
             val _value7: String? = _rows.getColumn(7).getText()
             val _value8: String? = _rows.getColumn(8).getJson()
             val _value9: java.time.Instant? = _rows.getColumn(9).getTimestamp()
@@ -213,7 +213,7 @@ class Queries {
         val _value3: String = _rows.getColumn(3).getText()
         val _value4: String = _rows.getColumn(4).getText()
         val _value5: String? = _rows.getColumn(5).getJson()
-        val _value6: String = _rows.getColumn(6).getText()
+        val _value6: String? = _rows.getColumn(6).getText()
         val _value7: String? = _rows.getColumn(7).getText()
         val _value8: String? = _rows.getColumn(8).getJson()
         val _value9: java.time.Instant? = _rows.getColumn(9).getTimestamp()
@@ -221,14 +221,14 @@ class Queries {
     }
 
     // -- name: CreateVenue :one
-    fun createVenue(id: Long, slug: String, name: String, city: String, createdAt: java.time.Instant?, spotifyPlaylist: String, status: String, statuses: String?, tags: String?): CreateVenueRow? {
+    fun createVenue(id: Long, slug: String, name: String, city: String, createdAt: java.time.Instant?, spotifyPlaylist: String?, status: String, statuses: String?, tags: String?): CreateVenueRow? {
         val _params = Params.create()
         _params.put("\$id", PrimitiveValue.newUint64(id))
         _params.put("\$slug", PrimitiveValue.newText(slug))
         _params.put("\$name", PrimitiveValue.newText(name))
         _params.put("\$city", PrimitiveValue.newText(city))
         _params.put("\$created_at", if (createdAt == null) OptionalType.of(PrimitiveType.Timestamp).emptyValue() else PrimitiveValue.newTimestamp(createdAt).makeOptional())
-        _params.put("\$spotify_playlist", PrimitiveValue.newText(spotifyPlaylist))
+        _params.put("\$spotify_playlist", if (spotifyPlaylist == null) OptionalType.of(PrimitiveType.Text).emptyValue() else PrimitiveValue.newText(spotifyPlaylist).makeOptional())
         _params.put("\$status", PrimitiveValue.newText(status))
         _params.put("\$statuses", if (statuses == null) OptionalType.of(PrimitiveType.Json).emptyValue() else PrimitiveValue.newJson(statuses).makeOptional())
         _params.put("\$tags", if (tags == null) OptionalType.of(PrimitiveType.Json).emptyValue() else PrimitiveValue.newJson(tags).makeOptional())
