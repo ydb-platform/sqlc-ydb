@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.2.11
+
 ### Added
 
 - Allow query-scoped YQL parameter type contracts in `sql[].analyzer.parameters` for queries without `DECLARE`, including offline analysis, connected EXPLAIN validation and generated bindings across runtime targets.
