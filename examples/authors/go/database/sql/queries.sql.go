@@ -291,3 +291,16 @@ func (q *Queries) GetAuthorExportMetadata(ctx context.Context, arg uint64) (GetA
 
 	return row, err
 }
+
+// -- name: EchoAuthorIDText :one
+func (q *Queries) EchoAuthorIDText(ctx context.Context, arg string) (EchoAuthorIDTextRow, error) {
+	var row EchoAuthorIDTextRow
+	err := q.db.QueryRowContext(ctx, ""+
+		"SELECT $author_id AS author_id_text;",
+		sql.Named("author_id", arg),
+	).Scan(
+		&row.AuthorIDText,
+	)
+
+	return row, err
+}

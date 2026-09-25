@@ -352,4 +352,24 @@ class Queries {
         val _value7: String? = _rows.getColumn(7).getJson()
         return GetAuthorExportMetadataRow(_value0, _value1, _value2, _value3, _value4, _value5, _value6, _value7)
     }
+
+    // -- name: EchoAuthorIDText :one
+    fun echoAuthorIDText(authorId: String): EchoAuthorIDTextRow? {
+        val _params = Params.create()
+        _params.put("\$author_id", PrimitiveValue.newText(authorId))
+        val _query = if (transaction != null) {
+            QueryReader.readFrom(transaction.createQuery(
+                "SELECT \$author_id AS author_id_text;", _params)).join().getValue()
+        } else {
+            client!!.supplyResult { _session ->
+                QueryReader.readFrom(_session.createQuery(
+                    "SELECT \$author_id AS author_id_text;", TxMode.SERIALIZABLE_RW, _params))
+            }.join().getValue()
+        }
+        kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
+        val _rows = _query.getResultSet(0)
+        if (!_rows.next()) return null
+        val _value0: String = _rows.getColumn(0).getText()
+        return EchoAuthorIDTextRow(_value0)
+    }
 }

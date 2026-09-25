@@ -283,3 +283,23 @@ class Querier:
             )
         finally:
             cursor.close()
+
+    # -- name: EchoAuthorIDText :one
+    def echo_author_i_d_text(self, author_id: str) -> Optional[_models.EchoAuthorIDTextRow]:
+        parameters = {
+            "$author_id": (author_id, _ydb.PrimitiveType.Utf8),
+        }
+        cursor = self._connection.cursor()
+        try:
+            cursor.execute(
+                ("SELECT $author_id AS author_id_text;"),
+                parameters,
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return _models.EchoAuthorIDTextRow(
+                author_id_text=row[0],
+            )
+        finally:
+            cursor.close()

@@ -42,3 +42,7 @@ class GetAuthorExportMetadataRow:
     export_timestamp_micros: int
     column6: int
     export_metadata: Optional[JSONValue]
+
+@dataclass
+class EchoAuthorIDTextRow:
+    author_id_text: str

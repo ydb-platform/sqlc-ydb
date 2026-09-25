@@ -12,4 +12,6 @@ Compared with [upstream](../README.md), IDs are explicit `Uint64` inputs rather 
 
 `GetAuthorExportMetadata` obtains the current UTC date, datetime and timestamp in YDB, exports the date/datetime as text and the timestamp as native, text and integer-microsecond values, and returns JSON export metadata. Its unaliased `COALESCE(CAST(id AS Uint32), 0)` demonstrates a fitting integer fallback: an ID outside the Uint32 range produces zero. These values are computed by YDB inside the request, without client-side clock substitution or conversion. The explicit date/datetime text conversion keeps this example within the scalar result types supported by every runtime profile.
 
+`EchoAuthorIDText` returns a text value supplied by the caller. Its `$author_id` parameter has no inferable SQL type, so `analyzer.parameters` assigns `Utf8` to this query alone; the other author queries still infer `$author_id` as `Uint64` from the table column.
+
 This example covers every built-in language/runtime. Each language's build files and executable smoke tests live in its own directory. See [development](../../.agents/development.md) for generation and sequential live acceptance commands.

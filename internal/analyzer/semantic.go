@@ -3,6 +3,7 @@ package analyzer
 import (
 	"fmt"
 	"maps"
+	"slices"
 	"sort"
 	"strings"
 
@@ -105,6 +106,8 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		}
 	}
 	diagnostics = append(diagnostics, declarationDiagnostics...)
+	declared, configuredDiagnostics := configuredDeclarations(block, declared)
+	diagnostics = append(diagnostics, configuredDiagnostics...)
 	inferred := map[string]model.Type{}
 	localPositions, localNames, localTypes, tabular, lambdas, localDiagnostics := localBindings(catalog, block, tree, declared, inferred, query.Syntax)
 	diagnostics = append(diagnostics, localDiagnostics...)
@@ -169,6 +172,19 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	}
 	parameters, parameterDiagnostics := externalParameters(block, tree.binds, declared, inferred, declarationPositions, localPositions, localNames)
 	diagnostics = append(diagnostics, parameterDiagnostics...)
+	for _, name := range slices.Sorted(maps.Keys(block.parameters)) {
+		used := false
+		for _, bind := range tree.binds {
+			position := bind.GetStart().GetStart()
+			if bindName(bind) == name && !localPositions[position] && (!localNames[name] || declarationPositions[position]) {
+				used = true
+				break
+			}
+		}
+		if !used {
+			diagnostics = append(diagnostics, model.Diagnostic{Position: query.Source, Message: fmt.Sprintf("unused parameter $%s in analyzer.parameters for query %q", name, block.name)})
+		}
+	}
 	query.Parameters = parameters
 	for _, parameter := range parameters {
 		if previous, ok := resultParameters[parameter.Name]; ok && !previous.Equal(parameter.Type) {
@@ -506,6 +522,28 @@ func declarations(block queryBlock, tree queryTree) (map[string]model.Type, map[
 		declared[name] = typeValue
 	}
 	return declared, positions, diagnostics
+}
+
+func configuredDeclarations(block queryBlock, declared map[string]model.Type) (map[string]model.Type, []model.Diagnostic) {
+	if len(block.parameters) == 0 {
+		return declared, nil
+	}
+	resolved := maps.Clone(declared)
+	var diagnostics []model.Diagnostic
+	for _, name := range slices.Sorted(maps.Keys(block.parameters)) {
+		typ := block.parameters[name]
+		parsed, err := parseType(typ.String())
+		if err != nil || !parsed.Equal(typ) {
+			diagnostics = append(diagnostics, model.Diagnostic{Position: model.Position{File: block.file, Line: block.line, Column: 1}, Message: fmt.Sprintf("configured parameter $%s has unsupported YQL type %s", name, typ.String())})
+			continue
+		}
+		if source, ok := declared[name]; ok && !source.Equal(typ) {
+			diagnostics = append(diagnostics, model.Diagnostic{Position: model.Position{File: block.file, Line: block.line, Column: 1}, Message: fmt.Sprintf("configured parameter $%s type %s conflicts with DECLARE type %s", name, typ.String(), source.String())})
+			continue
+		}
+		resolved[name] = typ
+	}
+	return resolved, diagnostics
 }
 
 func localBindings(catalog model.Catalog, block queryBlock, tree queryTree, declared, inferred map[string]model.Type, syntax *model.QuerySyntax) (map[int]bool, map[string]bool, map[string]model.Type, map[string]*model.Table, map[string]lambdaBinding, []model.Diagnostic) {

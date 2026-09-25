@@ -271,4 +271,20 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
             export_metadata: row.remove_field(7)?.try_into()?,
         })
     }
+
+    // -- name: EchoAuthorIDText :one
+    #[builder(on(String, into))]
+    pub async fn echo_author_id_text(
+        &mut self,
+        author_id: String,
+    ) -> ydb::YdbResult<EchoAuthorIdTextRow> {
+        let mut row = self
+            .client
+            .query_row("SELECT $author_id AS author_id_text;")
+            .param("$author_id", author_id)
+            .await?;
+        Ok(EchoAuthorIdTextRow {
+            author_id_text: row.remove_field(0)?.try_into()?,
+        })
+    }
 }

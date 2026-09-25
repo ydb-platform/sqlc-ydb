@@ -52,9 +52,9 @@ Before generation, the shared analyzer expands supported `SELECT *`, `SELECT ali
 
 ## Server query validation
 
-Before table discovery and local query semantics, the compiler sends each named query unchanged to QueryService with execution mode `EXPLAIN`. It follows the same path for all queries without classifying their complexity. EXPLAIN compiles SELECT and DML without executing either or requiring parameter values. After successful validation and catalog analysis, generated SQL contains explicit columns in place of wildcard projections. Declarations, expressions and source text outside the replaced wildcard spans are preserved.
+Before table discovery and local query semantics, the compiler sends each named query to QueryService with execution mode `EXPLAIN`. It follows the same path for all queries without classifying their complexity. EXPLAIN compiles SELECT and DML without executing either or requiring parameter values. The request uses the authored SQL unless [parameter types are configured](compatibility.md#configured-parameter-types), in which case missing declarations are added for EXPLAIN only. After successful validation and catalog analysis, generated SQL contains explicit columns in place of wildcard projections. Declarations, expressions and source text outside the replaced wildcard spans are preserved.
 
-Declare external query parameters explicitly in each named query:
+Declare external query parameters explicitly in each named query, or configure their types for that query:
 
 ```sql
 -- name: ReadRecord :one
@@ -62,7 +62,7 @@ DECLARE $id AS Uint64;
 SELECT id, title FROM records WHERE id = $id;
 ```
 
-The compiler does not infer and prepend declarations for connected analysis. For the known `Unknown name: $parameter` diagnostic, matched case-insensitively, the command adds a suggestion to write `DECLARE $var AS <YQL type>;`. This hint is best-effort because server diagnostic wording can change; the original server error is always preserved. Server errors are reported before local query-shape or type-inference limitations. Successful EXPLAIN is followed by the existing catalog and semantic checks needed to generate typed code; it does not extend the supported result-expression set. Offline parameter inference remains unchanged.
+Without a configured type, the compiler does not infer and prepend declarations for connected analysis; every external parameter must have either a source `DECLARE` or a configured type, even when offline analysis could infer it. For the known `Unknown name: $parameter` diagnostic, matched case-insensitively, the command adds a suggestion to write `DECLARE $var AS <YQL type>;`. This hint is best-effort because server diagnostic wording can change; the original server error is always preserved. After configured declarations are checked, server errors are reported before local query-shape or type-inference limitations. Successful EXPLAIN is followed by the existing catalog and semantic checks needed to generate typed code; it does not extend the supported result-expression set. Offline parameter inference remains unchanged.
 
 A server error fails the command; it never silently falls back to offline analysis. All selected generators consume the same analysis. Connection, metadata and validation errors occur before generated files are written. No persistent metadata cache is used: every invocation checks the current schema again.
 

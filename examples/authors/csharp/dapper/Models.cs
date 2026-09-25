@@ -90,3 +90,7 @@ public sealed record GetAuthorExportMetadataRow(
     uint Column6,
     string? ExportMetadata
 );
+
+public sealed record EchoAuthorIDTextRow(
+    string AuthorIDText
+);

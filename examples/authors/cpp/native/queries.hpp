@@ -36,6 +36,7 @@ public:
     std::vector<FindAuthorsByNamePrefixRow> FindAuthorsByNamePrefix(const std::string& prefix) const;
     std::optional<GetAuthorStatisticsRow> GetAuthorStatistics() const;
     std::optional<GetAuthorExportMetadataRow> GetAuthorExportMetadata(std::uint64_t author_id) const;
+    std::optional<EchoAuthorIDTextRow> EchoAuthorIDText(const std::string& author_id) const;
 
 private:
     NYdb::NQuery::TQueryClient* client_;

@@ -74,3 +74,8 @@ pub struct GetAuthorExportMetadataRow {
     pub column6: u32,
     pub export_metadata: Option<String>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct EchoAuthorIdTextRow {
+    pub author_id_text: String,
+}

@@ -463,3 +463,29 @@ func (q *Queries) GetAuthorExportMetadata(ctx context.Context, arg uint64, opts 
 
 	return row, nil
 }
+
+// -- name: EchoAuthorIDText :one
+func (q *Queries) EchoAuthorIDText(ctx context.Context, arg string, opts ...query.ExecuteOption) (EchoAuthorIDTextRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$author_id").Text(arg)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	result, err := q.db.QueryRow(ctx, ""+
+		"SELECT $author_id AS author_id_text;",
+		callOptions...,
+	)
+	if err != nil {
+		return EchoAuthorIDTextRow{}, xerrors.WithStackTrace(err)
+	}
+
+	var row EchoAuthorIDTextRow
+	if err := result.ScanNamed(
+		query.Named("author_id_text", &row.AuthorIDText),
+	); err != nil {
+		return EchoAuthorIDTextRow{}, xerrors.WithStackTrace(err)
+	}
+
+	return row, nil
+}

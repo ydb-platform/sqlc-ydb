@@ -50,6 +50,10 @@ public sealed class Queries
             ["export_timestamp_micros"] = nameof(GetAuthorExportMetadataRow.ExportTimestampMicros),
             ["export_metadata"] = nameof(GetAuthorExportMetadataRow.ExportMetadata),
         }));
+        SqlMapper.SetTypeMap(typeof(EchoAuthorIDTextRow), new ColumnTypeMap(typeof(EchoAuthorIDTextRow), new Dictionary<string, string>
+        {
+            ["author_id_text"] = nameof(EchoAuthorIDTextRow.AuthorIDText),
+        }));
     }
 
     private sealed class ColumnTypeMap : SqlMapper.ITypeMap
@@ -320,6 +324,25 @@ public sealed class Queries
             cancellationToken: cancellationToken);
 
         return await _connection.QueryFirstAsync<GetAuthorExportMetadataRow>(command).ConfigureAwait(false);
+    }
+
+    // -- name: EchoAuthorIDText :one
+    public async Task<EchoAuthorIDTextRow> EchoAuthorIDTextAsync(string authorId, CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var parameters = new YdbParameters(
+            new YdbParameter("$author_id", DbType.String, authorId)
+        );
+
+        var command = new CommandDefinition(
+            commandText: """
+            SELECT $author_id AS author_id_text;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        return await _connection.QueryFirstAsync<EchoAuthorIDTextRow>(command).ConfigureAwait(false);
     }
 
     private sealed class YdbParameters : SqlMapper.IDynamicParameters

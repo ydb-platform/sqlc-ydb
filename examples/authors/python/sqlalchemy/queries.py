@@ -293,3 +293,24 @@ class Querier:
             column6=row._mapping["column6"],
             export_metadata=row._mapping["export_metadata"],
         )
+
+    # -- name: EchoAuthorIDText :one
+    def echo_author_i_d_text(self, author_id: str) -> Optional[_models.EchoAuthorIDTextRow]:
+        parameters = {
+            "author_id": (author_id, _ydb.PrimitiveType.Utf8),
+        }
+        result = self._connection.execute(
+            _text(
+                ("SELECT :author_id AS author_id_text;")
+            ),
+            parameters,
+        )
+        try:
+            row = result.fetchone()
+        finally:
+            result.close()
+        if row is None:
+            return None
+        return _models.EchoAuthorIDTextRow(
+            author_id_text=row._mapping["author_id_text"],
+        )

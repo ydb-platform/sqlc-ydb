@@ -60,3 +60,6 @@ SELECT
     CAST('{"source":"authors"}' AS Json) AS export_metadata
 FROM authors
 WHERE id = $author_id;
+
+-- name: EchoAuthorIDText :one
+SELECT $author_id AS author_id_text;

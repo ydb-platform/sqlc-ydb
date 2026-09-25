@@ -19,6 +19,7 @@ Compatibility is tracked by individual CLI, configuration and generated API cont
 - `version --upgrade` replaces the running executable with the verified latest stable release, resolving symlinks and preserving their paths. Download and verification failures preserve the installed binary. See [installation](installation.md#update-the-installed-executable). Automatic in-place upgrades are supported on Linux and macOS. On Windows, `version --upgrade` prints manual upgrade instructions.
 - `sqlc.yaml`, `sqlc.yml`, and `sqlc.json`; configuration version 2. Paths resolve relative to the configuration.
 - Concrete offline function signatures can be declared per query set under `sql[].analyzer.functions`; see [function signatures](functions.md). They are scoped to that `sql` entry and shared by every selected generator.
+- External parameter types can be configured per named query under `sql[].analyzer.parameters` when SQL does not declare or determine them; see [configured parameter types](#configured-parameter-types).
 - Optional [database-assisted analysis](database-analysis.md) discovers referenced table schemas, checks supplied schemas for drift and compiles queries on YDB without executing them. `--no-database` forces offline analysis; local schema inputs are then required.
 - File paths, lists, nonrecursive directories, and ordinary glob patterns. Explicit list order is retained; directory entries and glob matches use lexical order. Hidden files and `*.down.sql` are excluded.
 - Schema rollback sections for goose, sql-migrate, tern and dbmate are excluded. Migration markers inside string literals are preserved.
@@ -53,6 +54,19 @@ This check covers regular files directly in directories the current generation w
 ## Current analyzer coverage
 
 The analyzer supports explicit `CREATE TABLE` catalogs and the schema migration operations listed above, table column and wildcard projections, table/column aliases, supported joins and their optional sides, supported scalar/aggregate functions, `DECLARE`, direct comparison parameter inference, scalar and SELECT-valued local bindings, `INSERT`/`UPSERT ... VALUES`, typed `INSERT`/`UPSERT ... SELECT`, `UPDATE ... SET`, `UPDATE ... ON SELECT`, `DELETE`, `DELETE ... ON SELECT`, and `RETURNING`. SELECT expression, source, predicate and grouping analysis is shared between read queries and DML SELECT sources. It validates names outside the projection and conflicting parameter constraints. Diagnostics include source file, line and column. Table, column, alias and parameter names are case-sensitive, as in YQL.
+
+### Configured parameter types
+
+Use `sql[].analyzer.parameters` to supply a YQL type for an external parameter that cannot be determined from the query text, such as a `List<Struct<...>>` passed to `AS_TABLE`. The outer key is the exact `-- name:` query name; inner keys are exact parameter names without `$`. The contract belongs to that query and is shared by all generators in the same `sql` entry:
+
+```yaml
+analyzer:
+  parameters:
+    ReadRows:
+      rows: List<Struct<id:Uint64,name:Utf8>>
+```
+
+The analyzer rejects unknown query names, unused parameter names, invalid types, and configured types that conflict with a source `DECLARE` or SQL type constraint. Source declarations and generated executable SQL remain unchanged. Connected analysis requires a source `DECLARE` or configured type for every external parameter, including those inferable offline, because EXPLAIN has no bound values. The compiler adds configured declarations only to its non-executing EXPLAIN request; generated methods still send the authored SQL and bind the resolved parameter types. See the [authors example](../examples/authors/queries.sql) for a parameter whose type differs between named queries. Selected runtimes may still reject a container type they cannot bind.
 
 One named query can contain several supported INSERT/UPSERT, UPDATE and DELETE statements. Use `:exec` for scripts without results, or `:one`/`:many` for scripts with exactly one SELECT or DML RETURNING result, before, between or after the other mutations. A UNION is one result. Leading declarations and supported local bindings are shared, while each statement resolves its own table and column scope. A shared parameter must have a consistent type across statements. DECLARE statements must precede local assignments, and both must precede the data statements; the existing static TablePathPrefix rules still apply. If a later statement changes the inferred type of a parameter used by the SELECT, add DECLARE to keep its result type stable.
 

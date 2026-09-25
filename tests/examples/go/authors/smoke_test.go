@@ -29,6 +29,7 @@ func TestGeneratedExample(t *testing.T) {
 		put        func(uint64, string, *string) error
 		get        func(uint64) (string, *string, error)
 		projection func(uint64) (string, error)
+		echo       func(string) (string, error)
 		list       func() (int, error)
 		remove     func(uint64) error
 	}{
@@ -42,6 +43,7 @@ func TestGeneratedExample(t *testing.T) {
 			},
 			func(id uint64) (string, *string, error) { r, e := n.GetAuthor(ctx, id); return r.Name, r.Bio, e },
 			func(id uint64) (string, error) { r, e := n.GetAuthorName(ctx, id); return r.Name, e },
+			func(id string) (string, error) { r, e := n.EchoAuthorIDText(ctx, id); return r.AuthorIDText, e },
 			func() (int, error) { r, e := n.ListAuthors(ctx); return len(r), e },
 			func(id uint64) error { return n.DeleteAuthor(ctx, id) },
 		},
@@ -55,6 +57,7 @@ func TestGeneratedExample(t *testing.T) {
 			},
 			func(id uint64) (string, *string, error) { r, e := s.GetAuthor(ctx, id); return r.Name, r.Bio, e },
 			func(id uint64) (string, error) { r, e := s.GetAuthorName(ctx, id); return r.Name, e },
+			func(id string) (string, error) { r, e := s.EchoAuthorIDText(ctx, id); return r.AuthorIDText, e },
 			func() (int, error) { r, e := s.ListAuthors(ctx); return len(r), e },
 			func(id uint64) error { return s.DeleteAuthor(ctx, id) },
 		},
@@ -73,6 +76,9 @@ func TestGeneratedExample(t *testing.T) {
 			name, err = tc.projection(id)
 			require.NoError(t, err)
 			require.Equal(t, "Автор", name)
+			textID, err := tc.echo("external-id")
+			require.NoError(t, err)
+			require.Equal(t, "external-id", textID)
 			biography := "Биография"
 			require.NoError(t, tc.put(id, "Автор", &biography))
 			_, got, err := tc.get(id)

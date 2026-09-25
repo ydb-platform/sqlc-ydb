@@ -76,4 +76,8 @@ struct GetAuthorExportMetadataRow final {
     std::optional<::userver::formats::json::Value> export_metadata;
 };
 
+struct EchoAuthorIDTextRow final {
+    ::userver::ydb::Utf8 author_id_text;
+};
+
 }  // namespace authors::userver

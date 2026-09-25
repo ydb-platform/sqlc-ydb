@@ -89,6 +89,10 @@ type GetAuthorExportMetadataRow struct {
 	ExportMetadata        *string   `json:"export_metadata"`
 }
 
+type EchoAuthorIDTextRow struct {
+	AuthorIDText string `json:"author_id_text"`
+}
+
 type Querier interface {
 	GetAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorRow, error)
 	ListAuthors(ctx context.Context, opts ...query.ExecuteOption) ([]ListAuthorsRow, error)
@@ -102,4 +106,5 @@ type Querier interface {
 	FindAuthorsByNamePrefix(ctx context.Context, arg string, opts ...query.ExecuteOption) ([]FindAuthorsByNamePrefixRow, error)
 	GetAuthorStatistics(ctx context.Context, opts ...query.ExecuteOption) (GetAuthorStatisticsRow, error)
 	GetAuthorExportMetadata(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorExportMetadataRow, error)
+	EchoAuthorIDText(ctx context.Context, arg string, opts ...query.ExecuteOption) (EchoAuthorIDTextRow, error)
 }

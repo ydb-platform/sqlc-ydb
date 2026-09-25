@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/yql/builtins"
 
@@ -119,8 +121,9 @@ type Function struct {
 }
 
 type Analyzer struct {
-	Functions []Function `yaml:"functions"`
-	Database  *bool      `yaml:"database"`
+	Functions  []Function                   `yaml:"functions"`
+	Parameters map[string]map[string]string `yaml:"parameters"`
+	Database   *bool                        `yaml:"database"`
 }
 
 type SQL struct {
@@ -219,6 +222,9 @@ func Parse(data []byte) (*Config, error) {
 			}
 		}
 		if err := validateFunctions(i, s.Analyzer.Functions); err != nil {
+			return nil, err
+		}
+		if err := validateParameters(i, s.Analyzer.Parameters); err != nil {
 			return nil, err
 		}
 		if g := s.Gen.Go; g != nil {
@@ -365,6 +371,38 @@ func validateFunctions(sqlIndex int, functions []Function) error {
 					return fmt.Errorf("%s: duplicate argument name %q", prefix, argument.Name)
 				}
 				names[argument.Name] = struct{}{}
+			}
+		}
+	}
+	return nil
+}
+
+func validateParameters(sqlIndex int, queries map[string]map[string]string) error {
+	queryNames := make([]string, 0, len(queries))
+	for query := range queries {
+		queryNames = append(queryNames, query)
+	}
+	sort.Strings(queryNames)
+	for _, query := range queryNames {
+		parameters := queries[query]
+		if query == "" {
+			return fmt.Errorf("sql[%d].analyzer.parameters: query name is required", sqlIndex)
+		}
+		if len(parameters) == 0 {
+			return fmt.Errorf("sql[%d].analyzer.parameters.%s: at least one parameter is required", sqlIndex, query)
+		}
+		names := make([]string, 0, len(parameters))
+		for name := range parameters {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			typ := parameters[name]
+			if name == "" || strings.HasPrefix(name, "$") {
+				return fmt.Errorf("sql[%d].analyzer.parameters.%s: parameter name %q must be non-empty and omit the leading $", sqlIndex, query, name)
+			}
+			if typ == "" {
+				return fmt.Errorf("sql[%d].analyzer.parameters.%s.%s: type is required", sqlIndex, query, name)
 			}
 		}
 	}

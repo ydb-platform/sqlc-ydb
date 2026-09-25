@@ -73,4 +73,8 @@ struct GetAuthorExportMetadataRow final {
     std::optional<std::string> export_metadata;
 };
 
+struct EchoAuthorIDTextRow final {
+    std::string author_id_text;
+};
+
 }  // namespace authors::native

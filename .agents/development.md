@@ -102,7 +102,7 @@ The database-analysis acceptance test creates a unique table, discovers its meta
 ```sh
 python3 -m pip install -r examples/authors/python/requirements.txt
 YDB_CONNECTION_STRING=grpc://localhost:2136/local \
-  go test -p 1 -count=1 -timeout=240s ./internal/endtoend -run '^TestLiveYDBDatabaseAnalysis$' -v
+  go test -p 1 -count=1 -timeout=240s ./internal/endtoend -run '^(TestLiveYDBDatabaseAnalysis|TestLiveYDBConfiguredParameterTypes)$' -v
 ```
 
 `TestLiveYDBQueryMetadata` separately checks the public query-service contract with fixed test queries: EXPLAIN with explicit declarations requires no values, while execution with LIMIT 0 returns typed empty results and still needs parameter values. Run `go test -p 1 -count=1 -timeout=120s ./internal/database -run '^TestLiveYDBQueryMetadata$' -v` against the same disposable database. CI runs both database-analysis and query-metadata tests on the pinned stable image and in a separate lightweight job using `local-ydb:nightly`; the nightly job records the resolved image digest. `TestLiveYDBWildcardSchemaEvolution` generates clients from local schema and live metadata before adding an unrelated column, then executes SELECT and RETURNING queries through the pinned Go database/sql driver. CI includes it in stable and nightly acceptance. All suites run sequentially on each host.

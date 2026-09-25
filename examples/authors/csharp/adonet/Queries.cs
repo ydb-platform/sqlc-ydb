@@ -286,4 +286,22 @@ public sealed class Queries
         reader.GetFieldValue<uint>(6),
         reader.IsDBNull(7) ? null : reader.GetFieldValue<string>(7)
     );
+
+    // -- name: EchoAuthorIDText :one
+    public async Task<EchoAuthorIDTextRow> EchoAuthorIDTextAsync(string authorId, CancellationToken cancellationToken = default)
+    {
+        await using var command = new YdbCommand(
+            "SELECT $author_id AS author_id_text;", _connection) { Transaction = _transaction };
+        command.Parameters.Add(new YdbParameter("$author_id", DbType.String, authorId));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException("query returned no rows");
+        }
+        return EchoAuthorIDTextRowFrom(reader);
+    }
+
+    private static EchoAuthorIDTextRow EchoAuthorIDTextRowFrom(DbDataReader reader) => new(
+        reader.GetFieldValue<string>(0)
+    );
 }

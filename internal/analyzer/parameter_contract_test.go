@@ -1,0 +1,109 @@
+package analyzer
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/ydb-platform/sqlc-ydb/internal/model"
+)
+
+func TestConfiguredParameterTypeResolvesUndeclaredQuery(t *testing.T) {
+	const sql = "-- name: Echo :one\nSELECT $value AS value;"
+	options := Options{Parameters: map[string]map[string]model.Type{"Echo": {"value": {Kind: "Utf8"}}}}
+	result, err := AnalyzeWithOptions(nil, []model.Source{{Name: "query.sql", Text: sql}}, options)
+	require.NoError(t, err)
+	require.Equal(t, sql, result.Queries[0].SQL)
+	require.Empty(t, result.Queries[0].DeclaredParameters)
+	require.Equal(t, []model.Parameter{{Name: "value", Type: model.Type{Kind: "Utf8"}}}, result.Queries[0].Parameters)
+	require.Equal(t, model.Type{Kind: "Utf8"}, result.Queries[0].ResultSets[0].Columns[0].Type)
+}
+
+func TestConfiguredStructuredParameterResolvesASTABLE(t *testing.T) {
+	const sql = "-- name: Read :many\nSELECT r.id, r.name FROM AS_TABLE($rows) AS r;"
+	rows, err := ParseType("List<Struct<id:Uint64,name:Utf8>>")
+	require.NoError(t, err)
+	options := Options{Parameters: map[string]map[string]model.Type{"Read": {"rows": rows}}}
+	result, err := AnalyzeWithOptions(nil, []model.Source{{Name: "query.sql", Text: sql}}, options)
+	require.NoError(t, err)
+	require.Equal(t, []model.Parameter{{Name: "rows", Type: rows}}, result.Queries[0].Parameters)
+	require.Equal(t, []string{"id", "name"}, []string{result.Queries[0].ResultSets[0].Columns[0].Name, result.Queries[0].ResultSets[0].Columns[1].Name})
+}
+
+func TestConfiguredParameterTypesAreScopedByQuery(t *testing.T) {
+	const sql = "-- name: Number :one\nSELECT $value AS value;\n-- name: Text :one\nSELECT $value AS value;"
+	options := Options{Parameters: map[string]map[string]model.Type{
+		"Number": {"value": {Kind: "Uint64"}},
+		"Text":   {"value": {Kind: "Utf8"}},
+	}}
+	result, err := AnalyzeWithOptions(nil, []model.Source{{Name: "query.sql", Text: sql}}, options)
+	require.NoError(t, err)
+	require.Equal(t, model.Type{Kind: "Uint64"}, result.Queries[0].Parameters[0].Type)
+	require.Equal(t, model.Type{Kind: "Utf8"}, result.Queries[1].Parameters[0].Type)
+}
+
+func TestConfiguredParameterTypeRejectsMismatchAndUnusedNames(t *testing.T) {
+	const schema = "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));"
+	for _, tc := range []struct {
+		name    string
+		sql     string
+		options Options
+		want    string
+	}{
+		{"SQL constraint", "-- name: Read :many\nSELECT id FROM records WHERE id=$id;", Options{Parameters: map[string]map[string]model.Type{"Read": {"id": {Kind: "Utf8"}}}}, "parameter $id"},
+		{"DECLARE conflict", "-- name: Read :one\nDECLARE $id AS Uint64; SELECT $id AS id;", Options{Parameters: map[string]map[string]model.Type{"Read": {"id": {Kind: "Utf8"}}}}, "conflicts with DECLARE"},
+		{"unknown query", "-- name: Read :one\nSELECT 1 AS value;", Options{Parameters: map[string]map[string]model.Type{"Other": {"id": {Kind: "Uint64"}}}}, "unknown query"},
+		{"unused parameter", "-- name: Read :one\nSELECT 1 AS value;", Options{Parameters: map[string]map[string]model.Type{"Read": {"id": {Kind: "Uint64"}}}}, "unused parameter"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := AnalyzeWithOptions([]model.Source{{Name: "schema.sql", Text: schema}}, []model.Source{{Name: "query.sql", Text: tc.sql}}, tc.options)
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
+func TestDatabaseAnalysisValidatesConfiguredParametersWithoutChangingExecutableSQL(t *testing.T) {
+	const sql = "-- name: Read :one\nSELECT id FROM records WHERE id = $id;"
+	database := &fakeAnalysisDatabase{tables: map[string]model.Table{"records": databaseTestTable("name")}}
+	options := Options{Parameters: map[string]map[string]model.Type{"Read": {"id": {Kind: "Uint64"}}}}
+	result, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: sql}}, options, database)
+	require.NoError(t, err)
+	require.Equal(t, []string{"DECLARE $`id` AS Uint64; " + sql}, database.validated)
+	require.Equal(t, sql, result.Queries[0].SQL)
+	require.Empty(t, result.Queries[0].DeclaredParameters)
+}
+
+func TestDatabaseAnalysisDoesNotDuplicateSourceDeclaration(t *testing.T) {
+	const sql = "-- name: Read :one\nDECLARE $id AS Uint64;\nSELECT $id AS id, $`имя` AS name;"
+	database := &fakeAnalysisDatabase{}
+	options := Options{Parameters: map[string]map[string]model.Type{"Read": {"id": {Kind: "Uint64"}, "имя": {Kind: "Utf8"}}}}
+	result, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: sql}}, options, database)
+	require.NoError(t, err)
+	require.Equal(t, []string{"DECLARE $`имя` AS Utf8; " + sql}, database.validated)
+	require.Equal(t, []string{"id"}, result.Queries[0].DeclaredParameters)
+	require.Equal(t, sql, result.Queries[0].SQL)
+}
+
+func TestDatabaseAnalysisNeedsTypesForAllUndeclaredParameters(t *testing.T) {
+	const sql = "-- name: Read :many\nSELECT $opaque AS value FROM records WHERE id = $id;"
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));"}}
+	queries := []model.Source{{Name: "query.sql", Text: sql}}
+	partial := Options{Parameters: map[string]map[string]model.Type{"Read": {"opaque": {Kind: "Utf8"}}}}
+	_, err := AnalyzeWithOptions(schema, queries, partial)
+	require.NoError(t, err)
+
+	database := &fakeAnalysisDatabase{validateError: errors.New("Unknown name: $id"), tables: map[string]model.Table{"records": databaseTestTable("name")}}
+	_, err = AnalyzeWithDatabase(context.Background(), nil, queries, partial, database)
+	require.ErrorContains(t, err, "database query validation failed: Unknown name: $id")
+	require.Equal(t, []string{"DECLARE $`opaque` AS Utf8; " + sql}, database.validated)
+
+	database.validateError = nil
+	database.validated = nil
+	complete := Options{Parameters: map[string]map[string]model.Type{"Read": {"opaque": {Kind: "Utf8"}, "id": {Kind: "Uint64"}}}}
+	result, err := AnalyzeWithDatabase(context.Background(), nil, queries, complete, database)
+	require.NoError(t, err)
+	require.Equal(t, []string{"DECLARE $`id` AS Uint64; DECLARE $`opaque` AS Utf8; " + sql}, database.validated)
+	require.Equal(t, []model.Parameter{{Name: "opaque", Type: model.Type{Kind: "Utf8"}}, {Name: "id", Type: model.Type{Kind: "Uint64"}}}, result.Queries[0].Parameters)
+}

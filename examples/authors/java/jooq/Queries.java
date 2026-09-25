@@ -201,4 +201,11 @@ public final class Queries {
             }
         });
     }
+
+    // -- name: EchoAuthorIDText :one
+    public Optional<EchoAuthorIDTextRow> echoAuthorIDText(String authorId) {
+        return dsl.select(val(authorId, YdbTypes.UTF8).as("author_id_text"))
+                .coerce(field(name("author_id_text"), YdbTypes.UTF8))
+                .fetchOptional(mapping(EchoAuthorIDTextRow::new));
+    }
 }

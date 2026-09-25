@@ -7,9 +7,10 @@ import (
 	"github.com/ydb-platform/sqlc-ydb/internal/yql/builtins"
 )
 
-// Options supplies additional offline type contracts to one compilation unit.
+// Options supplies additional type contracts to one compilation unit.
 type Options struct {
-	Functions []builtins.Signature
+	Functions  []builtins.Signature
+	Parameters map[string]map[string]model.Type
 }
 
 // ParseType reads a YQL type using the same grammar and normalization as DECLARE.

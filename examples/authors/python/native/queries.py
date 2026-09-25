@@ -270,3 +270,22 @@ class Querier:
             column6=row["column6"],
             export_metadata=row["export_metadata"],
         )
+
+    # -- name: EchoAuthorIDText :one
+    def echo_author_i_d_text(self, author_id: str) -> Optional[_models.EchoAuthorIDTextRow]:
+        parameters = {
+            "$author_id": _ydb.TypedValue(author_id, _ydb.PrimitiveType.Utf8),
+        }
+        result_sets = self._execute(
+            ("SELECT $author_id AS author_id_text;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        row = rows[0] if rows else None
+        if row is None:
+            return None
+        return _models.EchoAuthorIDTextRow(
+            author_id_text=row["author_id_text"],
+        )

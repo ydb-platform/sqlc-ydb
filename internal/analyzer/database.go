@@ -3,6 +3,7 @@ package analyzer
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -18,14 +19,37 @@ type Database interface {
 	ValidateQuery(context.Context, string) error
 }
 
-// AnalyzeWithDatabase validates each named query's original SQL without execution,
-// then discovers referenced tables or checks the supplied schema against the
-// database before normal semantic analysis. Parameters need source DECLAREs.
+// AnalyzeWithDatabase validates each named query without execution, then discovers
+// referenced tables or checks the supplied schema before semantic analysis.
 func AnalyzeWithDatabase(ctx context.Context, schema, queries []model.Source, options Options, database Database) (*model.AnalysisResult, error) {
 	if database == nil {
 		return &model.AnalysisResult{}, fmt.Errorf("database analysis requires a database connection")
 	}
 	return analyze(ctx, schema, queries, options, database)
+}
+
+func queryValidationSQL(block queryBlock) (string, []model.Diagnostic) {
+	if len(block.parameters) == 0 {
+		return block.text, nil
+	}
+	parsed, diagnostics := parseYQL(block.file, block.text, block.line-1)
+	if len(diagnostics) != 0 {
+		return "", diagnostics
+	}
+	declared, _, declarationDiagnostics := declarations(block, collectQueryTree(parsed.tree))
+	_, configuredDiagnostics := configuredDeclarations(block, declared)
+	diagnostics = append(declarationDiagnostics, configuredDiagnostics...)
+	if len(diagnostics) != 0 {
+		return "", diagnostics
+	}
+	var prefix strings.Builder
+	for _, name := range slices.Sorted(maps.Keys(block.parameters)) {
+		if _, sourceDeclared := declared[name]; sourceDeclared {
+			continue
+		}
+		fmt.Fprintf(&prefix, "DECLARE $%s AS %s; ", quotedYQLIdentifier(name), block.parameters[name].String())
+	}
+	return prefix.String() + block.text, nil
 }
 
 type databaseTableReference struct {
