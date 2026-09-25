@@ -7,6 +7,22 @@ import (
 	"time"
 )
 
+type Authors struct {
+	AuthorID uint64 `json:"author_id"`
+	Name     string `json:"name"`
+}
+
+type Books struct {
+	BookID          uint64    `json:"book_id"`
+	AuthorID        uint64    `json:"author_id"`
+	Isbn            string    `json:"isbn"`
+	BookType        string    `json:"book_type"`
+	Title           string    `json:"title"`
+	PublicationYear int32     `json:"publication_year"`
+	Available       time.Time `json:"available"`
+	Tags            string    `json:"tags"`
+}
+
 type GetAuthorRow struct {
 	AuthorID uint64 `json:"author_id"`
 	Name     string `json:"name"`
@@ -21,6 +37,11 @@ type GetBookRow struct {
 	PublicationYear int32     `json:"publication_year"`
 	Available       time.Time `json:"available"`
 	Tags            string    `json:"tags"`
+}
+
+type GetBookAndAuthorRow struct {
+	Books   Books   `json:"books"`
+	Authors Authors `json:"authors"`
 }
 
 type BooksByTitleYearRow struct {
@@ -155,6 +176,7 @@ type InspectBookTextRow struct {
 type Querier interface {
 	GetAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorRow, error)
 	GetBook(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetBookRow, error)
+	GetBookAndAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetBookAndAuthorRow, error)
 	DeleteBook(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error
 	BooksByTitleYear(ctx context.Context, arg BooksByTitleYearParams, opts ...query.ExecuteOption) ([]BooksByTitleYearRow, error)
 	BooksByTags(ctx context.Context, arg string, opts ...query.ExecuteOption) ([]BooksByTagsRow, error)

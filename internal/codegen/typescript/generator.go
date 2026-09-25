@@ -76,6 +76,7 @@ func Generate(a *model.AnalysisResult, options Options) ([]model.File, error) {
 func validate(a *model.AnalysisResult) error {
 	methods := map[string]string{}
 	itemTypes := map[string]bool{}
+	embeddedTypes := map[string]string{}
 	for _, query := range a.Queries {
 		for _, p := range query.Parameters {
 			if isStructList(p.Type) {
@@ -124,8 +125,34 @@ func validate(a *model.AnalysisResult) error {
 				return fmt.Errorf("typescript generator: query %q: expected one result set, got %d", query.Name, len(query.ResultSets))
 			}
 			seenColumns := map[string]string{}
+			seenFields := map[string]bool{}
+			result := query.ResultSets[0]
+			for _, embed := range result.Embeds {
+				if embed.Start < 0 || embed.End > len(result.Columns) || embed.Start >= embed.End {
+					return fmt.Errorf("typescript generator: query %q: invalid embedded column range", query.Name)
+				}
+				if _, err := identifier(embed.Field, false); err != nil || seenFields[embed.Field] {
+					return fmt.Errorf("typescript generator: query %q: embedded field name collision at %q", query.Name, embed.Field)
+				}
+				seenFields[embed.Field] = true
+				table := embeddedTable(a.Catalog, embed.Table)
+				if table == nil || len(table.Columns) != embed.End-embed.Start {
+					return fmt.Errorf("typescript generator: query %q: embedded table %q does not match projected columns", query.Name, embed.Table)
+				}
+				typ := exportedName(embed.Field)
+				if previous, ok := embeddedTypes[typ]; ok && previous != embed.Table {
+					return fmt.Errorf("typescript generator: embedded model name collision %q", typ)
+				}
+				embeddedTypes[typ] = embed.Table
+				for i, column := range table.Columns {
+					projected := result.Columns[embed.Start+i]
+					if projected.Name != column.Name || !projected.Type.Equal(column.Type) {
+						return fmt.Errorf("typescript generator: query %q: embedded table %q does not match projected columns", query.Name, embed.Table)
+					}
+				}
+			}
 
-			for _, column := range query.ResultSets[0].Columns {
+			for i, column := range result.Columns {
 				field := column.ResultName()
 				if !utf8.ValidString(field) {
 					return fmt.Errorf("typescript generator: query %q: result key is not valid UTF-8", query.Name)
@@ -137,6 +164,23 @@ func validate(a *model.AnalysisResult) error {
 				if _, err := tsType(column.Type); err != nil {
 					return fmt.Errorf("typescript generator: query %q column %q: %w", query.Name, column.Name, err)
 				}
+				if !embeddedColumn(result.Embeds, i) {
+					if seenFields[field] {
+						return fmt.Errorf("typescript generator: query %q: result field name collision at %q", query.Name, field)
+					}
+					seenFields[field] = true
+				}
+			}
+		}
+	}
+	for name := range embeddedTypes {
+		if name == "ConfigureQuery" || name == "Queries" || itemTypes[name] {
+			return fmt.Errorf("typescript generator: embedded model type name collision %q", name)
+		}
+		for _, query := range a.Queries {
+			base := exportedName(query.Name)
+			if name == base+"Row" || name == base+"WireRow" || len(query.Parameters) > 1 && name == base+"Params" {
+				return fmt.Errorf("typescript generator: embedded model type name collision %q", name)
 			}
 		}
 	}
@@ -226,6 +270,7 @@ func renderTypeScript(a *model.AnalysisResult) (string, error) {
 	if batch {
 		b.WriteString("// The SDK infers Null for an empty List, so retain the declared item type.\nfunction structList(items: Struct[], type: StructType): Value<ListType> {\n  const list = new List<Struct>();\n  for (const item of items) list.items.push(item);\n  return { type: new ListType(type), encode: () => list.encode() };\n}\n\n")
 	}
+	renderEmbeddedTypes(&b, a)
 	for _, q := range a.Queries {
 		for _, p := range q.Parameters {
 			if isStructList(p.Type) {
@@ -261,15 +306,78 @@ func renderTypeScript(a *model.AnalysisResult) (string, error) {
 }
 
 func renderRowType(b *strings.Builder, name string, q model.AnalyzedQuery) {
-	b.WriteString(name + " = {\n")
-	for _, c := range q.ResultSets[0].Columns {
-		field := c.ResultName()
-		if !plainProperty(field) || reserved[field] {
-			field = strconv.Quote(field)
+	result := q.ResultSets[0]
+	if len(result.Embeds) > 0 {
+		b.WriteString("type " + exportedName(q.Name) + "WireRow = {\n")
+		for _, c := range result.Columns {
+			b.WriteString("  readonly " + tsProperty(c.ResultName()) + ": " + resultType(c.Type) + ";\n")
 		}
-		b.WriteString("  readonly " + field + ": " + resultType(c.Type) + ";\n")
+		b.WriteString("};\n\n")
+	}
+	b.WriteString(name + " = {\n")
+	for i := 0; i < len(result.Columns); i++ {
+		if embed := embeddingAt(result.Embeds, i); embed != nil {
+			b.WriteString("  readonly " + tsProperty(embed.Field) + ": " + exportedName(embed.Field) + ";\n")
+			i = embed.End - 1
+			continue
+		}
+		c := result.Columns[i]
+		b.WriteString("  readonly " + tsProperty(c.ResultName()) + ": " + resultType(c.Type) + ";\n")
 	}
 	b.WriteString("};\n\n")
+}
+
+func tsProperty(field string) string {
+	if !plainProperty(field) || reserved[field] {
+		return strconv.Quote(field)
+	}
+	return field
+}
+
+func embeddedTable(catalog model.Catalog, name string) *model.Table {
+	for i := range catalog.Tables {
+		if catalog.Tables[i].Name == name {
+			return &catalog.Tables[i]
+		}
+	}
+	return nil
+}
+
+func embeddingAt(embeds []model.Embedding, index int) *model.Embedding {
+	for i := range embeds {
+		if embeds[i].Start == index {
+			return &embeds[i]
+		}
+	}
+	return nil
+}
+
+func embeddedColumn(embeds []model.Embedding, index int) bool {
+	for _, embed := range embeds {
+		if index >= embed.Start && index < embed.End {
+			return true
+		}
+	}
+	return false
+}
+
+func renderEmbeddedTypes(b *strings.Builder, a *model.AnalysisResult) {
+	seen := map[string]bool{}
+	for _, q := range a.Queries {
+		for _, result := range q.ResultSets {
+			for _, embed := range result.Embeds {
+				if seen[embed.Table] {
+					continue
+				}
+				seen[embed.Table] = true
+				b.WriteString("export type " + exportedName(embed.Field) + " = {\n")
+				for _, column := range embeddedTable(a.Catalog, embed.Table).Columns {
+					b.WriteString("  readonly " + tsProperty(column.Name) + ": " + resultType(column.Type) + ";\n")
+				}
+				b.WriteString("};\n\n")
+			}
+		}
+	}
 }
 
 func plainProperty(s string) bool {
@@ -300,7 +408,11 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 		if q.Command == model.One {
 			ret = row + " | null"
 		}
-		generic = "<[" + row + "]>"
+		wire := row
+		if len(q.ResultSets[0].Embeds) > 0 {
+			wire = exportedName(q.Name) + "WireRow"
+		}
+		generic = "<[" + wire + "]>"
 	}
 	b.WriteString("\n  // " + model.QueryAnnotation(q) + "\n")
 	b.WriteString("  async " + method + "(" + params + "configure?: ConfigureQuery): Promise<" + ret + "> {\n")
@@ -342,10 +454,37 @@ func renderMethod(b *strings.Builder, q model.AnalyzedQuery) {
 		return
 	}
 	b.WriteString("    const [rows] = await stmt;\n")
+	if len(q.ResultSets[0].Embeds) > 0 {
+		b.WriteString("    const mapped = rows.map((row): " + exportedName(q.Name) + "Row => ({\n")
+		result := q.ResultSets[0]
+		for i := 0; i < len(result.Columns); i++ {
+			if embed := embeddingAt(result.Embeds, i); embed != nil {
+				b.WriteString("      " + tsProperty(embed.Field) + ": {\n")
+				for j := embed.Start; j < embed.End; j++ {
+					column := result.Columns[j]
+					b.WriteString("        " + tsProperty(column.Name) + ": row[" + strconv.Quote(column.ResultName()) + "],\n")
+				}
+				b.WriteString("      },\n")
+				i = embed.End - 1
+				continue
+			}
+			column := result.Columns[i]
+			b.WriteString("      " + tsProperty(column.ResultName()) + ": row[" + strconv.Quote(column.ResultName()) + "],\n")
+		}
+		b.WriteString("    }));\n")
+	}
 	if q.Command == model.One {
-		b.WriteString("\n    return rows[0] ?? null;\n")
+		if len(q.ResultSets[0].Embeds) > 0 {
+			b.WriteString("\n    return mapped[0] ?? null;\n")
+		} else {
+			b.WriteString("\n    return rows[0] ?? null;\n")
+		}
 	} else {
-		b.WriteString("\n    return rows;\n")
+		if len(q.ResultSets[0].Embeds) > 0 {
+			b.WriteString("\n    return mapped;\n")
+		} else {
+			b.WriteString("\n    return rows;\n")
+		}
 	}
 	b.WriteString("  }\n")
 }

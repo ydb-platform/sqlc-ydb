@@ -72,6 +72,9 @@ func analyze(ctx context.Context, schema, queries []model.Source, options Option
 		}
 		if database != nil && len(result.Diagnostics) == 0 {
 			for _, block := range allBlocks {
+				if containsEmbedMacro(block) {
+					continue
+				}
 				position := model.Position{File: block.file, Line: block.line, Column: 1}
 				if err := ctx.Err(); err != nil {
 					result.Diagnostics = append(result.Diagnostics, model.Diagnostic{Position: position, Message: fmt.Sprintf("database analysis canceled: %v", err)})
@@ -97,6 +100,18 @@ func analyze(ctx context.Context, schema, queries []model.Source, options Option
 				query, queryDiagnostics := analyzeExecutableQuery(catalog, block)
 				result.Diagnostics = append(result.Diagnostics, queryDiagnostics...)
 				if len(queryDiagnostics) == 0 {
+					if database != nil && containsEmbedMacro(block) {
+						block.text = query.SQL
+						validationSQL, validationDiagnostics := queryValidationSQL(block)
+						result.Diagnostics = append(result.Diagnostics, validationDiagnostics...)
+						if len(validationDiagnostics) != 0 {
+							continue
+						}
+						if err := database.ValidateQuery(ctx, validationSQL); err != nil {
+							result.Diagnostics = append(result.Diagnostics, model.Diagnostic{Position: query.Source, Message: fmt.Sprintf("database query validation failed: %v", err)})
+							continue
+						}
+					}
 					result.Queries = append(result.Queries, query)
 				}
 			}

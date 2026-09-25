@@ -28,6 +28,74 @@ func sampleAnalysis() *model.AnalysisResult {
 	}
 }
 
+func embeddedAnalysis() *model.AnalysisResult {
+	u64 := model.Type{Kind: "Uint64"}
+	utf8 := model.Type{Kind: "Utf8"}
+	return &model.AnalysisResult{
+		Catalog: model.Catalog{Tables: []model.Table{
+			{Name: "books", Columns: []model.Column{{Name: "id", Type: u64}, {Name: "author_id", Type: u64}}},
+			{Name: "authors", Columns: []model.Column{{Name: "author_id", Type: u64}, {Name: "name", Type: utf8}}},
+		}},
+		Queries: []model.AnalyzedQuery{{
+			Name: "list_joined", Command: model.Many, SQL: "SELECT b.id AS sqlc_embed_0_id, b.author_id AS sqlc_embed_0_author_id, a.author_id AS sqlc_embed_1_author_id, a.name AS sqlc_embed_1_name FROM books AS b INNER JOIN authors AS a ON b.author_id = a.author_id;",
+			ResultSets: []model.ResultSet{{
+				Columns: []model.Column{
+					{Name: "id", WireName: "sqlc_embed_0_id", Type: u64, Table: "books"},
+					{Name: "author_id", WireName: "sqlc_embed_0_author_id", Type: u64, Table: "books"},
+					{Name: "author_id", WireName: "sqlc_embed_1_author_id", Type: u64, Table: "authors"},
+					{Name: "name", WireName: "sqlc_embed_1_name", Type: utf8, Table: "authors"},
+				},
+				Embeds: []model.Embedding{{Start: 0, End: 2, Table: "books", Alias: "b", Field: "books"}, {Start: 2, End: 4, Table: "authors", Alias: "a", Field: "authors"}},
+			}},
+		}},
+	}
+}
+
+func TestGenerateEmbeddedTableModelsAndDecoding(t *testing.T) {
+	for _, runtime := range []string{"ydb", "dbapi", "sqlalchemy"} {
+		t.Run(runtime, func(t *testing.T) {
+			files, err := Generate(embeddedAnalysis(), Options{Runtime: runtime})
+			require.NoError(t, err)
+			models, queries := string(files[0].Content), string(files[1].Content)
+			require.Contains(t, models, "class Books:")
+			require.Contains(t, models, "class Authors:")
+			require.Contains(t, models, "class ListJoinedRow:")
+			require.Contains(t, models, "    books: Books\n    authors: Authors")
+			require.Contains(t, queries, "books=_models.Books(")
+			require.Contains(t, queries, "authors=_models.Authors(")
+			if runtime == "dbapi" {
+				require.Contains(t, queries, "author_id=row[1]")
+				require.Contains(t, queries, "author_id=row[2]")
+			} else {
+				field := "row"
+				if runtime == "sqlalchemy" {
+					field = "row._mapping"
+				}
+				require.Contains(t, queries, `author_id=`+field+`["sqlc_embed_0_author_id"]`)
+				require.Contains(t, queries, `author_id=`+field+`["sqlc_embed_1_author_id"]`)
+			}
+			dir := t.TempDir()
+			for _, file := range files {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, file.Name), file.Content, 0600))
+			}
+			cmd := exec.Command("python3", "-m", "py_compile", filepath.Join(dir, "models.py"), filepath.Join(dir, "queries.py"))
+			cmd.Env = append(os.Environ(), "PYTHONPYCACHEPREFIX="+filepath.Join(dir, "pycache"))
+			out, err := cmd.CombinedOutput()
+			require.NoError(t, err, "%s generated invalid Python:\n%s", runtime, out)
+		})
+	}
+}
+
+func TestGenerateRejectsEmbeddedFieldCollision(t *testing.T) {
+	in := embeddedAnalysis()
+	rs := &in.Queries[0].ResultSets[0]
+	rs.Columns = append(rs.Columns, model.Column{Name: "books", Type: model.Type{Kind: "Utf8"}})
+	for _, runtime := range []string{"ydb", "dbapi", "sqlalchemy"} {
+		_, err := Generate(in, Options{Runtime: runtime})
+		require.ErrorContains(t, err, `result field name collision at "books"`)
+	}
+}
+
 func liveAnalysis(table string) *model.AnalysisResult {
 	utf8 := model.Type{Kind: "Utf8"}
 	blob := model.Type{Kind: "String"}

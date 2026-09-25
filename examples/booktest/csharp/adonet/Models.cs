@@ -35,6 +35,11 @@ public sealed record GetBookRow(
     string Tags
 );
 
+public sealed record GetBookAndAuthorRow(
+    Books Books,
+    Authors Authors
+);
+
 public sealed record BooksByTitleYearParams(
     string Title,
     int PublicationYear

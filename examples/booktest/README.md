@@ -4,6 +4,8 @@ This example adapts sqlc's `booktest` examples at commit `3c2546a4b47fabbcec3e07
 
 The adaptation keeps the author and book CRUD queries, title/year lookup, author join, tag-overlap lookup, and greeting query covered by the upstream dialect variants. Create queries take explicit `Uint64` identifiers in place of upstream serial keys. The upstream enum is represented as `Utf8` (`FICTION` or `NONFICTION`), availability uses YDB `Timestamp`, and tags use YDB `Json`. The tag query converts each JSON array to a string list and uses a YQL set to test for overlap, following the PostgreSQL variant rather than the serialized string equality in MySQL/SQLite. `SayHello` uses YQL string concatenation with a required `Utf8` input in place of the PostgreSQL user-defined function.
 
+`GetBookAndAuthor` uses `sqlc.embed` for a book and its author. Both tables have an `author_id` column; the generated SQL gives the projected columns distinct result names while the generated row keeps the two table models nested.
+
 `RemoveBookTag` filters one book's JSON string array and writes the result in one `UPDATE`. The lambda uses typed `NOT IN` against a list containing the declared tag parameter; removing the last matching tag writes an empty JSON array.
 
 Foreign-key, unique-index, default-value, and auto-increment behavior from the upstream schemas is not declared here because the supported YDB schema subset does not provide those contracts. Callers must validate `book_type` values and supply identifiers, timestamps, and tags explicitly.

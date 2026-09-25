@@ -102,6 +102,11 @@ async function runBooktest() {
     assert.deepEqual((await queries.getBook(bookId)).available, available);
     assert.equal((await queries.booksByTitleYear({ title: "Earthsea", publicationYear: 1968 }))[0].book_id, bookId);
     assert.equal((await queries.booksByTags('["fantasy"]'))[0]["a.name"], "Ursula");
+    const embedded = await queries.getBookAndAuthor(bookId);
+    assert.equal(embedded.books.book_id, bookId);
+    assert.equal(embedded.books.author_id, authorId);
+    assert.equal(embedded.authors.author_id, authorId);
+    assert.equal(embedded.authors.name, "Ursula");
     assert.deepEqual(await queries.sayHello("YDB"), { greeting: "hello YDB" });
     await queries.updateBook({ bookId, title: "A Wizard of Earthsea", tags: '["classic"]' });
     await queries.updateBookISBN({ bookId, title: "A Wizard of Earthsea", tags: '["classic"]', isbn: "new-isbn" });

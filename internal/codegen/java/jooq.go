@@ -84,6 +84,46 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 	}
 	tables.WriteString("}\n")
 	files = append(files, model.File{Name: "Tables.java", Content: []byte(tables.String())})
+	embeddedTables := map[string]bool{}
+	for _, q := range a.Queries {
+		for _, result := range q.ResultSets {
+			for _, embed := range result.Embeds {
+				embeddedTables[embed.Table] = true
+			}
+		}
+	}
+	modelNames := map[string]bool{"Queries": true, "Tables": true}
+	for _, table := range a.Catalog.Tables {
+		if !embeddedTables[table.Name] {
+			continue
+		}
+		n, err := tableName(table.Name)
+		if err != nil {
+			return nil, err
+		}
+		if modelNames[n] {
+			return nil, fmt.Errorf("jOOQ model name collision: %s", n)
+		}
+		modelNames[n] = true
+		fields := []string{}
+		seen := map[string]bool{}
+		for _, column := range table.Columns {
+			field, err := name(column.Name, false)
+			if err != nil {
+				return nil, err
+			}
+			if seen[field] {
+				return nil, fmt.Errorf("jOOQ field name collision in %s: %s", n, field)
+			}
+			seen[field] = true
+			typ, _, err := jooqType(column.Type)
+			if err != nil {
+				return nil, err
+			}
+			fields = append(fields, typ+" "+field)
+		}
+		files = append(files, model.File{Name: n + ".java", Content: []byte(header + "public record " + n + "(" + strings.Join(fields, ", ") + ") {}\n")})
+	}
 	var b strings.Builder
 	b.WriteString(header + "import java.util.List;\nimport java.util.Objects;\nimport java.util.Optional;\n\nimport org.jooq.impl.SQLDataType;\nimport tech.ydb.jooq.YdbDSLContext;\nimport tech.ydb.jooq.YdbTypes;\n\n" + batchImports(a) + "import static org.jooq.impl.DSL.*;\nimport static org.jooq.Records.mapping;\nimport static " + o.Package + ".Tables.*;\n\npublic final class Queries {\n    private final YdbDSLContext dsl;\n\n    public Queries(YdbDSLContext dsl) {\n        this.dsl = Objects.requireNonNull(dsl);\n    }\n")
 	methods := map[string]bool{}
@@ -163,8 +203,24 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			}
 			var fields []string
 			seen := map[string]bool{}
-			for _, c := range q.ResultSets[0].Columns {
-				fn, e := name(c.Name, false)
+			for i, c := range q.ResultSets[0].Columns {
+				typ, dataType, e := jooqType(c.Type)
+				if e != nil {
+					return nil, e
+				}
+				resultFields = append(resultFields, "field(name("+quoted(c.ResultName())+"), "+dataType+")")
+				field := c.Name
+				if embed := javaEmbeddingAt(q.ResultSets[0], i); embed != nil {
+					if embed.Start != i {
+						continue
+					}
+					field = embed.Field
+					typ, e = tableName(embed.Table)
+					if e != nil {
+						return nil, e
+					}
+				}
+				fn, e := name(field, false)
 				if e != nil {
 					return nil, e
 				}
@@ -172,13 +228,12 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 					return nil, fmt.Errorf("%s: Java field collision: %s", q.Name, fn)
 				}
 				seen[fn] = true
-				typ, dataType, e := jooqType(c.Type)
-				if e != nil {
-					return nil, e
-				}
 				fields = append(fields, typ+" "+fn)
-				resultFields = append(resultFields, "field(name("+quoted(c.ResultName())+"), "+dataType+")")
 			}
+			if modelNames[row] {
+				return nil, fmt.Errorf("jOOQ model name collision: %s", row)
+			}
+			modelNames[row] = true
 			files = append(files, model.File{Name: row + ".java", Content: []byte(header + "public record " + row + "(" + strings.Join(fields, ", ") + ") {}\n")})
 			ret = "Optional<" + row + ">"
 			if q.Command == model.Many {
@@ -275,7 +330,7 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 				if q.Command == model.Many {
 					fetch = "fetch"
 				}
-				fmt.Fprintf(&b, "        return dsl.resultQuery(\"{0};\\n{1}\", sql(%s), stmt)\n                .coerce(%s)\n                .%s(mapping(%s::new));\n", sqlLiteral(text), strings.Join(resultFields, ", "), fetch, row)
+				fmt.Fprintf(&b, "        return dsl.resultQuery(\"{0};\\n{1}\", sql(%s), stmt)\n                .coerce(%s)\n                .%s(%s);\n", sqlLiteral(text), strings.Join(resultFields, ", "), fetch, jooqRowMapper(q.ResultSets[0], row))
 			}
 		} else if q.Command == model.Exec {
 			b.WriteString("        " + body + "\n                .execute();\n")
@@ -292,9 +347,9 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 				}
 				// The dialect uses DEFAULT, whose DML RETURNING execution calls
 				// executeUpdate/getGeneratedKeys. YDB returns an ordinary result set.
-				fmt.Fprintf(&b, "        var stmt = %s;\n\n        // YDB RETURNING produces a result set, not JDBC generated keys.\n        return dsl.resultQuery(\"{0}\", stmt)\n                .coerce(%s)\n                .%s(mapping(%s::new));\n", body, strings.Join(fields, ", "), fetch, row)
+				fmt.Fprintf(&b, "        var stmt = %s;\n\n        // YDB RETURNING produces a result set, not JDBC generated keys.\n        return dsl.resultQuery(\"{0}\", stmt)\n                .coerce(%s)\n                .%s(%s);\n", body, strings.Join(fields, ", "), fetch, jooqRowMapper(q.ResultSets[0], row))
 			} else {
-				fmt.Fprintf(&b, "        return %s\n                .coerce(%s)\n                .%s(mapping(%s::new));\n", body, strings.Join(resultFields, ", "), fetch, row)
+				fmt.Fprintf(&b, "        return %s\n                .coerce(%s)\n                .%s(%s);\n", body, strings.Join(resultFields, ", "), fetch, jooqRowMapper(q.ResultSets[0], row))
 			}
 		}
 		b.WriteString("    }\n")
@@ -305,6 +360,18 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		files[i].Content = []byte(jooqImports(string(files[i].Content)))
 	}
 	return files, nil
+}
+
+func jooqRowMapper(result model.ResultSet, row string) string {
+	if len(result.Embeds) == 0 {
+		return "mapping(" + row + "::new)"
+	}
+	values := make([]string, len(result.Columns))
+	for i, column := range result.Columns {
+		typ, _, _ := jooqType(column.Type)
+		values[i] = fmt.Sprintf("_record.get(%d, %s.class)", i, typ)
+	}
+	return "_record -> new " + row + "(" + strings.Join(javaRowValues(result, values), ", ") + ")"
 }
 
 func jooqRequiresFullSQL(q model.AnalyzedQuery) bool {

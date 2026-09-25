@@ -108,6 +108,65 @@ std::optional<GetBookRow> Queries::GetBook(std::uint64_t book_id) const {
     return sqlc_row;
 }
 
+// -- name: GetBookAndAuthor :one
+std::optional<GetBookAndAuthorRow> Queries::GetBookAndAuthor(std::uint64_t book_id) const {
+    std::optional<NYdb::TResultSet> sqlc_result_set;
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_params = NYdb::TParamsBuilder()
+            .AddParam("$book_id").Uint64(book_id).Build()
+            .Build();
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            "SELECT `b`.`book_id` AS `__sqlc_embed_0_0`, `b`.`author_id` AS `__sqlc_embed_0_1`, `b`.`isbn` AS `__sqlc_embed_0_2`, `b`.`book_type` AS `__sqlc_embed_0_3`, `b`.`title` AS `__sqlc_embed_0_4`, `b`.`publication_year` AS `__sqlc_embed_0_5`, `b`.`available` AS `__sqlc_embed_0_6`, `b`.`tags` AS `__sqlc_embed_0_7`, `a`.`author_id` AS `__sqlc_embed_1_0`, `a`.`name` AS `__sqlc_embed_1_1`\n"
+            "FROM books AS b\n"
+            "JOIN authors AS a ON b.author_id = a.author_id\n"
+            "WHERE b.book_id = $book_id;",
+            sqlc_tx,
+            sqlc_params,
+            this->execute_settings_
+        ).GetValueSync();
+        if (sqlc_result.IsSuccess()) {
+            if (sqlc_result.GetResultSets().size() != 1) {
+                throw std::runtime_error("expected exactly one result set");
+            }
+            sqlc_result_set = sqlc_result.GetResultSet(0);
+        }
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+    if (!sqlc_result_set) {
+        throw std::runtime_error("GetBookAndAuthor: successful query returned no result set");
+    }
+    NYdb::TResultSetParser sqlc_parser(*sqlc_result_set);
+    if (!sqlc_parser.TryNextRow()) {
+        return std::nullopt;
+    }
+    GetBookAndAuthorRow sqlc_row{
+        {
+            sqlc_parser.ColumnParser("__sqlc_embed_0_0").GetUint64(),
+            sqlc_parser.ColumnParser("__sqlc_embed_0_1").GetUint64(),
+            sqlc_parser.ColumnParser("__sqlc_embed_0_2").GetUtf8(),
+            sqlc_parser.ColumnParser("__sqlc_embed_0_3").GetUtf8(),
+            sqlc_parser.ColumnParser("__sqlc_embed_0_4").GetUtf8(),
+            sqlc_parser.ColumnParser("__sqlc_embed_0_5").GetInt32(),
+            sqlc_parser.ColumnParser("__sqlc_embed_0_6").GetTimestamp(),
+            sqlc_parser.ColumnParser("__sqlc_embed_0_7").GetJson(),
+        },
+        {
+            sqlc_parser.ColumnParser("__sqlc_embed_1_0").GetUint64(),
+            sqlc_parser.ColumnParser("__sqlc_embed_1_1").GetUtf8(),
+        },
+    };
+    return sqlc_row;
+}
+
 // -- name: DeleteBook :exec
 void Queries::DeleteBook(std::uint64_t book_id) const {
     const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {

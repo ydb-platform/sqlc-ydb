@@ -152,6 +152,17 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	}
 
 	query.MultipleStatements = dataStatements > 1
+	if query.MultipleStatements && block.wildcards != nil && len(block.wildcards.embeds) != 0 {
+		diagnostics = append(diagnostics, model.Diagnostic{Position: query.Source, Message: "sqlc.embed requires a single row-returning SELECT statement"})
+	}
+	for _, call := range sqlcMacroCalls(parsed.tokens) {
+		if strings.EqualFold(call.name, "embed") && (block.wildcards == nil || !block.wildcards.usedEmbeds[call.token.GetStart()]) {
+			diagnostics = append(diagnostics, model.Diagnostic{
+				Position: model.Position{File: block.file, Line: block.line - 1 + call.token.GetLine(), Column: call.token.GetColumn() + 1},
+				Message:  "sqlc.embed must be a direct result expression in a single top-level SELECT",
+			})
+		}
+	}
 
 	for name, localType := range localTypes {
 		if usedType, ok := inferred[name]; ok {
@@ -213,7 +224,11 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		}
 	}
 	if returnsRows {
-		query.ResultSets = []model.ResultSet{{Columns: resultColumns}}
+		result := model.ResultSet{Columns: resultColumns}
+		if block.wildcards != nil {
+			result.Embeds = block.wildcards.embeds
+		}
+		query.ResultSets = []model.ResultSet{result}
 	}
 	return query, diagnostics
 }
@@ -257,6 +272,9 @@ func analyzeDataStatement(catalog model.Catalog, block queryBlock, statement *pa
 		var cores []*parser.Select_coreContext
 		cores, partials, selectDiagnostics = selectArms(block, selectStatement)
 		diagnostics = append(diagnostics, selectDiagnostics...)
+		if block.wildcards != nil && len(cores) == 1 {
+			block.wildcards.embedCore = cores[0]
+		}
 		for i, core := range cores {
 			columns, armDiagnostics := analyzeSelectCore(catalog, block, core, partials[i], bindings, inferred, syntax, selectProjection)
 			diagnostics = append(diagnostics, armDiagnostics...)
@@ -728,6 +746,7 @@ type relation struct {
 	table    *model.Table
 	alias    string
 	optional bool
+	physical bool
 }
 
 func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser.Select_coreContext, bindings, inferred map[string]model.Type, syntax *model.QuerySyntax) ([]relation, []model.Diagnostic) {
@@ -831,7 +850,7 @@ func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser
 					diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, fmt.Sprintf("duplicate source alias %q", alias)))
 				}
 			}
-			relations = append(relations, relation{table: table, alias: alias})
+			relations = append(relations, relation{table: table, alias: alias, physical: tableRef != nil && tableRef.Table_key() != nil})
 			if i > 0 {
 				op := strings.ToUpper(join.Join_op(i - 1).GetText())
 				switch {
@@ -910,6 +929,22 @@ func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContex
 			continue
 		}
 		expr := result.Expr()
+		if invoke, ok := directEmbedCall(expr); ok {
+			hasWildcard = true
+			embedColumns, embedding, expressions, err := embedProjection(block, selectCore, result, invoke, relations, ordinal, len(columns))
+			if err != nil {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, expr, err.Error()))
+				continue
+			}
+			columns = append(columns, embedColumns...)
+			block.wildcards.embeds = append(block.wildcards.embeds, embedding)
+			block.wildcards.usedEmbeds[expr.GetStart().GetStart()] = true
+			for _, ref := range columnRefs(expr) {
+				block.wildcards.usedEmbedArgs[ref.ctx.GetStart().GetStart()] = true
+			}
+			block.wildcards.addExpression(expr, expressions)
+			continue
+		}
 		column, pure, err := expressionColumn(expr, relations, declared, selectCore.Group_by_clause() != nil, block.functions, block.lambdas)
 		if err != nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, expr, err.Error()))
@@ -936,6 +971,19 @@ func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContex
 			}
 		}
 		columns = append(columns, column)
+	}
+	if block.wildcards != nil && len(block.wildcards.embeds) != 0 {
+		if len(unnamed) != 0 {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, selectCore, "sqlc.embed with computed result expressions requires explicit AS aliases"))
+		}
+		seen := map[string]bool{}
+		for _, column := range columns {
+			name := column.ResultName()
+			if seen[name] {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, selectCore, fmt.Sprintf("sqlc.embed result column %q collides with another projection; use a unique AS alias", name)))
+			}
+			seen[name] = true
+		}
 	}
 	if namedResult {
 		nameImplicitProjections(columns, unnamed, hasWildcard, block.wildcards)
@@ -1108,6 +1156,9 @@ func validateColumnReferences(block queryBlock, root antlr.Tree, relations []rel
 	seen := map[int]bool{}
 	for _, ref := range columnRefs(root) {
 		position := ref.ctx.GetStart().GetStart()
+		if block.wildcards != nil && block.wildcards.usedEmbedArgs[position] {
+			continue
+		}
 		if seen[position] {
 			continue
 		}

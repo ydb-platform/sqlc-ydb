@@ -48,6 +48,32 @@ class Queries(private val client: org.jetbrains.exposed.v1.jdbc.JdbcTransaction)
         }
     }
 
+    // -- name: GetBookAndAuthor :one
+    fun getBookAndAuthor(bookId: Long): GetBookAndAuthorRow? {
+        val _connection = client.connection.connection as java.sql.Connection
+        _connection.prepareStatement(
+            "SELECT `b`.`book_id` AS `__sqlc_embed_0_0`, `b`.`author_id` AS `__sqlc_embed_0_1`, `b`.`isbn` AS `__sqlc_embed_0_2`, `b`.`book_type` AS `__sqlc_embed_0_3`, `b`.`title` AS `__sqlc_embed_0_4`, `b`.`publication_year` AS `__sqlc_embed_0_5`, `b`.`available` AS `__sqlc_embed_0_6`, `b`.`tags` AS `__sqlc_embed_0_7`, `a`.`author_id` AS `__sqlc_embed_1_0`, `a`.`name` AS `__sqlc_embed_1_1`\n" +
+            "FROM books AS b\n" +
+            "JOIN authors AS a ON b.author_id = a.author_id\n" +
+            "WHERE b.book_id = ?;").use { _prepared ->
+            _prepared.setObject(1, PrimitiveValue.newUint64(bookId))
+            _prepared.executeQuery().use { _rows ->
+                if (!_rows.next()) return null
+                val _value0: Long = _rows.getLong(1)
+                val _value1: Long = _rows.getLong(2)
+                val _value2: String = _rows.getString(3)
+                val _value3: String = _rows.getString(4)
+                val _value4: String = _rows.getString(5)
+                val _value5: Int = _rows.getInt(6)
+                val _value6: java.time.Instant = _rows.getTimestamp(7).toInstant()
+                val _value7: String = _rows.getString(8)
+                val _value8: Long = _rows.getLong(9)
+                val _value9: String = _rows.getString(10)
+                return GetBookAndAuthorRow(Books(_value0, _value1, _value2, _value3, _value4, _value5, _value6, _value7), Authors(_value8, _value9))
+            }
+        }
+    }
+
     // -- name: DeleteBook :exec
     fun deleteBook(bookId: Long): Unit {
         val _connection = client.connection.connection as java.sql.Connection

@@ -70,6 +70,41 @@ func TestGenerateDapperProfileUsesDapperExecutionAndTypedYdbParameters(t *testin
 	}
 }
 
+func TestEmbeddedResultBuildsNestedRecordsInBothCSharpProfiles(t *testing.T) {
+	u64 := model.Type{Kind: "Uint64"}
+	utf8 := model.Type{Kind: "Utf8"}
+	a := &model.AnalysisResult{
+		Catalog: model.Catalog{Tables: []model.Table{
+			{Name: "books", Columns: []model.Column{{Name: "book_id", Type: u64}, {Name: "author_id", Type: u64}}},
+			{Name: "authors", Columns: []model.Column{{Name: "author_id", Type: u64}, {Name: "name", Type: utf8}}},
+		}},
+		Queries: []model.AnalyzedQuery{{Name: "GetBookAndAuthor", Command: model.One, SQL: "SELECT 1;", ResultSets: []model.ResultSet{{
+			Columns: []model.Column{{Name: "book_id", WireName: "book_id_1", Type: u64}, {Name: "author_id", WireName: "author_id_1", Type: u64}, {Name: "author_id", WireName: "author_id_2", Type: u64}, {Name: "name", WireName: "name_2", Type: utf8}},
+			Embeds:  []model.Embedding{{Start: 0, End: 2, Table: "books", Field: "books"}, {Start: 2, End: 4, Table: "authors", Field: "authors"}},
+		}}}},
+	}
+	for _, runtime := range []string{"adonet", "dapper"} {
+		t.Run(runtime, func(t *testing.T) {
+			models, queries := generatedRuntime(t, a, runtime)
+			require.Contains(t, models, "public sealed record GetBookAndAuthorRow(\n    Books Books,\n    Authors Authors\n);")
+			require.NotContains(t, models, "public sealed record GetBookAndAuthorRow(\n    ulong")
+			require.Contains(t, queries, "new Books(")
+			require.Contains(t, queries, "new Authors(")
+			if runtime == "dapper" {
+				require.Contains(t, queries, "private sealed record GetBookAndAuthorWireRow(")
+				require.Contains(t, queries, `["author_id_2"] = nameof(GetBookAndAuthorWireRow.Column2)`)
+				require.Contains(t, queries, "QueryFirstAsync<GetBookAndAuthorWireRow>(command)")
+				require.Contains(t, queries, "row.Column2")
+			} else {
+				require.Contains(t, queries, "reader.GetFieldValue<ulong>(2)")
+			}
+		})
+	}
+	a.Queries[0].ResultSets[0].Embeds[1].Field = "books"
+	_, err := Generate(a, Options{})
+	require.ErrorContains(t, err, "column name collision")
+}
+
 func TestJsonAndTimestampUseRealSDKTypesInEveryRuntime(t *testing.T) {
 	jsonType := model.Type{Kind: "Json"}
 	timestampType := model.Type{Kind: "Timestamp"}

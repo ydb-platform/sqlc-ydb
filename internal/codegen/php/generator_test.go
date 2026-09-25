@@ -155,6 +155,36 @@ func TestResultValidationUsesWireNameWithoutChangingDTOProperty(t *testing.T) {
 	require.Contains(t, row, "public readonly string $authorId", "wire name changed the public DTO property:\n%s", row)
 }
 
+func TestEmbeddedResultUsesTableDTOsAndPhysicalWireOrder(t *testing.T) {
+	u64 := model.Type{Kind: "Uint64"}
+	utf8 := model.Type{Kind: "Utf8"}
+	a := &model.AnalysisResult{
+		Catalog: model.Catalog{Tables: []model.Table{
+			{Name: "books", Columns: []model.Column{{Name: "book_id", Type: u64}, {Name: "author_id", Type: u64}}},
+			{Name: "authors", Columns: []model.Column{{Name: "author_id", Type: u64}, {Name: "name", Type: utf8}}},
+		}},
+		Queries: []model.AnalyzedQuery{{Name: "GetBookAndAuthor", Command: model.One, SQL: "SELECT 1;", ResultSets: []model.ResultSet{{
+			Columns: []model.Column{{Name: "book_id", WireName: "book_id_1", Type: u64}, {Name: "author_id", WireName: "author_id_1", Type: u64}, {Name: "author_id", WireName: "author_id_2", Type: u64}, {Name: "name", WireName: "name_2", Type: utf8}},
+			Embeds:  []model.Embedding{{Start: 0, End: 2, Table: "books", Field: "books"}, {Start: 2, End: 4, Table: "authors", Field: "authors"}},
+		}}}},
+	}
+	files, err := Generate(a, Options{})
+	require.NoError(t, err)
+	row := generatedFile(t, files, "GetBookAndAuthorRow.php")
+	require.Contains(t, row, "public readonly Books $books")
+	require.Contains(t, row, "public readonly Authors $authors")
+	require.NotContains(t, row, "$authorId")
+	queries := generatedFile(t, files, "Queries.php")
+	require.Contains(t, queries, "['author_id_2', PrimitiveTypeId::UINT64, false]")
+	require.Contains(t, queries, "new Books(")
+	require.Contains(t, queries, "new Authors(")
+	require.Contains(t, queries, "YdbValueCodec::uint64($items->offsetGet(2), 'GetBookAndAuthor.author_id')")
+
+	a.Queries[0].ResultSets[0].Embeds[1].Field = "books"
+	_, err = Generate(a, Options{})
+	require.ErrorContains(t, err, "property name collision")
+}
+
 func TestSQLLiteralRoundTripsThroughPHP(t *testing.T) {
 	php, err := exec.LookPath("php")
 	if err != nil {

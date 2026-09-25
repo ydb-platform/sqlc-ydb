@@ -83,6 +83,32 @@ func TestResultKeysAreNotNormalized(t *testing.T) {
 	}
 }
 
+func TestEmbeddedResultKeepsWireKeysSeparateFromNestedRow(t *testing.T) {
+	uint64Type := model.Type{Kind: "Uint64"}
+	utf8Type := model.Type{Kind: "Utf8"}
+	books := []model.Column{{Name: "book_id", Type: uint64Type}, {Name: "author_id", Type: uint64Type}}
+	authors := []model.Column{{Name: "author_id", Type: uint64Type}, {Name: "name", Type: utf8Type}}
+	a := &model.AnalysisResult{
+		Catalog: model.Catalog{Tables: []model.Table{{Name: "books", Columns: books}, {Name: "authors", Columns: authors}}},
+		Queries: []model.AnalyzedQuery{{Name: "GetBookAndAuthor", Command: model.One, SQL: "SELECT b.book_id, b.author_id, a.author_id, a.name FROM books b JOIN authors a ON b.author_id = a.author_id;", ResultSets: []model.ResultSet{{
+			Columns: []model.Column{{Name: "book_id", WireName: "embed_books_book_id", Type: uint64Type}, {Name: "author_id", WireName: "embed_books_author_id", Type: uint64Type}, {Name: "author_id", WireName: "embed_authors_author_id", Type: uint64Type}, {Name: "name", WireName: "embed_authors_name", Type: utf8Type}},
+			Embeds:  []model.Embedding{{Start: 0, End: 2, Table: "books", Field: "books"}, {Start: 2, End: 4, Table: "authors", Field: "authors"}},
+		}}}},
+	}
+	files, err := Generate(a, Options{})
+	require.NoError(t, err)
+	got := fileContent(t, files, "queries.ts")
+	require.Contains(t, got, "export type GetBookAndAuthorRow = {\n  readonly books: Books;\n  readonly authors: Authors;")
+	require.Contains(t, got, "type GetBookAndAuthorWireRow = {")
+	require.Contains(t, got, `book_id: row["embed_books_book_id"]`)
+	require.Contains(t, got, `author_id: row["embed_authors_author_id"]`)
+	require.Contains(t, got, "return mapped[0] ?? null;")
+
+	a.Queries[0].ResultSets[0].Embeds[1].Field = "books"
+	_, err = Generate(a, Options{})
+	require.ErrorContains(t, err, "embedded field name collision")
+}
+
 func TestProjectionPreservesSQLAndWireNames(t *testing.T) {
 	for _, tc := range []struct{ sql, want string }{
 		{"SELECT display_name FROM authors;", "SELECT display_name FROM authors;"},

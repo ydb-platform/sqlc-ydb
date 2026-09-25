@@ -70,6 +70,41 @@ class Querier:
             tags=row["tags"],
         )
 
+    # -- name: GetBookAndAuthor :one
+    def get_book_and_author(self, book_id: int) -> Optional[_models.GetBookAndAuthorRow]:
+        parameters = {
+            "$book_id": _ydb.TypedValue(book_id, _ydb.PrimitiveType.Uint64),
+        }
+        result_sets = self._execute(
+            ("SELECT `b`.`book_id` AS `__sqlc_embed_0_0`, `b`.`author_id` AS `__sqlc_embed_0_1`, `b`.`isbn` AS `__sqlc_embed_0_2`, `b`.`book_type` AS `__sqlc_embed_0_3`, `b`.`title` AS `__sqlc_embed_0_4`, `b`.`publication_year` AS `__sqlc_embed_0_5`, `b`.`available` AS `__sqlc_embed_0_6`, `b`.`tags` AS `__sqlc_embed_0_7`, `a`.`author_id` AS `__sqlc_embed_1_0`, `a`.`name` AS `__sqlc_embed_1_1`\n"
+             "FROM books AS b\n"
+             "JOIN authors AS a ON b.author_id = a.author_id\n"
+             "WHERE b.book_id = $book_id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        row = rows[0] if rows else None
+        if row is None:
+            return None
+        return _models.GetBookAndAuthorRow(
+            books=_models.Books(
+                book_id=row["__sqlc_embed_0_0"],
+                author_id=row["__sqlc_embed_0_1"],
+                isbn=row["__sqlc_embed_0_2"],
+                book_type=row["__sqlc_embed_0_3"],
+                title=row["__sqlc_embed_0_4"],
+                publication_year=row["__sqlc_embed_0_5"],
+                available=row["__sqlc_embed_0_6"],
+                tags=row["__sqlc_embed_0_7"],
+            ),
+            authors=_models.Authors(
+                author_id=row["__sqlc_embed_1_0"],
+                name=row["__sqlc_embed_1_1"],
+            ),
+        )
+
     # -- name: DeleteBook :exec
     def delete_book(self, book_id: int) -> None:
         parameters = {

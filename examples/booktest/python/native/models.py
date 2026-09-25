@@ -25,6 +25,11 @@ class Books:
     tags: JSONValue
 
 @dataclass
+class GetBookAndAuthorRow:
+    books: Books
+    authors: Authors
+
+@dataclass
 class BooksByTagsRow:
     book_id: int
     title: str

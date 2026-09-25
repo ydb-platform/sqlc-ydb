@@ -5,6 +5,22 @@ import { Bytes, Int32, Json, Timestamp, Uint64, Utf8 } from "@ydbjs/value/primit
 
 export type ConfigureQuery = (query: Query) => void;
 
+export type Books = {
+  readonly book_id: bigint;
+  readonly author_id: bigint;
+  readonly isbn: string;
+  readonly book_type: string;
+  readonly title: string;
+  readonly publication_year: number;
+  readonly available: Date;
+  readonly tags: JSValue;
+};
+
+export type Authors = {
+  readonly author_id: bigint;
+  readonly name: string;
+};
+
 export type GetAuthorRow = {
   readonly author_id: bigint;
   readonly name: string;
@@ -19,6 +35,24 @@ export type GetBookRow = {
   readonly publication_year: number;
   readonly available: Date;
   readonly tags: JSValue;
+};
+
+type GetBookAndAuthorWireRow = {
+  readonly __sqlc_embed_0_0: bigint;
+  readonly __sqlc_embed_0_1: bigint;
+  readonly __sqlc_embed_0_2: string;
+  readonly __sqlc_embed_0_3: string;
+  readonly __sqlc_embed_0_4: string;
+  readonly __sqlc_embed_0_5: number;
+  readonly __sqlc_embed_0_6: Date;
+  readonly __sqlc_embed_0_7: JSValue;
+  readonly __sqlc_embed_1_0: bigint;
+  readonly __sqlc_embed_1_1: string;
+};
+
+export type GetBookAndAuthorRow = {
+  readonly books: Books;
+  readonly authors: Authors;
 };
 
 export type BooksByTitleYearParams = {
@@ -184,6 +218,37 @@ export class Queries {
     const [rows] = await stmt;
 
     return rows[0] ?? null;
+  }
+
+  // -- name: GetBookAndAuthor :one
+  async getBookAndAuthor(bookId: bigint, configure?: ConfigureQuery): Promise<GetBookAndAuthorRow | null> {
+    const stmt = this.#sql<[GetBookAndAuthorWireRow]>(
+      "SELECT `b`.`book_id` AS `__sqlc_embed_0_0`, `b`.`author_id` AS `__sqlc_embed_0_1`, `b`.`isbn` AS `__sqlc_embed_0_2`, `b`.`book_type` AS `__sqlc_embed_0_3`, `b`.`title` AS `__sqlc_embed_0_4`, `b`.`publication_year` AS `__sqlc_embed_0_5`, `b`.`available` AS `__sqlc_embed_0_6`, `b`.`tags` AS `__sqlc_embed_0_7`, `a`.`author_id` AS `__sqlc_embed_1_0`, `a`.`name` AS `__sqlc_embed_1_1`\n" +
+      "FROM books AS b\n" +
+      "JOIN authors AS a ON b.author_id = a.author_id\n" +
+      "WHERE b.book_id = $book_id;"
+    )
+      .parameter("book_id", new Uint64(bookId));
+    configure?.(stmt);
+    const [rows] = await stmt;
+    const mapped = rows.map((row): GetBookAndAuthorRow => ({
+      books: {
+        book_id: row["__sqlc_embed_0_0"],
+        author_id: row["__sqlc_embed_0_1"],
+        isbn: row["__sqlc_embed_0_2"],
+        book_type: row["__sqlc_embed_0_3"],
+        title: row["__sqlc_embed_0_4"],
+        publication_year: row["__sqlc_embed_0_5"],
+        available: row["__sqlc_embed_0_6"],
+        tags: row["__sqlc_embed_0_7"],
+      },
+      authors: {
+        author_id: row["__sqlc_embed_1_0"],
+        name: row["__sqlc_embed_1_1"],
+      },
+    }));
+
+    return mapped[0] ?? null;
   }
 
   // -- name: DeleteBook :exec

@@ -52,6 +52,33 @@ public final class Queries {
         }
     }
 
+    // -- name: GetBookAndAuthor :one
+    public java.util.Optional<GetBookAndAuthorRow> getBookAndAuthor(long bookId) throws java.sql.SQLException {
+        try (var _prepared = client.prepareStatement("""
+            SELECT `b`.`book_id` AS `__sqlc_embed_0_0`, `b`.`author_id` AS `__sqlc_embed_0_1`, `b`.`isbn` AS `__sqlc_embed_0_2`, `b`.`book_type` AS `__sqlc_embed_0_3`, `b`.`title` AS `__sqlc_embed_0_4`, `b`.`publication_year` AS `__sqlc_embed_0_5`, `b`.`available` AS `__sqlc_embed_0_6`, `b`.`tags` AS `__sqlc_embed_0_7`, `a`.`author_id` AS `__sqlc_embed_1_0`, `a`.`name` AS `__sqlc_embed_1_1`
+            FROM books AS b
+            JOIN authors AS a ON b.author_id = a.author_id
+            WHERE b.book_id = ?;\
+            """)) {
+            _prepared.setObject(1, PrimitiveValue.newUint64(bookId));
+            try (var _rows = _prepared.executeQuery()) {
+                if (!_rows.next()) return java.util.Optional.empty();
+                long _value0 = _rows.getLong(1);
+                long _value1 = _rows.getLong(2);
+                String _value2 = _rows.getString(3);
+                String _value3 = _rows.getString(4);
+                String _value4 = _rows.getString(5);
+                int _value5 = _rows.getInt(6);
+                var _value6Raw = _rows.getTimestamp(7);
+                java.time.Instant _value6 = _value6Raw == null ? null : _value6Raw.toInstant();
+                String _value7 = _rows.getString(8);
+                long _value8 = _rows.getLong(9);
+                String _value9 = _rows.getString(10);
+                return java.util.Optional.of(new GetBookAndAuthorRow(new Books(_value0, _value1, _value2, _value3, _value4, _value5, _value6, _value7), new Authors(_value8, _value9)));
+            }
+        }
+    }
+
     // -- name: DeleteBook :exec
     public void deleteBook(long bookId) throws java.sql.SQLException {
         try (var _prepared = client.prepareStatement("""

@@ -93,7 +93,8 @@ func Generate(in *model.AnalysisResult, opts Options) ([]model.File, error) {
 		}
 		if query.Command == model.One || query.Command == model.Many {
 			name := pascalName(query.Name) + "Row"
-			files = append(files, model.File{Name: name + ".php", Content: []byte(renderDTO(opts.Namespace, name, query.ResultSets[0].Columns))})
+			columns, types := phpRowColumns(query.ResultSets[0])
+			files = append(files, model.File{Name: name + ".php", Content: []byte(renderDTOWithTypes(opts.Namespace, name, columns, types))})
 		}
 	}
 	sort.Slice(files[2:], func(i, j int) bool { return files[2+i].Name < files[2+j].Name })
@@ -184,8 +185,36 @@ func validate(in *model.AnalysisResult) error {
 			}
 		}
 		if query.Command == model.One || query.Command == model.Many {
-			if err := validateFields("query "+query.Name+" result", query.ResultSets[0].Columns); err != nil {
+			result := query.ResultSets[0]
+			columns, _ := phpRowColumns(result)
+			if err := validateFieldNames("query "+query.Name+" result", columns); err != nil {
 				return err
+			}
+			for _, column := range result.Columns {
+				if _, err := phpType(column.Type); err != nil {
+					return fmt.Errorf("php generator: query %q result column %q: %w", query.Name, column.Name, err)
+				}
+			}
+			for _, embed := range result.Embeds {
+				if embed.Start < 0 || embed.End > len(result.Columns) || embed.Start >= embed.End {
+					return fmt.Errorf("php generator: query %q: invalid embedded column range", query.Name)
+				}
+				var table *model.Table
+				for i := range in.Catalog.Tables {
+					if in.Catalog.Tables[i].Name == embed.Table {
+						table = &in.Catalog.Tables[i]
+						break
+					}
+				}
+				if table == nil || len(table.Columns) != embed.End-embed.Start {
+					return fmt.Errorf("php generator: query %q: embedded table %q does not match projected columns", query.Name, embed.Table)
+				}
+				for i, column := range table.Columns {
+					projected := result.Columns[embed.Start+i]
+					if projected.Name != column.Name || !projected.Type.Equal(column.Type) {
+						return fmt.Errorf("php generator: query %q: embedded table %q does not match projected columns", query.Name, embed.Table)
+					}
+				}
 			}
 			if err := add(classes, classBase+"Row", "row:"+query.Name, "class name"); err != nil {
 				return err
@@ -242,6 +271,10 @@ func phpType(t model.Type) (string, error) {
 }
 
 func renderDTO(namespace, name string, columns []model.Column) string {
+	return renderDTOWithTypes(namespace, name, columns, nil)
+}
+
+func renderDTOWithTypes(namespace, name string, columns []model.Column, overrides map[string]string) string {
 	var b strings.Builder
 	b.WriteString(generatedHeader)
 	b.WriteString("declare(strict_types=1);\n\nnamespace " + namespace + ";\n\n")
@@ -252,7 +285,10 @@ func renderDTO(namespace, name string, columns []model.Column) string {
 			typeName = "array"
 			fmt.Fprintf(&b, "        /** @var list<%s> */\n", strings.TrimSuffix(name, "Params")+pascalName(column.Name)+"Item")
 		} else {
-			typeName, _ = phpType(column.Type)
+			typeName = overrides[column.Name]
+			if typeName == "" {
+				typeName, _ = phpType(column.Type)
+			}
 		}
 		comma := ","
 		if i == len(columns)-1 {
@@ -262,6 +298,33 @@ func renderDTO(namespace, name string, columns []model.Column) string {
 	}
 	b.WriteString("    ) {}\n}\n")
 	return b.String()
+}
+
+func phpRowColumns(result model.ResultSet) ([]model.Column, map[string]string) {
+	if len(result.Embeds) == 0 {
+		return result.Columns, nil
+	}
+	var columns []model.Column
+	overrides := map[string]string{}
+	for i := 0; i < len(result.Columns); i++ {
+		if embed := phpEmbeddingAt(result.Embeds, i); embed != nil {
+			columns = append(columns, model.Column{Name: embed.Field})
+			overrides[embed.Field] = pascalName(embed.Table)
+			i = embed.End - 1
+			continue
+		}
+		columns = append(columns, result.Columns[i])
+	}
+	return columns, overrides
+}
+
+func phpEmbeddingAt(embeds []model.Embedding, index int) *model.Embedding {
+	for i := range embeds {
+		if embeds[i].Start == index {
+			return &embeds[i]
+		}
+	}
+	return nil
 }
 
 func renderQueries(in *model.AnalysisResult, namespace string) string {
@@ -463,14 +526,18 @@ func renderMethod(b *strings.Builder, query model.AnalyzedQuery) {
 	}
 	b.WriteString("            ],\n")
 	fmt.Fprintf(b, "            static fn($items): %s => new %s(\n", rowClass, rowClass)
-	for i, column := range query.ResultSets[0].Columns {
-		base := column.Type.UnwrapOptional()
-		info := phpTypes[base.Kind]
-		fn := info.method
-		if column.Type.IsOptional() {
-			fn = "optional" + strings.ToUpper(fn[:1]) + fn[1:]
+	result := query.ResultSets[0]
+	for i := 0; i < len(result.Columns); i++ {
+		if embed := phpEmbeddingAt(result.Embeds, i); embed != nil {
+			fmt.Fprintf(b, "                new %s(\n", pascalName(embed.Table))
+			for j := embed.Start; j < embed.End; j++ {
+				fmt.Fprintf(b, "                    %s,\n", phpDecodedValue(query.Name, result.Columns[j], j))
+			}
+			b.WriteString("                ),\n")
+			i = embed.End - 1
+			continue
 		}
-		fmt.Fprintf(b, "                YdbValueCodec::%s($items->offsetGet(%d), %s),\n", fn, i, phpString(query.Name+"."+column.Name, ""))
+		fmt.Fprintf(b, "                %s,\n", phpDecodedValue(query.Name, result.Columns[i], i))
 	}
 	b.WriteString("            ),\n        );\n")
 	if query.Command == model.One {
@@ -479,6 +546,15 @@ func renderMethod(b *strings.Builder, query model.AnalyzedQuery) {
 		b.WriteString("\n        return $rows;\n")
 	}
 	b.WriteString("    }\n")
+}
+
+func phpDecodedValue(query string, column model.Column, index int) string {
+	info := phpTypes[column.Type.UnwrapOptional().Kind]
+	fn := info.method
+	if column.Type.IsOptional() {
+		fn = "optional" + strings.ToUpper(fn[:1]) + fn[1:]
+	}
+	return fmt.Sprintf("YdbValueCodec::%s($items->offsetGet(%d), %s)", fn, index, phpString(query+"."+column.Name, ""))
 }
 
 // The runtime template has one static method per block. Retain only methods

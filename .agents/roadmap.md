@@ -23,10 +23,10 @@ Semantic changes belong in the shared analyzer. Acceptance requires focused diag
 
 Macro processing must run once per `sql` entry through `analyzer.Analyze`, before any generator. Keep executable SQL, resolved metadata and original diagnostic positions together. Use tokens and parse contexts so rewrites preserve strings, comments, quoted identifiers and local bindings.
 
-Implement in this order:
+Track the macros separately:
 
 1. `sqlc.arg` and `sqlc.narg`: lower to YDB parameters, infer types, preserve `narg` nullability, and diagnose conflicts with declarations or local bindings. Cover repeated uses and preserve existing public parameter names.
-2. `sqlc.embed`: expand projections against the catalog and retain result grouping.
+2. `sqlc.embed`: physical table projections in a single top-level SELECT are implemented with catalog-backed result grouping; nullable outer-join sides and derived sources remain future work.
 3. `sqlc.slice`: define YDB `List<T>` semantics and verify each runtime's binding.
 
 Resolve each rewrite against the catalog and validate the final YQL. Record external parameter occurrences and update their ranges after rewrites. Driver placeholder rendering, such as SQLAlchemy's `:name`, then uses those ranges without rediscovering parameters.

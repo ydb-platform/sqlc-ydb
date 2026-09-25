@@ -8,6 +8,22 @@
 
 namespace booktest::native {
 
+struct Books final {
+    std::uint64_t book_id;
+    std::uint64_t author_id;
+    std::string isbn;
+    std::string book_type;
+    std::string title;
+    std::int32_t publication_year;
+    TInstant available;
+    std::string tags;
+};
+
+struct Authors final {
+    std::uint64_t author_id;
+    std::string name;
+};
+
 struct GetAuthorRow final {
     std::uint64_t author_id;
     std::string name;
@@ -22,6 +38,11 @@ struct GetBookRow final {
     std::int32_t publication_year;
     TInstant available;
     std::string tags;
+};
+
+struct GetBookAndAuthorRow final {
+    Books books;
+    Authors authors;
 };
 
 struct BooksByTitleYearRow final {

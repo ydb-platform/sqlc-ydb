@@ -163,7 +163,18 @@ type Parameter struct {
 	Name string
 	Type Type
 }
-type ResultSet struct{ Columns []Column }
+type ResultSet struct {
+	Columns []Column
+	Embeds  []Embedding
+}
+
+type Embedding struct {
+	Start int
+	End   int
+	Table string
+	Alias string
+	Field string
+}
 
 type Command string
 

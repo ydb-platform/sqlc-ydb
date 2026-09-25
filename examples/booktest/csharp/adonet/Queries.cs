@@ -83,6 +83,40 @@ public sealed class Queries
         reader.GetFieldValue<string>(7)
     );
 
+    // -- name: GetBookAndAuthor :one
+    public async Task<GetBookAndAuthorRow> GetBookAndAuthorAsync(ulong bookId, CancellationToken cancellationToken = default)
+    {
+        await using var command = new YdbCommand(
+            "SELECT `b`.`book_id` AS `__sqlc_embed_0_0`, `b`.`author_id` AS `__sqlc_embed_0_1`, `b`.`isbn` AS `__sqlc_embed_0_2`, `b`.`book_type` AS `__sqlc_embed_0_3`, `b`.`title` AS `__sqlc_embed_0_4`, `b`.`publication_year` AS `__sqlc_embed_0_5`, `b`.`available` AS `__sqlc_embed_0_6`, `b`.`tags` AS `__sqlc_embed_0_7`, `a`.`author_id` AS `__sqlc_embed_1_0`, `a`.`name` AS `__sqlc_embed_1_1`\n" +
+            "FROM books AS b\n" +
+            "JOIN authors AS a ON b.author_id = a.author_id\n" +
+            "WHERE b.book_id = $book_id;", _connection) { Transaction = _transaction };
+        command.Parameters.Add(new YdbParameter("$book_id", DbType.UInt64, bookId));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException("query returned no rows");
+        }
+        return GetBookAndAuthorRowFrom(reader);
+    }
+
+    private static GetBookAndAuthorRow GetBookAndAuthorRowFrom(DbDataReader reader) => new(
+        new Books(
+            reader.GetFieldValue<ulong>(0),
+            reader.GetFieldValue<ulong>(1),
+            reader.GetFieldValue<string>(2),
+            reader.GetFieldValue<string>(3),
+            reader.GetFieldValue<string>(4),
+            reader.GetFieldValue<int>(5),
+            reader.GetFieldValue<DateTime>(6),
+            reader.GetFieldValue<string>(7)
+        ),
+        new Authors(
+            reader.GetFieldValue<ulong>(8),
+            reader.GetFieldValue<string>(9)
+        )
+    );
+
     // -- name: DeleteBook :exec
     public async Task DeleteBookAsync(ulong bookId, CancellationToken cancellationToken = default)
     {

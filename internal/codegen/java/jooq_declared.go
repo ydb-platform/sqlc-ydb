@@ -170,7 +170,7 @@ func emitJooqDeclared(b *strings.Builder, q model.AnalyzedQuery, names []string,
 			types = append(types, dt)
 			values = append(values, fmt.Sprintf("_row.get(%d, %s.class)", i, typ))
 		}
-		fmt.Fprintf(b, "                    var _result = dsl.fetch(_rows, %s).map(_row -> new %s(%s));\n", strings.Join(types, ", "), row, strings.Join(values, ", "))
+		fmt.Fprintf(b, "                    var _result = dsl.fetch(_rows, %s).map(_row -> new %s(%s));\n", strings.Join(types, ", "), row, strings.Join(javaRowValues(q.ResultSets[0], values), ", "))
 		if q.MultipleStatements {
 			emitJDBCScriptFinish(b, "                    ")
 		}

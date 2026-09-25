@@ -219,6 +219,10 @@ function runBooktest(Table $table): void
         ));
         check($queries->getAuthor($authorId)?->name === 'Ursula', 'booktest: author read failed');
         check($queries->getBook($bookId)?->available === $available, 'booktest: Timestamp lost microseconds');
+        $embedded = $queries->getBookAndAuthor($bookId);
+        check($embedded?->books->bookId === $bookId && $embedded->books->authorId === $authorId &&
+            $embedded->authors->authorId === $authorId && $embedded->authors->name === 'Ursula',
+            'booktest: embedded table rows failed');
         check($queries->booksByTitleYear(new Booktest\Native\BooksByTitleYearParams(
             title: 'Earthsea',
             publicationYear: 1968,
