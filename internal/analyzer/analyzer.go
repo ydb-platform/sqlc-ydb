@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -55,6 +57,19 @@ func analyze(ctx context.Context, schema, queries []model.Source, options Option
 				allBlocks = append(allBlocks, block)
 			}
 		}
+		for _, name := range slices.Sorted(maps.Keys(options.Parameters)) {
+			if !slices.ContainsFunc(allBlocks, func(block queryBlock) bool { return block.name == name }) {
+				errList := make([]error, 0, len(result.Diagnostics)+1)
+				for _, diagnostic := range result.Diagnostics {
+					errList = append(errList, diagnostic)
+				}
+				errList = append(errList, fmt.Errorf("analyzer.parameters references unknown query %q", name))
+				return result, errors.Join(errList...)
+			}
+		}
+		for i := range allBlocks {
+			allBlocks[i].parameters = options.Parameters[allBlocks[i].name]
+		}
 		if database != nil && len(result.Diagnostics) == 0 {
 			for _, block := range allBlocks {
 				position := model.Position{File: block.file, Line: block.line, Column: 1}
@@ -62,7 +77,12 @@ func analyze(ctx context.Context, schema, queries []model.Source, options Option
 					result.Diagnostics = append(result.Diagnostics, model.Diagnostic{Position: position, Message: fmt.Sprintf("database analysis canceled: %v", err)})
 					break
 				}
-				if err := database.ValidateQuery(ctx, block.text); err != nil {
+				validationSQL, validationDiagnostics := queryValidationSQL(block)
+				result.Diagnostics = append(result.Diagnostics, validationDiagnostics...)
+				if len(validationDiagnostics) != 0 {
+					continue
+				}
+				if err := database.ValidateQuery(ctx, validationSQL); err != nil {
 					result.Diagnostics = append(result.Diagnostics, model.Diagnostic{Position: position, Message: fmt.Sprintf("database query validation failed: %v", err)})
 				}
 			}
@@ -155,6 +175,7 @@ type queryBlock struct {
 	line            int
 	text            string
 	functions       *builtins.Registry
+	parameters      map[string]model.Type
 	parsed          *parsedYQL
 	wildcards       *wildcardRewrites
 	tablePathPrefix string

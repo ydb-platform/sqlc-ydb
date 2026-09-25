@@ -87,7 +87,7 @@ class GeneratedQueriesTest {
                 }
             }
         }
-        assertEquals(64, statements.size());
+        assertEquals(65, statements.size());
     }
     @Test
     void declaredQueryReadsDialectCarriers() throws Exception {

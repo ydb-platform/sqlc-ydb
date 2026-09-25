@@ -238,4 +238,18 @@ class Queries(private val client: org.jetbrains.exposed.v1.jdbc.JdbcTransaction)
             }
         }
     }
+
+    // -- name: EchoAuthorIDText :one
+    fun echoAuthorIDText(authorId: String): EchoAuthorIDTextRow? {
+        val _connection = client.connection.connection as java.sql.Connection
+        _connection.prepareStatement(
+            "SELECT ? AS author_id_text;").use { _prepared ->
+            _prepared.setString(1, authorId)
+            _prepared.executeQuery().use { _rows ->
+                if (!_rows.next()) return null
+                val _value0: String = _rows.getString(1)
+                return EchoAuthorIDTextRow(_value0)
+            }
+        }
+    }
 }

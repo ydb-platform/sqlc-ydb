@@ -298,4 +298,25 @@ std::optional<GetAuthorExportMetadataRow> Queries::GetAuthorExportMetadata(std::
     };
 }
 
+// -- name: EchoAuthorIDText :one
+std::optional<EchoAuthorIDTextRow> Queries::EchoAuthorIDText(const ::userver::ydb::Utf8& author_id) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "SELECT $author_id AS author_id_text;",
+        ::userver::ydb::Query::Name{"EchoAuthorIDText"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    auto sqlc_response =
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$author_id", author_id)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$author_id", author_id);
+    auto sqlc_cursor = sqlc_response.GetSingleCursor();
+    if (sqlc_cursor.empty()) {
+        return std::nullopt;
+    }
+    auto sqlc_row = sqlc_cursor.GetFirstRow();
+    return EchoAuthorIDTextRow{
+        sqlc_row.Get<::userver::ydb::Utf8>("author_id_text"),
+    };
+}
+
 }  // namespace authors::userver

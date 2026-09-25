@@ -242,4 +242,18 @@ public final class Queries {
             }
         }
     }
+
+    // -- name: EchoAuthorIDText :one
+    public java.util.Optional<EchoAuthorIDTextRow> echoAuthorIDText(String authorId) throws java.sql.SQLException {
+        try (var _prepared = client.prepareStatement("""
+            SELECT ? AS author_id_text;\
+            """)) {
+            _prepared.setString(1, authorId);
+            try (var _rows = _prepared.executeQuery()) {
+                if (!_rows.next()) return java.util.Optional.empty();
+                String _value0 = _rows.getString(1);
+                return java.util.Optional.of(new EchoAuthorIDTextRow(_value0));
+            }
+        }
+    }
 }

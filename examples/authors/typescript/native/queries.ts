@@ -88,6 +88,10 @@ export type GetAuthorExportMetadataRow = {
   readonly export_metadata: JSValue;
 };
 
+export type EchoAuthorIDTextRow = {
+  readonly author_id_text: string;
+};
+
 export class Queries {
   readonly #sql: SQL;
 
@@ -272,6 +276,18 @@ export class Queries {
     Object.defineProperty(stmt, "text", { value: stmt.text, writable: false });
     stmt
       .parameter("author_id", new Uint64(authorId));
+    configure?.(stmt);
+    const [rows] = await stmt;
+
+    return rows[0] ?? null;
+  }
+
+  // -- name: EchoAuthorIDText :one
+  async echoAuthorIDText(authorId: string, configure?: ConfigureQuery): Promise<EchoAuthorIDTextRow | null> {
+    const stmt = this.#sql<[EchoAuthorIDTextRow]>(
+      "SELECT $author_id AS author_id_text;"
+    )
+      .parameter("author_id", new Utf8(authorId));
     configure?.(stmt);
     const [rows] = await stmt;
 

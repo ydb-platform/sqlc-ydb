@@ -4,6 +4,10 @@ sql:
     engine: ydb
     schema: schema.sql
     queries: queries.sql
+    analyzer:
+      parameters:
+        EchoAuthorIDText:
+          author_id: Utf8
     gen:
       kotlin:
         package: authors.nativeapi
@@ -44,6 +48,10 @@ sql:
     engine: ydb
     schema: schema.sql
     queries: queries.sql
+    analyzer:
+      parameters:
+        EchoAuthorIDText:
+          author_id: Utf8
     gen:
       kotlin:
         package: authors.jdbc
@@ -64,6 +72,10 @@ sql:
     engine: ydb
     schema: schema.sql
     queries: queries.sql
+    analyzer:
+      parameters:
+        EchoAuthorIDText:
+          author_id: Utf8
     gen:
       kotlin:
         package: authors.exposed
@@ -73,6 +85,10 @@ sql:
     engine: ydb
     schema: schema.sql
     queries: queries.sql
+    analyzer:
+      parameters:
+        EchoAuthorIDText:
+          author_id: Utf8
     gen:
       python:
         out: python/sqlalchemy
@@ -82,6 +98,10 @@ sql:
     engine: ydb
     schema: schema.sql
     queries: queries.sql
+    analyzer:
+      parameters:
+        EchoAuthorIDText:
+          author_id: Utf8
     gen:
       cpp:
         namespace: authors::userver
@@ -91,6 +111,10 @@ sql:
     engine: ydb
     schema: schema.sql
     queries: queries.sql
+    analyzer:
+      parameters:
+        EchoAuthorIDText:
+          author_id: Utf8
     gen:
       csharp:
         namespace: Authors.Dapper
@@ -100,6 +124,10 @@ sql:
     engine: ydb
     schema: schema.sql
     queries: queries.sql
+    analyzer:
+      parameters:
+        EchoAuthorIDText:
+          author_id: Utf8
     gen:
       java:
         package: authors.jooq

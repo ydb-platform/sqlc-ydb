@@ -544,4 +544,47 @@ std::optional<GetAuthorExportMetadataRow> Queries::GetAuthorExportMetadata(std::
     return sqlc_row;
 }
 
+// -- name: EchoAuthorIDText :one
+std::optional<EchoAuthorIDTextRow> Queries::EchoAuthorIDText(const std::string& author_id) const {
+    std::optional<NYdb::TResultSet> sqlc_result_set;
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_params = NYdb::TParamsBuilder()
+            .AddParam("$author_id").Utf8(author_id).Build()
+            .Build();
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            "SELECT $author_id AS author_id_text;",
+            sqlc_tx,
+            sqlc_params,
+            this->execute_settings_
+        ).GetValueSync();
+        if (sqlc_result.IsSuccess()) {
+            if (sqlc_result.GetResultSets().size() != 1) {
+                throw std::runtime_error("expected exactly one result set");
+            }
+            sqlc_result_set = sqlc_result.GetResultSet(0);
+        }
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+    if (!sqlc_result_set) {
+        throw std::runtime_error("EchoAuthorIDText: successful query returned no result set");
+    }
+    NYdb::TResultSetParser sqlc_parser(*sqlc_result_set);
+    if (!sqlc_parser.TryNextRow()) {
+        return std::nullopt;
+    }
+    EchoAuthorIDTextRow sqlc_row{
+        sqlc_parser.ColumnParser("author_id_text").GetUtf8(),
+    };
+    return sqlc_row;
+}
+
 }  // namespace authors::native

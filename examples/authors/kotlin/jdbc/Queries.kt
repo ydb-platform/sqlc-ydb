@@ -226,4 +226,17 @@ class Queries(private val client: java.sql.Connection) {
             }
         }
     }
+
+    // -- name: EchoAuthorIDText :one
+    fun echoAuthorIDText(authorId: String): EchoAuthorIDTextRow? {
+        client.prepareStatement(
+            "SELECT ? AS author_id_text;").use { _prepared ->
+            _prepared.setString(1, authorId)
+            _prepared.executeQuery().use { _rows ->
+                if (!_rows.next()) return null
+                val _value0: String = _rows.getString(1)
+                return EchoAuthorIDTextRow(_value0)
+            }
+        }
+    }
 }

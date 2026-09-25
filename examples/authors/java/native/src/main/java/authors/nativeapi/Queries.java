@@ -254,4 +254,19 @@ public final class Queries {
         String _value7 = _rows.getColumn(7).getJson();
         return java.util.Optional.of(new GetAuthorExportMetadataRow(_value0, _value1, _value2, _value3, _value4, _value5, _value6, _value7));
     }
+
+    // -- name: EchoAuthorIDText :one
+    public java.util.Optional<EchoAuthorIDTextRow> echoAuthorIDText(String authorId) {
+        var _params = Params.create();
+        _params.put("$author_id", PrimitiveValue.newText(authorId));
+        var _query = QueryReader.readFrom(
+                client.createQuery("""
+                    SELECT $author_id AS author_id_text;\
+                    """, _params)).join().getValue();
+        if (_query.getResultSetCount() != 1) throw new IllegalStateException("Expected one result set");
+        var _rows = _query.getResultSet(0);
+        if (!_rows.next()) return java.util.Optional.empty();
+        String _value0 = _rows.getColumn(0).getText();
+        return java.util.Optional.of(new EchoAuthorIDTextRow(_value0));
+    }
 }

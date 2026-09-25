@@ -198,7 +198,7 @@ jobs:
       # Keep local-ydb acceptance sequential: concurrent tests/compilers can
       # exhaust the memory budget even when they use only one YDB service.
       - name: Verify analyzer types, tabular sources, UDFs and generated typed DML with YDB
-        run: go test -p 1 -count=1 -timeout=300s -covermode=atomic -coverpkg=./... -coverprofile=coverage-semantic.out ./internal/endtoend -run '^(TestLiveYDBSemanticTypes|TestLiveYDBTypedDML|TestLiveYDBComputedDML|TestLiveYDBDatabaseAnalysis|TestLiveYDBWildcardSchemaEvolution|TestLiveYDBIndexes|TestLiveYDBIndexMetadata|TestLiveYDBTabularSources|TestLiveYDBUDFModules)$' -v
+        run: go test -p 1 -count=1 -timeout=300s -covermode=atomic -coverpkg=./... -coverprofile=coverage-semantic.out ./internal/endtoend -run '^(TestLiveYDBSemanticTypes|TestLiveYDBTypedDML|TestLiveYDBComputedDML|TestLiveYDBDatabaseAnalysis|TestLiveYDBConfiguredParameterTypes|TestLiveYDBWildcardSchemaEvolution|TestLiveYDBIndexes|TestLiveYDBIndexMetadata|TestLiveYDBTabularSources|TestLiveYDBUDFModules)$' -v
       - name: Verify integer aliases and pagination with YDB
         timeout-minutes: 5
         run: go test -p 1 -count=1 -timeout=240s -covermode=atomic -coverpkg=./... -coverprofile=coverage-integer-limits-live.out ./internal/endtoend -run '^TestLiveYDBIntegerLimits$' -v
@@ -328,7 +328,7 @@ jobs:
       - name: Verify public query metadata and EXPLAIN contracts
         run: go test -p 1 -count=1 -timeout=120s ./internal/database -run '^TestLiveYDBQueryMetadata$' -v
       - name: Verify database-assisted generation
-        run: go test -p 1 -count=1 -timeout=240s ./internal/endtoend -run '^(TestLiveYDBComputedDML|TestLiveYDBDatabaseAnalysis|TestLiveYDBWildcardSchemaEvolution|TestLiveYDBIndexes|TestLiveYDBIndexMetadata)$' -v
+        run: go test -p 1 -count=1 -timeout=240s ./internal/endtoend -run '^(TestLiveYDBComputedDML|TestLiveYDBDatabaseAnalysis|TestLiveYDBConfiguredParameterTypes|TestLiveYDBWildcardSchemaEvolution|TestLiveYDBIndexes|TestLiveYDBIndexMetadata)$' -v
       - name: Verify integer aliases and pagination with nightly YDB
         timeout-minutes: 5
         run: go test -p 1 -count=1 -timeout=240s ./internal/endtoend -run '^TestLiveYDBIntegerLimits$' -v

@@ -31,7 +31,11 @@ func TestJooqAllExampleQueries(t *testing.T) {
 			require.Nil(t, e)
 			sources, e := source.Read(root, []string{queries}, false)
 			require.Nil(t, e)
-			a, e := analyzer.Analyze(schemas, sources)
+			options := analyzer.Options{}
+			if family == "authors" {
+				options.Parameters = map[string]map[string]model.Type{"EchoAuthorIDText": {"author_id": {Kind: "Utf8"}}}
+			}
+			a, e := analyzer.AnalyzeWithOptions(schemas, sources, options)
 			require.Nil(t, e)
 			files, e := Generate(a, Options{Package: family + ".jooq", Runtime: "jooq"})
 			require.Nil(t, e)

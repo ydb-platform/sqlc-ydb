@@ -29,7 +29,11 @@ func TestApprovedExamples(t *testing.T) {
 			require.NoError(t, err)
 			queries, err := source.Read(base, []string{queryPath}, false)
 			require.NoError(t, err)
-			a, err := analyzer.Analyze(schema, queries)
+			options := analyzer.Options{}
+			if family == "authors" {
+				options.Parameters = map[string]map[string]model.Type{"EchoAuthorIDText": {"author_id": {Kind: "Utf8"}}}
+			}
+			a, err := analyzer.AnalyzeWithOptions(schema, queries, options)
 			require.NoError(t, err)
 			files, err := Generate(a, Options{})
 			require.NoError(t, err)
