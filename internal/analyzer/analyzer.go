@@ -59,7 +59,12 @@ func analyze(ctx context.Context, schema, queries []model.Source, options Option
 		}
 		for _, name := range slices.Sorted(maps.Keys(options.Parameters)) {
 			if !slices.ContainsFunc(allBlocks, func(block queryBlock) bool { return block.name == name }) {
-				return result, fmt.Errorf("analyzer.parameters references unknown query %q", name)
+				errList := make([]error, 0, len(result.Diagnostics)+1)
+				for _, diagnostic := range result.Diagnostics {
+					errList = append(errList, diagnostic)
+				}
+				errList = append(errList, fmt.Errorf("analyzer.parameters references unknown query %q", name))
+				return result, errors.Join(errList...)
 			}
 		}
 		for i := range allBlocks {

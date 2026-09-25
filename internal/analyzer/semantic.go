@@ -175,6 +175,9 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	for _, name := range slices.Sorted(maps.Keys(block.parameters)) {
 		used := false
 		for _, bind := range tree.binds {
+			if bind.GetStart() == nil {
+				continue
+			}
 			position := bind.GetStart().GetStart()
 			if bindName(bind) == name && !localPositions[position] && (!localNames[name] || declarationPositions[position]) {
 				used = true

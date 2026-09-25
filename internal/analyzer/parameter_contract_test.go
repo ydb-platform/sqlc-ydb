@@ -32,6 +32,21 @@ func TestConfiguredStructuredParameterResolvesASTABLE(t *testing.T) {
 	require.Equal(t, []string{"id", "name"}, []string{result.Queries[0].ResultSets[0].Columns[0].Name, result.Queries[0].ResultSets[0].Columns[1].Name})
 }
 
+func TestConfiguredParameterSurvivesWildcardRewrite(t *testing.T) {
+	const sql = "-- name: Read :many\nSELECT * FROM AS_TABLE($rows) AS r;"
+	rows, err := ParseType("List<Struct<id:Uint64,name:Utf8>>")
+	require.NoError(t, err)
+	options := Options{Parameters: map[string]map[string]model.Type{"Read": {"rows": rows}}}
+
+	result, err := AnalyzeWithOptions(nil, []model.Source{{Name: "query.sql", Text: sql}}, options)
+	require.NoError(t, err)
+	require.Len(t, result.Queries, 1)
+	query := result.Queries[0]
+	require.Equal(t, "-- name: Read :many\nSELECT `id`, `name` FROM AS_TABLE($rows) AS r;", query.SQL)
+	require.Equal(t, []model.Parameter{{Name: "rows", Type: rows}}, query.Parameters)
+	require.Equal(t, []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}}, {Name: "name", Type: model.Type{Kind: "Utf8"}}}, query.ResultSets[0].Columns)
+}
+
 func TestConfiguredParameterTypesAreScopedByQuery(t *testing.T) {
 	const sql = "-- name: Number :one\nSELECT $value AS value;\n-- name: Text :one\nSELECT $value AS value;"
 	options := Options{Parameters: map[string]map[string]model.Type{
@@ -62,6 +77,20 @@ func TestConfiguredParameterTypeRejectsMismatchAndUnusedNames(t *testing.T) {
 			require.ErrorContains(t, err, tc.want)
 		})
 	}
+}
+
+func TestConfiguredParameterUnknownQueryPreservesPreviousDiagnostics(t *testing.T) {
+	queries := []model.Source{
+		{Name: "first.sql", Text: "-- name: Read :one\nSELECT 1 AS value;"},
+		{Name: "second.sql", Text: "-- name: Read :one\nSELECT 2 AS value;"},
+	}
+	options := Options{Parameters: map[string]map[string]model.Type{"Other": {"id": {Kind: "Uint64"}}}}
+
+	result, err := AnalyzeWithOptions(nil, queries, options)
+	require.ErrorContains(t, err, `analyzer.parameters references unknown query "Other"`)
+	require.ErrorContains(t, err, `query "Read" is declared more than once`)
+	require.Len(t, result.Diagnostics, 1)
+	require.ErrorContains(t, result.Diagnostics[0], `query "Read" is declared more than once`)
 }
 
 func TestDatabaseAnalysisValidatesConfiguredParametersWithoutChangingExecutableSQL(t *testing.T) {
