@@ -1170,8 +1170,25 @@ func joinedColumn(column model.Column, optional bool) model.Column {
 
 func inferFromComparisons(root antlr.Tree, relations []relation, inferred map[string]model.Type) {
 	scopeDescendants(root, func(root antlr.Tree) {
-		switch root.(type) {
-		case *parser.Xor_subexprContext, *parser.Eq_subexprContext:
+		switch node := root.(type) {
+		case *parser.Xor_subexprContext:
+			if condition := node.Cond_expr(); condition != nil && condition.BETWEEN() != nil {
+				refs := columnRefs(node.Eq_subexpr())
+				if len(refs) != 1 || node.Eq_subexpr().GetText() != refs[0].ctx.GetText() {
+					return
+				}
+				column, err := resolveColumn(relations, refs[0])
+				if err != nil {
+					return
+				}
+				for _, bound := range condition.AllEq_subexpr() {
+					if bind := directBind(bound); bind != nil {
+						inferParameter(inferred, bindName(bind), column.Type)
+					}
+				}
+				return
+			}
+		case *parser.Eq_subexprContext:
 		default:
 			return
 		}

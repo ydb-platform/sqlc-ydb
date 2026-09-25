@@ -68,6 +68,43 @@ HAVING id = $having_id;`}}
 	}
 }
 
+func TestAnalyzeInfersDirectBetweenBounds(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, label Utf8, PRIMARY KEY (id));`}}
+	for _, tc := range []struct {
+		name, sql string
+		want      []model.Parameter
+	}{
+		{"where", `SELECT id FROM records WHERE id BETWEEN $low AND $high;`, []model.Parameter{{Name: "low", Type: model.Type{Kind: "Uint64"}}, {Name: "high", Type: model.Type{Kind: "Uint64"}}}},
+		{"not between", `SELECT id FROM records WHERE label NOT BETWEEN $low AND $high;`, []model.Parameter{{Name: "low", Type: model.Optional(model.Type{Kind: "Utf8"})}, {Name: "high", Type: model.Optional(model.Type{Kind: "Utf8"})}}},
+		{"projection", `SELECT id BETWEEN $low AND $high AS matches FROM records;`, []model.Parameter{{Name: "low", Type: model.Type{Kind: "Uint64"}}, {Name: "high", Type: model.Type{Kind: "Uint64"}}}},
+		{"qualified join", `SELECT a.id FROM records AS a JOIN records AS b ON a.id BETWEEN $low AND $high;`, []model.Parameter{{Name: "low", Type: model.Type{Kind: "Uint64"}}, {Name: "high", Type: model.Type{Kind: "Uint64"}}}},
+		{"update", `UPDATE records SET label = "matched"u WHERE id BETWEEN $low AND $high RETURNING id;`, []model.Parameter{{Name: "low", Type: model.Type{Kind: "Uint64"}}, {Name: "high", Type: model.Type{Kind: "Uint64"}}}},
+		{"symmetric", `SELECT id FROM records WHERE id BETWEEN SYMMETRIC $low AND $high;`, []model.Parameter{{Name: "low", Type: model.Type{Kind: "Uint64"}}, {Name: "high", Type: model.Type{Kind: "Uint64"}}}},
+		{"asymmetric", `SELECT id FROM records WHERE id BETWEEN ASYMMETRIC $low AND $high;`, []model.Parameter{{Name: "low", Type: model.Type{Kind: "Uint64"}}, {Name: "high", Type: model.Type{Kind: "Uint64"}}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Rows :many\n" + tc.sql}})
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got.Queries[0].Parameters)
+		})
+	}
+}
+
+func TestAnalyzeBetweenInferencePreservesTypeConstraints(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, label Utf8, PRIMARY KEY (id));`}}
+	for _, tc := range []struct{ name, sql, want string }{
+		{"declared conflict", `DECLARE $low AS Utf8; SELECT id FROM records WHERE id BETWEEN $low AND 10u;`, "parameter $low declared as Utf8 but used with Uint64"},
+		{"inferred conflict", `SELECT id FROM records WHERE id BETWEEN $bound AND 10u AND label BETWEEN $bound AND "z"u;`, "external parameter $bound has incompatible inferred types"},
+		{"computed left", `SELECT id FROM records WHERE id + 1u BETWEEN $low AND $high;`, "cannot resolve type of external parameter $low; add DECLARE"},
+		{"ambiguous left", `SELECT a.id FROM records AS a JOIN records AS b ON id BETWEEN $low AND $high;`, `ambiguous column "id"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Rows :many\n" + tc.sql}})
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
 func TestAnalyzeRejectsConflictingInferredExpressionParametersAcrossUnionArms(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE ids (
     value Uint64 NOT NULL,
@@ -101,7 +138,7 @@ SELECT id FROM records WHERE ($id = id OR id = $id) AND label = $label OR label 
 func TestAnalyzeParameterContextsRequireDeclare(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, label Utf8, PRIMARY KEY (id));`}}
 	for _, tt := range []struct{ name, sql string }{
-		{"between", "SELECT id FROM records WHERE id BETWEEN $low AND $high;"},
+		{"between computed bound", "SELECT id FROM records WHERE id BETWEEN $low + 1u AND $high;"},
 		{"pattern", "SELECT id FROM records WHERE label LIKE $pattern;"},
 		{"function", "SELECT id FROM records WHERE String::AsciiToLower($value) = 'label';"},
 		{"cast", "SELECT id FROM records WHERE CAST($allow AS Bool);"},

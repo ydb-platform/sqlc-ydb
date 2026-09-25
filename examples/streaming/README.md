@@ -4,13 +4,13 @@ This example exports an ordered range of devices as newline-delimited JSON using
 
 ```sql
 -- name: VisitDevices :each
-DECLARE $min_id AS Uint64;
-DECLARE $max_id AS Uint64;
 SELECT id, name
 FROM streaming_devices
 WHERE id BETWEEN $min_id AND $max_id
 ORDER BY id;
 ```
+
+The analyzer infers the `Uint64` bounds from `streaming_devices.id`, so this query needs no `DECLARE` for them.
 
 With the native package imported as `devices`, a caller-owned session or transaction can stream into an encoder:
 

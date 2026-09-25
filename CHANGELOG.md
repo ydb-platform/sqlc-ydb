@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Infer direct `BETWEEN` and `NOT BETWEEN` bound parameter types from a uniquely resolved column, including `SYMMETRIC` and `ASYMMETRIC` forms.
+
 ## v0.2.12
 
 ### Added
