@@ -2,7 +2,6 @@ package builtins
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -110,7 +109,7 @@ func resolveListTransform(name string, args []model.Type) (model.Type, error) {
 	if err := validateConcreteOrNull(*callback.Elem); err != nil {
 		return model.Type{}, fmt.Errorf("%s callback result: %w", name, err)
 	}
-	if strings.EqualFold(name, "ListFilter") {
+	if name == "ListFilter" {
 		predicate, _, err := baseType(*callback.Elem)
 		if err != nil || predicate.Kind != "Bool" {
 			return model.Type{}, fmt.Errorf("ListFilter callback must return Bool or Optional<Bool>")
@@ -159,7 +158,7 @@ func resolveDictAccess(name string, args []model.Type) (model.Type, error) {
 	if err := exactCollectionValue(*dict.Key, args[1]); err != nil {
 		return model.Type{}, fmt.Errorf("%s argument 2 must match key type %s: %w", name, dict.Key.String(), err)
 	}
-	if strings.EqualFold(name, "DictContains") {
+	if name == "DictContains" {
 		return model.Type{Kind: "Bool"}, nil
 	}
 	return model.Optional(*dict.Elem), nil

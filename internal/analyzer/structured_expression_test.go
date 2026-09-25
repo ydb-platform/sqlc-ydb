@@ -20,6 +20,8 @@ func TestStructuredMemberExpressions(t *testing.T) {
 		{"optional field", "Struct<id:Optional<Uint64>>", "SELECT $key.id AS value;", "Optional<Uint64>", ""},
 		{"optional struct", "Optional<Struct<id:Uint64>>", "SELECT $key.id AS value;", "Optional<Uint64>", ""},
 		{"optional struct and field", "Optional<Struct<id:Optional<Uint64>>>", "SELECT $key.id AS value;", "Optional<Uint64>", ""},
+		{"optional nested struct", "Optional<Struct<inner:Struct<id:Uint64>>>", "SELECT $key.inner.id AS value;", "Optional<Uint64>", ""},
+		{"parenthesized optional struct", "Optional<Struct<id:Uint64>>", "SELECT ($key).id AS value;", "Optional<Uint64>", ""},
 		{"missing", "Struct<id:Uint64>", "SELECT id FROM records WHERE id=$key.missing;", "", "unknown struct field"},
 		{"wrong type", "Struct<id:Utf8>", "SELECT id FROM records WHERE id=$key.id;", "", "incompatible"},
 		{"wrong base", "Uint64", "SELECT $key.id AS value;", "", "requires Struct"},
@@ -87,6 +89,7 @@ func TestStructuredMemberBasesAndSuffixes(t *testing.T) {
 		{"indexed suffix", "DECLARE $key AS Struct<id:Uint64>; SELECT $key.id[0] AS value;", "unsupported member access"},
 		{"invocation after field", "DECLARE $key AS Struct<id:Uint64>; SELECT $key.id() AS value;", "unsupported member invocation"},
 		{"literal base", "SELECT 1u.field AS value;", "unsupported member base"},
+		{"tuple base", "SELECT (1u, 2u).field AS value;", "unsupported member base"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\n" + test.query}})

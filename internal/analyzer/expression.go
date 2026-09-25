@@ -283,6 +283,20 @@ func directBind(root antlr.ParserRuleContext) parser.IBind_parameterContext {
 	return nil
 }
 
+func sameOrWrappedExpression(outer, inner antlr.ParserRuleContext) bool {
+	text := outer.GetText()
+	if text == inner.GetText() {
+		return true
+	}
+	for len(text) >= 2 && text[0] == '(' && text[len(text)-1] == ')' {
+		text = text[1 : len(text)-1]
+		if text == inner.GetText() {
+			return true
+		}
+	}
+	return false
+}
+
 func coveringCast(expr parser.IExprContext) *parser.Cast_exprContext {
 	var result *parser.Cast_exprContext
 	descendants(expr, func(node antlr.Tree) {
@@ -491,6 +505,8 @@ func resolveCallChain(name string, invokes []*parser.Invoke_exprContext, scope e
 			if err != nil {
 				return model.Type{}, err
 			}
+			result = *result.Elem
+			invokes = invokes[1:]
 		}
 	} else {
 		result, err = resolveFunction(name, invokes[0], scope)

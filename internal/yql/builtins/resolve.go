@@ -91,12 +91,16 @@ func lookupCore(name string) functionResolver {
 		return resolveListLength
 	case "LISTHAS":
 		return resolveListHas
-	case "LISTMAP", "LISTFILTER":
-		return func(args []model.Type) (model.Type, error) { return resolveListTransform(name, args) }
+	case "LISTMAP":
+		return func(args []model.Type) (model.Type, error) { return resolveListTransform("ListMap", args) }
+	case "LISTFILTER":
+		return func(args []model.Type) (model.Type, error) { return resolveListTransform("ListFilter", args) }
 	case "TODICT":
 		return resolveToDict
-	case "DICTCONTAINS", "DICTLOOKUP":
-		return func(args []model.Type) (model.Type, error) { return resolveDictAccess(name, args) }
+	case "DICTCONTAINS":
+		return func(args []model.Type) (model.Type, error) { return resolveDictAccess("DictContains", args) }
+	case "DICTLOOKUP":
+		return func(args []model.Type) (model.Type, error) { return resolveDictAccess("DictLookup", args) }
 	case "LISTCREATE":
 		return resolveListCreate
 	case "SETISDISJOINT":

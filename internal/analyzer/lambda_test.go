@@ -17,6 +17,8 @@ func TestListLambdaScopes(t *testing.T) {
 		{"named capture", `DECLARE $step AS Uint64; $advance = ($x) -> ($x + $step); SELECT ListMap(ListCreate(Uint64), $advance) AS values;`, "List<Uint64>"},
 		{"named invocation", `$advance = ($x) -> ($x + 1ul); SELECT $advance(2ul) AS values;`, "Uint64"},
 		{"named alias", `$advance = ($x) -> ($x + 1ul); $next = $advance; SELECT $next(2ul) AS values;`, "Uint64"},
+		{"parenthesized named definition", `$advance = ((($x) -> ($x + 1ul))); SELECT $advance(2ul) AS values;`, "Uint64"},
+		{"parenthesized named alias", `$advance = ($x) -> ($x + 1ul); $next = ($advance); SELECT $next(2ul) AS values;`, "Uint64"},
 		{"named in tabular local", `$advance = ($x) -> ($x + 1ul); $rows = (SELECT $advance(1ul) AS n); SELECT * FROM $rows;`, "Uint64"},
 		{"nested and captured", `DECLARE $offset AS Uint64; SELECT ListMap(ListCreate(Uint64), ($x) -> (ListMap(ListCreate(Uint64), ($y) -> ($x + $y + $offset)))) AS values;`, "List<List<Uint64>>"},
 		{"nested shadow and local capture", `SELECT ListMap(ListCreate(Uint64), ($x) -> { $y = $x + 1ul; RETURN ListMap(ListCreate(Uint64), ($x) -> ($x + $y)); }) AS values;`, "List<List<Uint64>>"},
@@ -34,6 +36,27 @@ func TestListLambdaScopes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNamedLambdaCapturesInferredParameter(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE t (id Uint64 NOT NULL, PRIMARY KEY(id));`}}
+	query := []model.Source{{Name: "query.sql", Text: `-- name: Value :one
+$rows = (SELECT id FROM t WHERE id = $offset);
+$advance = ($x) -> ($x + $offset);
+SELECT $advance(1ul) AS value FROM $rows LIMIT 1;`}}
+	got, err := Analyze(schema, query)
+	require.NoError(t, err)
+	require.Equal(t, "Uint64", got.Queries[0].ResultSets[0].Columns[0].Type.String())
+	require.Equal(t, []model.Parameter{{Name: "offset", Type: model.Type{Kind: "Uint64"}}}, got.Queries[0].Parameters)
+}
+
+func TestNamedLambdaReturningCallable(t *testing.T) {
+	query := []model.Source{{Name: "query.sql", Text: `-- name: Format :one
+$formatter = ($pattern) -> (DateTime::Format($pattern));
+SELECT $formatter("%Y-%m-%d")(CurrentUtcTimestamp()) AS value;`}}
+	got, err := Analyze(nil, query)
+	require.NoError(t, err)
+	require.Equal(t, "String", got.Queries[0].ResultSets[0].Columns[0].Type.String())
 }
 
 func TestListLambdaDiagnostics(t *testing.T) {

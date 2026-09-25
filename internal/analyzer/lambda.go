@@ -19,7 +19,7 @@ type lambdaBinding struct {
 func directLambda(expr parser.IExprContext) parser.ILambdaContext {
 	var result parser.ILambdaContext
 	descendants(expr, func(node antlr.Tree) {
-		if lambda, ok := node.(parser.ILambdaContext); ok && lambda.ARROW() != nil && sameSpan(expr, lambda) {
+		if lambda, ok := node.(parser.ILambdaContext); ok && lambda.ARROW() != nil && sameOrWrappedExpression(expr, lambda) {
 			result = lambda
 		}
 	})

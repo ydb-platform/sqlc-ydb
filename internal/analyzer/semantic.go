@@ -572,6 +572,11 @@ func localBindings(catalog model.Catalog, block queryBlock, tree queryTree, decl
 		if lambda := directLambda(statement.Expr()); lambda != nil {
 			bindings := maps.Clone(declared)
 			maps.Copy(bindings, types)
+			for bindingName, typeValue := range inferred {
+				if _, exists := bindings[bindingName]; !exists && typeValue.Kind != "" {
+					bindings[bindingName] = typeValue
+				}
+			}
 			lambdas[name] = lambdaBinding{lambda: lambda, bindings: bindings, lambdas: maps.Clone(lambdas)}
 			types[name] = model.Type{Kind: "Lambda"}
 			continue
@@ -586,7 +591,7 @@ func localBindings(catalog model.Catalog, block queryBlock, tree queryTree, decl
 				rhsBinds = append(rhsBinds, bind)
 			}
 		})
-		if len(rhsBinds) == 1 && statement.Expr().GetText() == rhsBinds[0].GetText() {
+		if len(rhsBinds) == 1 && sameOrWrappedExpression(statement.Expr(), rhsBinds[0]) {
 			rhsName := bindName(rhsBinds[0])
 			typeValue, ok := types[rhsName]
 			if !ok {
@@ -640,11 +645,7 @@ func localSelectCore(statement *parser.Named_nodes_stmtContext) (*parser.Select_
 		if selected == nil {
 			return nil, nil, false, nil
 		}
-		text := statement.Expr().GetText()
-		for len(text) >= 2 && text[0] == '(' && text[len(text)-1] == ')' {
-			text = text[1 : len(text)-1]
-		}
-		if text != selected.GetText() {
+		if !sameOrWrappedExpression(statement.Expr(), selected) {
 			return nil, nil, false, nil
 		}
 		compound := selected.Select_subexpr_core()
@@ -652,6 +653,9 @@ func localSelectCore(statement *parser.Named_nodes_stmtContext) (*parser.Select_
 			return nil, nil, true, fmt.Errorf("tabular local assignments support one SELECT input without CTE, UNION, or INTERSECT")
 		}
 		partial = compound.Select_subexpr_intersect(0).Select_or_expr(0).Select_kind_partial()
+		if partial == nil {
+			return nil, nil, false, nil
+		}
 	} else {
 		return nil, nil, false, nil
 	}
