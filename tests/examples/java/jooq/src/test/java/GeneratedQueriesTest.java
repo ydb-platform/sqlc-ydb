@@ -71,6 +71,11 @@ class GeneratedQueriesTest {
                         assertTrue(sql.contains("Yson::ConvertToStringList"), sql);
                         assertTrue(sql.toLowerCase().contains("left outer join") || sql.toLowerCase().contains("left join"), sql);
                     }
+                    if (family.equals("booktest") && method.getName().equals("getBookAndAuthor")) {
+                        assertTrue(sql.contains("PRAGMA OrderedColumns;"), sql);
+                        assertTrue(sql.contains("__sqlc_embed_0_1"), sql);
+                        assertTrue(sql.contains("__sqlc_embed_1_0"), sql);
+                    }
                     if (method.getName().equals("removeBookTag")) {
                         assertTrue(sql.contains("UPDATE `books`"), sql);
                         assertTrue(sql.contains("ListFilter("), sql);
@@ -87,7 +92,7 @@ class GeneratedQueriesTest {
                 }
             }
         }
-        assertEquals(65, statements.size());
+        assertEquals(66, statements.size());
     }
     @Test
     void declaredQueryReadsDialectCarriers() throws Exception {

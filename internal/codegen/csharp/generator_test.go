@@ -81,6 +81,9 @@ func TestEmbeddedResultBuildsNestedRecordsInBothCSharpProfiles(t *testing.T) {
 		Queries: []model.AnalyzedQuery{{Name: "GetBookAndAuthor", Command: model.One, SQL: "SELECT 1;", ResultSets: []model.ResultSet{{
 			Columns: []model.Column{{Name: "book_id", WireName: "book_id_1", Type: u64}, {Name: "author_id", WireName: "author_id_1", Type: u64}, {Name: "author_id", WireName: "author_id_2", Type: u64}, {Name: "name", WireName: "name_2", Type: utf8}},
 			Embeds:  []model.Embedding{{Start: 0, End: 2, Table: "books", Field: "books"}, {Start: 2, End: 4, Table: "authors", Field: "authors"}},
+		}}}, {Name: "ListBookAndAuthor", Command: model.Many, SQL: "SELECT 1;", ResultSets: []model.ResultSet{{
+			Columns: []model.Column{{Name: "label", Type: utf8}, {Name: "book_id", WireName: "book_id_1", Type: u64}, {Name: "author_id", WireName: "author_id_1", Type: u64}, {Name: "rank", Type: model.Type{Kind: "Int32"}}, {Name: "author_id", WireName: "author_id_2", Type: u64}, {Name: "name", WireName: "name_2", Type: utf8}, {Name: "active", Type: model.Type{Kind: "Bool"}}},
+			Embeds:  []model.Embedding{{Start: 1, End: 3, Table: "books", Field: "books"}, {Start: 4, End: 6, Table: "authors", Field: "authors"}},
 		}}}},
 	}
 	for _, runtime := range []string{"adonet", "dapper"} {
@@ -90,13 +93,17 @@ func TestEmbeddedResultBuildsNestedRecordsInBothCSharpProfiles(t *testing.T) {
 			require.NotContains(t, models, "public sealed record GetBookAndAuthorRow(\n    ulong")
 			require.Contains(t, queries, "new Books(")
 			require.Contains(t, queries, "new Authors(")
+			require.Contains(t, models, "public sealed record ListBookAndAuthorRow(\n    string Label,\n    Books Books,\n    int Rank,\n    Authors Authors,\n    bool Active\n);")
 			if runtime == "dapper" {
 				require.Contains(t, queries, "private sealed record GetBookAndAuthorWireRow(")
 				require.Contains(t, queries, `["author_id_2"] = nameof(GetBookAndAuthorWireRow.Column2)`)
 				require.Contains(t, queries, "QueryFirstAsync<GetBookAndAuthorWireRow>(command)")
 				require.Contains(t, queries, "row.Column2")
+				require.Contains(t, queries, "QueryAsync<ListBookAndAuthorWireRow>(command).ConfigureAwait(false)).Select(ListBookAndAuthorRowFromWire).ToList()")
+				require.Contains(t, queries, "row.Column0,\n        new Books(\n            row.Column1,\n            row.Column2\n        ),\n        row.Column3,\n        new Authors(\n            row.Column4,\n            row.Column5\n        ),\n        row.Column6\n")
 			} else {
 				require.Contains(t, queries, "reader.GetFieldValue<ulong>(2)")
+				require.Contains(t, queries, "reader.GetFieldValue<bool>(6)")
 			}
 		})
 	}

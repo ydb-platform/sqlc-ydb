@@ -32,6 +32,7 @@ func TestAnalyzeExpandsEmbeddedTableResults(t *testing.T) {
 	require.Equal(t, "__sqlc_embed_2_1", got.ResultSets[0].Columns[5].ResultName())
 	require.Contains(t, got.SQL, "`b`.`book_id` AS `__sqlc_embed_0_0`")
 	require.Contains(t, got.SQL, "`a`.`author_id` AS `__sqlc_embed_2_0`")
+	require.Contains(t, got.SQL, "-- name: Read :many\nPRAGMA OrderedColumns;\nSELECT")
 	require.NotContains(t, got.SQL, "sqlc.embed")
 }
 
@@ -78,8 +79,35 @@ func TestAnalyzeEmbeddedRewritePreservesSurroundingSQL(t *testing.T) {
 	query := "-- name: Read :one\r\nSELECT 'sqlc.embed(b)' AS marker, /* перед */ sqlc . embed ( b ) /* после */ FROM `путь/books` AS b;"
 	result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
 	require.NoError(t, err)
-	require.Equal(t, "-- name: Read :one\r\nSELECT 'sqlc.embed(b)' AS marker, /* перед */ `b`.`id` AS `__sqlc_embed_1_0` /* после */ FROM `путь/books` AS b;", result.Queries[0].SQL)
+	require.Equal(t, "-- name: Read :one\r\nPRAGMA OrderedColumns;\r\nSELECT 'sqlc.embed(b)' AS marker, /* перед */ `b`.`id` AS `__sqlc_embed_1_0` /* после */ FROM `путь/books` AS b;", result.Queries[0].SQL)
 	require.Equal(t, model.Embedding{Start: 1, End: 2, Table: "путь/books", Alias: "b", Field: "books"}, result.Queries[0].ResultSets[0].Embeds[0])
+}
+
+func TestAnalyzeEmbeddedOrderingWithExistingPragmas(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE `/local/books` (id Uint64 NOT NULL, PRIMARY KEY(id));"}}
+	for _, preamble := range []string{
+		"PRAGMA TablePathPrefix('/local');\nDECLARE $id AS Uint64;\n",
+		"PRAGMA OrderedColumns;\nPRAGMA TablePathPrefix('/local');\nDECLARE $id AS Uint64;\n",
+	} {
+		query := "-- name: Read :one\n" + preamble + "SELECT sqlc.embed(b) FROM books AS b WHERE b.id = $id;"
+		result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
+		require.NoError(t, err)
+		got := result.Queries[0]
+		require.Equal(t, 1, strings.Count(got.SQL, "PRAGMA OrderedColumns;"))
+		require.Contains(t, got.SQL, "PRAGMA TablePathPrefix('/local');\nDECLARE $id AS Uint64;\nSELECT `b`.`id` AS `__sqlc_embed_0_0` FROM books AS b")
+		require.Equal(t, "/local/books", got.ResultSets[0].Embeds[0].Table)
+	}
+}
+
+func TestAnalyzeRejectsLateOrDisabledColumnOrdering(t *testing.T) {
+	for _, query := range []string{
+		"PRAGMA OrderedColumns = default; SELECT sqlc.embed(b) FROM books AS b;",
+		"SELECT book_id FROM books; PRAGMA OrderedColumns;",
+		"PRAGMA DisableOrderedColumns; SELECT sqlc.embed(b) FROM books AS b;",
+	} {
+		_, err := Analyze(embedSchema, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + query}})
+		require.ErrorContains(t, err, "PRAGMA")
+	}
 }
 
 func TestDatabaseValidatesExpandedEmbeddedSQL(t *testing.T) {
@@ -91,6 +119,7 @@ func TestDatabaseValidatesExpandedEmbeddedSQL(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, database.validated, 1)
 	require.NotContains(t, database.validated[0], "sqlc.embed")
+	require.Contains(t, database.validated[0], "PRAGMA OrderedColumns;")
 	require.True(t, strings.Contains(database.validated[0], "__sqlc_embed_0_0"))
 	require.Equal(t, database.validated[0], result.Queries[0].SQL)
 }

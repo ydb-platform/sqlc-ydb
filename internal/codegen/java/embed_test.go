@@ -32,7 +32,9 @@ SELECT sqlc.embed(b), sqlc.embed(a) FROM books AS b INNER JOIN authors AS a ON b
 			require.Contains(t, generated["Books.java"], "authorId")
 			require.Contains(t, generated["Authors.java"], "authorId")
 			queries := generated["Queries.java"]
+			require.Contains(t, queries, "PRAGMA OrderedColumns;")
 			if runtime == "jooq" {
+				require.Contains(t, queries, "dsl.resultQuery(\"{0};\\n{1}\"")
 				require.Contains(t, queries, "new GetEmbeddedRow(new Books(")
 				require.Contains(t, queries, "new Authors(")
 				require.Contains(t, queries, `_record.get(1, org.jooq.types.ULong.class)`)

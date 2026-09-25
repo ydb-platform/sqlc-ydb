@@ -55,7 +55,7 @@ public final class Queries {
     public Optional<GetBookAndAuthorRow> getBookAndAuthor(ULong bookId) {
         var b = BOOKS.as("b");
         var a = AUTHORS.as("a");
-        return dsl.select(
+        var stmt = dsl.select(
             b.BOOK_ID.as("__sqlc_embed_0_0"),
             b.AUTHOR_ID.as("__sqlc_embed_0_1"),
             b.ISBN.as("__sqlc_embed_0_2"),
@@ -70,7 +70,11 @@ public final class Queries {
                 .from(b)
                 .join(a)
                 .on(b.AUTHOR_ID.eq(a.AUTHOR_ID))
-                .where(b.BOOK_ID.eq(val(bookId, YdbTypes.UINT64)))
+                .where(b.BOOK_ID.eq(val(bookId, YdbTypes.UINT64)));
+
+        return dsl.resultQuery("{0};\n{1}", sql("""
+            PRAGMA OrderedColumns\
+            """), stmt)
                 .coerce(field(name("__sqlc_embed_0_0"), YdbTypes.UINT64), field(name("__sqlc_embed_0_1"), YdbTypes.UINT64), field(name("__sqlc_embed_0_2"), YdbTypes.UTF8), field(name("__sqlc_embed_0_3"), YdbTypes.UTF8), field(name("__sqlc_embed_0_4"), YdbTypes.UTF8), field(name("__sqlc_embed_0_5"), YdbTypes.INT32), field(name("__sqlc_embed_0_6"), YdbTypes.TIMESTAMP), field(name("__sqlc_embed_0_7"), YdbTypes.JSON), field(name("__sqlc_embed_1_0"), YdbTypes.UINT64), field(name("__sqlc_embed_1_1"), YdbTypes.UTF8))
                 .fetchOptional(_record -> new GetBookAndAuthorRow(new Books(_record.get(0, org.jooq.types.ULong.class), _record.get(1, org.jooq.types.ULong.class), _record.get(2, String.class), _record.get(3, String.class), _record.get(4, String.class), _record.get(5, Integer.class), _record.get(6, java.time.Instant.class), _record.get(7, org.jooq.JSON.class)), new Authors(_record.get(8, org.jooq.types.ULong.class), _record.get(9, String.class))));
     }

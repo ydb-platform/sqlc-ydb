@@ -317,10 +317,8 @@ func generateJooq(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		if r.err != nil {
 			return nil, fmt.Errorf("%s: %w", q.Name, r.err)
 		}
-		if q.Syntax.TablePathPrefix != "" {
-			// Keep the pragma with the typed statement: a relative table mapping
-			// must inherit the same prefix as the declared JDBC execution path.
-			pragmas := jooqNodes[*parser.Pragma_stmtContext](q.Syntax.Root)
+		if pragmas := jooqNodes[*parser.Pragma_stmtContext](q.Syntax.Root); len(pragmas) != 0 {
+			// Keep pragmas with the typed statement so YDB applies its settings.
 			text := string([]rune(q.SQL)[pragmas[0].GetStart().GetStart() : pragmas[len(pragmas)-1].GetStop().GetStop()+1])
 			fmt.Fprintf(&b, "        var stmt = %s;\n\n", body)
 			if q.Command == model.Exec {
@@ -649,7 +647,7 @@ func (r *jooqRenderer) statement() string {
 	root := r.query.Syntax.Root
 	for _, stmt := range jooqNodes[*parser.Sql_stmtContext](root) {
 		core := stmt.Sql_stmt_core()
-		if core.Pragma_stmt() != nil && r.query.Syntax.TablePathPrefix != "" {
+		if core.Pragma_stmt() != nil {
 			continue
 		}
 		var source parser.IInto_values_sourceContext

@@ -93,6 +93,9 @@ func TestEmbeddedResultKeepsWireKeysSeparateFromNestedRow(t *testing.T) {
 		Queries: []model.AnalyzedQuery{{Name: "GetBookAndAuthor", Command: model.One, SQL: "SELECT b.book_id, b.author_id, a.author_id, a.name FROM books b JOIN authors a ON b.author_id = a.author_id;", ResultSets: []model.ResultSet{{
 			Columns: []model.Column{{Name: "book_id", WireName: "embed_books_book_id", Type: uint64Type}, {Name: "author_id", WireName: "embed_books_author_id", Type: uint64Type}, {Name: "author_id", WireName: "embed_authors_author_id", Type: uint64Type}, {Name: "name", WireName: "embed_authors_name", Type: utf8Type}},
 			Embeds:  []model.Embedding{{Start: 0, End: 2, Table: "books", Field: "books"}, {Start: 2, End: 4, Table: "authors", Field: "authors"}},
+		}}}, {Name: "ListBookAndAuthor", Command: model.Many, SQL: "SELECT 1;", ResultSets: []model.ResultSet{{
+			Columns: []model.Column{{Name: "label", Type: utf8Type}, {Name: "book_id", WireName: "embed_books_book_id", Type: uint64Type}, {Name: "author_id", WireName: "embed_books_author_id", Type: uint64Type}, {Name: "rank", Type: model.Type{Kind: "Int32"}}, {Name: "author_id", WireName: "embed_authors_author_id", Type: uint64Type}, {Name: "name", WireName: "embed_authors_name", Type: utf8Type}, {Name: "active", Type: model.Type{Kind: "Bool"}}},
+			Embeds:  []model.Embedding{{Start: 1, End: 3, Table: "books", Field: "books"}, {Start: 4, End: 6, Table: "authors", Field: "authors"}},
 		}}}},
 	}
 	files, err := Generate(a, Options{})
@@ -103,6 +106,9 @@ func TestEmbeddedResultKeepsWireKeysSeparateFromNestedRow(t *testing.T) {
 	require.Contains(t, got, `book_id: row["embed_books_book_id"]`)
 	require.Contains(t, got, `author_id: row["embed_authors_author_id"]`)
 	require.Contains(t, got, "return mapped[0] ?? null;")
+	require.Contains(t, got, "export type ListBookAndAuthorRow = {\n  readonly label: string;\n  readonly books: Books;\n  readonly rank: number;\n  readonly authors: Authors;\n  readonly active: boolean;")
+	require.Contains(t, got, "      label: row[\"label\"],\n      books: {\n        book_id: row[\"embed_books_book_id\"],\n        author_id: row[\"embed_books_author_id\"],\n      },\n      rank: row[\"rank\"],\n      authors: {\n        author_id: row[\"embed_authors_author_id\"],\n        name: row[\"embed_authors_name\"],\n      },\n      active: row[\"active\"],")
+	require.Contains(t, got, "return mapped;")
 
 	a.Queries[0].ResultSets[0].Embeds[1].Field = "books"
 	_, err = Generate(a, Options{})

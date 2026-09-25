@@ -39,6 +39,17 @@ func analyzeExecutableQuery(catalog model.Catalog, block queryBlock) (model.Anal
 	if err != nil {
 		return query, []model.Diagnostic{{Position: query.Source, Message: fmt.Sprintf("cannot expand query wildcards: %v", err)}}
 	}
+	if len(rewrites.embeds) != 0 && !hasOrderedColumns(query.Syntax.Root.(parser.ISql_queryContext)) {
+		first := strings.IndexByte(sql, '\n')
+		if first < 0 {
+			return query, []model.Diagnostic{{Position: query.Source, Message: "sqlc.embed query requires a newline after its -- name: annotation"}}
+		}
+		newline := "\n"
+		if first > 0 && sql[first-1] == '\r' {
+			newline = "\r\n"
+		}
+		sql = sql[:first+1] + "PRAGMA OrderedColumns;" + newline + sql[first+1:]
+	}
 	block.text = sql
 	block.parsed = nil
 	block.wildcards = nil
@@ -56,6 +67,15 @@ func analyzeExecutableQuery(catalog model.Catalog, block queryBlock) (model.Anal
 		expanded.ResultSets[0] = query.ResultSets[0]
 	}
 	return expanded, diagnostics
+}
+
+func hasOrderedColumns(root parser.ISql_queryContext) bool {
+	for _, statement := range root.Sql_stmt_list().AllSql_stmt() {
+		if pragma := statement.Sql_stmt_core().Pragma_stmt(); pragma != nil && strings.EqualFold(identifier(pragma.An_id().GetText()), "OrderedColumns") {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *wildcardRewrites) add(token antlr.Token, expressions []string) {

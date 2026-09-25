@@ -85,6 +85,7 @@ func (q *Queries) GetBookAndAuthor(ctx context.Context, arg uint64, opts ...quer
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
 	result, err := q.db.QueryRow(ctx, ""+
+		"PRAGMA OrderedColumns;\n"+
 		"SELECT `b`.`book_id` AS `__sqlc_embed_0_0`, `b`.`author_id` AS `__sqlc_embed_0_1`, `b`.`isbn` AS `__sqlc_embed_0_2`, `b`.`book_type` AS `__sqlc_embed_0_3`, `b`.`title` AS `__sqlc_embed_0_4`, `b`.`publication_year` AS `__sqlc_embed_0_5`, `b`.`available` AS `__sqlc_embed_0_6`, `b`.`tags` AS `__sqlc_embed_0_7`, `a`.`author_id` AS `__sqlc_embed_1_0`, `a`.`name` AS `__sqlc_embed_1_1`\n"+
 		"FROM books AS b\n"+
 		"JOIN authors AS a ON b.author_id = a.author_id\n"+
