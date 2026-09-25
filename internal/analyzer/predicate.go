@@ -131,7 +131,7 @@ func validatePredicateAtom(atom *parser.Xor_subexprContext, scope expressionScop
 func resolveINCondition(atom *parser.Xor_subexprContext, scope expressionScope) (model.Type, error) {
 	left, err := resolveINOperand(atom.Eq_subexpr(), scope)
 	if err != nil {
-		return model.Type{}, fmt.Errorf("cannot resolve predicate operand %q: %w", atom.Eq_subexpr().GetText(), err)
+		return model.Type{}, fmt.Errorf("cannot resolve IN operand %q: %w", atom.Eq_subexpr().GetText(), err)
 	}
 	inExpr := atom.Cond_expr().In_expr()
 	if subquery, ok := scope.inSubqueries[inExpr.GetStart().GetTokenIndex()]; ok {
@@ -149,15 +149,18 @@ func resolveINCondition(atom *parser.Xor_subexprContext, scope expressionScope) 
 		}
 		optionalList = typeValue.IsOptional()
 		types = append(types, *typeValue.UnwrapOptional().Elem)
-	} else if !parenthesizedINValues(inExpr) {
+	} else if !inValueExpressions(inExpr) {
+		if casual := inExpr.In_unary_subexpr().In_unary_casual_subexpr(); casual != nil &&
+			casual.In_atom_expr() != nil && casual.Unary_subexpr_suffix() != nil && casual.Unary_subexpr_suffix().GetText() == "" {
+			if lambda := casual.In_atom_expr().Lambda(); lambda != nil && lambda.ARROW() != nil {
+				return model.Type{}, fmt.Errorf("lambda is not a valid IN operand %q; provide a List expression", inExpr.GetText())
+			}
+		}
 		var typeValue model.Type
 		var err error
 		if name, invoke, ok := inFunctionCall(inExpr); ok {
 			typeValue, err = resolveFunction(name, invoke, scope)
 		} else {
-			if casual := inExpr.In_unary_subexpr().In_unary_casual_subexpr(); casual != nil && casual.In_atom_expr() != nil && casual.In_atom_expr().List_literal() != nil {
-				return model.Type{}, fmt.Errorf("unsupported IN operand %q", inExpr.GetText())
-			}
 			typeValue, err = resolveScalarNode(inExpr, scope)
 		}
 		if err != nil {
@@ -201,7 +204,7 @@ func resolveINCondition(atom *parser.Xor_subexprContext, scope expressionScope) 
 	}
 	common, err := builtins.CommonType(types...)
 	if err != nil {
-		return model.Type{}, fmt.Errorf("predicate operands have incompatible types: %w", err)
+		return model.Type{}, fmt.Errorf("IN operands have incompatible types: %w", err)
 	}
 	result := model.Type{Kind: "Bool"}
 	if common.IsOptional() || optionalList {
@@ -210,9 +213,13 @@ func resolveINCondition(atom *parser.Xor_subexprContext, scope expressionScope) 
 	return result, nil
 }
 
-func parenthesizedINValues(expr parser.IIn_exprContext) bool {
+func inValueExpressions(expr parser.IIn_exprContext) bool {
 	casual := expr.In_unary_subexpr().In_unary_casual_subexpr()
-	return casual != nil && casual.In_atom_expr() != nil && casual.In_atom_expr().Lambda() != nil
+	if casual == nil || casual.Unary_subexpr_suffix() == nil || casual.Unary_subexpr_suffix().GetText() != "" {
+		return false
+	}
+	atom := casual.In_atom_expr()
+	return atom != nil && (atom.List_literal() != nil || atom.Lambda() != nil && atom.Lambda().ARROW() == nil)
 }
 
 func inFunctionCall(expr parser.IIn_exprContext) (string, *parser.Invoke_exprContext, bool) {

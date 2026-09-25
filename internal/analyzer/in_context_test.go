@@ -82,6 +82,8 @@ func TestTypedINResolvesNullableAndScalarOperands(t *testing.T) {
 		{"scalar values", "DECLARE $id AS Uint64;", "1ul IN ($id, 2ul)", "Bool"},
 		{"nullable scalar", "DECLARE $id AS Uint64?;", "1ul IN ($id, 2ul)", "Optional<Bool>"},
 		{"list expression", "", "1ul IN AsList(1ul, 2ul)", "Bool"},
+		{"list literal", "", "1ul IN [1ul, 2ul]", "Bool"},
+		{"nullable list literal", "", "1ul IN [CAST(NULL AS Uint64?), 2ul]", "Optional<Bool>"},
 		{"converted list", "DECLARE $document AS Yson;", `"a" IN Yson::ConvertToStringList($document)`, "Bool"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -93,14 +95,48 @@ func TestTypedINResolvesNullableAndScalarOperands(t *testing.T) {
 	}
 }
 
+func TestTypedINListLiteralRemainsSupportedInPredicates(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));`}}
+	for _, statement := range []string{
+		"SELECT id FROM records WHERE id IN [1ul, 2ul];",
+		"SELECT a.id FROM records AS a JOIN records AS b ON a.id = b.id AND a.id IN [1ul, 2ul];",
+	} {
+		t.Run(statement, func(t *testing.T) {
+			query := "-- name: Read :many\n" + statement
+			result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
+			require.NoError(t, err)
+			require.Equal(t, query, result.Queries[0].SQL)
+		})
+	}
+}
+
+func TestTypedINErrorsNameExpressionOperands(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));`}}
+	for _, statement := range []string{
+		"SELECT id IN $values AS selected FROM records;",
+		"SELECT CASE WHEN id IN $values THEN 1u ELSE 0u END AS selected FROM records;",
+		"SELECT IF(id IN $values, 1u, 0u) AS selected FROM records;",
+		"SELECT id FROM records GROUP BY id HAVING id IN $values;",
+	} {
+		t.Run(statement, func(t *testing.T) {
+			query := "-- name: Read :many\nDECLARE $values AS List<Utf8>;\n" + statement
+			_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
+			require.ErrorContains(t, err, "IN operands have incompatible types")
+			require.NotContains(t, err.Error(), "predicate operands")
+		})
+	}
+}
+
 func TestTypedINRejectsInvalidExpressionOperands(t *testing.T) {
 	for _, tc := range []struct{ declaration, expression, want string }{
+		{"", "missing IN [1ul]", `cannot resolve IN operand "missing"`},
 		{"", "1ul IN 2ul", "requires a List expression"},
 		{"", "1ul IN AsList(1ul)[0]", `unsupported scalar expression "AsList(1ul)[0]"`},
 		{"DECLARE $document AS Json;", `1ul IN JSON_VALUE($document, "$.id")`, `unsupported scalar expression "JSON_VALUE(`},
 		{"DECLARE $id AS Uint64;", "$id IN $id", "requires a List parameter"},
 		{"DECLARE $ids AS List<Uint64>;", "1ul IN ($ids)", "parenthesized List parameter"},
-		{"DECLARE $values AS List<Utf8>;", "1ul IN $values", "predicate operands have incompatible types"},
+		{"DECLARE $values AS List<Utf8>;", "1ul IN $values", "IN operands have incompatible types"},
+		{"", "1ul IN ($x) -> (AsList($x))", `lambda is not a valid IN operand "($x)->(AsList($x))"; provide a List expression`},
 		{"DECLARE $id AS Uint64;", "1ul IN Unknown::List($id)", "unsupported YQL function"},
 	} {
 		t.Run(tc.expression, func(t *testing.T) {

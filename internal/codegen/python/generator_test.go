@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -504,6 +505,15 @@ func TestLiveYDBGeneratedRuntimes(t *testing.T) {
 	}
 	table := "sqlc_python_live_" + fmt.Sprint(time.Now().UnixNano())
 	a := liveAnalysis(table)
+	membership, err := analyzer.Analyze(nil, []model.Source{{Name: "queries.sql", Text: `-- name: Contains :one
+DECLARE $ids AS List<Uint64>?;
+SELECT 1ul IN $ids AS contains;
+
+-- name: DoesNotContain :one
+DECLARE $ids AS List<Uint64>?;
+SELECT 1ul NOT IN $ids AS contains;`}})
+	require.NoError(t, err)
+	a.Queries = append(a.Queries, membership.Queries...)
 	root := t.TempDir()
 	paths := map[string]string{}
 	for _, runtime := range []string{"ydb", "dbapi", "sqlalchemy"} {
@@ -525,9 +535,14 @@ from ydb_generated.queries import Querier as YQuerier
 driver = ydb.Driver(ydb.DriverConfig(endpoint, database, credentials=ydb.AnonymousCredentials(), disable_discovery=True)); driver.wait(20)
 pool = ydb.QuerySessionPool(driver)
 table = %q
+def check_optional_list(query):
+    for ids, selected, excluded in [([1, 2**64-1], True, False), ([2**64-1], False, True), ([], False, True), (None, None, None)]:
+        assert query.contains(ids).contains is selected, ids
+        assert query.does_not_contain(ids).contains is excluded, ids
 pool.execute_with_retries("CREATE TABLE %%s (id Uint64, name Utf8, blob String, PRIMARY KEY(id));" %% table)
 try:
     y = YQuerier(pool); y.insert_author(1, "one", b"bytes")
+    check_optional_list(y)
     assert y.get_author(1).blob == b"bytes" and y.get_author(99) is None and y.get_joined_author(1).id == 1
     assert list(y.list_authors())[0].name == "one"; y.find_author(None); y.find_author("one")
     def rollback_generated_calls(tx):
@@ -541,13 +556,16 @@ try:
     host, port = u.hostname, u.port
     c = ydb_dbapi.connect(host=host, port=port, database=database, protocol=u.scheme)
     from dbapi_generated.queries import Querier as DQuerier
-    d = DQuerier(c); d.insert_author(2, "two", b"two"); assert d.get_author(2).blob == b"two"; assert d.get_joined_author(2).id == 2; assert d.get_author(999) is None; c.close()
+    d = DQuerier(c); d.insert_author(2, "two", b"two"); assert d.get_author(2).blob == b"two"; assert d.get_joined_author(2).id == 2; assert d.get_author(999) is None
+    check_optional_list(d)
+    c.close()
     import sqlalchemy as sa
     import ydb.sqlalchemy
     e = sa.create_engine("yql+ydb://%%s/%%s" %% (u.netloc, database.lstrip("/")))
     with e.begin() as conn:
         from sa_generated.queries import Querier as SQuerier
         s = SQuerier(conn); s.insert_author(3, "three", b"three"); assert s.get_author(3).name == "three"; assert s.get_joined_author(3).id == 3; assert s.get_author(999) is None
+        check_optional_list(s)
     e.dispose()
 finally:
     pool.execute_with_retries("DROP TABLE IF EXISTS %%s;" %% table); driver.stop()
