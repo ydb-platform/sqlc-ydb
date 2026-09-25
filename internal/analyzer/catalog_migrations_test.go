@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -24,6 +25,51 @@ SELECT id, biography FROM authors;`}}
 	}
 	require.Equal(t, wantColumns, got.Catalog.Tables[0].Columns)
 	require.Equal(t, wantColumns, got.Queries[0].ResultSets[0].Columns)
+}
+
+func TestCatalogDropNotNullUpdatesQueryTypes(t *testing.T) {
+	schema := []model.Source{
+		{Name: "001.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, note Utf8 NOT NULL, PRIMARY KEY(id));`},
+		{Name: "002.sql", Text: `ALTER TABLE records ALTER COLUMN note DROP NOT NULL;`},
+		{Name: "003.sql", Text: `ALTER TABLE records ALTER COLUMN note DROP NOT NULL;`},
+		{Name: "004.sql", Text: `ALTER TABLE records ALTER COLUMN id DROP NOT NULL;`},
+	}
+	queries := []model.Source{{Name: "query.sql", Text: "-- name: ReadRecords :many\nSELECT id, note FROM records WHERE note = $note;"}}
+
+	got, err := Analyze(schema, queries)
+	require.NoError(t, err)
+	require.Equal(t, []string{"id"}, got.Catalog.Tables[0].PrimaryKey)
+	wantColumns := []model.Column{
+		{Name: "id", Type: model.Optional(model.Type{Kind: "Uint64"}), Table: "records"},
+		{Name: "note", Type: model.Optional(model.Type{Kind: "Utf8"}), Table: "records"},
+	}
+	require.Equal(t, wantColumns, got.Catalog.Tables[0].Columns)
+	require.Equal(t, wantColumns, got.Queries[0].ResultSets[0].Columns)
+	require.Equal(t, []model.Parameter{{Name: "note", Type: model.Optional(model.Type{Kind: "Utf8"})}}, got.Queries[0].Parameters)
+}
+
+func TestCatalogDropNotNullMatchesConnectedSchema(t *testing.T) {
+	schema := []model.Source{
+		{Name: "001.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, note Utf8 NOT NULL, PRIMARY KEY(id));`},
+		{Name: "002.sql", Text: `ALTER TABLE records ALTER COLUMN note DROP NOT NULL;`},
+	}
+	queries := []model.Source{{Name: "query.sql", Text: "-- name: ReadRecords :many\nSELECT note FROM records;"}}
+	database := &fakeAnalysisDatabase{tables: map[string]model.Table{"records": {
+		Columns: []model.Column{
+			{Name: "id", Type: model.Type{Kind: "Uint64"}},
+			{Name: "note", Type: model.Optional(model.Type{Kind: "Utf8"})},
+		},
+		PrimaryKey: []string{"id"},
+	}}}
+
+	_, err := AnalyzeWithDatabase(context.Background(), schema, queries, Options{}, database)
+	require.NoError(t, err)
+	database.tables["records"] = model.Table{Columns: []model.Column{
+		{Name: "id", Type: model.Type{Kind: "Uint64"}},
+		{Name: "note", Type: model.Type{Kind: "Utf8"}},
+	}, PrimaryKey: []string{"id"}}
+	_, err = AnalyzeWithDatabase(context.Background(), schema, queries, Options{}, database)
+	require.ErrorContains(t, err, "database type Utf8")
 }
 
 func TestCatalogDropRecreateAndRenamePreserveOrder(t *testing.T) {
@@ -216,6 +262,7 @@ func TestCatalogRejectsMissingObjectsAndPrimaryKeyChanges(t *testing.T) {
 		{name: "drop missing table", sql: `DROP TABLE missing;`, want: `table "missing" does not exist`},
 		{name: "alter missing table", sql: `ALTER TABLE missing ADD COLUMN value Utf8;`, want: `table "missing" does not exist`},
 		{name: "drop missing column", sql: `CREATE TABLE t (id Uint64 NOT NULL, PRIMARY KEY (id)); ALTER TABLE t DROP COLUMN missing;`, want: `column "missing" does not exist`},
+		{name: "drop not null missing column", sql: `CREATE TABLE t (id Uint64 NOT NULL, PRIMARY KEY (id)); ALTER TABLE t ALTER COLUMN missing DROP NOT NULL;`, want: `column "missing" does not exist`},
 		{name: "drop key column", sql: `CREATE TABLE t (id Uint64 NOT NULL, PRIMARY KEY (id)); ALTER TABLE t DROP COLUMN id;`, want: `cannot drop primary key column "id"`},
 		{name: "duplicate key column", sql: `CREATE TABLE t (id Uint64 NOT NULL, PRIMARY KEY (id, id));`, want: `primary key column "id" is declared more than once`},
 		{name: "missing primary key", sql: `CREATE TABLE t (id Uint64 NOT NULL);`, want: `must declare a PRIMARY KEY`},
@@ -237,7 +284,6 @@ func TestCatalogRejectsUnsupportedSchemaOperations(t *testing.T) {
 	}{
 		{name: "alter nullability", sql: `CREATE TABLE t (id Uint64 NOT NULL, value Utf8, PRIMARY KEY (id)); ALTER TABLE t ALTER COLUMN value SET NOT NULL;`, want: "unsupported ALTER TABLE action"},
 		{name: "view", sql: `CREATE VIEW records AS SELECT 1 AS id;`, want: "unsupported schema statement"},
-		{name: "drop nullability", sql: `CREATE TABLE t (id Uint64 NOT NULL, value Utf8 NOT NULL, PRIMARY KEY (id)); ALTER TABLE t ALTER COLUMN value DROP NOT NULL;`, want: "unsupported ALTER TABLE action"},
 		{name: "data statement", sql: `CREATE TABLE t (id Uint64 NOT NULL, PRIMARY KEY (id)); UPSERT INTO t (id) VALUES (1);`, want: "unsupported schema statement"},
 	}
 	for _, tt := range tests {
@@ -257,6 +303,15 @@ ALTER TABLE authors ADD COLUMN biography Utf8, DROP COLUMN missing;`}})
 	require.Contains(t, diagnostics[0].Message, `column "missing" does not exist`)
 	want := []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}, Table: "authors"}}
 	require.Equal(t, want, catalog.Tables[0].Columns)
+}
+
+func TestCatalogDropNotNullDoesNotPartiallyApplyFailedAlter(t *testing.T) {
+	catalog, diagnostics := buildCatalog([]model.Source{{Name: "schema.sql", Text: `
+CREATE TABLE records (id Uint64 NOT NULL, note Utf8 NOT NULL, PRIMARY KEY (id));
+ALTER TABLE records ALTER COLUMN note DROP NOT NULL, DROP COLUMN missing;`}})
+	require.Len(t, diagnostics, 1)
+	require.Contains(t, diagnostics[0].Message, `column "missing" does not exist`)
+	require.Equal(t, model.Type{Kind: "Utf8"}, catalog.Tables[0].Columns[1].Type)
 }
 
 func TestCatalogTableSettingsPreserveSemanticColumns(t *testing.T) {

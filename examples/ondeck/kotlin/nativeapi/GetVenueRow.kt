@@ -8,7 +8,7 @@ data class GetVenueRow(
     val city: String,
     val status: String,
     val statuses: String?,
-    val spotifyPlaylist: String,
+    val spotifyPlaylist: String?,
     val songkickId: String?,
     val tags: String?,
     val createdAt: java.time.Instant?

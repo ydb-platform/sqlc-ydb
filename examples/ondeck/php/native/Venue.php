@@ -13,7 +13,7 @@ final class Venue
         public readonly string $slug,
         public readonly string $name,
         public readonly string $city,
-        public readonly string $spotifyPlaylist,
+        public readonly ?string $spotifyPlaylist,
         public readonly ?string $songkickId,
         public readonly ?string $tags,
         public readonly ?int $createdAt

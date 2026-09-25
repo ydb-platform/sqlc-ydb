@@ -233,7 +233,7 @@ public sealed class Queries
             new YdbParameter("$name", DbType.String, args.Name),
             new YdbParameter("$city", DbType.String, args.City),
             new YdbParameter("$created_at", YdbValue.MakeOptionalTimestamp(NormalizeTimestamp(args.CreatedAt))),
-            new YdbParameter("$spotify_playlist", DbType.String, args.SpotifyPlaylist),
+            new YdbParameter("$spotify_playlist", YdbValue.MakeOptionalUtf8(args.SpotifyPlaylist)),
             new YdbParameter("$status", DbType.String, args.Status),
             new YdbParameter("$statuses", YdbValue.MakeOptionalJson(args.Statuses)),
             new YdbParameter("$tags", YdbValue.MakeOptionalJson(args.Tags))

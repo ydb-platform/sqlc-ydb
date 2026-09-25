@@ -71,67 +71,15 @@ func validatePredicate(expr parser.IExprContext, scope expressionScope) error {
 
 func validatePredicateAtom(atom *parser.Xor_subexprContext, scope expressionScope) error {
 	if condition := atom.Cond_expr(); condition != nil {
-		var left model.Type
-		var err error
 		if condition.IN() != nil {
-			left, err = resolveINOperand(atom.Eq_subexpr(), scope)
-		} else {
-			left, err = resolveScalarNode(atom.Eq_subexpr(), scope)
+			_, err := resolveINCondition(atom, scope)
+			return err
 		}
+		_, err := resolveScalarNode(atom.Eq_subexpr(), scope)
 		if err != nil {
 			return fmt.Errorf("cannot resolve predicate operand %q: %w", atom.Eq_subexpr().GetText(), err)
 		}
 		if condition.ISNULL() != nil || condition.NOTNULL() != nil || condition.NULL() != nil {
-			return nil
-		}
-		if condition.IN() != nil && condition.In_expr() != nil {
-			types := []model.Type{left}
-			inExpr := condition.In_expr()
-			if subquery, ok := scope.inSubqueries[inExpr.GetStart().GetTokenIndex()]; ok {
-				if err := validateINSubqueryTypes(left, subquery); err != nil {
-					return fmt.Errorf("IN subquery key types are incompatible: %s and %s: %w", left.String(), subquery.String(), err)
-				}
-				return nil
-			}
-			if bind := directBind(inExpr); bind != nil && inExpr.GetText() == bind.GetText() {
-				typeValue, ok := scope.bindings[bindName(bind)]
-				if !ok || typeValue.Kind != "List" || typeValue.Elem == nil {
-					return fmt.Errorf("direct IN operand %q requires a List parameter", bind.GetText())
-				}
-				types = append(types, *typeValue.Elem)
-			} else {
-				var expressions []parser.IExprContext
-				descendants(inExpr, func(node antlr.Tree) {
-					candidate, ok := node.(parser.IExprContext)
-					if !ok {
-						return
-					}
-					for parent := candidate.GetParent(); parent != nil && parent != inExpr; parent = parent.GetParent() {
-						if _, nested := parent.(parser.IExprContext); nested {
-							return
-						}
-					}
-					expressions = append(expressions, candidate)
-				})
-				if len(expressions) == 0 {
-					return fmt.Errorf("unsupported IN operand %q", inExpr.GetText())
-				}
-				for _, expression := range expressions {
-					if bind := directBind(expression); bind != nil {
-						if typeValue, ok := scope.bindings[bindName(bind)]; ok && typeValue.Kind == "List" {
-							return fmt.Errorf("parenthesized List parameter %q is not a valid IN operand; use IN %s", bind.GetText(), bind.GetText())
-						}
-					}
-					typeValue, err := resolveExpression(expression, scope)
-					if err != nil {
-						return fmt.Errorf("cannot resolve IN operand %q: %w", expression.GetText(), err)
-					}
-					types = append(types, typeValue)
-				}
-			}
-			if _, err := builtins.CommonType(types...); err != nil {
-				return fmt.Errorf("predicate operands have incompatible types: %w", err)
-			}
 			return nil
 		}
 		_, _, err = resolveComparison(atom, scope)
@@ -178,6 +126,116 @@ func validatePredicateAtom(atom *parser.Xor_subexprContext, scope expressionScop
 		return fmt.Errorf("predicate expression has type %s, want Bool", typeValue.String())
 	}
 	return nil
+}
+
+func resolveINCondition(atom *parser.Xor_subexprContext, scope expressionScope) (model.Type, error) {
+	left, err := resolveINOperand(atom.Eq_subexpr(), scope)
+	if err != nil {
+		return model.Type{}, fmt.Errorf("cannot resolve predicate operand %q: %w", atom.Eq_subexpr().GetText(), err)
+	}
+	inExpr := atom.Cond_expr().In_expr()
+	if subquery, ok := scope.inSubqueries[inExpr.GetStart().GetTokenIndex()]; ok {
+		if err := validateINSubqueryTypes(left, subquery); err != nil {
+			return model.Type{}, fmt.Errorf("IN subquery key types are incompatible: %s and %s: %w", left.String(), subquery.String(), err)
+		}
+		return model.Type{Kind: "Bool"}, nil
+	}
+	types := []model.Type{left}
+	optionalList := false
+	if bind := directBind(inExpr); bind != nil && inExpr.GetText() == bind.GetText() {
+		typeValue, ok := scope.bindings[bindName(bind)]
+		if !ok || typeValue.UnwrapOptional().Kind != "List" || typeValue.UnwrapOptional().Elem == nil {
+			return model.Type{}, fmt.Errorf("direct IN operand %q requires a List parameter", bind.GetText())
+		}
+		optionalList = typeValue.IsOptional()
+		types = append(types, *typeValue.UnwrapOptional().Elem)
+	} else if !parenthesizedINValues(inExpr) {
+		var typeValue model.Type
+		var err error
+		if name, invoke, ok := inFunctionCall(inExpr); ok {
+			typeValue, err = resolveFunction(name, invoke, scope)
+		} else {
+			if casual := inExpr.In_unary_subexpr().In_unary_casual_subexpr(); casual != nil && casual.In_atom_expr() != nil && casual.In_atom_expr().List_literal() != nil {
+				return model.Type{}, fmt.Errorf("unsupported IN operand %q", inExpr.GetText())
+			}
+			typeValue, err = resolveScalarNode(inExpr, scope)
+		}
+		if err != nil {
+			return model.Type{}, fmt.Errorf("cannot resolve IN operand %q: %w", inExpr.GetText(), err)
+		}
+		list := typeValue.UnwrapOptional()
+		if list.Kind != "List" || list.Elem == nil {
+			return model.Type{}, fmt.Errorf("direct IN operand %q requires a List expression", inExpr.GetText())
+		}
+		optionalList = typeValue.IsOptional()
+		types = append(types, *list.Elem)
+	} else {
+		var expressions []parser.IExprContext
+		descendants(inExpr, func(node antlr.Tree) {
+			candidate, ok := node.(parser.IExprContext)
+			if !ok {
+				return
+			}
+			for parent := candidate.GetParent(); parent != nil && parent != inExpr; parent = parent.GetParent() {
+				if _, nested := parent.(parser.IExprContext); nested {
+					return
+				}
+			}
+			expressions = append(expressions, candidate)
+		})
+		if len(expressions) == 0 {
+			return model.Type{}, fmt.Errorf("unsupported IN operand %q", inExpr.GetText())
+		}
+		for _, expression := range expressions {
+			if bind := directBind(expression); bind != nil {
+				if typeValue, ok := scope.bindings[bindName(bind)]; ok && typeValue.UnwrapOptional().Kind == "List" {
+					return model.Type{}, fmt.Errorf("parenthesized List parameter %q is not a valid IN operand; use IN %s", bind.GetText(), bind.GetText())
+				}
+			}
+			typeValue, err := resolveExpression(expression, scope)
+			if err != nil {
+				return model.Type{}, fmt.Errorf("cannot resolve IN operand %q: %w", expression.GetText(), err)
+			}
+			types = append(types, typeValue)
+		}
+	}
+	common, err := builtins.CommonType(types...)
+	if err != nil {
+		return model.Type{}, fmt.Errorf("predicate operands have incompatible types: %w", err)
+	}
+	result := model.Type{Kind: "Bool"}
+	if common.IsOptional() || optionalList {
+		result = model.Optional(result)
+	}
+	return result, nil
+}
+
+func parenthesizedINValues(expr parser.IIn_exprContext) bool {
+	casual := expr.In_unary_subexpr().In_unary_casual_subexpr()
+	return casual != nil && casual.In_atom_expr() != nil && casual.In_atom_expr().Lambda() != nil
+}
+
+func inFunctionCall(expr parser.IIn_exprContext) (string, *parser.Invoke_exprContext, bool) {
+	casual := expr.In_unary_subexpr().In_unary_casual_subexpr()
+	if casual == nil || casual.Unary_subexpr_suffix() == nil {
+		return "", nil, false
+	}
+	suffix := casual.Unary_subexpr_suffix()
+	if len(suffix.AllInvoke_expr()) != 1 {
+		return "", nil, false
+	}
+	invoke, ok := suffix.Invoke_expr(0).(*parser.Invoke_exprContext)
+	if !ok || suffix.GetText() != invoke.GetText() {
+		return "", nil, false
+	}
+	if casual.Id_expr_in() != nil {
+		return identifier(casual.Id_expr_in().GetText()), invoke, true
+	}
+	atom := casual.In_atom_expr()
+	if atom != nil && atom.NAMESPACE() != nil && atom.An_id_or_type() != nil && atom.Id_or_type() != nil {
+		return identifier(atom.An_id_or_type().GetText()) + "::" + identifier(atom.Id_or_type().GetText()), invoke, true
+	}
+	return "", nil, false
 }
 
 func nestedBooleanExpression(root antlr.ParserRuleContext) parser.IExprContext {

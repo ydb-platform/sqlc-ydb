@@ -190,7 +190,7 @@ public final class Queries {
 
                 SET tags = UNWRAP(Yson::SerializeJson(Json::From(ListFilter(
                     Yson::ConvertToStringList(tags),
-                    ($item) -> ($item != $tag)
+                    ($item) -> ($item NOT IN AsList($tag))
                 ))))
                 WHERE book_id = $book_id;\
                 """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {

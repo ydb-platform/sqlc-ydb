@@ -31,7 +31,7 @@ public:
     std::vector<ListVenuesRow> ListVenues(const std::string& city) const;
     void DeleteVenue(const std::string& slug) const;
     std::optional<GetVenueRow> GetVenue(const std::string& slug, const std::string& city) const;
-    std::optional<CreateVenueRow> CreateVenue(std::uint64_t id, const std::string& slug, const std::string& name, const std::string& city, const std::optional<TInstant>& created_at, const std::string& spotify_playlist, const std::string& status, const std::optional<std::string>& statuses, const std::optional<std::string>& tags) const;
+    std::optional<CreateVenueRow> CreateVenue(std::uint64_t id, const std::string& slug, const std::string& name, const std::string& city, const std::optional<TInstant>& created_at, const std::optional<std::string>& spotify_playlist, const std::string& status, const std::optional<std::string>& statuses, const std::optional<std::string>& tags) const;
     std::optional<UpdateVenueNameRow> UpdateVenueName(const std::string& name, const std::string& slug) const;
     std::vector<VenueCountByCityRow> VenueCountByCity() const;
 

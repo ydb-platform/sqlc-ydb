@@ -12,7 +12,7 @@ final class CreateVenueParams
         public readonly string $name,
         public readonly string $city,
         public readonly ?int $createdAt,
-        public readonly string $spotifyPlaylist,
+        public readonly ?string $spotifyPlaylist,
         public readonly string $status,
         public readonly ?string $statuses,
         public readonly ?string $tags

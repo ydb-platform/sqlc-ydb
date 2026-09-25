@@ -192,7 +192,7 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
         name: String,
         city: String,
         #[builder(required, into)] created_at: Option<std::time::SystemTime>,
-        spotify_playlist: String,
+        #[builder(required, into)] spotify_playlist: Option<String>,
         status: String,
         #[builder(required, into)] statuses: Option<String>,
         #[builder(required, into)] tags: Option<String>,

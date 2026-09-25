@@ -270,7 +270,7 @@ async fn ondeck_smoke(client: &mut ydb::QueryClient) -> ydb::YdbResult<()> {
             .name("Club")
             .city("moscow")
             .created_at(created_at)
-            .spotify_playlist("playlist")
+            .spotify_playlist(Some("playlist".to_owned()))
             .status("open")
             .statuses(None)
             .tags(Some(String::from("[\"music\"]")))

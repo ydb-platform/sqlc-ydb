@@ -41,7 +41,7 @@ public final class Tables {
         public final TableField<Record, String> SLUG = createField(name("slug"), YdbTypes.UTF8.nullable(false), this);
         public final TableField<Record, String> NAME = createField(name("name"), YdbTypes.UTF8.nullable(false), this);
         public final TableField<Record, String> CITY = createField(name("city"), YdbTypes.UTF8.nullable(false), this);
-        public final TableField<Record, String> SPOTIFY_PLAYLIST = createField(name("spotify_playlist"), YdbTypes.UTF8.nullable(false), this);
+        public final TableField<Record, String> SPOTIFY_PLAYLIST = createField(name("spotify_playlist"), YdbTypes.UTF8.nullable(true), this);
         public final TableField<Record, String> SONGKICK_ID = createField(name("songkick_id"), YdbTypes.UTF8.nullable(true), this);
         public final TableField<Record, JSON> TAGS = createField(name("tags"), YdbTypes.JSON.nullable(true), this);
         public final TableField<Record, Instant> CREATED_AT = createField(name("created_at"), YdbTypes.TIMESTAMP.nullable(true), this);

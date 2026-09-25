@@ -136,7 +136,7 @@ func (q *Queries) CreateVenue(ctx context.Context, arg CreateVenueParams, opts .
 	parameters = parameters.Param("$name").Text(arg.Name)
 	parameters = parameters.Param("$city").Text(arg.City)
 	parameters = parameters.Param("$created_at").BeginOptional().Timestamp(arg.CreatedAt).EndOptional()
-	parameters = parameters.Param("$spotify_playlist").Text(arg.SpotifyPlaylist)
+	parameters = parameters.Param("$spotify_playlist").BeginOptional().Text(arg.SpotifyPlaylist).EndOptional()
 	parameters = parameters.Param("$status").Text(arg.Status)
 	parameters = parameters.Param("$statuses").BeginOptional().JSON(arg.Statuses).EndOptional()
 	parameters = parameters.Param("$tags").BeginOptional().JSON(arg.Tags).EndOptional()

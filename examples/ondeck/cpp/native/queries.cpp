@@ -225,7 +225,7 @@ std::vector<ListVenuesRow> Queries::ListVenues(const std::string& city) const {
             sqlc_parser.ColumnParser("city").GetUtf8(),
             sqlc_parser.ColumnParser("status").GetUtf8(),
             sqlc_parser.ColumnParser("statuses").GetOptionalJson(),
-            sqlc_parser.ColumnParser("spotify_playlist").GetUtf8(),
+            sqlc_parser.ColumnParser("spotify_playlist").GetOptionalUtf8(),
             sqlc_parser.ColumnParser("songkick_id").GetOptionalUtf8(),
             sqlc_parser.ColumnParser("tags").GetOptionalJson(),
             sqlc_parser.ColumnParser("created_at").GetOptionalTimestamp(),
@@ -307,7 +307,7 @@ std::optional<GetVenueRow> Queries::GetVenue(const std::string& slug, const std:
         sqlc_parser.ColumnParser("city").GetUtf8(),
         sqlc_parser.ColumnParser("status").GetUtf8(),
         sqlc_parser.ColumnParser("statuses").GetOptionalJson(),
-        sqlc_parser.ColumnParser("spotify_playlist").GetUtf8(),
+        sqlc_parser.ColumnParser("spotify_playlist").GetOptionalUtf8(),
         sqlc_parser.ColumnParser("songkick_id").GetOptionalUtf8(),
         sqlc_parser.ColumnParser("tags").GetOptionalJson(),
         sqlc_parser.ColumnParser("created_at").GetOptionalTimestamp(),
@@ -316,7 +316,7 @@ std::optional<GetVenueRow> Queries::GetVenue(const std::string& slug, const std:
 }
 
 // -- name: CreateVenue :one
-std::optional<CreateVenueRow> Queries::CreateVenue(std::uint64_t id, const std::string& slug, const std::string& name, const std::string& city, const std::optional<TInstant>& created_at, const std::string& spotify_playlist, const std::string& status, const std::optional<std::string>& statuses, const std::optional<std::string>& tags) const {
+std::optional<CreateVenueRow> Queries::CreateVenue(std::uint64_t id, const std::string& slug, const std::string& name, const std::string& city, const std::optional<TInstant>& created_at, const std::optional<std::string>& spotify_playlist, const std::string& status, const std::optional<std::string>& statuses, const std::optional<std::string>& tags) const {
     std::optional<NYdb::TResultSet> sqlc_result_set;
     const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
         auto sqlc_params = NYdb::TParamsBuilder()
@@ -325,7 +325,7 @@ std::optional<CreateVenueRow> Queries::CreateVenue(std::uint64_t id, const std::
             .AddParam("$name").Utf8(name).Build()
             .AddParam("$city").Utf8(city).Build()
             .AddParam("$created_at").OptionalTimestamp(created_at).Build()
-            .AddParam("$spotify_playlist").Utf8(spotify_playlist).Build()
+            .AddParam("$spotify_playlist").OptionalUtf8(spotify_playlist).Build()
             .AddParam("$status").Utf8(status).Build()
             .AddParam("$statuses").OptionalJson(statuses).Build()
             .AddParam("$tags").OptionalJson(tags).Build()

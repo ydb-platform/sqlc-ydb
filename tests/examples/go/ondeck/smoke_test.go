@@ -32,6 +32,7 @@ func TestLive(t *testing.T) {
 	venueTable = "venue"
 	db.Apply(t, "../../../../examples/ondeck/schema/0004_add_created_at.sql")
 	db.Apply(t, "../../../../examples/ondeck/schema/0005_drop_column.sql")
+	db.Apply(t, "../../../../examples/ondeck/schema/0006_drop_playlist_not_null.sql")
 
 	native := ondecknative.New(db.Native)
 	legacy, err := native.GetVenue(db.Context, ondecknative.GetVenueParams{Slug: "legacy", City: "old-city"})
@@ -57,7 +58,7 @@ func TestLive(t *testing.T) {
 	tags := `["jazz","live"]`
 	createdVenue, err := native.CreateVenue(db.Context, ondecknative.CreateVenueParams{
 		ID: 7, Slug: "blue-note", Name: "Blue Note", City: "nyc",
-		CreatedAt: &now, SpotifyPlaylist: "spotify:playlist:example", Status: "op!en",
+		CreatedAt: &now, Status: "op!en",
 		Statuses: &statuses, Tags: &tags,
 	})
 	require.NoError(t, err)
@@ -67,6 +68,7 @@ func TestLive(t *testing.T) {
 	require.NotNil(t, venue.CreatedAt)
 	require.True(t, venue.CreatedAt.Equal(now))
 	require.Nil(t, venue.SongkickID)
+	require.Nil(t, venue.SpotifyPlaylist)
 	require.Equal(t, &statuses, venue.Statuses)
 	require.Equal(t, &tags, venue.Tags)
 	venues, err := native.ListVenues(db.Context, "nyc")

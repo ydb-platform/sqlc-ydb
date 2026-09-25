@@ -252,7 +252,7 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
                 "UPDATE books\n",
                 "SET tags = UNWRAP(Yson::SerializeJson(Json::From(ListFilter(\n",
                 "    Yson::ConvertToStringList(tags),\n",
-                "    ($item) -> ($item != $tag)\n",
+                "    ($item) -> ($item NOT IN AsList($tag))\n",
                 "))))\n",
                 "WHERE book_id = $book_id;",
             ))

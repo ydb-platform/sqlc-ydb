@@ -198,7 +198,7 @@ class Queries(private val client: java.sql.Connection) {
             "UPDATE books\n" +
             "SET tags = UNWRAP(Yson::SerializeJson(Json::From(ListFilter(\n" +
             "    Yson::ConvertToStringList(tags),\n" +
-            "    (\$item) -> (\$item != \$tag)\n" +
+            "    (\$item) -> (\$item NOT IN AsList(\$tag))\n" +
             "))))\n" +
             "WHERE book_id = \$book_id;", tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY).use { _prepared ->
             _prepared.setObject("book_id", PrimitiveValue.newUint64(bookId))

@@ -121,7 +121,7 @@ std::vector<ListVenuesRow> Queries::ListVenues(const ::userver::ydb::Utf8& city)
             sqlc_row.Get<::userver::ydb::Utf8>("city"),
             sqlc_row.Get<::userver::ydb::Utf8>("status"),
             sqlc_row.Get<std::optional<::userver::formats::json::Value>>("statuses"),
-            sqlc_row.Get<::userver::ydb::Utf8>("spotify_playlist"),
+            sqlc_row.Get<std::optional<::userver::ydb::Utf8>>("spotify_playlist"),
             sqlc_row.Get<std::optional<::userver::ydb::Utf8>>("songkick_id"),
             sqlc_row.Get<std::optional<::userver::formats::json::Value>>("tags"),
             sqlc_row.Get<std::optional<std::chrono::system_clock::time_point>>("created_at"),
@@ -170,7 +170,7 @@ std::optional<GetVenueRow> Queries::GetVenue(const ::userver::ydb::Utf8& slug, c
         sqlc_row.Get<::userver::ydb::Utf8>("city"),
         sqlc_row.Get<::userver::ydb::Utf8>("status"),
         sqlc_row.Get<std::optional<::userver::formats::json::Value>>("statuses"),
-        sqlc_row.Get<::userver::ydb::Utf8>("spotify_playlist"),
+        sqlc_row.Get<std::optional<::userver::ydb::Utf8>>("spotify_playlist"),
         sqlc_row.Get<std::optional<::userver::ydb::Utf8>>("songkick_id"),
         sqlc_row.Get<std::optional<::userver::formats::json::Value>>("tags"),
         sqlc_row.Get<std::optional<std::chrono::system_clock::time_point>>("created_at"),
@@ -178,7 +178,7 @@ std::optional<GetVenueRow> Queries::GetVenue(const ::userver::ydb::Utf8& slug, c
 }
 
 // -- name: CreateVenue :one
-std::optional<CreateVenueRow> Queries::CreateVenue(std::uint64_t id, const ::userver::ydb::Utf8& slug, const ::userver::ydb::Utf8& name, const ::userver::ydb::Utf8& city, const std::optional<std::chrono::system_clock::time_point>& created_at, const ::userver::ydb::Utf8& spotify_playlist, const ::userver::ydb::Utf8& status, const std::optional<::userver::formats::json::Value>& statuses, const std::optional<::userver::formats::json::Value>& tags) const {
+std::optional<CreateVenueRow> Queries::CreateVenue(std::uint64_t id, const ::userver::ydb::Utf8& slug, const ::userver::ydb::Utf8& name, const ::userver::ydb::Utf8& city, const std::optional<std::chrono::system_clock::time_point>& created_at, const std::optional<::userver::ydb::Utf8>& spotify_playlist, const ::userver::ydb::Utf8& status, const std::optional<::userver::formats::json::Value>& statuses, const std::optional<::userver::formats::json::Value>& tags) const {
     const auto sqlc_query = ::userver::ydb::Query{
         "INSERT INTO venue (\n"
         "    id,\n"

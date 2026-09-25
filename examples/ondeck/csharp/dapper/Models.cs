@@ -15,7 +15,7 @@ public sealed record Venue(
     string Slug,
     string Name,
     string City,
-    string SpotifyPlaylist,
+    string? SpotifyPlaylist,
     string? SongkickID,
     string? Tags,
     DateTime? CreatedAt
@@ -53,7 +53,7 @@ public sealed record ListVenuesRow(
     string City,
     string Status,
     string? Statuses,
-    string SpotifyPlaylist,
+    string? SpotifyPlaylist,
     string? SongkickID,
     string? Tags,
     DateTime? CreatedAt
@@ -71,7 +71,7 @@ public sealed record GetVenueRow(
     string City,
     string Status,
     string? Statuses,
-    string SpotifyPlaylist,
+    string? SpotifyPlaylist,
     string? SongkickID,
     string? Tags,
     DateTime? CreatedAt
@@ -83,7 +83,7 @@ public sealed record CreateVenueParams(
     string Name,
     string City,
     DateTime? CreatedAt,
-    string SpotifyPlaylist,
+    string? SpotifyPlaylist,
     string Status,
     string? Statuses,
     string? Tags

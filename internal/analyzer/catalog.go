@@ -185,6 +185,17 @@ func applyAlterTableAction(catalog model.Catalog, tableIndex int, table *model.T
 		table.Columns = append(table.Columns[:columnIndex], table.Columns[columnIndex+1:]...)
 		return nil
 	}
+	if drop := action.Alter_table_alter_column_drop_not_null(); drop != nil {
+		name := identifier(drop.An_id().GetText())
+		columnIndex, exists := catalogColumnIndex(*table, name)
+		if !exists {
+			return []model.Diagnostic{diagnosticAt(file, 0, drop, fmt.Sprintf("column %q does not exist in table %q", name, table.Name))}
+		}
+		if !table.Columns[columnIndex].Type.IsOptional() {
+			table.Columns[columnIndex].Type = model.Optional(table.Columns[columnIndex].Type)
+		}
+		return nil
+	}
 	if rename := action.Alter_table_rename_to(); rename != nil {
 		newName := resolveTablePath(prefix, identifier(rename.An_id_table().GetText()))
 		if otherIndex, exists := catalogTableIndex(catalog, newName); exists && otherIndex != tableIndex {
@@ -196,7 +207,7 @@ func applyAlterTableAction(catalog model.Catalog, tableIndex int, table *model.T
 		}
 		return nil
 	}
-	return []model.Diagnostic{diagnosticAt(file, 0, action, fmt.Sprintf("unsupported ALTER TABLE action %q; supported actions are ADD COLUMN, DROP COLUMN, ADD INDEX, DROP INDEX, and RENAME TO", action.GetText()))}
+	return []model.Diagnostic{diagnosticAt(file, 0, action, fmt.Sprintf("unsupported ALTER TABLE action %q; supported actions are ADD COLUMN, DROP COLUMN, ALTER COLUMN ... DROP NOT NULL, ADD INDEX, DROP INDEX, and RENAME TO", action.GetText()))}
 }
 
 func catalogTableIndex(catalog model.Catalog, name string) (int, bool) {

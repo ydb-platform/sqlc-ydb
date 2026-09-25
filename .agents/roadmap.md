@@ -4,7 +4,7 @@ Current behavior is in [compatibility](../docs/compatibility.md), stage ownershi
 
 ## Query compatibility priorities
 
-The following issues track planned work; their examples and acceptance criteria define the scope. Name-mapped INSERT/UPSERT SELECT, trailing Struct commas, verified integer aliases and compatible LIMIT/OFFSET types, secondary-index metadata with VIEW selection, and static absolute TablePathPrefix resolution are implemented; their original scope is in [#25](https://github.com/ydb-platform/sqlc-ydb/issues/25), [#26](https://github.com/ydb-platform/sqlc-ydb/issues/26), [#27](https://github.com/ydb-platform/sqlc-ydb/issues/27), [#28](https://github.com/ydb-platform/sqlc-ydb/issues/28), and [#29](https://github.com/ydb-platform/sqlc-ydb/issues/29). The [compatibility contract](../docs/compatibility.md#current-analyzer-coverage) records their boundaries. Subsequent changes should remain separate, reviewable PRs.
+The following issues track planned work; their examples and acceptance criteria define the scope. Name-mapped INSERT/UPSERT SELECT, trailing Struct commas, verified integer aliases and compatible LIMIT/OFFSET types, secondary-index metadata with VIEW selection, static absolute TablePathPrefix resolution, and ALTER COLUMN DROP NOT NULL are implemented; their original scope is in [#25](https://github.com/ydb-platform/sqlc-ydb/issues/25), [#26](https://github.com/ydb-platform/sqlc-ydb/issues/26), [#27](https://github.com/ydb-platform/sqlc-ydb/issues/27), [#28](https://github.com/ydb-platform/sqlc-ydb/issues/28), [#29](https://github.com/ydb-platform/sqlc-ydb/issues/29), and [#30](https://github.com/ydb-platform/sqlc-ydb/issues/30). The [compatibility contract](../docs/compatibility.md#current-analyzer-coverage) records their boundaries. Subsequent changes should remain separate, reviewable PRs.
 
 The noncorrelated scalar/tuple IN subquery portion of [#32](https://github.com/ydb-platform/sqlc-ydb/issues/32) is implemented; its remaining scope is listed below.
 
@@ -12,7 +12,6 @@ Multi-statement DML scripts without results (`:exec`) or with one typed SELECT/R
 
 | Order | Planned capability | Tracking |
 | --- | --- | --- |
-| 2 | ALTER COLUMN DROP NOT NULL | [#30](https://github.com/ydb-platform/sqlc-ydb/issues/30) |
 | 3 | Shared Boolean expressions, conditional aggregates and scalar conversions | [#31](https://github.com/ydb-platform/sqlc-ydb/issues/31) |
 | 4 | Derived FROM/JOIN sources, named SELECT bindings and collection aggregation | [#32](https://github.com/ydb-platform/sqlc-ydb/issues/32) |
 | 6 | Typed lambdas and JSON/Yson collection transformations | [#34](https://github.com/ydb-platform/sqlc-ydb/issues/34) |
