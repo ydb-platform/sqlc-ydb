@@ -376,6 +376,13 @@ func jooqRequiresFullSQL(q model.AnalyzedQuery) bool {
 	if q.Syntax == nil {
 		return false
 	}
+	for _, group := range jooqNodes[*parser.Group_by_clauseContext](q.Syntax.Root) {
+		for _, named := range jooqNodes[*parser.Named_exprContext](group) {
+			if named.AS() != nil {
+				return true
+			}
+		}
+	}
 	for _, call := range jooqNodes[*parser.Unary_casual_subexprContext](q.Syntax.Root) {
 		atom, suffix := call.Atom_expr(), call.Unary_subexpr_suffix()
 		if atom == nil || suffix == nil || len(suffix.AllInvoke_expr()) == 0 {

@@ -34,6 +34,7 @@ public:
     std::optional<CreateVenueRow> CreateVenue(std::uint64_t id, const std::string& slug, const std::string& name, const std::string& city, const std::optional<TInstant>& created_at, const std::optional<std::string>& spotify_playlist, const std::string& status, const std::optional<std::string>& statuses, const std::optional<std::string>& tags) const;
     std::optional<UpdateVenueNameRow> UpdateVenueName(const std::string& name, const std::string& slug) const;
     std::vector<VenueCountByCityRow> VenueCountByCity() const;
+    std::vector<VenueCountByCityStatusRow> VenueCountByCityStatus(std::uint64_t minimum_venues) const;
 
 private:
     NYdb::NQuery::TQueryClient* client_;

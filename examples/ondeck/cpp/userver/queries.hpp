@@ -31,6 +31,7 @@ public:
     std::optional<CreateVenueRow> CreateVenue(std::uint64_t id, const ::userver::ydb::Utf8& slug, const ::userver::ydb::Utf8& name, const ::userver::ydb::Utf8& city, const std::optional<std::chrono::system_clock::time_point>& created_at, const std::optional<::userver::ydb::Utf8>& spotify_playlist, const ::userver::ydb::Utf8& status, const std::optional<::userver::formats::json::Value>& statuses, const std::optional<::userver::formats::json::Value>& tags) const;
     std::optional<UpdateVenueNameRow> UpdateVenueName(const ::userver::ydb::Utf8& name, const ::userver::ydb::Utf8& slug) const;
     std::vector<VenueCountByCityRow> VenueCountByCity() const;
+    std::vector<VenueCountByCityStatusRow> VenueCountByCityStatus(std::uint64_t minimum_venues) const;
 
 private:
     ::userver::ydb::TableClient* client_;

@@ -270,4 +270,32 @@ std::vector<VenueCountByCityRow> Queries::VenueCountByCity() const {
     return sqlc_rows;
 }
 
+// -- name: VenueCountByCityStatus :many
+std::vector<VenueCountByCityStatusRow> Queries::VenueCountByCityStatus(std::uint64_t minimum_venues) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "DECLARE $minimum_venues AS Uint64;\n"
+        "SELECT city_status, COUNT(*) AS venue_count\n"
+        "FROM venue\n"
+        "GROUP BY city || \"/\"u || status AS city_status\n"
+        "HAVING COUNT(*) >= $minimum_venues\n"
+        "ORDER BY city_status;",
+        ::userver::ydb::Query::Name{"VenueCountByCityStatus"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    auto sqlc_response =
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$minimum_venues", minimum_venues)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$minimum_venues", minimum_venues);
+    auto sqlc_cursor = sqlc_response.GetSingleCursor();
+    std::vector<VenueCountByCityStatusRow> sqlc_rows;
+    sqlc_rows.reserve(sqlc_cursor.size());
+    for (auto sqlc_row : sqlc_cursor) {
+        sqlc_rows.push_back(VenueCountByCityStatusRow{
+            sqlc_row.Get<::userver::ydb::Utf8>("city_status"),
+            sqlc_row.Get<std::uint64_t>("venue_count"),
+        });
+    }
+    return sqlc_rows;
+}
+
 }  // namespace ondeck::userver

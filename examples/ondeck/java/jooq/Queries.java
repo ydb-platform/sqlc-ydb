@@ -175,4 +175,26 @@ public final class Queries {
                 .coerce(field(name("city"), YdbTypes.UTF8), field(name("venue_count"), YdbTypes.UINT64))
                 .fetch(mapping(VenueCountByCityRow::new));
     }
+
+    // -- name: VenueCountByCityStatus :many
+    public List<VenueCountByCityStatusRow> venueCountByCityStatus(ULong minimumVenues) {
+        return dsl.connectionResult(_connection -> {
+            try (var _prepared = _connection.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+                DECLARE $minimum_venues AS Uint64;
+                SELECT city_status, COUNT(*) AS venue_count
+                FROM\s\
+                """ + dsl.render(VENUE) + " AS `venue`" + """
+
+                GROUP BY city || \"/\"u || status AS city_status
+                HAVING COUNT(*) >= $minimum_venues
+                ORDER BY city_status;\
+                """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+                _prepared.setObject("minimum_venues", tech.ydb.table.values.PrimitiveValue.newUint64(minimumVenues.longValue()));
+                try (var _rows = _prepared.executeQuery()) {
+                    var _result = dsl.fetch(_rows, YdbTypes.UTF8, YdbTypes.UINT64).map(_row -> new VenueCountByCityStatusRow(_row.get(0, String.class), _row.get(1, org.jooq.types.ULong.class)));
+                    return _result;
+                }
+            }
+        });
+    }
 }

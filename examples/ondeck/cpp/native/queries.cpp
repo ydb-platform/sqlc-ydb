@@ -479,4 +479,54 @@ std::vector<VenueCountByCityRow> Queries::VenueCountByCity() const {
     return sqlc_rows;
 }
 
+// -- name: VenueCountByCityStatus :many
+std::vector<VenueCountByCityStatusRow> Queries::VenueCountByCityStatus(std::uint64_t minimum_venues) const {
+    std::optional<NYdb::TResultSet> sqlc_result_set;
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_params = NYdb::TParamsBuilder()
+            .AddParam("$minimum_venues").Uint64(minimum_venues).Build()
+            .Build();
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            "DECLARE $minimum_venues AS Uint64;\n"
+            "SELECT city_status, COUNT(*) AS venue_count\n"
+            "FROM venue\n"
+            "GROUP BY city || \"/\"u || status AS city_status\n"
+            "HAVING COUNT(*) >= $minimum_venues\n"
+            "ORDER BY city_status;",
+            sqlc_tx,
+            sqlc_params,
+            this->execute_settings_
+        ).GetValueSync();
+        if (sqlc_result.IsSuccess()) {
+            if (sqlc_result.GetResultSets().size() != 1) {
+                throw std::runtime_error("expected exactly one result set");
+            }
+            sqlc_result_set = sqlc_result.GetResultSet(0);
+        }
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+    if (!sqlc_result_set) {
+        throw std::runtime_error("VenueCountByCityStatus: successful query returned no result set");
+    }
+    NYdb::TResultSetParser sqlc_parser(*sqlc_result_set);
+    std::vector<VenueCountByCityStatusRow> sqlc_rows;
+    sqlc_rows.reserve(sqlc_result_set->RowsCount());
+    while (sqlc_parser.TryNextRow()) {
+        sqlc_rows.push_back(VenueCountByCityStatusRow{
+            sqlc_parser.ColumnParser("city_status").GetUtf8(),
+            sqlc_parser.ColumnParser("venue_count").GetUint64(),
+        });
+    }
+    return sqlc_rows;
+}
+
 }  // namespace ondeck::native

@@ -88,3 +88,8 @@ type VenueCountByCityRow struct {
 	City       string
 	VenueCount uint64
 }
+
+type VenueCountByCityStatusRow struct {
+	CityStatus string
+	VenueCount uint64
+}

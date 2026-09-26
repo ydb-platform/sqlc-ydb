@@ -260,3 +260,58 @@ func (q *Queries) VenueCountByCity(ctx context.Context, opts ...query.ExecuteOpt
 
 	return items, nil
 }
+
+// -- name: VenueCountByCityStatus :many
+func (q *Queries) VenueCountByCityStatus(ctx context.Context, arg uint64, opts ...query.ExecuteOption) ([]VenueCountByCityStatusRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$minimum_venues").Uint64(arg)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	result, err := q.db.Query(ctx, ""+
+		"DECLARE $minimum_venues AS Uint64;\n"+
+		"SELECT city_status, COUNT(*) AS venue_count\n"+
+		"FROM venue\n"+
+		"GROUP BY city || \"/\"u || status AS city_status\n"+
+		"HAVING COUNT(*) >= $minimum_venues\n"+
+		"ORDER BY city_status;",
+		callOptions...,
+	)
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
+	}
+	defer result.Close(ctx)
+
+	resultSet, err := result.NextResultSet(ctx)
+	if errors.Is(err, io.EOF) {
+		return nil, xerrors.WithStackTrace(query.ErrNoResultSets)
+	}
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
+	}
+
+	items := []VenueCountByCityStatusRow(nil)
+	for r, err := range resultSet.Rows(ctx) {
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+		var row VenueCountByCityStatusRow
+		if err := r.ScanNamed(
+			query.Named("city_status", &row.CityStatus),
+			query.Named("venue_count", &row.VenueCount),
+		); err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+		items = append(items, row)
+	}
+
+	_, err = result.NextResultSet(ctx)
+	if err == nil {
+		return nil, xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+	} else if !errors.Is(err, io.EOF) {
+		return nil, xerrors.WithStackTrace(err)
+	}
+
+	return items, nil
+}

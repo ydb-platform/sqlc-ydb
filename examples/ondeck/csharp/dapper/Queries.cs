@@ -48,6 +48,11 @@ public sealed class Queries
         {
             ["venue_count"] = nameof(VenueCountByCityRow.VenueCount),
         }));
+        SqlMapper.SetTypeMap(typeof(VenueCountByCityStatusRow), new ColumnTypeMap(typeof(VenueCountByCityStatusRow), new Dictionary<string, string>
+        {
+            ["city_status"] = nameof(VenueCountByCityStatusRow.CityStatus),
+            ["venue_count"] = nameof(VenueCountByCityStatusRow.VenueCount),
+        }));
     }
 
     private sealed class ColumnTypeMap : SqlMapper.ITypeMap
@@ -312,6 +317,30 @@ public sealed class Queries
             cancellationToken: cancellationToken);
 
         return (await _connection.QueryAsync<VenueCountByCityRow>(command).ConfigureAwait(false)).AsList();
+    }
+
+    // -- name: VenueCountByCityStatus :many
+    public async Task<IReadOnlyList<VenueCountByCityStatusRow>> VenueCountByCityStatusAsync(ulong minimumVenues, CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var parameters = new YdbParameters(
+            new YdbParameter("$minimum_venues", DbType.UInt64, minimumVenues)
+        );
+
+        var command = new CommandDefinition(
+            commandText: """
+            DECLARE $minimum_venues AS Uint64;
+            SELECT city_status, COUNT(*) AS venue_count
+            FROM venue
+            GROUP BY city || "/"u || status AS city_status
+            HAVING COUNT(*) >= $minimum_venues
+            ORDER BY city_status;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        return (await _connection.QueryAsync<VenueCountByCityStatusRow>(command).ConfigureAwait(false)).AsList();
     }
 
     private sealed class YdbParameters : SqlMapper.IDynamicParameters

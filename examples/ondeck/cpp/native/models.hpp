@@ -62,4 +62,9 @@ struct VenueCountByCityRow final {
     std::uint64_t venue_count;
 };
 
+struct VenueCountByCityStatusRow final {
+    std::string city_status;
+    std::uint64_t venue_count;
+};
+
 }  // namespace ondeck::native

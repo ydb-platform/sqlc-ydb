@@ -9,31 +9,36 @@ import (
 	parser "github.com/ydb-platform/yql-parsers/go"
 )
 
-func validatePredicateContexts(block queryBlock, root antlr.Tree, relations []relation, bindings map[string]model.Type, subqueries map[int]model.Type) []model.Diagnostic {
-	var predicates []parser.IExprContext
+func validatePredicateContexts(block queryBlock, root antlr.Tree, relations, groupedRelations []relation, bindings map[string]model.Type, subqueries map[int]model.Type) []model.Diagnostic {
+	type predicateContext struct {
+		expr      parser.IExprContext
+		relations []relation
+	}
+	var predicates []predicateContext
 	scopeDescendants(root, func(node antlr.Tree) {
 		switch ctx := node.(type) {
 		case *parser.Select_coreContext:
 			if ctx.WHERE() != nil {
-				predicates = append(predicates, ctx.Expr(0))
+				predicates = append(predicates, predicateContext{ctx.Expr(0), groupedRelations})
 			}
 		case *parser.Join_constraintContext:
 			if ctx.ON() != nil && ctx.Expr() != nil {
-				predicates = append(predicates, ctx.Expr())
+				predicates = append(predicates, predicateContext{ctx.Expr(), relations})
 			}
 		case *parser.Update_stmtContext:
 			if ctx.WHERE() != nil && ctx.Expr() != nil {
-				predicates = append(predicates, ctx.Expr())
+				predicates = append(predicates, predicateContext{ctx.Expr(), relations})
 			}
 		case *parser.Delete_stmtContext:
 			if ctx.WHERE() != nil && ctx.Expr() != nil {
-				predicates = append(predicates, ctx.Expr())
+				predicates = append(predicates, predicateContext{ctx.Expr(), relations})
 			}
 		}
 	})
 	seen := map[int]bool{}
 	var diagnostics []model.Diagnostic
-	for _, predicate := range predicates {
+	for _, item := range predicates {
+		predicate := item.expr
 		if predicate == nil || seen[predicate.GetStart().GetStart()] {
 			continue
 		}
@@ -42,7 +47,7 @@ func validatePredicateContexts(block queryBlock, root antlr.Tree, relations []re
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, predicate, "aggregate functions are not allowed in WHERE or JOIN predicates; use HAVING after aggregation"))
 			continue
 		}
-		if err := validatePredicate(predicate, expressionScope{relations: relations, bindings: bindings, lambdas: block.lambdas, functions: block.functions, inSubqueries: subqueries}); err != nil {
+		if err := validatePredicate(predicate, expressionScope{relations: item.relations, bindings: bindings, lambdas: block.lambdas, functions: block.functions, inSubqueries: subqueries}); err != nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, predicate, fmt.Sprintf("invalid predicate: %v", err)))
 		}
 	}

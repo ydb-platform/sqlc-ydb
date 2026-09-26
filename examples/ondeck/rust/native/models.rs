@@ -61,3 +61,9 @@ pub struct VenueCountByCityRow {
     pub city: String,
     pub venue_count: u64,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct VenueCountByCityStatusRow {
+    pub city_status: String,
+    pub venue_count: u64,
+}

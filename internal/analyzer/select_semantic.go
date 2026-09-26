@@ -137,9 +137,106 @@ func reconcileUnionColumns(block queryBlock, statement parser.ISelect_stmtContex
 	return columns, diagnostics
 }
 
+func groupingAliases(block queryBlock, core *parser.Select_coreContext, relations []relation, bindings map[string]model.Type) (model.Table, []model.Diagnostic) {
+	var table model.Table
+	var diagnostics []model.Diagnostic
+	groupBy := core.Group_by_clause()
+	if groupBy == nil || groupBy.Grouping_element_list() == nil {
+		return table, nil
+	}
+	seen := map[string]bool{}
+	for _, element := range groupBy.Grouping_element_list().AllGrouping_element() {
+		ordinary := element.Ordinary_grouping_set()
+		if ordinary == nil || ordinary.Named_expr() == nil || ordinary.Named_expr().AS() == nil {
+			continue
+		}
+		named := ordinary.Named_expr()
+		alias := identifier(named.An_id_or_type().GetText())
+		if seen[alias] {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, named, fmt.Sprintf("duplicate GROUP BY alias %q", alias)))
+			continue
+		}
+		seen[alias] = true
+		expr := named.Expr()
+		if expr == nil {
+			continue
+		}
+		refs := columnRefs(expr)
+		if len(refs) == 1 && isPureColumnExpression(expr) && refs[0].qualifier == "" && refs[0].name == alias {
+			continue
+		}
+		if containsAggregate(expr) {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, expr, "GROUP BY expression cannot contain an aggregate function"))
+			continue
+		}
+		typ, err := resolveExpression(expr, expressionScope{relations: relations, bindings: bindings, lambdas: block.lambdas, functions: block.functions})
+		if err != nil {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, expr, fmt.Sprintf("cannot resolve GROUP BY expression: %v", err)))
+			continue
+		}
+		table.Columns = append(table.Columns, model.Column{Name: alias, Type: typ})
+	}
+	return table, diagnostics
+}
+
+func groupingAliasNames(root antlr.Tree) map[string]bool {
+	core, ok := root.(*parser.Select_coreContext)
+	if !ok || core.Group_by_clause() == nil || core.Group_by_clause().Grouping_element_list() == nil {
+		return nil
+	}
+	names := map[string]bool{}
+	for _, element := range core.Group_by_clause().Grouping_element_list().AllGrouping_element() {
+		if ordinary := element.Ordinary_grouping_set(); ordinary != nil && ordinary.Named_expr() != nil && ordinary.Named_expr().AS() != nil {
+			named := ordinary.Named_expr()
+			alias := identifier(named.An_id_or_type().GetText())
+			refs := columnRefs(named.Expr())
+			if len(refs) == 1 && isPureColumnExpression(named.Expr()) && refs[0].qualifier == "" && refs[0].name == alias {
+				continue
+			}
+			names[alias] = true
+		}
+	}
+	return names
+}
+
+func groupingAliasVisible(ref columnRef) bool {
+	for parent := ref.ctx.GetParent(); parent != nil; parent = parent.GetParent() {
+		switch parent.(type) {
+		case *parser.Grouping_elementContext, *parser.Join_constraintContext:
+			return false
+		case *parser.Select_coreContext:
+			return true
+		}
+	}
+	return false
+}
+
+func groupingInferenceColumn(aliases map[string]bool, relations []relation, ref columnRef) (model.Column, error) {
+	grouping := len(relations) != 0 && relations[len(relations)-1].grouping
+	if aliases[ref.name] && ref.qualifier == "" && groupingAliasVisible(ref) && !grouping {
+		return model.Column{}, fmt.Errorf("GROUP BY alias is not resolved yet")
+	}
+	if grouping && !groupingAliasVisible(ref) {
+		relations = relations[:len(relations)-1]
+	}
+	return resolveColumn(relations, ref)
+}
+
+func clearGroupingAliasBindings(syntax *model.QuerySyntax, core *parser.Select_coreContext, aliases *model.Table) {
+	for _, ref := range columnRefs(core) {
+		if ref.qualifier == "" && groupingAliasVisible(ref) && tableColumn(aliases, ref.name) != nil {
+			delete(syntax.Columns, ref.ctx.GetStart().GetTokenIndex())
+		}
+	}
+}
+
 func validateGrouping(block queryBlock, core *parser.Select_coreContext, relations []relation, bindings map[string]model.Type) []model.Diagnostic {
 	grouped := map[string]bool{}
 	var diagnostics []model.Diagnostic
+	sources := relations
+	if len(sources) != 0 && sources[len(sources)-1].grouping {
+		sources = sources[:len(sources)-1]
+	}
 	if groupBy := core.Group_by_clause(); groupBy != nil && groupBy.Grouping_element_list() != nil {
 		for _, element := range groupBy.Grouping_element_list().AllGrouping_element() {
 			ordinary := element.Ordinary_grouping_set()
@@ -147,15 +244,24 @@ func validateGrouping(block queryBlock, core *parser.Select_coreContext, relatio
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, element, "only direct column GROUP BY elements are currently supported"))
 				continue
 			}
-			expr := ordinary.Named_expr().Expr()
+			named := ordinary.Named_expr()
+			expr := named.Expr()
 			refs := columnRefs(expr)
-			if len(refs) != 1 || !isPureColumnExpression(expr) {
+			if len(refs) == 1 && isPureColumnExpression(expr) {
+				key, err := resolvedColumnKey(sources, refs[0])
+				if err == nil {
+					grouped[key] = true
+				}
+			} else if named.AS() == nil {
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, expr, "only direct column GROUP BY expressions are currently supported"))
 				continue
 			}
-			key, err := resolvedColumnKey(relations, refs[0])
-			if err == nil {
-				grouped[key] = true
+			if named.AS() != nil {
+				alias := identifier(named.An_id_or_type().GetText())
+				key, err := resolvedColumnKey(relations, columnRef{name: alias})
+				if err == nil {
+					grouped[key] = true
+				}
 			}
 		}
 	}
@@ -206,6 +312,13 @@ func validateGrouping(block queryBlock, core *parser.Select_coreContext, relatio
 }
 
 func resolvedColumnKey(relations []relation, ref columnRef) (string, error) {
+	if ref.qualifier == "" {
+		for _, rel := range relations {
+			if rel.grouping && tableColumn(rel.table, ref.name) != nil {
+				return rel.alias + "\x00" + ref.name, nil
+			}
+		}
+	}
 	var key string
 	matches := 0
 	for _, rel := range relations {
@@ -348,6 +461,7 @@ func validateLimitOffset(block queryBlock, partial parser.ISelect_kind_partialCo
 }
 
 func inferFromInLists(root antlr.Tree, relations []relation, inferred map[string]model.Type) {
+	aliases := groupingAliasNames(root)
 	scopeDescendants(root, func(node antlr.Tree) {
 		condition, ok := node.(*parser.Cond_exprContext)
 		if !ok {
@@ -361,7 +475,7 @@ func inferFromInLists(root antlr.Tree, relations []relation, inferred map[string
 		if len(refs) != 1 {
 			return
 		}
-		column, err := resolveColumn(relations, refs[0])
+		column, err := groupingInferenceColumn(aliases, relations, refs[0])
 		if err != nil {
 			return
 		}

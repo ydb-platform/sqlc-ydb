@@ -190,6 +190,120 @@ HAVING COUNT(*) > 0ul;`}}
 	}
 }
 
+func TestAnalyzeResolvesComputedGroupKey(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, category Utf8 NOT NULL, PRIMARY KEY (id));`}}
+	queries := []model.Source{{Name: "query.sql", Text: `-- name: DoubledCounts :many
+SELECT doubled, COUNT(*) AS total
+FROM records
+GROUP BY id + id AS doubled
+HAVING doubled > 0ul;`}}
+
+	got, err := Analyze(schema, queries)
+	require.NoError(t, err)
+	require.Equal(t, []model.Column{
+		{Name: "doubled", Type: model.Type{Kind: "Uint64"}},
+		{Name: "total", Type: model.Type{Kind: "Uint64"}},
+	}, got.Queries[0].ResultSets[0].Columns)
+}
+
+func TestAnalyzeResolvesComputedGroupKeyInWhere(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY (id));`}}
+	queries := []model.Source{{Name: "query.sql", Text: `-- name: Filtered :many
+SELECT doubled, COUNT(*) AS total
+FROM records
+WHERE doubled > 0ul
+GROUP BY id + id AS doubled;`}}
+
+	got, err := Analyze(schema, queries)
+	require.NoError(t, err)
+	require.Equal(t, model.Type{Kind: "Uint64"}, got.Queries[0].ResultSets[0].Columns[0].Type)
+}
+
+func TestAnalyzeRejectsUngroupedSourceOfComputedKey(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY (id));`}}
+	queries := []model.Source{{Name: "query.sql", Text: `-- name: Invalid :many
+SELECT id, doubled, COUNT(*) AS total
+FROM records
+GROUP BY id + id AS doubled;`}}
+
+	_, err := Analyze(schema, queries)
+	require.ErrorContains(t, err, `projection column "id" must appear in GROUP BY or an aggregate function`)
+}
+
+func TestAnalyzeComputedGroupKeyShadowsSourceColumn(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, foo Utf8 NOT NULL, bar Uint64 NOT NULL, PRIMARY KEY (id));`}}
+	queries := []model.Source{{Name: "query.sql", Text: `-- name: Grouped :many
+SELECT foo, COUNT(*) AS total
+FROM records
+WHERE foo > $minimum
+GROUP BY bar AS foo;`}}
+
+	got, err := Analyze(schema, queries)
+	require.NoError(t, err)
+	require.Equal(t, []model.Parameter{{Name: "minimum", Type: model.Type{Kind: "Uint64"}}}, got.Queries[0].Parameters)
+	require.Equal(t, model.Type{Kind: "Uint64"}, got.Queries[0].ResultSets[0].Columns[0].Type)
+}
+
+func TestAnalyzeInfersParameterBeforeComputedGroupKey(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY (id));`}}
+	queries := []model.Source{{Name: "query.sql", Text: `-- name: Grouped :many
+SELECT shifted, COUNT(*) AS total
+FROM records
+WHERE id > $delta
+GROUP BY id + $delta AS shifted;`}}
+
+	got, err := Analyze(schema, queries)
+	require.NoError(t, err)
+	require.Equal(t, []model.Parameter{{Name: "delta", Type: model.Type{Kind: "Uint64"}}}, got.Queries[0].Parameters)
+}
+
+func TestAnalyzeNamedDirectGroupKeyKeepsSourceInference(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY (id));`}}
+	queries := []model.Source{{Name: "query.sql", Text: `-- name: Grouped :many
+SELECT id, COUNT(*) AS total FROM records WHERE id > $minimum GROUP BY id AS id;`}}
+
+	got, err := Analyze(schema, queries)
+	require.NoError(t, err)
+	require.Equal(t, []model.Parameter{{Name: "minimum", Type: model.Type{Kind: "Uint64"}}}, got.Queries[0].Parameters)
+}
+
+func TestAnalyzeRejectsDuplicateComputedGroupAliases(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY (id));`}}
+	queries := []model.Source{{Name: "query.sql", Text: `-- name: Invalid :many
+SELECT doubled, COUNT(*) AS total
+FROM records
+GROUP BY id + id AS doubled, id + 1ul AS doubled;`}}
+
+	_, err := Analyze(schema, queries)
+	require.ErrorContains(t, err, `duplicate GROUP BY alias "doubled"`)
+}
+
+func TestAnalyzeRejectsGroupAliasInJoinOn(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY (id));`}}
+	queries := []model.Source{{Name: "query.sql", Text: `-- name: Invalid :many
+SELECT doubled, COUNT(*) AS total
+FROM records AS r JOIN records AS s ON r.id = doubled
+GROUP BY r.id + r.id AS doubled;`}}
+
+	_, err := Analyze(schema, queries)
+	require.ErrorContains(t, err, `unknown column "doubled"`)
+}
+
+func TestAnalyzeRejectsInvalidComputedGroupKeys(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY (id));`}}
+	for _, tc := range []struct{ sql, want string }{
+		{`SELECT id, COUNT(*) AS total FROM records GROUP BY id + id;`, `only direct column GROUP BY expressions are currently supported`},
+		{`SELECT key, COUNT(*) AS total FROM records GROUP BY SUM(id) AS key;`, `GROUP BY expression cannot contain an aggregate function`},
+		{`SELECT key, COUNT(*) AS total FROM records GROUP BY Mystery(id) AS key;`, `cannot resolve GROUP BY expression: unsupported YQL function "Mystery"`},
+		{`SELECT *, COUNT(*) AS total FROM records GROUP BY id + id AS key;`, `star projections are unsupported in grouped or aggregate queries`},
+	} {
+		t.Run(tc.sql, func(t *testing.T) {
+			_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Invalid :many\n" + tc.sql}})
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
 func TestAnalyzeUsesGroupingContextForAggregateNullability(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (
     id Uint64 NOT NULL,

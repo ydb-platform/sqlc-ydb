@@ -347,4 +347,38 @@ class Queries {
         }
         return _items
     }
+
+    // -- name: VenueCountByCityStatus :many
+    fun venueCountByCityStatus(minimumVenues: Long): List<VenueCountByCityStatusRow> {
+        val _params = Params.create()
+        _params.put("\$minimum_venues", PrimitiveValue.newUint64(minimumVenues))
+        val _query = if (transaction != null) {
+            QueryReader.readFrom(transaction.createQuery(
+                "DECLARE \$minimum_venues AS Uint64;\n" +
+                "SELECT city_status, COUNT(*) AS venue_count\n" +
+                "FROM venue\n" +
+                "GROUP BY city || \"/\"u || status AS city_status\n" +
+                "HAVING COUNT(*) >= \$minimum_venues\n" +
+                "ORDER BY city_status;", _params)).join().getValue()
+        } else {
+            client!!.supplyResult { _session ->
+                QueryReader.readFrom(_session.createQuery(
+                    "DECLARE \$minimum_venues AS Uint64;\n" +
+                    "SELECT city_status, COUNT(*) AS venue_count\n" +
+                    "FROM venue\n" +
+                    "GROUP BY city || \"/\"u || status AS city_status\n" +
+                    "HAVING COUNT(*) >= \$minimum_venues\n" +
+                    "ORDER BY city_status;", TxMode.SERIALIZABLE_RW, _params))
+            }.join().getValue()
+        }
+        kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
+        val _rows = _query.getResultSet(0)
+        val _items = ArrayList<VenueCountByCityStatusRow>()
+        while (_rows.next()) {
+            val _value0: String = _rows.getColumn(0).getText()
+            val _value1: Long = _rows.getColumn(1).getUint64()
+            _items.add(VenueCountByCityStatusRow(_value0, _value1))
+        }
+        return _items
+    }
 }

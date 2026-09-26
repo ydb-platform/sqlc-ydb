@@ -177,3 +177,38 @@ func (q *Queries) VenueCountByCity(ctx context.Context) ([]VenueCountByCityRow, 
 
 	return items, nil
 }
+
+// -- name: VenueCountByCityStatus :many
+func (q *Queries) VenueCountByCityStatus(ctx context.Context, arg uint64) ([]VenueCountByCityStatusRow, error) {
+	rows, err := q.db.QueryContext(ctx, ""+
+		"DECLARE $minimum_venues AS Uint64;\n"+
+		"SELECT city_status, COUNT(*) AS venue_count\n"+
+		"FROM venue\n"+
+		"GROUP BY city || \"/\"u || status AS city_status\n"+
+		"HAVING COUNT(*) >= $minimum_venues\n"+
+		"ORDER BY city_status;",
+		sql.Named("minimum_venues", arg),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []VenueCountByCityStatusRow(nil)
+	for rows.Next() {
+		var row VenueCountByCityStatusRow
+		if err := rows.Scan(
+			&row.CityStatus,
+			&row.VenueCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, row)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
