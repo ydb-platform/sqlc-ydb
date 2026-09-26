@@ -41,6 +41,15 @@ public final class Queries {
                 .fetch(mapping(ListAuthorsRow::new));
     }
 
+    // -- name: ListAuthorsWithoutBio :many
+    public List<ListAuthorsWithoutBioRow> listAuthorsWithoutBio() {
+        return dsl.select(AUTHORS.ID, AUTHORS.NAME)
+                .from(AUTHORS)
+                .orderBy(AUTHORS.ID)
+                .coerce(field(name("id"), YdbTypes.UINT64), field(name("name"), YdbTypes.UTF8))
+                .fetch(mapping(ListAuthorsWithoutBioRow::new));
+    }
+
     // -- name: ListAuthorsPage :many
     public List<ListAuthorsPageRow> listAuthorsPage(Integer pageSize, UInteger offset) {
         return dsl.connectionResult(_connection -> {

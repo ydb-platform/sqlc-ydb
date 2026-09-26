@@ -57,6 +57,22 @@ class Querier:
             bio=row["bio"],
         ) for row in rows]
 
+    # -- name: ListAuthorsWithoutBio :many
+    def list_authors_without_bio(self) -> list[_models.ListAuthorsWithoutBioRow]:
+        parameters = {
+        }
+        result_sets = self._execute(
+            ("SELECT `id`, `name` FROM authors ORDER BY id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.ListAuthorsWithoutBioRow(
+            id=row["id"],
+            name=row["name"],
+        ) for row in rows]
+
     # -- name: ListAuthorsPage :many
     def list_authors_page(self, page_size: int, offset: int) -> list[_models.Authors]:
         parameters = {

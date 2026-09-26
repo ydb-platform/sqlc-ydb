@@ -4,6 +4,9 @@ SELECT id, name, bio FROM authors WHERE id = $author_id;
 -- name: ListAuthors :many
 SELECT id, name, bio FROM authors ORDER BY name;
 
+-- name: ListAuthorsWithoutBio :many
+SELECT * WITHOUT bio FROM authors ORDER BY id;
+
 -- name: ListAuthorsPage :many
 DECLARE $page_size AS Int;
 DECLARE $offset AS Uint32;

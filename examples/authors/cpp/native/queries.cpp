@@ -97,6 +97,47 @@ std::vector<ListAuthorsRow> Queries::ListAuthors() const {
     return sqlc_rows;
 }
 
+// -- name: ListAuthorsWithoutBio :many
+std::vector<ListAuthorsWithoutBioRow> Queries::ListAuthorsWithoutBio() const {
+    std::optional<NYdb::TResultSet> sqlc_result_set;
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            "SELECT `id`, `name` FROM authors ORDER BY id;",
+            sqlc_tx,
+            this->execute_settings_
+        ).GetValueSync();
+        if (sqlc_result.IsSuccess()) {
+            if (sqlc_result.GetResultSets().size() != 1) {
+                throw std::runtime_error("expected exactly one result set");
+            }
+            sqlc_result_set = sqlc_result.GetResultSet(0);
+        }
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+    if (!sqlc_result_set) {
+        throw std::runtime_error("ListAuthorsWithoutBio: successful query returned no result set");
+    }
+    NYdb::TResultSetParser sqlc_parser(*sqlc_result_set);
+    std::vector<ListAuthorsWithoutBioRow> sqlc_rows;
+    sqlc_rows.reserve(sqlc_result_set->RowsCount());
+    while (sqlc_parser.TryNextRow()) {
+        sqlc_rows.push_back(ListAuthorsWithoutBioRow{
+            sqlc_parser.ColumnParser("id").GetUint64(),
+            sqlc_parser.ColumnParser("name").GetUtf8(),
+        });
+    }
+    return sqlc_rows;
+}
+
 // -- name: ListAuthorsPage :many
 std::vector<ListAuthorsPageRow> Queries::ListAuthorsPage(std::int32_t page_size, std::uint32_t offset) const {
     std::optional<NYdb::TResultSet> sqlc_result_set;

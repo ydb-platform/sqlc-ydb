@@ -40,6 +40,22 @@ class Queries(private val client: java.sql.Connection) {
         }
     }
 
+    // -- name: ListAuthorsWithoutBio :many
+    fun listAuthorsWithoutBio(): List<ListAuthorsWithoutBioRow> {
+        client.prepareStatement(
+            "SELECT `id`, `name` FROM authors ORDER BY id;").use { _prepared ->
+            _prepared.executeQuery().use { _rows ->
+                val _items = ArrayList<ListAuthorsWithoutBioRow>()
+                while (_rows.next()) {
+                    val _value0: Long = _rows.getLong(1)
+                    val _value1: String = _rows.getString(2)
+                    _items.add(ListAuthorsWithoutBioRow(_value0, _value1))
+                }
+                return _items
+            }
+        }
+    }
+
     // -- name: ListAuthorsPage :many
     fun listAuthorsPage(pageSize: Int, offset: Long): List<ListAuthorsPageRow> {
         kotlin.require(offset >= 0 && offset <= 4294967295L) { "parameter \$offset is outside Uint32 range" }

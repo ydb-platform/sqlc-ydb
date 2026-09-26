@@ -18,6 +18,11 @@ export type ListAuthorsRow = {
   readonly bio: string | null;
 };
 
+export type ListAuthorsWithoutBioRow = {
+  readonly id: bigint;
+  readonly name: string;
+};
+
 export type ListAuthorsPageParams = {
   readonly pageSize: number;
   readonly offset: number;
@@ -116,6 +121,17 @@ export class Queries {
   async listAuthors(configure?: ConfigureQuery): Promise<ListAuthorsRow[]> {
     const stmt = this.#sql<[ListAuthorsRow]>(
       "SELECT id, name, bio FROM authors ORDER BY name;"
+    );
+    configure?.(stmt);
+    const [rows] = await stmt;
+
+    return rows;
+  }
+
+  // -- name: ListAuthorsWithoutBio :many
+  async listAuthorsWithoutBio(configure?: ConfigureQuery): Promise<ListAuthorsWithoutBioRow[]> {
+    const stmt = this.#sql<[ListAuthorsWithoutBioRow]>(
+      "SELECT `id`, `name` FROM authors ORDER BY id;"
     );
     configure?.(stmt);
     const [rows] = await stmt;

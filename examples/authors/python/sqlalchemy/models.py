@@ -11,6 +11,11 @@ class Authors:
     bio: Optional[str]
 
 @dataclass
+class ListAuthorsWithoutBioRow:
+    id: int
+    name: str
+
+@dataclass
 class GetAuthorNameRow:
     name: str
 

@@ -45,6 +45,23 @@ public final class Queries {
         }
     }
 
+    // -- name: ListAuthorsWithoutBio :many
+    public java.util.List<ListAuthorsWithoutBioRow> listAuthorsWithoutBio() throws java.sql.SQLException {
+        try (var _prepared = client.prepareStatement("""
+            SELECT `id`, `name` FROM authors ORDER BY id;\
+            """)) {
+            try (var _rows = _prepared.executeQuery()) {
+                var _items = new java.util.ArrayList<ListAuthorsWithoutBioRow>();
+                while (_rows.next()) {
+                    long _value0 = _rows.getLong(1);
+                    String _value1 = _rows.getString(2);
+                    _items.add(new ListAuthorsWithoutBioRow(_value0, _value1));
+                }
+                return _items;
+            }
+        }
+    }
+
     // -- name: ListAuthorsPage :many
     public java.util.List<ListAuthorsPageRow> listAuthorsPage(int pageSize, long offset) throws java.sql.SQLException {
         if (offset < 0 || offset > 4294967295L) throw new IllegalArgumentException("parameter $offset is outside Uint32 range");

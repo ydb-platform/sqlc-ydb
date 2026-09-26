@@ -86,11 +86,49 @@ func (r *wildcardRewrites) add(token antlr.Token, expressions []string) {
 	})
 }
 
+func (r *wildcardRewrites) removeResultColumn(core *parser.Select_coreContext, ordinal int) {
+	results := core.AllResult_column()
+	result := results[ordinal]
+	start := runeByteOffset(r.source, result.GetStart().GetStart())
+	end := runeByteOffset(r.source, result.GetStop().GetStop()+1)
+	if ordinal+1 < len(results) {
+		end = runeByteOffset(r.source, results[ordinal+1].GetStart().GetStart())
+	} else if ordinal > 0 {
+		for _, comma := range core.AllCOMMA() {
+			if comma.GetSymbol().GetStart() > results[ordinal-1].GetStop().GetStop() && comma.GetSymbol().GetStart() < result.GetStart().GetStart() {
+				start = runeByteOffset(r.source, comma.GetSymbol().GetStart())
+				break
+			}
+		}
+	}
+	r.replacements = append(r.replacements, wildcardReplacement{start: start, end: end})
+}
+
 func (r *wildcardRewrites) addExpression(expr parser.IExprContext, expressions []string) {
 	r.replacements = append(r.replacements, wildcardReplacement{
 		start: runeByteOffset(r.source, expr.GetStart().GetStart()),
 		end:   runeByteOffset(r.source, expr.GetStop().GetStop()+1),
 		text:  strings.Join(expressions, ", "),
+	})
+}
+
+func (r *wildcardRewrites) addWithout(core *parser.Select_coreContext) {
+	token := core.WITHOUT().GetSymbol()
+	list := core.Without_column_list()
+	start := runeByteOffset(r.source, token.GetStart())
+	results := core.AllResult_column()
+	for _, comma := range core.AllCOMMA() {
+		if comma.GetSymbol().GetStart() > results[len(results)-1].GetStop().GetStop() && comma.GetSymbol().GetStop() < token.GetStart() {
+			start = runeByteOffset(r.source, comma.GetSymbol().GetStart())
+			break
+		}
+	}
+	if start == runeByteOffset(r.source, token.GetStart()) && start > 0 && (r.source[start-1] == ' ' || r.source[start-1] == '\t') {
+		start--
+	}
+	r.replacements = append(r.replacements, wildcardReplacement{
+		start: start,
+		end:   runeByteOffset(r.source, list.GetStop().GetStop()+1),
 	})
 }
 

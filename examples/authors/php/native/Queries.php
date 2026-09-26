@@ -149,6 +149,51 @@ final class Queries
         return $rows;
     }
 
+    /** @return list<ListAuthorsWithoutBioRow> */
+    // -- name: ListAuthorsWithoutBio :many
+    public function listAuthorsWithoutBio(): array
+    {
+        $parameters = [
+        ];
+
+        $result = $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                SELECT `id`, `name` FROM authors ORDER BY id;
+                SQLC_YDB_YQL)
+                ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0);
+            if ($this->txId !== null) {
+                $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
+            } else {
+                $query->beginTx('serializable_read_write');
+            }
+            if ($this->configure !== null) {
+                ($this->configure)($query);
+            }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
+
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
+        });
+
+        $rows = $this->decodeRows(
+            $result,
+            'ListAuthorsWithoutBio',
+            [
+                ['id', PrimitiveTypeId::UINT64, false],
+                ['name', PrimitiveTypeId::UTF8, false],
+            ],
+            static fn($items): ListAuthorsWithoutBioRow => new ListAuthorsWithoutBioRow(
+                YdbValueCodec::uint64($items->offsetGet(0), 'ListAuthorsWithoutBio.id'),
+                YdbValueCodec::utf8($items->offsetGet(1), 'ListAuthorsWithoutBio.name'),
+            ),
+        );
+
+        return $rows;
+    }
+
     /** @return list<ListAuthorsPageRow> */
     // -- name: ListAuthorsPage :many
     public function listAuthorsPage(ListAuthorsPageParams $params): array
