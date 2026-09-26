@@ -1033,7 +1033,14 @@ func selectWithoutColumns(block queryBlock, core *parser.Select_coreContext, rel
 	if len(candidates) == 0 {
 		return nil, nil
 	}
+	available := map[withoutColumn]bool{}
+	for _, rel := range relations {
+		for _, column := range rel.table.Columns {
+			available[withoutColumn{rel.alias, column.Name}] = true
+		}
+	}
 	excluded := map[withoutColumn]bool{}
+	seen := map[withoutColumn]bool{}
 	var diagnostics []model.Diagnostic
 	for _, name := range list.AllWithout_column_name() {
 		qualifier, column := "", ""
@@ -1047,7 +1054,7 @@ func selectWithoutColumns(block queryBlock, core *parser.Select_coreContext, rel
 			continue
 		}
 		var match withoutColumn
-		for key := range candidates {
+		for key := range available {
 			if key.column != column || qualifier != "" && qualifier != key.alias {
 				continue
 			}
@@ -1058,12 +1065,15 @@ func selectWithoutColumns(block queryBlock, core *parser.Select_coreContext, rel
 			if !ifExists {
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, name, fmt.Sprintf("unknown SELECT WITHOUT column %q", name.GetText())))
 			}
-		} else if excluded[match] {
+		} else if seen[match] {
 			if !ifExists {
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, name, fmt.Sprintf("duplicate SELECT WITHOUT column %q", name.GetText())))
 			}
 		} else {
-			excluded[match] = true
+			seen[match] = true
+			if candidates[match] {
+				excluded[match] = true
+			}
 		}
 	}
 	if len(diagnostics) == 0 && block.wildcards != nil {

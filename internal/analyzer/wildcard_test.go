@@ -103,6 +103,18 @@ func TestAnalyzeSelectWithoutJoinsAndExplicitColumns(t *testing.T) {
 			"SELECT name WITHOUT IF EXISTS missing FROM records;",
 			[]string{"name"},
 		},
+		{
+			"no wildcard ignores unknown exclusion",
+			"SELECT name WITHOUT missing FROM records;",
+			"SELECT name WITHOUT missing FROM records;",
+			[]string{"name"},
+		},
+		{
+			"other join source exclusion",
+			"SELECT d.* WITHOUT r.payload FROM records AS r JOIN details AS d ON r.id = d.record_id;",
+			"SELECT d.`record_id` AS `record_id`, `d`.`note` AS `note` FROM records AS r JOIN details AS d ON r.id = d.record_id;",
+			[]string{"record_id", "note"},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + tc.sql}})
@@ -123,6 +135,9 @@ func TestAnalyzeSelectWithoutDiagnostics(t *testing.T) {
 		{"unknown", "SELECT * WITHOUT missing FROM records;", `unknown SELECT WITHOUT column "missing"`},
 		{"duplicate", "SELECT * WITHOUT name, name FROM records;", `duplicate SELECT WITHOUT column "name"`},
 		{"unknown qualifier", "SELECT * WITHOUT other.name FROM records;", `unknown SELECT WITHOUT column "other.name"`},
+		{"unknown wildcard qualifier", "SELECT x.* WITHOUT x.name FROM records AS r;", `unknown table or alias "x"`},
+		{"unknown column on other join source", "SELECT d.* WITHOUT r.missing FROM records AS r JOIN details AS d ON r.id = d.record_id;", `unknown SELECT WITHOUT column "r.missing"`},
+		{"duplicate column on other join source", "SELECT d.* WITHOUT r.name, r.name FROM records AS r JOIN details AS d ON r.id = d.record_id;", `duplicate SELECT WITHOUT column "r.name"`},
 		{"join requires qualifier", "SELECT * WITHOUT name FROM records AS r JOIN details AS d ON r.id = d.record_id;", `SELECT WITHOUT column "name" in a JOIN requires a table alias`},
 		{"empty result", "SELECT * WITHOUT id, name FROM records;", "generated clients require at least one column"},
 		{"multiple empty wildcards after expression", "SELECT 3 AS keep, r.*, r.* WITHOUT r.id, r.name FROM records AS r;", "multiple wildcard projections"},
