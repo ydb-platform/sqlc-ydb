@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.5.1
+
 ### Added
 
 - Resolve typed `GROUP BY expression AS alias` keys in projections, WHERE and HAVING, including source-column name shadowing, across generated runtimes.
