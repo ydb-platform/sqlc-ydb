@@ -89,6 +89,10 @@ class GeneratedQueriesTest {
                         assertTrue(sql.contains("UPDATE `books`"), sql);
                         assertTrue(sql.contains("ListFilter("), sql);
                     }
+                    if (family.equals("ondeck") && method.getName().equals("venueCountByCityStatus")) {
+                        assertTrue(sql.contains("GROUP BY city || \"/\"u || status AS city_status"), sql);
+                        assertTrue(sql.contains("HAVING COUNT(*) >= $minimum_venues"), sql);
+                    }
                     if (method.getName().equals("updateAuthorAndListBooks")) {
                         assertEquals("DECLARE $author_id AS Uint64;\nDECLARE $name AS Utf8;\nUPDATE `authors` SET name = $name WHERE author_id = $author_id;\nSELECT book_id, title FROM `books` AS `books` WHERE author_id = $author_id ORDER BY book_id;", sql);
                     }
@@ -101,7 +105,7 @@ class GeneratedQueriesTest {
                 }
             }
         }
-        assertEquals(68, statements.size());
+        assertEquals(69, statements.size());
     }
     @Test
     void declaredQueryReadsDialectCarriers() throws Exception {
