@@ -297,6 +297,7 @@ func TestDatabaseAnalysisPropagatesErrors(t *testing.T) {
 		{"missing table", fakeAnalysisDatabase{}, "table does not exist"},
 		{"connection", fakeAnalysisDatabase{describeError: errors.New("connection refused")}, "connection refused"},
 		{"unknown type", fakeAnalysisDatabase{tables: map[string]model.Table{"records": {Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Mystery"}}}}}}, "unsupported YQL type Mystery"},
+		{"duplicate database columns", fakeAnalysisDatabase{tables: map[string]model.Table{"records": databaseTestTable("id")}}, `database returned an empty or duplicate column name "id"`},
 		{"server compilation", fakeAnalysisDatabase{tables: map[string]model.Table{"records": databaseTestTable("name")}, validateError: errors.New("server compilation failed")}, "database query validation failed: server compilation failed"},
 	} {
 		t.Run(test.name, func(t *testing.T) {

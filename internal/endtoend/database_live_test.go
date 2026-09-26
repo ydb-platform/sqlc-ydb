@@ -53,6 +53,10 @@ func TestLiveYDBDatabaseAnalysis(t *testing.T) {
 DECLARE $id AS Uint64;
 SELECT * FROM records WHERE id = $id;
 
+-- name: ReadEmbeddedRecord :one
+DECLARE $id AS Uint64;
+SELECT sqlc.embed(r) FROM records AS r WHERE r.id = $id;
+
 -- name: InsertRecord :exec
 DECLARE $id AS Uint64;
 DECLARE $ztext AS Optional<Utf8>;
