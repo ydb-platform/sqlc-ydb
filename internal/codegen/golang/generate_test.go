@@ -30,6 +30,87 @@ func sample() *model.AnalysisResult {
 	}}
 }
 
+func embeddedAnalysis() *model.AnalysisResult {
+	u64 := model.Type{Kind: "Uint64"}
+	utf8 := model.Type{Kind: "Utf8"}
+	return &model.AnalysisResult{
+		Catalog: model.Catalog{Tables: []model.Table{
+			{Name: "books", Columns: []model.Column{{Name: "id", Type: u64}, {Name: "author_id", Type: u64}}},
+			{Name: "authors", Columns: []model.Column{{Name: "author_id", Type: u64}, {Name: "name", Type: utf8}}},
+		}},
+		Queries: []model.AnalyzedQuery{{
+			Name: "ListJoined", Command: model.Many, SQL: "SELECT b.id AS sqlc_embed_0_id, b.author_id AS sqlc_embed_0_author_id, a.author_id AS sqlc_embed_1_author_id, a.name AS sqlc_embed_1_name FROM books AS b INNER JOIN authors AS a ON b.author_id = a.author_id;",
+			ResultSets: []model.ResultSet{{
+				Columns: []model.Column{
+					{Name: "id", WireName: "sqlc_embed_0_id", Type: u64, Table: "books"},
+					{Name: "author_id", WireName: "sqlc_embed_0_author_id", Type: u64, Table: "books"},
+					{Name: "author_id", WireName: "sqlc_embed_1_author_id", Type: u64, Table: "authors"},
+					{Name: "name", WireName: "sqlc_embed_1_name", Type: utf8, Table: "authors"},
+				},
+				Embeds: []model.Embedding{{Start: 0, End: 2, Table: "books", Alias: "b", Field: "books"}, {Start: 2, End: 4, Table: "authors", Alias: "a", Field: "authors"}},
+			}},
+		}},
+	}
+}
+
+func TestGenerateEmbeddedTableModelsAndScans(t *testing.T) {
+	for _, runtime := range []string{"ydb", "database/sql"} {
+		t.Run(runtime, func(t *testing.T) {
+			files, err := Generate(embeddedAnalysis(), Options{Package: "db", Runtime: runtime})
+			require.NoError(t, err)
+			models, query := "", ""
+			for _, file := range files {
+				switch file.Name {
+				case "models.go":
+					models = string(file.Content)
+				case "query.sql.go":
+					query = string(file.Content)
+				}
+			}
+			require.Contains(t, models, "type Books struct")
+			require.Contains(t, models, "type Authors struct")
+			require.Contains(t, models, "Books   Books")
+			require.Contains(t, models, "Authors Authors")
+			for _, destination := range []string{"&row.Books.AuthorID", "&row.Authors.AuthorID"} {
+				require.Contains(t, query, destination)
+			}
+			if runtime == "ydb" {
+				require.Contains(t, query, `query.Named("sqlc_embed_0_author_id", &row.Books.AuthorID)`)
+				require.Contains(t, query, `query.Named("sqlc_embed_1_author_id", &row.Authors.AuthorID)`)
+			}
+			compileInput(t, embeddedAnalysis(), Options{Package: "db", Runtime: runtime})
+		})
+	}
+}
+
+func TestGenerateRejectsEmbeddedFieldCollision(t *testing.T) {
+	in := embeddedAnalysis()
+	rs := &in.Queries[0].ResultSets[0]
+	rs.Columns = append(rs.Columns, model.Column{Name: "books", Type: model.Type{Kind: "Utf8"}})
+	for _, runtime := range []string{"ydb", "database/sql"} {
+		_, err := Generate(in, Options{Package: "db", Runtime: runtime})
+		require.ErrorContains(t, err, `colliding result field "books"`)
+	}
+}
+
+func TestGenerateRejectsEmbeddedModelCollisions(t *testing.T) {
+	for _, tc := range []struct {
+		name, schema, query, want string
+	}{
+		{"model name", "CREATE TABLE ReadRow (id Uint64 NOT NULL, PRIMARY KEY(id));", "-- name: Read :many\nSELECT sqlc.embed(t) FROM ReadRow AS t;", "generated model name ReadRow collides"},
+		{"model field", "CREATE TABLE books (id Uint64 NOT NULL, book_id Uint64, bookID Uint64, PRIMARY KEY(id));", "-- name: Read :many\nSELECT sqlc.embed(t) FROM books AS t;", `colliding model field "bookID"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: tc.schema}}, []model.Source{{Name: "query.sql", Text: tc.query}})
+			require.NoError(t, err)
+			for _, runtime := range []string{"ydb", "database/sql"} {
+				_, err := Generate(analysis, Options{Package: "db", Runtime: runtime})
+				require.ErrorContains(t, err, tc.want, runtime)
+			}
+		})
+	}
+}
+
 func TestGeneratedSQLUsesQuotedLinesAndPreservesText(t *testing.T) {
 	for _, tc := range []struct {
 		sql, wantLiteral, wantSQL string

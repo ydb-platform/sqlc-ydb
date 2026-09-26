@@ -65,6 +65,18 @@ func validate(in *model.AnalysisResult, options Options) error {
 	}
 
 	for _, query := range in.Queries {
+		for _, resultSet := range query.ResultSets {
+			for _, embed := range resultSet.Embeds {
+				name := cppEmbeddedName(embed.Field)
+				if err := validateIdent(name); err != nil {
+					return fmt.Errorf("%s: invalid embedded C++ model %q: %w", query.Name, name, err)
+				}
+				if previous, ok := rowTypes[name]; ok && previous != embed.Table {
+					return fmt.Errorf("generated C++ type %q collides between %s and %s", name, previous, embed.Table)
+				}
+				rowTypes[name] = embed.Table
+			}
+		}
 		for _, p := range query.Parameters {
 			if isStructList(p.Type) {
 				name := itemName(query.Name, p.Name)
@@ -121,6 +133,20 @@ func validate(in *model.AnalysisResult, options Options) error {
 				if err := validateIdent(column.Name); err != nil {
 					return fmt.Errorf("%s: invalid C++ result column %q: %w", query.Name, column.Name, err)
 				}
+				if _, err := typeInfo(column.Type, options.Runtime); err != nil {
+					return fmt.Errorf("%s column %s: %w", query.Name, column.Name, err)
+				}
+			}
+			for i, column := range resultSet.Columns {
+				if embed, inside := containingEmbed(resultSet, i); inside {
+					if i != embed.Start {
+						continue
+					}
+					column.Name = embed.Field
+				}
+				if err := validateIdent(column.Name); err != nil {
+					return fmt.Errorf("%s: invalid C++ result column %q: %w", query.Name, column.Name, err)
+				}
 				if seenColumns[column.Name] {
 					return fmt.Errorf("%s: duplicate C++ result column %q", query.Name, column.Name)
 				}
@@ -128,13 +154,26 @@ func validate(in *model.AnalysisResult, options Options) error {
 					return fmt.Errorf("%s: result column %q collides with generated row type", query.Name, column.Name)
 				}
 				seenColumns[column.Name] = true
-				if _, err := typeInfo(column.Type, options.Runtime); err != nil {
-					return fmt.Errorf("%s column %s: %w", query.Name, column.Name, err)
-				}
 			}
 		}
 	}
 	return nil
+}
+
+func cppEmbeddedName(field string) string {
+	if field == "" {
+		return ""
+	}
+	return strings.ToUpper(field[:1]) + field[1:]
+}
+
+func containingEmbed(resultSet model.ResultSet, index int) (model.Embedding, bool) {
+	for _, embed := range resultSet.Embeds {
+		if embed.Start <= index && index < embed.End {
+			return embed, true
+		}
+	}
+	return model.Embedding{}, false
 }
 
 func validateNamespace(namespace string) error {
@@ -289,6 +328,26 @@ func renderModels(in *model.AnalysisResult, options Options) (string, error) {
 		}
 	}
 	out.WriteString("\nnamespace " + options.Namespace + " {\n\n")
+	seenEmbedded := map[string]bool{}
+	for _, query := range in.Queries {
+		for _, resultSet := range query.ResultSets {
+			for _, embed := range resultSet.Embeds {
+				if seenEmbedded[embed.Table] {
+					continue
+				}
+				seenEmbedded[embed.Table] = true
+				out.WriteString("struct " + cppEmbeddedName(embed.Field) + " final {\n")
+				for _, column := range resultSet.Columns[embed.Start:embed.End] {
+					info, err := typeInfo(column.Type, options.Runtime)
+					if err != nil {
+						return "", err
+					}
+					out.WriteString("    " + info.cpp + " " + column.Name + ";\n")
+				}
+				out.WriteString("};\n\n")
+			}
+		}
+	}
 	for _, query := range in.Queries {
 		for _, p := range query.Parameters {
 			if isStructList(p.Type) {
@@ -307,7 +366,13 @@ func renderModels(in *model.AnalysisResult, options Options) (string, error) {
 			continue
 		}
 		out.WriteString("struct " + query.Name + "Row final {\n")
-		for _, column := range query.ResultSets[0].Columns {
+		for i, column := range query.ResultSets[0].Columns {
+			if embed, inside := containingEmbed(query.ResultSets[0], i); inside {
+				if i == embed.Start {
+					out.WriteString("    " + cppEmbeddedName(embed.Field) + " " + embed.Field + ";\n")
+				}
+				continue
+			}
 			info, err := typeInfo(column.Type, options.Runtime)
 			if err != nil {
 				return "", err
@@ -478,9 +543,27 @@ func renderNativeMethod(out *strings.Builder, query model.AnalyzedQuery, options
 }
 
 func writeNativeRow(out *strings.Builder, resultSet model.ResultSet, runtime, indent string) {
-	for _, column := range resultSet.Columns {
+	writeDecodedRow(out, resultSet, runtime, indent, func(column model.Column, info scalarType) string {
+		return "sqlc_parser.ColumnParser(" + strconv.Quote(column.ResultName()) + ")." + info.parser + "()"
+	})
+}
+
+func writeDecodedRow(out *strings.Builder, resultSet model.ResultSet, runtime, indent string, read func(model.Column, scalarType) string) {
+	for i := 0; i < len(resultSet.Columns); {
+		if embed, inside := containingEmbed(resultSet, i); inside && i == embed.Start {
+			out.WriteString(indent + "{\n")
+			for ; i < embed.End; i++ {
+				column := resultSet.Columns[i]
+				info, _ := typeInfo(column.Type, runtime)
+				out.WriteString(indent + "    " + read(column, info) + ",\n")
+			}
+			out.WriteString(indent + "},\n")
+			continue
+		}
+		column := resultSet.Columns[i]
 		info, _ := typeInfo(column.Type, runtime)
-		out.WriteString(indent + "sqlc_parser.ColumnParser(" + strconv.Quote(column.ResultName()) + ")." + info.parser + "(),\n")
+		out.WriteString(indent + read(column, info) + ",\n")
+		i++
 	}
 }
 
@@ -512,10 +595,9 @@ func renderUserverMethod(out *strings.Builder, query model.AnalyzedQuery, option
 }
 
 func writeUserverRow(out *strings.Builder, resultSet model.ResultSet, runtime, indent string) {
-	for _, column := range resultSet.Columns {
-		info, _ := typeInfo(column.Type, runtime)
-		out.WriteString(indent + "sqlc_row.Get<" + info.cpp + ">(" + strconv.Quote(column.ResultName()) + "),\n")
-	}
+	writeDecodedRow(out, resultSet, runtime, indent, func(column model.Column, info scalarType) string {
+		return "sqlc_row.Get<" + info.cpp + ">(" + strconv.Quote(column.ResultName()) + ")"
+	})
 }
 
 func sqlLiteral(sql string) string {

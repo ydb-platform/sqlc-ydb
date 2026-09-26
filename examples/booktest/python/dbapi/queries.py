@@ -62,6 +62,43 @@ class Querier:
         finally:
             cursor.close()
 
+    # -- name: GetBookAndAuthor :one
+    def get_book_and_author(self, book_id: int) -> Optional[_models.GetBookAndAuthorRow]:
+        parameters = {
+            "$book_id": (book_id, _ydb.PrimitiveType.Uint64),
+        }
+        cursor = self._connection.cursor()
+        try:
+            cursor.execute(
+                ("PRAGMA OrderedColumns;\n"
+                 "SELECT `b`.`book_id` AS `__sqlc_embed_0_0`, `b`.`author_id` AS `__sqlc_embed_0_1`, `b`.`isbn` AS `__sqlc_embed_0_2`, `b`.`book_type` AS `__sqlc_embed_0_3`, `b`.`title` AS `__sqlc_embed_0_4`, `b`.`publication_year` AS `__sqlc_embed_0_5`, `b`.`available` AS `__sqlc_embed_0_6`, `b`.`tags` AS `__sqlc_embed_0_7`, `a`.`author_id` AS `__sqlc_embed_1_0`, `a`.`name` AS `__sqlc_embed_1_1`\n"
+                 "FROM books AS b\n"
+                 "JOIN authors AS a ON b.author_id = a.author_id\n"
+                 "WHERE b.book_id = $book_id;"),
+                parameters,
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return _models.GetBookAndAuthorRow(
+                books=_models.Books(
+                    book_id=row[0],
+                    author_id=row[1],
+                    isbn=row[2],
+                    book_type=row[3],
+                    title=row[4],
+                    publication_year=row[5],
+                    available=row[6],
+                    tags=row[7],
+                ),
+                authors=_models.Authors(
+                    author_id=row[8],
+                    name=row[9],
+                ),
+            )
+        finally:
+            cursor.close()
+
     # -- name: DeleteBook :exec
     def delete_book(self, book_id: int) -> None:
         parameters = {

@@ -63,6 +63,38 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
         })
     }
 
+    // -- name: GetBookAndAuthor :one
+    #[builder(on(String, into))]
+    pub async fn book_and_author(&mut self, book_id: u64) -> ydb::YdbResult<GetBookAndAuthorRow> {
+        let mut row = self
+            .client
+            .query_row(concat!(
+                "PRAGMA OrderedColumns;\n",
+                "SELECT `b`.`book_id` AS `__sqlc_embed_0_0`, `b`.`author_id` AS `__sqlc_embed_0_1`, `b`.`isbn` AS `__sqlc_embed_0_2`, `b`.`book_type` AS `__sqlc_embed_0_3`, `b`.`title` AS `__sqlc_embed_0_4`, `b`.`publication_year` AS `__sqlc_embed_0_5`, `b`.`available` AS `__sqlc_embed_0_6`, `b`.`tags` AS `__sqlc_embed_0_7`, `a`.`author_id` AS `__sqlc_embed_1_0`, `a`.`name` AS `__sqlc_embed_1_1`\n",
+                "FROM books AS b\n",
+                "JOIN authors AS a ON b.author_id = a.author_id\n",
+                "WHERE b.book_id = $book_id;",
+            ))
+            .param("$book_id", book_id)
+            .await?;
+        Ok(GetBookAndAuthorRow {
+            books: Books {
+                book_id: row.remove_field(0)?.try_into()?,
+                author_id: row.remove_field(1)?.try_into()?,
+                isbn: row.remove_field(2)?.try_into()?,
+                book_type: row.remove_field(3)?.try_into()?,
+                title: row.remove_field(4)?.try_into()?,
+                publication_year: row.remove_field(5)?.try_into()?,
+                available: row.remove_field(6)?.try_into()?,
+                tags: row.remove_field(7)?.try_into()?,
+            },
+            authors: Authors {
+                author_id: row.remove_field(8)?.try_into()?,
+                name: row.remove_field(9)?.try_into()?,
+            },
+        })
+    }
+
     // -- name: DeleteBook :exec
     #[builder(on(String, into))]
     pub async fn delete_book(&mut self, book_id: u64) -> ydb::YdbResult<()> {

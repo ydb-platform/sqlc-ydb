@@ -66,6 +66,44 @@ class Querier:
             tags=row._mapping["tags"],
         )
 
+    # -- name: GetBookAndAuthor :one
+    def get_book_and_author(self, book_id: int) -> Optional[_models.GetBookAndAuthorRow]:
+        parameters = {
+            "book_id": (book_id, _ydb.PrimitiveType.Uint64),
+        }
+        result = self._connection.execute(
+            _text(
+                ("PRAGMA OrderedColumns;\n"
+                 "SELECT `b`.`book_id` AS `__sqlc_embed_0_0`, `b`.`author_id` AS `__sqlc_embed_0_1`, `b`.`isbn` AS `__sqlc_embed_0_2`, `b`.`book_type` AS `__sqlc_embed_0_3`, `b`.`title` AS `__sqlc_embed_0_4`, `b`.`publication_year` AS `__sqlc_embed_0_5`, `b`.`available` AS `__sqlc_embed_0_6`, `b`.`tags` AS `__sqlc_embed_0_7`, `a`.`author_id` AS `__sqlc_embed_1_0`, `a`.`name` AS `__sqlc_embed_1_1`\n"
+                 "FROM books AS b\n"
+                 "JOIN authors AS a ON b.author_id = a.author_id\n"
+                 "WHERE b.book_id = :book_id;")
+            ),
+            parameters,
+        )
+        try:
+            row = result.fetchone()
+        finally:
+            result.close()
+        if row is None:
+            return None
+        return _models.GetBookAndAuthorRow(
+            books=_models.Books(
+                book_id=row._mapping["__sqlc_embed_0_0"],
+                author_id=row._mapping["__sqlc_embed_0_1"],
+                isbn=row._mapping["__sqlc_embed_0_2"],
+                book_type=row._mapping["__sqlc_embed_0_3"],
+                title=row._mapping["__sqlc_embed_0_4"],
+                publication_year=row._mapping["__sqlc_embed_0_5"],
+                available=row._mapping["__sqlc_embed_0_6"],
+                tags=row._mapping["__sqlc_embed_0_7"],
+            ),
+            authors=_models.Authors(
+                author_id=row._mapping["__sqlc_embed_1_0"],
+                name=row._mapping["__sqlc_embed_1_1"],
+            ),
+        )
+
     # -- name: DeleteBook :exec
     def delete_book(self, book_id: int) -> None:
         parameters = {

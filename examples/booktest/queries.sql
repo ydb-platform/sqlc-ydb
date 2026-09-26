@@ -8,6 +8,12 @@ SELECT book_id, author_id, isbn, book_type, title, publication_year, available, 
 FROM books
 WHERE book_id = $book_id;
 
+-- name: GetBookAndAuthor :one
+SELECT sqlc.embed(b), sqlc.embed(a)
+FROM books AS b
+JOIN authors AS a ON b.author_id = a.author_id
+WHERE b.book_id = $book_id;
+
 -- name: DeleteBook :exec
 DELETE FROM books
 WHERE book_id = $book_id;

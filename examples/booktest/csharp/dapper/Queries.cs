@@ -30,6 +30,19 @@ public sealed class Queries
 
     public Queries WithTransaction(YdbTransaction transaction) => new(_connection, transaction ?? throw new ArgumentNullException(nameof(transaction)));
 
+    private sealed record GetBookAndAuthorWireRow(
+        ulong Column0,
+        ulong Column1,
+        string Column2,
+        string Column3,
+        string Column4,
+        int Column5,
+        DateTime Column6,
+        string Column7,
+        ulong Column8,
+        string Column9
+    );
+
     static Queries()
     {
         SqlMapper.SetTypeMap(typeof(GetAuthorRow), new ColumnTypeMap(typeof(GetAuthorRow), new Dictionary<string, string>
@@ -42,6 +55,19 @@ public sealed class Queries
             ["author_id"] = nameof(GetBookRow.AuthorID),
             ["book_type"] = nameof(GetBookRow.BookType),
             ["publication_year"] = nameof(GetBookRow.PublicationYear),
+        }));
+        SqlMapper.SetTypeMap(typeof(GetBookAndAuthorWireRow), new ColumnTypeMap(typeof(GetBookAndAuthorWireRow), new Dictionary<string, string>
+        {
+            ["__sqlc_embed_0_0"] = nameof(GetBookAndAuthorWireRow.Column0),
+            ["__sqlc_embed_0_1"] = nameof(GetBookAndAuthorWireRow.Column1),
+            ["__sqlc_embed_0_2"] = nameof(GetBookAndAuthorWireRow.Column2),
+            ["__sqlc_embed_0_3"] = nameof(GetBookAndAuthorWireRow.Column3),
+            ["__sqlc_embed_0_4"] = nameof(GetBookAndAuthorWireRow.Column4),
+            ["__sqlc_embed_0_5"] = nameof(GetBookAndAuthorWireRow.Column5),
+            ["__sqlc_embed_0_6"] = nameof(GetBookAndAuthorWireRow.Column6),
+            ["__sqlc_embed_0_7"] = nameof(GetBookAndAuthorWireRow.Column7),
+            ["__sqlc_embed_1_0"] = nameof(GetBookAndAuthorWireRow.Column8),
+            ["__sqlc_embed_1_1"] = nameof(GetBookAndAuthorWireRow.Column9),
         }));
         SqlMapper.SetTypeMap(typeof(BooksByTitleYearRow), new ColumnTypeMap(typeof(BooksByTitleYearRow), new Dictionary<string, string>
         {
@@ -167,6 +193,47 @@ public sealed class Queries
 
         return await _connection.QueryFirstAsync<GetBookRow>(command).ConfigureAwait(false);
     }
+
+    // -- name: GetBookAndAuthor :one
+    public async Task<GetBookAndAuthorRow> GetBookAndAuthorAsync(ulong bookId, CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var parameters = new YdbParameters(
+            new YdbParameter("$book_id", DbType.UInt64, bookId)
+        );
+
+        var command = new CommandDefinition(
+            commandText: """
+            PRAGMA OrderedColumns;
+            SELECT `b`.`book_id` AS `__sqlc_embed_0_0`, `b`.`author_id` AS `__sqlc_embed_0_1`, `b`.`isbn` AS `__sqlc_embed_0_2`, `b`.`book_type` AS `__sqlc_embed_0_3`, `b`.`title` AS `__sqlc_embed_0_4`, `b`.`publication_year` AS `__sqlc_embed_0_5`, `b`.`available` AS `__sqlc_embed_0_6`, `b`.`tags` AS `__sqlc_embed_0_7`, `a`.`author_id` AS `__sqlc_embed_1_0`, `a`.`name` AS `__sqlc_embed_1_1`
+            FROM books AS b
+            JOIN authors AS a ON b.author_id = a.author_id
+            WHERE b.book_id = $book_id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        var row = await _connection.QueryFirstAsync<GetBookAndAuthorWireRow>(command).ConfigureAwait(false);
+        return GetBookAndAuthorRowFromWire(row);
+    }
+
+    private static GetBookAndAuthorRow GetBookAndAuthorRowFromWire(GetBookAndAuthorWireRow row) => new(
+        new Books(
+            row.Column0,
+            row.Column1,
+            row.Column2,
+            row.Column3,
+            row.Column4,
+            row.Column5,
+            row.Column6,
+            row.Column7
+        ),
+        new Authors(
+            row.Column8,
+            row.Column9
+        )
+    );
 
     // -- name: DeleteBook :exec
     public async Task DeleteBookAsync(ulong bookId, CancellationToken cancellationToken = default, int? commandTimeout = null)

@@ -161,6 +161,75 @@ final class Queries
         return $rows[0] ?? null;
     }
 
+    // -- name: GetBookAndAuthor :one
+    public function getBookAndAuthor(string $bookId): ?GetBookAndAuthorRow
+    {
+        $parameters = [
+            '$book_id' => YdbValueCodec::typedUint64($bookId, 'book_id'),
+        ];
+
+        $result = $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                PRAGMA OrderedColumns;
+                SELECT `b`.`book_id` AS `__sqlc_embed_0_0`, `b`.`author_id` AS `__sqlc_embed_0_1`, `b`.`isbn` AS `__sqlc_embed_0_2`, `b`.`book_type` AS `__sqlc_embed_0_3`, `b`.`title` AS `__sqlc_embed_0_4`, `b`.`publication_year` AS `__sqlc_embed_0_5`, `b`.`available` AS `__sqlc_embed_0_6`, `b`.`tags` AS `__sqlc_embed_0_7`, `a`.`author_id` AS `__sqlc_embed_1_0`, `a`.`name` AS `__sqlc_embed_1_1`
+                FROM books AS b
+                JOIN authors AS a ON b.author_id = a.author_id
+                WHERE b.book_id = $book_id;
+                SQLC_YDB_YQL)
+                ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0);
+            if ($this->txId !== null) {
+                $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
+            } else {
+                $query->beginTx('serializable_read_write');
+            }
+            if ($this->configure !== null) {
+                ($this->configure)($query);
+            }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
+
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
+        });
+
+        $rows = $this->decodeRows(
+            $result,
+            'GetBookAndAuthor',
+            [
+                ['__sqlc_embed_0_0', PrimitiveTypeId::UINT64, false],
+                ['__sqlc_embed_0_1', PrimitiveTypeId::UINT64, false],
+                ['__sqlc_embed_0_2', PrimitiveTypeId::UTF8, false],
+                ['__sqlc_embed_0_3', PrimitiveTypeId::UTF8, false],
+                ['__sqlc_embed_0_4', PrimitiveTypeId::UTF8, false],
+                ['__sqlc_embed_0_5', PrimitiveTypeId::INT32, false],
+                ['__sqlc_embed_0_6', PrimitiveTypeId::TIMESTAMP, false],
+                ['__sqlc_embed_0_7', PrimitiveTypeId::JSON, false],
+                ['__sqlc_embed_1_0', PrimitiveTypeId::UINT64, false],
+                ['__sqlc_embed_1_1', PrimitiveTypeId::UTF8, false],
+            ],
+            static fn($items): GetBookAndAuthorRow => new GetBookAndAuthorRow(
+                new Books(
+                    YdbValueCodec::uint64($items->offsetGet(0), 'GetBookAndAuthor.book_id'),
+                    YdbValueCodec::uint64($items->offsetGet(1), 'GetBookAndAuthor.author_id'),
+                    YdbValueCodec::utf8($items->offsetGet(2), 'GetBookAndAuthor.isbn'),
+                    YdbValueCodec::utf8($items->offsetGet(3), 'GetBookAndAuthor.book_type'),
+                    YdbValueCodec::utf8($items->offsetGet(4), 'GetBookAndAuthor.title'),
+                    YdbValueCodec::int32($items->offsetGet(5), 'GetBookAndAuthor.publication_year'),
+                    YdbValueCodec::timestamp($items->offsetGet(6), 'GetBookAndAuthor.available'),
+                    YdbValueCodec::json($items->offsetGet(7), 'GetBookAndAuthor.tags'),
+                ),
+                new Authors(
+                    YdbValueCodec::uint64($items->offsetGet(8), 'GetBookAndAuthor.author_id'),
+                    YdbValueCodec::utf8($items->offsetGet(9), 'GetBookAndAuthor.name'),
+                ),
+            ),
+        );
+
+        return $rows[0] ?? null;
+    }
+
     // -- name: DeleteBook :exec
     public function deleteBook(string $bookId): void
     {

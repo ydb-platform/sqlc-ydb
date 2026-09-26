@@ -46,6 +46,11 @@ class LiveTest {
                 assertEquals(id, inserted.bookId());
                 assertEquals(available, inserted.available());
                 assertEquals(id, queries.getBook(id).orElseThrow().bookId());
+                var joined = queries.getBookAndAuthor(id).orElseThrow();
+                assertEquals(id, joined.books().bookId());
+                assertEquals(id, joined.books().authorId());
+                assertEquals(id, joined.authors().authorId());
+                assertEquals("Автор", joined.authors().name());
                 assertEquals(1, queries.booksByTitleYear("Title", 2026).size());
                 assertEquals("Автор", queries.booksByTags(JSON.valueOf("[\"tag\"]")).get(0).name());
                 ULong orphan = ULong.valueOf(7);

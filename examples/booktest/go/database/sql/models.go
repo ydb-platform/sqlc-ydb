@@ -3,6 +3,22 @@ package booktest
 
 import "time"
 
+type Authors struct {
+	AuthorID uint64
+	Name     string
+}
+
+type Books struct {
+	BookID          uint64
+	AuthorID        uint64
+	Isbn            string
+	BookType        string
+	Title           string
+	PublicationYear int32
+	Available       time.Time
+	Tags            string
+}
+
 type GetAuthorRow struct {
 	AuthorID uint64
 	Name     string
@@ -17,6 +33,11 @@ type GetBookRow struct {
 	PublicationYear int32
 	Available       time.Time
 	Tags            string
+}
+
+type GetBookAndAuthorRow struct {
+	Books   Books
+	Authors Authors
 }
 
 type BooksByTitleYearRow struct {

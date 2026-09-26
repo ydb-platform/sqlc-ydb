@@ -145,12 +145,18 @@ func validate(in *model.AnalysisResult, o Options) error {
 		}
 		for _, rs := range q.ResultSets {
 			field := map[string]bool{}
-			for _, c := range rs.Columns {
-				n := goName(c.Name)
-				if !ident(n) || field[n] {
-					return fmt.Errorf("%s: colliding result column %q", q.Name, c.Name)
+			for i, c := range rs.Columns {
+				if embed := embeddingAt(rs, i); embed == nil || embed.Start == i {
+					name := c.Name
+					if embed != nil {
+						name = embed.Field
+					}
+					n := goName(name)
+					if !ident(n) || field[n] {
+						return fmt.Errorf("%s: colliding result field %q", q.Name, name)
+					}
+					field[n] = true
 				}
-				field[n] = true
 				if _, err := goType(c.Type); err != nil {
 					return fmt.Errorf("%s column %s: %w", q.Name, c.Name, err)
 				}
@@ -297,6 +303,22 @@ func goType(t model.Type) (string, error) {
 func models(in *model.AnalysisResult, o Options) []byte {
 	var b bytes.Buffer
 	var imports typeImports
+	for _, table := range in.Catalog.Tables {
+		if !embeddedTableUsed(in, table.Name) {
+			continue
+		}
+		b.WriteString("type " + embeddedGoType(table.Name) + " struct {\n")
+		for _, c := range table.Columns {
+			typ, _ := goType(c.Type)
+			imports.add(c.Type)
+			b.WriteString(goName(c.Name) + " " + typ)
+			if o.EmitJSONTags {
+				b.WriteString(" `json:" + strconv.Quote(c.Name) + "`")
+			}
+			b.WriteString("\n")
+		}
+		b.WriteString("}\n\n")
+	}
 	for _, q := range in.Queries {
 		for _, p := range q.Parameters {
 			if isStructParameter(p.Type) {
@@ -306,7 +328,17 @@ func models(in *model.AnalysisResult, o Options) []byte {
 		if q.Command == model.One || q.Command == model.Many || q.Command == model.Each {
 			r := q.ResultSets[0]
 			b.WriteString("type " + q.Name + "Row struct {\n")
-			for _, c := range r.Columns {
+			for i, c := range r.Columns {
+				if embed := embeddingAt(r, i); embed != nil {
+					if embed.Start == i {
+						b.WriteString(goName(embed.Field) + " " + embeddedGoType(embed.Table))
+						if o.EmitJSONTags {
+							b.WriteString(" `json:" + strconv.Quote(embed.Field) + "`")
+						}
+						b.WriteString("\n")
+					}
+					continue
+				}
 				typ, _ := goType(c.Type)
 				imports.add(c.Type)
 				b.WriteString(goName(c.Name) + " " + typ)
@@ -804,17 +836,49 @@ func decimalValidationFailure(q model.AnalyzedQuery, o Options) string {
 func scanDestinations(rs model.ResultSet) []string {
 	x := make([]string, len(rs.Columns))
 	for i, c := range rs.Columns {
-		x[i] = "&row." + goName(c.Name)
+		x[i] = "&row." + resultFieldPath(rs, i, c)
 	}
 	return x
 }
 func scanNamed(rs model.ResultSet) string {
 	x := make([]string, len(rs.Columns))
 	for i, c := range rs.Columns {
-		x[i] = "query.Named(" + strconv.Quote(c.ResultName()) + ", &row." + goName(c.Name) + ")"
+		x[i] = "query.Named(" + strconv.Quote(c.ResultName()) + ", &row." + resultFieldPath(rs, i, c) + ")"
 	}
 	return strings.Join(x, ",\n")
 }
+
+func resultFieldPath(rs model.ResultSet, index int, column model.Column) string {
+	if embed := embeddingAt(rs, index); embed != nil {
+		return goName(embed.Field) + "." + goName(column.Name)
+	}
+	return goName(column.Name)
+}
+
+func embeddingAt(rs model.ResultSet, index int) *model.Embedding {
+	for i := range rs.Embeds {
+		embed := &rs.Embeds[i]
+		if embed.Start <= index && index < embed.End {
+			return embed
+		}
+	}
+	return nil
+}
+
+func embeddedTableUsed(in *model.AnalysisResult, name string) bool {
+	for _, q := range in.Queries {
+		for _, rs := range q.ResultSets {
+			for _, embed := range rs.Embeds {
+				if embed.Table == name {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func embeddedGoType(table string) string { return goName(filepath.Base(table)) }
 func writeYDBParameter(b *bytes.Buffer, p model.Parameter, value string, index int) {
 	if strings.EqualFold(p.Type.Kind, "List") {
 		writeYDBListParameter(b, p, value, index)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -153,6 +154,73 @@ func TestResultValidationUsesWireNameWithoutChangingDTOProperty(t *testing.T) {
 	require.Contains(t, queries, "['id', PrimitiveTypeId::UINT64, false]", "Queries.php does not validate the server wire name:\n%s", queries)
 	row := generatedFile(t, files, "GetAuthorRow.php")
 	require.Contains(t, row, "public readonly string $authorId", "wire name changed the public DTO property:\n%s", row)
+}
+
+func TestEmbeddedResultUsesTableDTOsAndPhysicalWireOrder(t *testing.T) {
+	u64 := model.Type{Kind: "Uint64"}
+	utf8 := model.Type{Kind: "Utf8"}
+	a := &model.AnalysisResult{
+		Catalog: model.Catalog{Tables: []model.Table{
+			{Name: "books", Columns: []model.Column{{Name: "book_id", Type: u64}, {Name: "author_id", Type: u64}}},
+			{Name: "authors", Columns: []model.Column{{Name: "author_id", Type: u64}, {Name: "name", Type: utf8}}},
+		}},
+		Queries: []model.AnalyzedQuery{{Name: "GetBookAndAuthor", Command: model.One, SQL: "SELECT 1;", ResultSets: []model.ResultSet{{
+			Columns: []model.Column{{Name: "book_id", WireName: "book_id_1", Type: u64}, {Name: "author_id", WireName: "author_id_1", Type: u64}, {Name: "author_id", WireName: "author_id_2", Type: u64}, {Name: "name", WireName: "name_2", Type: utf8}},
+			Embeds:  []model.Embedding{{Start: 0, End: 2, Table: "books", Field: "books"}, {Start: 2, End: 4, Table: "authors", Field: "authors"}},
+		}}}},
+	}
+	files, err := Generate(a, Options{})
+	require.NoError(t, err)
+	row := generatedFile(t, files, "GetBookAndAuthorRow.php")
+	require.Contains(t, row, "public readonly Books $books")
+	require.Contains(t, row, "public readonly Authors $authors")
+	require.NotContains(t, row, "$authorId")
+	queries := generatedFile(t, files, "Queries.php")
+	require.Contains(t, queries, "['author_id_2', PrimitiveTypeId::UINT64, false]")
+	require.Contains(t, queries, "new Books(")
+	require.Contains(t, queries, "new Authors(")
+	require.Contains(t, queries, "YdbValueCodec::uint64($items->offsetGet(2), 'GetBookAndAuthor.author_id')")
+
+	a.Queries[0].ResultSets[0].Embeds[1].Field = "books"
+	_, err = Generate(a, Options{})
+	require.ErrorContains(t, err, "property name collision")
+}
+
+func TestEmbeddedResultRejectsInconsistentAnalysis(t *testing.T) {
+	u64 := model.Type{Kind: "Uint64"}
+	a := &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "books", Columns: []model.Column{{Name: "id", Type: u64}}}}}, Queries: []model.AnalyzedQuery{{Name: "Read", Command: model.One, SQL: "SELECT id FROM books;", ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Int64"}}}, Embeds: []model.Embedding{{Start: 0, End: 1, Table: "books", Field: "books"}}}}}}}
+	_, err := Generate(a, Options{})
+	require.ErrorContains(t, err, `embedded table "books" does not match projected columns`)
+
+	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE books (id Uint64 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\nSELECT sqlc.embed(b), b.id AS books FROM books AS b;"}})
+	require.NoError(t, err)
+	_, err = Generate(analysis, Options{})
+	require.ErrorContains(t, err, "property name collision")
+}
+
+func TestEmbeddedResultRejectsInvalidModel(t *testing.T) {
+	u64 := model.Type{Kind: "Uint64"}
+	for _, tc := range []struct {
+		name   string
+		change func(*model.AnalysisResult)
+		want   string
+	}{
+		{"unsupported result type", func(a *model.AnalysisResult) {
+			a.Queries[0].ResultSets[0].Columns = append(a.Queries[0].ResultSets[0].Columns, model.Column{Name: "extra", Type: model.Type{Kind: "Tuple"}})
+		}, `result column "extra": unsupported YQL type "Tuple"`},
+		{"invalid range", func(a *model.AnalysisResult) { a.Queries[0].ResultSets[0].Embeds[0].End = 2 }, "invalid embedded column range"},
+		{"missing table", func(a *model.AnalysisResult) { a.Queries[0].ResultSets[0].Embeds[0].Table = "missing" }, `embedded table "missing" does not match projected columns`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &model.AnalysisResult{
+				Catalog: model.Catalog{Tables: []model.Table{{Name: "books", Columns: []model.Column{{Name: "id", Type: u64}}}}},
+				Queries: []model.AnalyzedQuery{{Name: "Read", Command: model.One, SQL: "SELECT id FROM books;", ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: u64}}, Embeds: []model.Embedding{{Start: 0, End: 1, Table: "books", Field: "books"}}}}}},
+			}
+			tc.change(a)
+			_, err := Generate(a, Options{})
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
 }
 
 func TestSQLLiteralRoundTripsThroughPHP(t *testing.T) {

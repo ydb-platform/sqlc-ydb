@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -35,6 +36,58 @@ func generatedFile(t *testing.T, files []model.File, name string) string {
 	}
 	require.FailNow(t, fmt.Sprintf("missing generated file %s", name))
 	return ""
+}
+
+func TestGenerateEmbeddedResult(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE books (book_id Uint64 NOT NULL, author_id Uint64 NOT NULL, PRIMARY KEY(book_id)); CREATE TABLE authors (author_id Uint64 NOT NULL, name Utf8, PRIMARY KEY(author_id));`}}
+	queries := []model.Source{{Name: "queries.sql", Text: `-- name: Read :many
+SELECT sqlc.embed(b), b.author_id AS selected_author_id, sqlc.embed(a)
+FROM books b JOIN authors a ON b.author_id = a.author_id;`}}
+	analysis, err := analyzer.Analyze(schema, queries)
+	require.NoError(t, err)
+	files, err := Generate(analysis, Options{})
+	require.NoError(t, err)
+	models := generatedFile(t, files, "models.rs")
+	queriesSource := generatedFile(t, files, "queries.rs")
+	require.Contains(t, models, "pub struct Books {\n    pub book_id: u64,\n    pub author_id: u64,")
+	require.Contains(t, models, "pub struct Authors {\n    pub author_id: u64,\n    pub name: Option<String>,")
+	require.Contains(t, models, "pub struct ReadRow {\n    pub books: Books,\n    pub selected_author_id: u64,\n    pub authors: Authors,")
+	require.Contains(t, queriesSource, "books: Books {\n")
+	require.Contains(t, queriesSource, "book_id: row.remove_field(0)?.try_into()?")
+	require.Contains(t, queriesSource, "selected_author_id: row.remove_field(2)?.try_into()?")
+	require.Contains(t, queriesSource, "authors: Authors {\n")
+	require.Contains(t, queriesSource, "name: row.remove_field(4)?.try_into()?")
+	previous := -1
+	for i := 0; i < 5; i++ {
+		position := strings.Index(queriesSource, fmt.Sprintf("row.remove_field(%d)?.try_into()?", i))
+		require.Greater(t, position, previous, "physical result column %d must decode in projection order", i)
+		previous = position
+	}
+}
+
+func TestEmbeddedRustNamesRejectInvalidOrCollidingModels(t *testing.T) {
+	for _, tc := range []struct{ name, schema, query, diagnostic string }{
+		{"invalid model", "CREATE TABLE `1books` (id Uint64 NOT NULL, PRIMARY KEY(id));", "-- name: Read :many\nSELECT sqlc.embed(b) FROM `1books` AS b;", `invalid embedded model name "1books"`},
+		{"model collision", "CREATE TABLE ReadRow (id Uint64 NOT NULL, PRIMARY KEY(id));", "-- name: Read :many\nSELECT sqlc.embed(b) FROM ReadRow AS b;", `embedded model name collision at "ReadRow"`},
+		{"field collision", "CREATE TABLE books (id Uint64 NOT NULL, PRIMARY KEY(id));", "-- name: Read :many\nSELECT sqlc.embed(b), b.id AS books FROM books AS b;", `column name collision at "books"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: tc.schema}}, []model.Source{{Name: "query.sql", Text: tc.query}})
+			require.NoError(t, err)
+			_, err = Generate(a, Options{})
+			require.ErrorContains(t, err, tc.diagnostic)
+		})
+	}
+}
+
+func TestRustEmbeddedModelIsEmittedOnceAcrossQueries(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE books (id Uint64 NOT NULL, PRIMARY KEY(id));"}}
+	queries := []model.Source{{Name: "query.sql", Text: "-- name: First :many\nSELECT sqlc.embed(b) FROM books AS b;\n-- name: Second :many\nSELECT sqlc.embed(b) FROM books AS b;"}}
+	a, err := analyzer.Analyze(schema, queries)
+	require.NoError(t, err)
+	files, err := Generate(a, Options{})
+	require.NoError(t, err)
+	require.Equal(t, 1, strings.Count(generatedFile(t, files, "models.rs"), "pub struct Books {"))
 }
 
 func TestGenerateYDBQuerierUsesNativeQueryClientContract(t *testing.T) {

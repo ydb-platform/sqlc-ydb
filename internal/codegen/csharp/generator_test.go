@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -68,6 +69,60 @@ func TestGenerateDapperProfileUsesDapperExecutionAndTypedYdbParameters(t *testin
 	} {
 		assert.Contains(t, queries, want, "Dapper Queries.cs missing %q:\n%s", want, queries)
 	}
+}
+
+func TestEmbeddedResultBuildsNestedRecordsInBothCSharpProfiles(t *testing.T) {
+	u64 := model.Type{Kind: "Uint64"}
+	utf8 := model.Type{Kind: "Utf8"}
+	a := &model.AnalysisResult{
+		Catalog: model.Catalog{Tables: []model.Table{
+			{Name: "books", Columns: []model.Column{{Name: "book_id", Type: u64}, {Name: "author_id", Type: u64}}},
+			{Name: "authors", Columns: []model.Column{{Name: "author_id", Type: u64}, {Name: "name", Type: utf8}}},
+		}},
+		Queries: []model.AnalyzedQuery{{Name: "GetBookAndAuthor", Command: model.One, SQL: "SELECT 1;", ResultSets: []model.ResultSet{{
+			Columns: []model.Column{{Name: "book_id", WireName: "book_id_1", Type: u64}, {Name: "author_id", WireName: "author_id_1", Type: u64}, {Name: "author_id", WireName: "author_id_2", Type: u64}, {Name: "name", WireName: "name_2", Type: utf8}},
+			Embeds:  []model.Embedding{{Start: 0, End: 2, Table: "books", Field: "books"}, {Start: 2, End: 4, Table: "authors", Field: "authors"}},
+		}}}, {Name: "ListBookAndAuthor", Command: model.Many, SQL: "SELECT 1;", ResultSets: []model.ResultSet{{
+			Columns: []model.Column{{Name: "label", Type: utf8}, {Name: "book_id", WireName: "book_id_1", Type: u64}, {Name: "author_id", WireName: "author_id_1", Type: u64}, {Name: "rank", Type: model.Type{Kind: "Int32"}}, {Name: "author_id", WireName: "author_id_2", Type: u64}, {Name: "name", WireName: "name_2", Type: utf8}, {Name: "active", Type: model.Type{Kind: "Bool"}}},
+			Embeds:  []model.Embedding{{Start: 1, End: 3, Table: "books", Field: "books"}, {Start: 4, End: 6, Table: "authors", Field: "authors"}},
+		}}}},
+	}
+	for _, runtime := range []string{"adonet", "dapper"} {
+		t.Run(runtime, func(t *testing.T) {
+			models, queries := generatedRuntime(t, a, runtime)
+			require.Contains(t, models, "public sealed record GetBookAndAuthorRow(\n    Books Books,\n    Authors Authors\n);")
+			require.NotContains(t, models, "public sealed record GetBookAndAuthorRow(\n    ulong")
+			require.Contains(t, queries, "new Books(")
+			require.Contains(t, queries, "new Authors(")
+			require.Contains(t, models, "public sealed record ListBookAndAuthorRow(\n    string Label,\n    Books Books,\n    int Rank,\n    Authors Authors,\n    bool Active\n);")
+			if runtime == "dapper" {
+				require.Contains(t, queries, "private sealed record GetBookAndAuthorWireRow(")
+				require.Contains(t, queries, `["author_id_2"] = nameof(GetBookAndAuthorWireRow.Column2)`)
+				require.Contains(t, queries, "QueryFirstAsync<GetBookAndAuthorWireRow>(command)")
+				require.Contains(t, queries, "row.Column2")
+				require.Contains(t, queries, "QueryAsync<ListBookAndAuthorWireRow>(command).ConfigureAwait(false)).Select(ListBookAndAuthorRowFromWire).ToList()")
+				require.Contains(t, queries, "row.Column0,\n        new Books(\n            row.Column1,\n            row.Column2\n        ),\n        row.Column3,\n        new Authors(\n            row.Column4,\n            row.Column5\n        ),\n        row.Column6\n")
+			} else {
+				require.Contains(t, queries, "reader.GetFieldValue<ulong>(2)")
+				require.Contains(t, queries, "reader.GetFieldValue<bool>(6)")
+			}
+		})
+	}
+	a.Queries[0].ResultSets[0].Embeds[1].Field = "books"
+	_, err := Generate(a, Options{})
+	require.ErrorContains(t, err, "column name collision")
+}
+
+func TestEmbeddedResultRejectsInconsistentAnalysis(t *testing.T) {
+	u64 := model.Type{Kind: "Uint64"}
+	a := &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "books", Columns: []model.Column{{Name: "id", Type: u64}}}}}, Queries: []model.AnalyzedQuery{{Name: "Read", Command: model.One, SQL: "SELECT id FROM books;", ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Int64"}}}, Embeds: []model.Embedding{{Start: 0, End: 1, Table: "books", Field: "books"}}}}}}}
+	_, err := Generate(a, Options{})
+	require.ErrorContains(t, err, `embedded table "books" does not match projected columns`)
+
+	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE books (id Uint64 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\nSELECT sqlc.embed(b), b.id AS books FROM books AS b;"}})
+	require.NoError(t, err)
+	_, err = Generate(analysis, Options{})
+	require.ErrorContains(t, err, "column name collision")
 }
 
 func TestJsonAndTimestampUseRealSDKTypesInEveryRuntime(t *testing.T) {

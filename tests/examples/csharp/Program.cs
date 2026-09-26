@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using Ydb.Sdk.Ado;
 using AuthorsDapper = Authors.Dapper;
 using BatchDapper = Batch.Dapper;
+using BooktestAdoNet = Booktest.AdoNet;
 using BooktestDapper = Booktest.Dapper;
 using JetsDapper = Jets.Dapper;
 using OndeckDapper = Ondeck.Dapper;
@@ -291,6 +292,13 @@ internal static class Program
         var hello = await queries.SayHelloAsync("YDB", cancellationToken);
         if (book.Available != at || book.Tags != "[\"speculative\"]" || joined.BookID != id || joined.Name is not null || hello.Greeting != "hello YDB")
             throw new InvalidOperationException("booktest Dapper JSON/Timestamp/LEFT JOIN mapping changed");
+        await queries.CreateBookAsync(new BooktestDapper.CreateBookParams(id - 1, id, "joined", "paper", "Kindred", 1979, at, "[]"), cancellationToken);
+        var embeddedDapper = await queries.GetBookAndAuthorAsync(id - 1, cancellationToken);
+        var embeddedAdoNet = await new BooktestAdoNet.Queries(connection).GetBookAndAuthorAsync(id - 1, cancellationToken);
+        if (embeddedDapper.Books.BookID != id - 1 || embeddedDapper.Books.AuthorID != id || embeddedDapper.Authors.AuthorID != id || embeddedDapper.Authors.Name != "Octavia" ||
+            embeddedAdoNet.Books.BookID != id - 1 || embeddedAdoNet.Authors.Name != "Octavia")
+            throw new InvalidOperationException("booktest embedded Dapper/ADO.NET row mapping changed");
+        await queries.DeleteBookAsync(id - 1, cancellationToken);
         await queries.DeleteBookAsync(id, cancellationToken);
         await AssertMissingAsync(() => queries.GetBookAsync(id, cancellationToken));
     }

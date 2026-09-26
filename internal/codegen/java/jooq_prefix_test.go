@@ -55,6 +55,21 @@ SELECT u.id FROM ` + "`/local/a/users`" + ` AS u WHERE u.name = $name;
 	t.Run("published dialect", func(t *testing.T) { runJooqPrefixSDK(t, files) })
 }
 
+func TestJooqSeparatedPragmasUseDeclaredSQL(t *testing.T) {
+	query := `-- name: Read :many
+PRAGMA OrderedColumns;
+DECLARE $id AS Uint64;
+PRAGMA TablePathPrefix('/local/a');
+SELECT id FROM users WHERE id = $id;`
+	a, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqPrefixSchema}}, []model.Source{{Name: "query.sql", Text: query}})
+	require.NoError(t, err)
+	files, err := Generate(a, Options{Package: "prefix", Runtime: "jooq"})
+	require.NoError(t, err)
+	code := string(files[len(files)-1].Content)
+	require.Equal(t, 1, strings.Count(code, "PRAGMA OrderedColumns;"))
+	require.Equal(t, 1, strings.Count(code, "PRAGMA TablePathPrefix('/local/a');"))
+}
+
 func TestJooqAliasCollisionNamesAuthoredAlias(t *testing.T) {
 	for _, aliases := range [][2]string{{"a/b", "a_b"}, {"a_b", "a/b"}} {
 		t.Run(aliases[0]+" then "+aliases[1], func(t *testing.T) {

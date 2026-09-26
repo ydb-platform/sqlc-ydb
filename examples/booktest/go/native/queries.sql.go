@@ -76,6 +76,45 @@ func (q *Queries) GetBook(ctx context.Context, arg uint64, opts ...query.Execute
 	return row, nil
 }
 
+// -- name: GetBookAndAuthor :one
+func (q *Queries) GetBookAndAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetBookAndAuthorRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$book_id").Uint64(arg)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	result, err := q.db.QueryRow(ctx, ""+
+		"PRAGMA OrderedColumns;\n"+
+		"SELECT `b`.`book_id` AS `__sqlc_embed_0_0`, `b`.`author_id` AS `__sqlc_embed_0_1`, `b`.`isbn` AS `__sqlc_embed_0_2`, `b`.`book_type` AS `__sqlc_embed_0_3`, `b`.`title` AS `__sqlc_embed_0_4`, `b`.`publication_year` AS `__sqlc_embed_0_5`, `b`.`available` AS `__sqlc_embed_0_6`, `b`.`tags` AS `__sqlc_embed_0_7`, `a`.`author_id` AS `__sqlc_embed_1_0`, `a`.`name` AS `__sqlc_embed_1_1`\n"+
+		"FROM books AS b\n"+
+		"JOIN authors AS a ON b.author_id = a.author_id\n"+
+		"WHERE b.book_id = $book_id;",
+		callOptions...,
+	)
+	if err != nil {
+		return GetBookAndAuthorRow{}, xerrors.WithStackTrace(err)
+	}
+
+	var row GetBookAndAuthorRow
+	if err := result.ScanNamed(
+		query.Named("__sqlc_embed_0_0", &row.Books.BookID),
+		query.Named("__sqlc_embed_0_1", &row.Books.AuthorID),
+		query.Named("__sqlc_embed_0_2", &row.Books.Isbn),
+		query.Named("__sqlc_embed_0_3", &row.Books.BookType),
+		query.Named("__sqlc_embed_0_4", &row.Books.Title),
+		query.Named("__sqlc_embed_0_5", &row.Books.PublicationYear),
+		query.Named("__sqlc_embed_0_6", &row.Books.Available),
+		query.Named("__sqlc_embed_0_7", &row.Books.Tags),
+		query.Named("__sqlc_embed_1_0", &row.Authors.AuthorID),
+		query.Named("__sqlc_embed_1_1", &row.Authors.Name),
+	); err != nil {
+		return GetBookAndAuthorRow{}, xerrors.WithStackTrace(err)
+	}
+
+	return row, nil
+}
+
 // -- name: DeleteBook :exec
 func (q *Queries) DeleteBook(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error {
 	parameters := ydb.ParamsBuilder()

@@ -86,15 +86,21 @@ func validateQuery(q model.AnalyzedQuery) error {
 	}
 	for _, rs := range q.ResultSets {
 		seenCols := map[string]bool{}
-		for _, c := range rs.Columns {
-			n := fieldName(c.Name)
-			if !validPythonName(n) {
-				return fmt.Errorf("python generator: query %q column %q has invalid generated Python name %q", q.Name, c.Name, n)
+		for i, c := range rs.Columns {
+			if embed := embeddingAt(rs, i); embed == nil || embed.Start == i {
+				name := c.Name
+				if embed != nil {
+					name = embed.Field
+				}
+				n := fieldName(name)
+				if !validPythonName(n) {
+					return fmt.Errorf("python generator: query %q result field %q has invalid generated Python name %q", q.Name, name, n)
+				}
+				if seenCols[n] {
+					return fmt.Errorf("python generator: query %q: result field name collision at %q", q.Name, n)
+				}
+				seenCols[n] = true
 			}
-			if seenCols[n] {
-				return fmt.Errorf("python generator: query %q: column name collision at %q", q.Name, n)
-			}
-			seenCols[n] = true
 			if _, err := pyType(c.Type); err != nil {
 				return fmt.Errorf("python generator: query %q column %q: %w", q.Name, c.Name, err)
 			}
@@ -237,7 +243,13 @@ func renderModels(a *model.AnalysisResult, o Options) (string, error) {
 			b.WriteString("    pass\n\n")
 			continue
 		}
-		for _, c := range q.ResultSets[0].Columns {
+		for i, c := range q.ResultSets[0].Columns {
+			if embed := embeddingAt(q.ResultSets[0], i); embed != nil {
+				if embed.Start == i {
+					b.WriteString("    " + fieldName(embed.Field) + ": " + className(embed.Table) + "\n")
+				}
+				continue
+			}
 			typ, e := resultPyType(c.Type, o)
 			if e != nil {
 				return "", e
@@ -455,15 +467,11 @@ func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQ
 				b.WriteString(indent + "row = rows[0] if rows else None\n")
 			}
 			b.WriteString(indent + "if row is None:\n" + indent + "    return None\n" + indent + "return _models." + row + "(\n")
-			for i, c := range q.ResultSets[0].Columns {
-				b.WriteString(indent + "    " + fieldName(c.Name) + "=" + rowValue(o.Runtime, c.ResultName(), i) + ",\n")
-			}
+			writeRowFields(b, q.ResultSets[0], o.Runtime, indent+"    ")
 			b.WriteString(indent + ")\n")
 		} else {
 			b.WriteString(indent + "return [_models." + row + "(\n")
-			for i, c := range q.ResultSets[0].Columns {
-				b.WriteString(indent + "    " + fieldName(c.Name) + "=" + rowValue(o.Runtime, c.ResultName(), i) + ",\n")
-			}
+			writeRowFields(b, q.ResultSets[0], o.Runtime, indent+"    ")
 			b.WriteString(indent + ") for row in rows]\n")
 		}
 	} else {
@@ -482,6 +490,33 @@ func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQ
 	return nil
 }
 
+func writeRowFields(b *strings.Builder, rs model.ResultSet, runtime, indent string) {
+	for i, c := range rs.Columns {
+		if embed := embeddingAt(rs, i); embed != nil {
+			if embed.Start == i {
+				b.WriteString(indent + fieldName(embed.Field) + "=_models." + className(embed.Table) + "(\n")
+				for j := embed.Start; j < embed.End; j++ {
+					column := rs.Columns[j]
+					b.WriteString(indent + "    " + fieldName(column.Name) + "=" + rowValue(runtime, column.ResultName(), j) + ",\n")
+				}
+				b.WriteString(indent + "),\n")
+			}
+			continue
+		}
+		b.WriteString(indent + fieldName(c.Name) + "=" + rowValue(runtime, c.ResultName(), i) + ",\n")
+	}
+}
+
+func embeddingAt(rs model.ResultSet, index int) *model.Embedding {
+	for i := range rs.Embeds {
+		embed := &rs.Embeds[i]
+		if embed.Start <= index && index < embed.End {
+			return embed
+		}
+	}
+	return nil
+}
+
 func rowValue(runtime, name string, index int) string {
 	switch runtime {
 	case "ydb":
@@ -495,8 +530,9 @@ func rowValue(runtime, name string, index int) string {
 
 func queryRowClass(a *model.AnalysisResult, q model.AnalyzedQuery) string {
 	if len(q.ResultSets) > 0 && len(q.ResultSets[0].Columns) > 0 {
-		table := q.ResultSets[0].Columns[0].Table
-		if table != "" && a != nil && queryMatchesTable(a, q, table) {
+		result := q.ResultSets[0]
+		table := result.Columns[0].Table
+		if len(result.Embeds) == 0 && table != "" && a != nil && queryMatchesTable(a, q, table) {
 			return className(table)
 		}
 	}

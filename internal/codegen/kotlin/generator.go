@@ -81,6 +81,9 @@ func name(s string, upper bool) (string, error) {
 	}
 	return n, nil
 }
+func tableName(path string) (string, error) {
+	return name(strings.ReplaceAll(path, "/", "_"), true)
+}
 func quoted(s string) string {
 	var b strings.Builder
 	b.WriteByte('"')
@@ -176,8 +179,50 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		files = append(files, model.File{Name: n + ".kt", Content: []byte(header + "data class " + n + "(\n" + strings.Join(fields, ",\n") + "\n)\n")})
 		return nil
 	}
+	addResultRecord := func(n string, result model.ResultSet) error {
+		if len(result.Embeds) == 0 {
+			return addRecord(n, result.Columns)
+		}
+		if types[n] {
+			return fmt.Errorf("Kotlin type name collision: %s", n)
+		}
+		types[n] = true
+		fields := []string{}
+		seen := map[string]bool{}
+		for i, c := range result.Columns {
+			field, typ := c.Name, ""
+			if embed := embeddingAt(result, i); embed != nil {
+				if embed.Start != i {
+					continue
+				}
+				field = embed.Field
+				var err error
+				typ, err = tableName(embed.Table)
+				if err != nil {
+					return err
+				}
+			} else {
+				var err error
+				_, typ, err = typeInfo(c.Type)
+				if err != nil {
+					return fmt.Errorf("%s.%s: %w", n, c.Name, err)
+				}
+			}
+			field, err := name(field, false)
+			if err != nil {
+				return err
+			}
+			if seen[field] {
+				return fmt.Errorf("Kotlin field name collision in %s: %s", n, field)
+			}
+			seen[field] = true
+			fields = append(fields, "    val "+field+": "+typ)
+		}
+		files = append(files, model.File{Name: n + ".kt", Content: []byte(header + "data class " + n + "(\n" + strings.Join(fields, ",\n") + "\n)\n")})
+		return nil
+	}
 	for _, table := range a.Catalog.Tables {
-		n, err := name(strings.ReplaceAll(table.Name, "/", "_"), true)
+		n, err := tableName(table.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -235,7 +280,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			if len(q.ResultSets) != 1 || len(q.ResultSets[0].Columns) == 0 {
 				return nil, fmt.Errorf("%s: %s requires one nonempty result set", q.Name, q.Command)
 			}
-			if err := addRecord(row, q.ResultSets[0].Columns); err != nil {
+			if err := addResultRecord(row, q.ResultSets[0]); err != nil {
 				return nil, err
 			}
 			if q.Command == model.One {
@@ -448,7 +493,7 @@ func emitRows(b *strings.Builder, q model.AnalyzedQuery, row, indent string, nat
 		}
 		values = append(values, n)
 	}
-	newRow := row + "(" + strings.Join(values, ", ") + ")"
+	newRow := row + "(" + strings.Join(rowValues(q.ResultSets[0], values), ", ") + ")"
 	if q.Command == model.One {
 		if q.MultipleStatements && !native {
 			b.WriteString(indent + "while (_rows.next()) {}\n")
@@ -464,6 +509,31 @@ func emitRows(b *strings.Builder, q model.AnalyzedQuery, row, indent string, nat
 		}
 		b.WriteString(indent + "return _items\n")
 	}
+}
+
+func embeddingAt(result model.ResultSet, index int) *model.Embedding {
+	for i := range result.Embeds {
+		embed := &result.Embeds[i]
+		if embed.Start <= index && index < embed.End {
+			return embed
+		}
+	}
+	return nil
+}
+
+func rowValues(result model.ResultSet, values []string) []string {
+	fields := make([]string, 0, len(values))
+	for i, value := range values {
+		if embed := embeddingAt(result, i); embed != nil {
+			if embed.Start == i {
+				typ, _ := tableName(embed.Table)
+				fields = append(fields, typ+"("+strings.Join(values[embed.Start:embed.End], ", ")+")")
+			}
+			continue
+		}
+		fields = append(fields, value)
+	}
+	return fields
 }
 
 func indentExpression(s, indent string) string {

@@ -83,6 +83,79 @@ func TestResultKeysAreNotNormalized(t *testing.T) {
 	}
 }
 
+func TestEmbeddedResultKeepsWireKeysSeparateFromNestedRow(t *testing.T) {
+	uint64Type := model.Type{Kind: "Uint64"}
+	utf8Type := model.Type{Kind: "Utf8"}
+	books := []model.Column{{Name: "book_id", Type: uint64Type}, {Name: "author_id", Type: uint64Type}}
+	authors := []model.Column{{Name: "author_id", Type: uint64Type}, {Name: "name", Type: utf8Type}}
+	a := &model.AnalysisResult{
+		Catalog: model.Catalog{Tables: []model.Table{{Name: "books", Columns: books}, {Name: "authors", Columns: authors}}},
+		Queries: []model.AnalyzedQuery{{Name: "GetBookAndAuthor", Command: model.One, SQL: "SELECT b.book_id, b.author_id, a.author_id, a.name FROM books b JOIN authors a ON b.author_id = a.author_id;", ResultSets: []model.ResultSet{{
+			Columns: []model.Column{{Name: "book_id", WireName: "embed_books_book_id", Type: uint64Type}, {Name: "author_id", WireName: "embed_books_author_id", Type: uint64Type}, {Name: "author_id", WireName: "embed_authors_author_id", Type: uint64Type}, {Name: "name", WireName: "embed_authors_name", Type: utf8Type}},
+			Embeds:  []model.Embedding{{Start: 0, End: 2, Table: "books", Field: "books"}, {Start: 2, End: 4, Table: "authors", Field: "authors"}},
+		}}}, {Name: "ListBookAndAuthor", Command: model.Many, SQL: "SELECT 1;", ResultSets: []model.ResultSet{{
+			Columns: []model.Column{{Name: "label", Type: utf8Type}, {Name: "book_id", WireName: "embed_books_book_id", Type: uint64Type}, {Name: "author_id", WireName: "embed_books_author_id", Type: uint64Type}, {Name: "rank", Type: model.Type{Kind: "Int32"}}, {Name: "author_id", WireName: "embed_authors_author_id", Type: uint64Type}, {Name: "name", WireName: "embed_authors_name", Type: utf8Type}, {Name: "active", Type: model.Type{Kind: "Bool"}}},
+			Embeds:  []model.Embedding{{Start: 1, End: 3, Table: "books", Field: "books"}, {Start: 4, End: 6, Table: "authors", Field: "authors"}},
+		}}}},
+	}
+	files, err := Generate(a, Options{})
+	require.NoError(t, err)
+	got := fileContent(t, files, "queries.ts")
+	require.Contains(t, got, "export type GetBookAndAuthorRow = {\n  readonly books: Books;\n  readonly authors: Authors;")
+	require.Contains(t, got, "type GetBookAndAuthorWireRow = {")
+	require.Contains(t, got, `book_id: row["embed_books_book_id"]`)
+	require.Contains(t, got, `author_id: row["embed_authors_author_id"]`)
+	require.Contains(t, got, "return mapped[0] ?? null;")
+	require.Contains(t, got, "export type ListBookAndAuthorRow = {\n  readonly label: string;\n  readonly books: Books;\n  readonly rank: number;\n  readonly authors: Authors;\n  readonly active: boolean;")
+	require.Contains(t, got, "      label: row[\"label\"],\n      books: {\n        book_id: row[\"embed_books_book_id\"],\n        author_id: row[\"embed_books_author_id\"],\n      },\n      rank: row[\"rank\"],\n      authors: {\n        author_id: row[\"embed_authors_author_id\"],\n        name: row[\"embed_authors_name\"],\n      },\n      active: row[\"active\"],")
+	require.Contains(t, got, "return mapped;")
+
+	a.Queries[0].ResultSets[0].Embeds[1].Field = "books"
+	_, err = Generate(a, Options{})
+	require.ErrorContains(t, err, "embedded field name collision")
+}
+
+func TestEmbeddedResultRejectsInconsistentAnalysis(t *testing.T) {
+	u64 := model.Type{Kind: "Uint64"}
+	a := &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "books", Columns: []model.Column{{Name: "id", Type: u64}}}}}, Queries: []model.AnalyzedQuery{{Name: "Read", Command: model.One, SQL: "SELECT id FROM books;", ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Int64"}}}, Embeds: []model.Embedding{{Start: 0, End: 1, Table: "books", Field: "books"}}}}}}}
+	_, err := Generate(a, Options{})
+	require.ErrorContains(t, err, `embedded table "books" does not match projected columns`)
+
+	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE books (id Uint64 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\nSELECT sqlc.embed(b), b.id AS books FROM books AS b;"}})
+	require.NoError(t, err)
+	_, err = Generate(analysis, Options{})
+	require.ErrorContains(t, err, "result field name collision")
+}
+
+func TestEmbeddedResultRejectsInvalidModel(t *testing.T) {
+	u64 := model.Type{Kind: "Uint64"}
+	for _, tc := range []struct {
+		name   string
+		change func(*model.AnalysisResult)
+		want   string
+	}{
+		{"invalid range", func(a *model.AnalysisResult) { a.Queries[0].ResultSets[0].Embeds[0].End = 2 }, "invalid embedded column range"},
+		{"missing table", func(a *model.AnalysisResult) { a.Queries[0].ResultSets[0].Embeds[0].Table = "missing" }, `embedded table "missing" does not match projected columns`},
+		{"generated model name collision", func(a *model.AnalysisResult) {
+			a.Catalog.Tables = append(a.Catalog.Tables, model.Table{Name: "authors", Columns: []model.Column{{Name: "id", Type: u64}}})
+			a.Queries[0].ResultSets[0].Columns = append(a.Queries[0].ResultSets[0].Columns, model.Column{Name: "id", WireName: "other_id", Type: u64})
+			a.Queries[0].ResultSets[0].Embeds = append(a.Queries[0].ResultSets[0].Embeds, model.Embedding{Start: 1, End: 2, Table: "authors", Field: "Books"})
+		}, `embedded model name collision "Books"`},
+		{"reserved generated model", func(a *model.AnalysisResult) { a.Queries[0].ResultSets[0].Embeds[0].Field = "queries" }, `embedded model type name collision "Queries"`},
+		{"generated row name", func(a *model.AnalysisResult) { a.Queries[0].ResultSets[0].Embeds[0].Field = "read_row" }, `embedded model type name collision "ReadRow"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &model.AnalysisResult{
+				Catalog: model.Catalog{Tables: []model.Table{{Name: "books", Columns: []model.Column{{Name: "id", Type: u64}}}}},
+				Queries: []model.AnalyzedQuery{{Name: "Read", Command: model.One, SQL: "SELECT id FROM books;", ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", WireName: "book_id", Type: u64}}, Embeds: []model.Embedding{{Start: 0, End: 1, Table: "books", Field: "books"}}}}}},
+			}
+			tc.change(a)
+			_, err := Generate(a, Options{})
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
 func TestProjectionPreservesSQLAndWireNames(t *testing.T) {
 	for _, tc := range []struct{ sql, want string }{
 		{"SELECT display_name FROM authors;", "SELECT display_name FROM authors;"},

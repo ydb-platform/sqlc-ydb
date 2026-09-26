@@ -70,6 +70,16 @@ func TestGeneratedExample(t *testing.T) {
 	if got, err := s.GetBook(ctx, 101); err != nil || got.Title != first.Title || !got.Available.Equal(available) {
 		require.FailNow(t, fmt.Sprintf("database/sql GetBook() = %#v, %v", got, err))
 	}
+	embeddedNative, err := n.GetBookAndAuthor(ctx, 101)
+	require.NoError(t, err)
+	require.Equal(t, first.BookID, embeddedNative.Books.BookID)
+	require.Equal(t, author.AuthorID, embeddedNative.Authors.AuthorID)
+	require.Equal(t, author.Name, embeddedNative.Authors.Name)
+	embeddedSQL, err := s.GetBookAndAuthor(ctx, 101)
+	require.NoError(t, err)
+	require.Equal(t, first.BookID, embeddedSQL.Books.BookID)
+	require.Equal(t, author.AuthorID, embeddedSQL.Authors.AuthorID)
+	require.Equal(t, author.Name, embeddedSQL.Authors.Name)
 	byTitle, err := n.BooksByTitleYear(ctx, native.BooksByTitleYearParams{Title: "The Dispossessed", PublicationYear: 1974})
 	require.NoError(t, err)
 	require.Len(t, byTitle, 1)

@@ -21,6 +21,7 @@ func TestAnalyzeExpandsWildcardSQL(t *testing.T) {
 		{"plain", "SELECT * FROM records;", "SELECT `z`, `id`, `name` FROM records;"},
 		{"qualified", "SELECT r.* FROM records AS r;", "SELECT r.`z` AS `z`, `r`.`id` AS `id`, `r`.`name` AS `name` FROM records AS r;"},
 		{"returning", "DELETE FROM records WHERE id = $id RETURNING *;", "DELETE FROM records WHERE id = $id RETURNING `z`, `id`, `name`;"},
+		{"returning at EOF", "DELETE FROM records WHERE id = $id RETURNING *", "DELETE FROM records WHERE id = $id RETURNING `z`, `id`, `name`"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			prefix := "-- name: Read :many\n"

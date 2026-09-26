@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Support `sqlc.embed` for physical table projections with nested result models across generated runtimes.
+
 ## v0.2.13
 
 ### Added

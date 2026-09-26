@@ -57,6 +57,44 @@ std::optional<GetBookRow> Queries::GetBook(std::uint64_t book_id) const {
     };
 }
 
+// -- name: GetBookAndAuthor :one
+std::optional<GetBookAndAuthorRow> Queries::GetBookAndAuthor(std::uint64_t book_id) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "PRAGMA OrderedColumns;\n"
+        "SELECT `b`.`book_id` AS `__sqlc_embed_0_0`, `b`.`author_id` AS `__sqlc_embed_0_1`, `b`.`isbn` AS `__sqlc_embed_0_2`, `b`.`book_type` AS `__sqlc_embed_0_3`, `b`.`title` AS `__sqlc_embed_0_4`, `b`.`publication_year` AS `__sqlc_embed_0_5`, `b`.`available` AS `__sqlc_embed_0_6`, `b`.`tags` AS `__sqlc_embed_0_7`, `a`.`author_id` AS `__sqlc_embed_1_0`, `a`.`name` AS `__sqlc_embed_1_1`\n"
+        "FROM books AS b\n"
+        "JOIN authors AS a ON b.author_id = a.author_id\n"
+        "WHERE b.book_id = $book_id;",
+        ::userver::ydb::Query::Name{"GetBookAndAuthor"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    auto sqlc_response =
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$book_id", book_id)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$book_id", book_id);
+    auto sqlc_cursor = sqlc_response.GetSingleCursor();
+    if (sqlc_cursor.empty()) {
+        return std::nullopt;
+    }
+    auto sqlc_row = sqlc_cursor.GetFirstRow();
+    return GetBookAndAuthorRow{
+        {
+            sqlc_row.Get<std::uint64_t>("__sqlc_embed_0_0"),
+            sqlc_row.Get<std::uint64_t>("__sqlc_embed_0_1"),
+            sqlc_row.Get<::userver::ydb::Utf8>("__sqlc_embed_0_2"),
+            sqlc_row.Get<::userver::ydb::Utf8>("__sqlc_embed_0_3"),
+            sqlc_row.Get<::userver::ydb::Utf8>("__sqlc_embed_0_4"),
+            sqlc_row.Get<std::int32_t>("__sqlc_embed_0_5"),
+            sqlc_row.Get<std::chrono::system_clock::time_point>("__sqlc_embed_0_6"),
+            sqlc_row.Get<::userver::formats::json::Value>("__sqlc_embed_0_7"),
+        },
+        {
+            sqlc_row.Get<std::uint64_t>("__sqlc_embed_1_0"),
+            sqlc_row.Get<::userver::ydb::Utf8>("__sqlc_embed_1_1"),
+        },
+    };
+}
+
 // -- name: DeleteBook :exec
 void Queries::DeleteBook(std::uint64_t book_id) const {
     const auto sqlc_query = ::userver::ydb::Query{

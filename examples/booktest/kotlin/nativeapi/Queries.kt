@@ -81,6 +81,43 @@ class Queries {
         return GetBookRow(_value0, _value1, _value2, _value3, _value4, _value5, _value6, _value7)
     }
 
+    // -- name: GetBookAndAuthor :one
+    fun getBookAndAuthor(bookId: Long): GetBookAndAuthorRow? {
+        val _params = Params.create()
+        _params.put("\$book_id", PrimitiveValue.newUint64(bookId))
+        val _query = if (transaction != null) {
+            QueryReader.readFrom(transaction.createQuery(
+                "PRAGMA OrderedColumns;\n" +
+                "SELECT `b`.`book_id` AS `__sqlc_embed_0_0`, `b`.`author_id` AS `__sqlc_embed_0_1`, `b`.`isbn` AS `__sqlc_embed_0_2`, `b`.`book_type` AS `__sqlc_embed_0_3`, `b`.`title` AS `__sqlc_embed_0_4`, `b`.`publication_year` AS `__sqlc_embed_0_5`, `b`.`available` AS `__sqlc_embed_0_6`, `b`.`tags` AS `__sqlc_embed_0_7`, `a`.`author_id` AS `__sqlc_embed_1_0`, `a`.`name` AS `__sqlc_embed_1_1`\n" +
+                "FROM books AS b\n" +
+                "JOIN authors AS a ON b.author_id = a.author_id\n" +
+                "WHERE b.book_id = \$book_id;", _params)).join().getValue()
+        } else {
+            client!!.supplyResult { _session ->
+                QueryReader.readFrom(_session.createQuery(
+                    "PRAGMA OrderedColumns;\n" +
+                    "SELECT `b`.`book_id` AS `__sqlc_embed_0_0`, `b`.`author_id` AS `__sqlc_embed_0_1`, `b`.`isbn` AS `__sqlc_embed_0_2`, `b`.`book_type` AS `__sqlc_embed_0_3`, `b`.`title` AS `__sqlc_embed_0_4`, `b`.`publication_year` AS `__sqlc_embed_0_5`, `b`.`available` AS `__sqlc_embed_0_6`, `b`.`tags` AS `__sqlc_embed_0_7`, `a`.`author_id` AS `__sqlc_embed_1_0`, `a`.`name` AS `__sqlc_embed_1_1`\n" +
+                    "FROM books AS b\n" +
+                    "JOIN authors AS a ON b.author_id = a.author_id\n" +
+                    "WHERE b.book_id = \$book_id;", TxMode.SERIALIZABLE_RW, _params))
+            }.join().getValue()
+        }
+        kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
+        val _rows = _query.getResultSet(0)
+        if (!_rows.next()) return null
+        val _value0: Long = _rows.getColumn(0).getUint64()
+        val _value1: Long = _rows.getColumn(1).getUint64()
+        val _value2: String = _rows.getColumn(2).getText()
+        val _value3: String = _rows.getColumn(3).getText()
+        val _value4: String = _rows.getColumn(4).getText()
+        val _value5: Int = _rows.getColumn(5).getInt32()
+        val _value6: java.time.Instant = _rows.getColumn(6).getTimestamp()
+        val _value7: String = _rows.getColumn(7).getJson()
+        val _value8: Long = _rows.getColumn(8).getUint64()
+        val _value9: String = _rows.getColumn(9).getText()
+        return GetBookAndAuthorRow(Books(_value0, _value1, _value2, _value3, _value4, _value5, _value6, _value7), Authors(_value8, _value9))
+    }
+
     // -- name: DeleteBook :exec
     fun deleteBook(bookId: Long): Unit {
         val _params = Params.create()

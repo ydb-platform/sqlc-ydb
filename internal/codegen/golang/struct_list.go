@@ -201,6 +201,24 @@ func validateStructDeclarations(in *model.AnalysisResult) error {
 			names[q.Name+"Row"] = true
 		}
 	}
+	for _, table := range in.Catalog.Tables {
+		if !embeddedTableUsed(in, table.Name) {
+			continue
+		}
+		name := embeddedGoType(table.Name)
+		if names[name] {
+			return fmt.Errorf("embedded table %q: generated model name %s collides with another declaration", table.Name, name)
+		}
+		names[name] = true
+		fields := map[string]bool{}
+		for _, column := range table.Columns {
+			field := goName(column.Name)
+			if fields[field] {
+				return fmt.Errorf("embedded table %q: colliding model field %q", table.Name, column.Name)
+			}
+			fields[field] = true
+		}
+	}
 	for _, q := range in.Queries {
 		for _, p := range q.Parameters {
 			declarations := []string{}

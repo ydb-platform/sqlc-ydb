@@ -32,8 +32,12 @@ func tablePathPrefix(file string, lineOffset int, root parser.ISql_queryContext)
 		}
 		message := ""
 		switch {
+		case pragma.Opt_id_prefix_or_type().GetText() == "" && strings.EqualFold(identifier(pragma.An_id().GetText()), "OrderedColumns"):
+			if started || len(pragma.AllPragma_value()) != 0 {
+				message = "PRAGMA OrderedColumns must be a leading flag before data statements"
+			}
 		case pragma.Opt_id_prefix_or_type().GetText() != "" || !strings.EqualFold(identifier(pragma.An_id().GetText()), "TablePathPrefix"):
-			message = "unsupported PRAGMA; only static TablePathPrefix is supported"
+			message = "unsupported PRAGMA; only static TablePathPrefix and OrderedColumns are supported"
 		case started:
 			message = "PRAGMA TablePathPrefix must precede local assignments ($name = ...) and data or schema statements; external parameter DECLARE may precede the pragma"
 		case len(pragma.AllPragma_value()) != 1 || pragma.Pragma_value(0).STRING_VALUE() == nil:
