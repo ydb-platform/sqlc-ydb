@@ -1,6 +1,15 @@
 # sqlc-ydb
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE) [![Release](https://img.shields.io/github/v/release/ydb-platform/sqlc-ydb.svg?style=flat-square)](https://github.com/ydb-platform/sqlc-ydb/releases) [![PkgGoDev](https://pkg.go.dev/badge/github.com/ydb-platform/sqlc-ydb/cmd/sqlc-ydb)](https://pkg.go.dev/github.com/ydb-platform/sqlc-ydb/cmd/sqlc-ydb) [![CI](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/ci.yml) [![lint](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/lint.yml) [![codecov](https://codecov.io/gh/ydb-platform/sqlc-ydb/branch/main/graph/badge.svg?precision=2)](https://app.codecov.io/gh/ydb-platform/sqlc-ydb) ![Code lines](https://sloc.xyz/github/ydb-platform/sqlc-ydb/?category=code) [![View examples](https://img.shields.io/badge/learn-examples-brightgreen.svg)](examples/README.md) [![Telegram](https://img.shields.io/badge/chat-on%20Telegram-2ba2d9.svg)](https://t.me/ydb_en) [![WebSite](https://img.shields.io/badge/website-ydb.tech-blue.svg)](https://ydb.tech) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE) 
+[![Release](https://img.shields.io/github/v/release/ydb-platform/sqlc-ydb.svg?style=flat-square)](https://github.com/ydb-platform/sqlc-ydb/releases) 
+[![PkgGoDev](https://pkg.go.dev/badge/github.com/ydb-platform/sqlc-ydb/cmd/sqlc-ydb)](https://pkg.go.dev/github.com/ydb-platform/sqlc-ydb/cmd/sqlc-ydb) 
+[![CI](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/ci.yml) 
+[![lint](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/ydb-platform/sqlc-ydb/actions/workflows/lint.yml) 
+[![codecov](https://codecov.io/gh/ydb-platform/sqlc-ydb/branch/main/graph/badge.svg?precision=2)](https://app.codecov.io/gh/ydb-platform/sqlc-ydb) 
+![Code lines](https://sloc.xyz/github/ydb-platform/sqlc-ydb/?category=code) 
+[![View examples](https://img.shields.io/badge/learn-examples-brightgreen.svg)](examples/README.md) 
+[![Telegram](https://img.shields.io/badge/chat-on%20Telegram-2ba2d9.svg)](https://t.me/ydb_en) 
+[![WebSite](https://img.shields.io/badge/website-ydb.tech-blue.svg)](https://ydb.tech) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 Inspired by [sqlc](https://github.com/sqlc-dev/sqlc), sqlc-ydb brings its SQL-first, typed query workflow to YDB as an independent implementation. Read [the project history](docs/history.md) for the upstream YDB proposals, engine-plugin discussions, and the decision to build a standalone tool.
 
