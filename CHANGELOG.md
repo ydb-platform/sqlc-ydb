@@ -2,12 +2,15 @@
 
 ## Unreleased
 
+### Added
+
+- Resolve typed `GROUP BY expression AS alias` keys in projections, WHERE and HAVING, including source-column name shadowing, across generated runtimes.
+
 ## v0.5.0
 
 ### Added
 
 - Add upstream-compatible `gen.go.rename` for generated Go struct fields and embedded table models, including result rows and parameter structs.
-- Resolve typed `GROUP BY expression AS alias` keys in projections, WHERE and HAVING, including source-column name shadowing, across generated runtimes.
 
 ## v0.4.0
 
