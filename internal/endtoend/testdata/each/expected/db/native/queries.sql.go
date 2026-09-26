@@ -35,8 +35,6 @@ func (q *Queries) VisitDevices(ctx context.Context, arg VisitDevicesParams, cons
 	defer cancel()
 
 	result, err := q.db.Query(ctx, ""+
-		"DECLARE $min_id AS Uint64;\n"+
-		"DECLARE $max_id AS Uint64;\n"+
 		"SELECT id, name\n"+
 		"FROM devices\n"+
 		"WHERE id BETWEEN $min_id AND $max_id\n"+
@@ -75,6 +73,95 @@ func (q *Queries) VisitDevices(ctx context.Context, arg VisitDevicesParams, cons
 			return err
 		}
 		var row VisitDevicesRow
+		if err := r.ScanNamed(
+			query.Named("id", &row.ID),
+			query.Named("name", &row.Name),
+		); err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := consume(row); err != nil {
+			return err
+		}
+	}
+
+	_, err = result.NextResultSet(ctx)
+	if err == nil {
+		return query.ErrMoreThanOneResultSet
+	}
+	if !errors.Is(err, io.EOF) {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	exhausted = true
+
+	return nil
+}
+
+// -- name: VisitNamedDevices :each
+func (q *Queries) VisitNamedDevices(ctx context.Context, arg VisitNamedDevicesParams, consume func(VisitNamedDevicesRow) error, opts ...query.ExecuteOption) (err error) {
+	defer func() { err = xerrors.WithStackTrace(err) }()
+
+	if consume == nil {
+		return errors.New("VisitNamedDevices: :each requires a non-nil callback")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$min_name").BeginOptional().Text(arg.MinName).EndOptional()
+	parameters = parameters.Param("$max_name").BeginOptional().Text(arg.MaxName).EndOptional()
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	result, err := q.db.Query(ctx, ""+
+		"SELECT id, name\n"+
+		"FROM devices\n"+
+		"WHERE name BETWEEN $min_name AND $max_name\n"+
+		"ORDER BY id;",
+		callOptions...,
+	)
+	if err != nil {
+		return err
+	}
+	exhausted := false
+	defer func() {
+		// Cancel an unfinished stream before Close, including during panic unwinding.
+		if !exhausted {
+			cancel()
+		}
+		err = errors.Join(err, result.Close(ctx))
+	}()
+
+	resultSet, err := result.NextResultSet(ctx)
+	if errors.Is(err, io.EOF) {
+		return query.ErrNoResultSets
+	}
+	if err != nil {
+		return err
+	}
+
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		r, err := resultSet.NextRow(ctx)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		var row VisitNamedDevicesRow
 		if err := r.ScanNamed(
 			query.Named("id", &row.ID),
 			query.Named("name", &row.Name),

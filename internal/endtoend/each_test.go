@@ -132,6 +132,12 @@ func TestEachLive(t *testing.T){
  // Client-backed native Queries remain valid and retain the SDK's materialization behavior.
  calls=0
  if err:=q.VisitFrom(ctx,2047,func(VisitFromRow)error{calls++;return nil});err!=nil||calls!=1{t.Fatalf("client: calls=%d err=%v",calls,err)}
+ calls=0
+ err=q.VisitNamedDevices(ctx,VisitNamedDevicesParams{MinName:&name,MaxName:&name},func(VisitNamedDevicesRow)error{calls++;return nil})
+ if err!=nil||calls!=2047{t.Fatalf("inferred nullable bounds: calls=%d err=%v",calls,err)}
+ calls=0
+ err=q.VisitNamedDevices(ctx,VisitNamedDevicesParams{MaxName:&name},func(VisitNamedDevicesRow)error{calls++;return nil})
+ if err!=nil||calls!=0{t.Fatalf("nil inferred bound: calls=%d err=%v",calls,err)}
  runtime.GC();var before runtime.MemStats;runtime.ReadMemStats(&before)
  calls=0
  err=streaming(ctx,func(row VisitDevicesRow)error{

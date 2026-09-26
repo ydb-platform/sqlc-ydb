@@ -34,8 +34,6 @@ func (q *Queries) VisitDevices(ctx context.Context, arg VisitDevicesParams, cons
 	defer cancel()
 
 	rows, err := q.db.QueryContext(ctx, ""+
-		"DECLARE $min_id AS Uint64;\n"+
-		"DECLARE $max_id AS Uint64;\n"+
 		"SELECT id, name\n"+
 		"FROM streaming_devices\n"+
 		"WHERE id BETWEEN $min_id AND $max_id\n"+
