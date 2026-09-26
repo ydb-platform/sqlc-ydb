@@ -343,7 +343,7 @@ func prepare(c *config.Config, generate, noDatabase bool) ([]output, error) {
 			return nil
 		}
 		if g := s.Gen.Go; g != nil {
-			files, err := golang.Generate(result, golang.Options{Package: g.Package, Runtime: g.SQLPackage, EmitJSONTags: g.EmitJSONTags, EmitInterface: g.EmitInterface, EmitEmptySlices: g.EmitEmptySlices})
+			files, err := golang.Generate(result, golang.Options{Package: g.Package, Runtime: g.SQLPackage, Rename: g.Rename, EmitJSONTags: g.EmitJSONTags, EmitInterface: g.EmitInterface, EmitEmptySlices: g.EmitEmptySlices})
 			if err != nil {
 				return nil, fmt.Errorf("Go generation: %w", err)
 			}

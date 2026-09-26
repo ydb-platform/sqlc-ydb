@@ -14,6 +14,7 @@ Use `sqlc-ydb init --help` to list languages and their runtimes. For the options
 | --- | --- | --- | --- |
 | `out` | string | Required | Output directory, relative to sqlc.yaml. |
 | `package` | string | `basename(out)` | Generated Go package name; defaults to the output directory's base name. |
+| `rename` | map | `{}` | Map source column or parameter names to exported Go struct field names. |
 | `emit_json_tags` | boolean | `false` | Add JSON tags to generated struct fields. |
 | `emit_interface` | boolean | `false` | Generate the Querier interface implemented by Queries. |
 | `emit_empty_slices` | boolean | `false` | Return empty slices instead of nil for successful :many queries with no rows. |
@@ -85,6 +86,8 @@ Use `sqlc-ydb init --help` to list languages and their runtimes. For the options
 <!-- END GENERATED GENERATOR OPTIONS -->
 
 ## Runtime contracts
+
+`gen.go.rename` maps a SQL column name to the exact exported Go field name used in generated result rows and embedded table models; the same source name in parameter structs and YQL `Struct` inputs uses that name too. The mapping is scoped to one `sql[].gen.go` entry. SQL text, YDB parameter/result/Struct member names, and JSON tags retain their original names. Names that are invalid Go identifiers or collide with another generated field are errors. For example, `rename: {account_id: AccountID, display_name: Label}` generates `AccountID` and `Label` for the [renaming example](../examples/renaming). This option does not rename generated type or method names.
 
 | Target | Configuration | Generated API |
 |---|---|---|

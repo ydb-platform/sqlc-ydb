@@ -4,7 +4,9 @@ package golang
 import (
 	"bytes"
 	"fmt"
+	"go/ast"
 	"go/format"
+	"go/token"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -17,6 +19,7 @@ import (
 type Options struct {
 	Package         string
 	Runtime         string // ydb or database/sql
+	Rename          map[string]string
 	EmitJSONTags    bool
 	EmitInterface   bool
 	EmitEmptySlices bool
@@ -93,7 +96,12 @@ func validateDecimalParameter(name string, value types.Decimal, precision, scale
 }
 
 func validate(in *model.AnalysisResult, o Options) error {
-	if err := validateStructDeclarations(in); err != nil {
+	for source, field := range o.Rename {
+		if source == "" || !token.IsIdentifier(field) || !ast.IsExported(field) {
+			return fmt.Errorf("gen.go.rename[%q] must be an exported Go identifier, got %q", source, field)
+		}
+	}
+	if err := validateStructDeclarations(in, o); err != nil {
 		return err
 	}
 	seen := map[string]bool{}
@@ -123,15 +131,15 @@ func validate(in *model.AnalysisResult, o Options) error {
 		}
 		field := map[string]bool{}
 		for _, p := range q.Parameters {
-			if !ident(goName(p.Name)) || field[goName(p.Name)] {
+			if !ident(o.fieldName(p.Name)) || field[o.fieldName(p.Name)] {
 				return fmt.Errorf("%s: colliding parameter %q", q.Name, p.Name)
 			}
-			field[goName(p.Name)] = true
+			field[o.fieldName(p.Name)] = true
 			if _, err := parameterGoType(q, p); err != nil {
 				return fmt.Errorf("%s parameter %s: %w", q.Name, p.Name, err)
 			}
 			if isStructParameter(p.Type) {
-				if err := validateStructParameter(p.Type); err != nil {
+				if err := validateStructParameter(p.Type, o); err != nil {
 					return fmt.Errorf("%s parameter %s: %w", q.Name, p.Name, err)
 				}
 			} else if hasKind(p.Type, "list") {
@@ -151,7 +159,7 @@ func validate(in *model.AnalysisResult, o Options) error {
 					if embed != nil {
 						name = embed.Field
 					}
-					n := goName(name)
+					n := o.fieldName(name)
 					if !ident(n) || field[n] {
 						return fmt.Errorf("%s: colliding result field %q", q.Name, name)
 					}
@@ -311,7 +319,7 @@ func models(in *model.AnalysisResult, o Options) []byte {
 		for _, c := range table.Columns {
 			typ, _ := goType(c.Type)
 			imports.add(c.Type)
-			b.WriteString(goName(c.Name) + " " + typ)
+			b.WriteString(o.fieldName(c.Name) + " " + typ)
 			if o.EmitJSONTags {
 				b.WriteString(" `json:" + strconv.Quote(c.Name) + "`")
 			}
@@ -331,7 +339,7 @@ func models(in *model.AnalysisResult, o Options) []byte {
 			for i, c := range r.Columns {
 				if embed := embeddingAt(r, i); embed != nil {
 					if embed.Start == i {
-						b.WriteString(goName(embed.Field) + " " + embeddedGoType(embed.Table))
+						b.WriteString(o.fieldName(embed.Field) + " " + embeddedGoType(embed.Table))
 						if o.EmitJSONTags {
 							b.WriteString(" `json:" + strconv.Quote(embed.Field) + "`")
 						}
@@ -341,7 +349,7 @@ func models(in *model.AnalysisResult, o Options) []byte {
 				}
 				typ, _ := goType(c.Type)
 				imports.add(c.Type)
-				b.WriteString(goName(c.Name) + " " + typ)
+				b.WriteString(o.fieldName(c.Name) + " " + typ)
 				if o.EmitJSONTags {
 					b.WriteString(" `json:" + strconv.Quote(c.Name) + "`")
 				}
@@ -356,7 +364,7 @@ func models(in *model.AnalysisResult, o Options) []byte {
 				if !isStructParameter(p.Type) {
 					imports.add(p.Type)
 				}
-				b.WriteString(goName(p.Name) + " " + typ)
+				b.WriteString(o.fieldName(p.Name) + " " + typ)
 				if o.EmitJSONTags {
 					b.WriteString(" `json:" + strconv.Quote(p.Name) + "`")
 				}
@@ -538,9 +546,9 @@ func queryFile(source string, qs []model.AnalyzedQuery, o Options) []byte {
 		writeQuery(&b, q, o)
 		for _, p := range q.Parameters {
 			if isStructList(p.Type) {
-				writeStructListBuilder(&b, q, p)
+				writeStructListBuilder(&b, q, p, o)
 			} else if strings.EqualFold(p.Type.Kind, "Struct") {
-				writeStructBuilder(&b, q, p)
+				writeStructBuilder(&b, q, p, o)
 			} else if o.Runtime == "database/sql" && strings.EqualFold(p.Type.Kind, "List") {
 				writeScalarListBuilder(&b, q, p)
 			}
@@ -624,16 +632,16 @@ func methodArgs(q model.AnalyzedQuery, o Options) string {
 	}
 	return args
 }
-func varRef(q model.AnalyzedQuery, p model.Parameter) string {
+func varRef(q model.AnalyzedQuery, p model.Parameter, o Options) string {
 	if len(q.Parameters) > 1 {
-		return "arg." + goName(p.Name)
+		return "arg." + o.fieldName(p.Name)
 	}
 	return "arg"
 }
-func sqlArgumentList(q model.AnalyzedQuery) []string {
+func sqlArgumentList(q model.AnalyzedQuery, o Options) []string {
 	x := make([]string, len(q.Parameters))
 	for i, p := range q.Parameters {
-		value := varRef(q, p)
+		value := varRef(q, p, o)
 		if isStructList(p.Type) {
 			x[i] = "sql.Named(" + strconv.Quote(p.Name) + ", " + structListBuilderName(q, p) + "(" + value + "))"
 			continue
@@ -699,7 +707,7 @@ func writeSQL(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 	if b.Len() != validationStart {
 		b.WriteByte('\n')
 	}
-	parameters := sqlArgumentList(q)
+	parameters := sqlArgumentList(q, o)
 	switch q.Command {
 	case model.Exec:
 		call := generatedCall("q.db.ExecContext", querySQL(q), parameters)
@@ -707,10 +715,10 @@ func writeSQL(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 	case model.One:
 		call := generatedCall("q.db.QueryRowContext", querySQL(q), parameters)
 		b.WriteString("var row " + q.Name + "Row\n")
-		b.WriteString("err := " + scanCall(call+".Scan", scanDestinations(q.ResultSets[0])) + "\n\n")
+		b.WriteString("err := " + scanCall(call+".Scan", scanDestinations(q.ResultSets[0], o)) + "\n\n")
 		b.WriteString("return row, err\n")
 	case model.Each:
-		writeSQLEach(b, q, parameters)
+		writeSQLEach(b, q, parameters, o)
 	case model.Many:
 		init := "[]" + q.Name + "Row(nil)"
 		if o.EmitEmptySlices {
@@ -722,7 +730,7 @@ func writeSQL(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 		b.WriteString("defer rows.Close()\n\n")
 		b.WriteString("items := " + init + "\n")
 		b.WriteString("for rows.Next() { var row " + q.Name + "Row\n")
-		b.WriteString("if err := " + scanCall("rows.Scan", scanDestinations(q.ResultSets[0])) + "; err != nil { return nil, err }\n")
+		b.WriteString("if err := " + scanCall("rows.Scan", scanDestinations(q.ResultSets[0], o)) + "; err != nil { return nil, err }\n")
 		b.WriteString("items = append(items, row)\n")
 		b.WriteString("}\n\n")
 		if q.MultipleStatements {
@@ -739,9 +747,9 @@ func writeYDB(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 		b.WriteString("parameters := ydb.ParamsBuilder()\n")
 		for i, p := range q.Parameters {
 			if isStructParameter(p.Type) {
-				b.WriteString("parameters = parameters.Param(" + strconv.Quote("$"+p.Name) + ").Any(" + structListBuilderName(q, p) + "(" + varRef(q, p) + "))\n")
+				b.WriteString("parameters = parameters.Param(" + strconv.Quote("$"+p.Name) + ").Any(" + structListBuilderName(q, p) + "(" + varRef(q, p, o) + "))\n")
 			} else {
-				writeYDBParameter(b, p, varRef(q, p), i)
+				writeYDBParameter(b, p, varRef(q, p, o), i)
 			}
 		}
 		// Execute options are applied in order by the SDK. Put generated parameters
@@ -752,7 +760,7 @@ func writeYDB(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 		opt = "callOptions..."
 	}
 	if q.Command == model.Each {
-		writeYDBEach(b, q, opt)
+		writeYDBEach(b, q, opt, o)
 		return
 	}
 	if q.Command == model.Exec {
@@ -760,7 +768,7 @@ func writeYDB(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 		return
 	}
 	if q.Command == model.One {
-		b.WriteString("result, err := " + ydbCall("q.db.QueryRow", querySQL(q), opt) + "\nif err != nil { return " + q.Name + "Row{}, xerrors.WithStackTrace(err) }\n\nvar row " + q.Name + "Row\nif err := result.ScanNamed(\n" + scanNamed(q.ResultSets[0]) + ",\n); err != nil { return " + q.Name + "Row{}, xerrors.WithStackTrace(err) }\n\nreturn row, nil\n")
+		b.WriteString("result, err := " + ydbCall("q.db.QueryRow", querySQL(q), opt) + "\nif err != nil { return " + q.Name + "Row{}, xerrors.WithStackTrace(err) }\n\nvar row " + q.Name + "Row\nif err := result.ScanNamed(\n" + scanNamed(q.ResultSets[0], o) + ",\n); err != nil { return " + q.Name + "Row{}, xerrors.WithStackTrace(err) }\n\nreturn row, nil\n")
 		return
 	}
 	init := "[]" + q.Name + "Row(nil)"
@@ -777,7 +785,7 @@ func writeYDB(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 	b.WriteString("for r, err := range resultSet.Rows(ctx) {\n")
 	b.WriteString("if err != nil { return nil, xerrors.WithStackTrace(err) }\n")
 	b.WriteString("var row " + q.Name + "Row\n")
-	b.WriteString("if err := r.ScanNamed(\n" + scanNamed(q.ResultSets[0]) + ",\n); err != nil { return nil, xerrors.WithStackTrace(err) }\n")
+	b.WriteString("if err := r.ScanNamed(\n" + scanNamed(q.ResultSets[0], o) + ",\n); err != nil { return nil, xerrors.WithStackTrace(err) }\n")
 	b.WriteString("items = append(items, row)\n")
 	b.WriteString("}\n\n")
 	b.WriteString("_, err = result.NextResultSet(ctx)\n")
@@ -789,7 +797,7 @@ func writeYDB(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 
 func writeDecimalValidations(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 	for i, p := range q.Parameters {
-		value := varRef(q, p)
+		value := varRef(q, p, o)
 		if isStructParameter(p.Type) {
 			writeStructDecimalValidations(b, q, p, o)
 			continue
@@ -833,26 +841,26 @@ func decimalValidationFailure(q model.AnalyzedQuery, o Options) string {
 		return "return " + err
 	}
 }
-func scanDestinations(rs model.ResultSet) []string {
+func scanDestinations(rs model.ResultSet, o Options) []string {
 	x := make([]string, len(rs.Columns))
 	for i, c := range rs.Columns {
-		x[i] = "&row." + resultFieldPath(rs, i, c)
+		x[i] = "&row." + resultFieldPath(rs, i, c, o)
 	}
 	return x
 }
-func scanNamed(rs model.ResultSet) string {
+func scanNamed(rs model.ResultSet, o Options) string {
 	x := make([]string, len(rs.Columns))
 	for i, c := range rs.Columns {
-		x[i] = "query.Named(" + strconv.Quote(c.ResultName()) + ", &row." + resultFieldPath(rs, i, c) + ")"
+		x[i] = "query.Named(" + strconv.Quote(c.ResultName()) + ", &row." + resultFieldPath(rs, i, c, o) + ")"
 	}
 	return strings.Join(x, ",\n")
 }
 
-func resultFieldPath(rs model.ResultSet, index int, column model.Column) string {
+func resultFieldPath(rs model.ResultSet, index int, column model.Column, o Options) string {
 	if embed := embeddingAt(rs, index); embed != nil {
-		return goName(embed.Field) + "." + goName(column.Name)
+		return o.fieldName(embed.Field) + "." + o.fieldName(column.Name)
 	}
-	return goName(column.Name)
+	return o.fieldName(column.Name)
 }
 
 func embeddingAt(rs model.ResultSet, index int) *model.Embedding {
@@ -1030,6 +1038,12 @@ func goName(s string) string {
 		return "Value"
 	}
 	return x
+}
+func (o Options) fieldName(source string) string {
+	if renamed, ok := o.Rename[source]; ok {
+		return renamed
+	}
+	return goName(source)
 }
 func ident(s string) bool {
 	if s == "" {

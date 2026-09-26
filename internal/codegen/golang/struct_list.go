@@ -46,7 +46,7 @@ func parameterGoType(q model.AnalyzedQuery, p model.Parameter) (string, error) {
 	return goType(p.Type)
 }
 
-func validateStructParameter(t model.Type) error {
+func validateStructParameter(t model.Type, o Options) error {
 	kind := "Struct"
 	if isStructList(t) {
 		kind = "List<Struct>"
@@ -57,7 +57,7 @@ func validateStructParameter(t model.Type) error {
 	}
 	names := map[string]bool{}
 	for _, f := range fields {
-		name := goName(f.Name)
+		name := o.fieldName(f.Name)
 		if f.Name == "" || !ident(name) || names[name] {
 			return fmt.Errorf("%s has invalid or colliding field %q", kind, f.Name)
 		}
@@ -87,7 +87,7 @@ func writeStructModel(b *bytes.Buffer, q model.AnalyzedQuery, p model.Parameter,
 	for _, f := range structFields(p.Type) {
 		typ, _ := goType(f.Type)
 		imports.add(f.Type)
-		b.WriteString(goName(f.Name) + " " + typ)
+		b.WriteString(o.fieldName(f.Name) + " " + typ)
 		if o.EmitJSONTags {
 			b.WriteString(" `json:" + strconv.Quote(f.Name) + "`")
 		}
@@ -98,7 +98,7 @@ func writeStructModel(b *bytes.Buffer, q model.AnalyzedQuery, p model.Parameter,
 
 // Both Go adapters pass the SDK's typed value through unchanged. Constructing
 // the empty list from its declared type also preserves Struct field types.
-func writeStructListBuilder(b *bytes.Buffer, q model.AnalyzedQuery, p model.Parameter) {
+func writeStructListBuilder(b *bytes.Buffer, q model.AnalyzedQuery, p model.Parameter, o Options) {
 	b.WriteString("func " + structListBuilderName(q, p) + "(values []" + structItemName(q, p) + ") types.Value {\n")
 	b.WriteString("if len(values) == 0 { return types.ZeroValue(types.List(types.Struct(\n")
 	for _, f := range p.Type.Elem.Fields {
@@ -110,15 +110,15 @@ func writeStructListBuilder(b *bytes.Buffer, q model.AnalyzedQuery, p model.Para
 	}
 	b.WriteString("))) }\nitems := make([]types.Value,len(values))\nfor i, item := range values { items[i] = types.StructValue(\n")
 	for _, f := range p.Type.Elem.Fields {
-		b.WriteString("types.StructFieldValue(" + strconv.Quote(f.Name) + ", " + structScalarValue(f.Type, "item."+goName(f.Name)) + "),\n")
+		b.WriteString("types.StructFieldValue(" + strconv.Quote(f.Name) + ", " + structScalarValue(f.Type, "item."+o.fieldName(f.Name)) + "),\n")
 	}
 	b.WriteString(") }\nreturn types.ListValue(items...)\n}\n\n")
 }
 
-func writeStructBuilder(b *bytes.Buffer, q model.AnalyzedQuery, p model.Parameter) {
+func writeStructBuilder(b *bytes.Buffer, q model.AnalyzedQuery, p model.Parameter, o Options) {
 	b.WriteString("func " + structListBuilderName(q, p) + "(item " + structItemName(q, p) + ") types.Value {\nreturn types.StructValue(\n")
 	for _, f := range p.Type.Fields {
-		b.WriteString("types.StructFieldValue(" + strconv.Quote(f.Name) + ", " + structScalarValue(f.Type, "item."+goName(f.Name)) + "),\n")
+		b.WriteString("types.StructFieldValue(" + strconv.Quote(f.Name) + ", " + structScalarValue(f.Type, "item."+o.fieldName(f.Name)) + "),\n")
 	}
 	b.WriteString(")\n}\n\n")
 }
@@ -165,9 +165,9 @@ func writeStructDecimalValidations(b *bytes.Buffer, q model.AnalyzedQuery, p mod
 	if !hasKind(p.Type, "decimal") {
 		return
 	}
-	valuePrefix := varRef(q, p) + "."
+	valuePrefix := varRef(q, p, o) + "."
 	if isStructList(p.Type) {
-		b.WriteString("for _, item := range " + varRef(q, p) + " {\n")
+		b.WriteString("for _, item := range " + varRef(q, p, o) + " {\n")
 		valuePrefix = "item."
 	}
 	for _, f := range structFields(p.Type) {
@@ -175,7 +175,7 @@ func writeStructDecimalValidations(b *bytes.Buffer, q model.AnalyzedQuery, p mod
 		if !strings.EqualFold(scalar.Kind, "Decimal") {
 			continue
 		}
-		value := valuePrefix + goName(f.Name)
+		value := valuePrefix + o.fieldName(f.Name)
 		if f.Type.IsOptional() {
 			b.WriteString("if " + value + " != nil {\n")
 			value = "*" + value
@@ -191,7 +191,7 @@ func writeStructDecimalValidations(b *bytes.Buffer, q model.AnalyzedQuery, p mod
 	}
 }
 
-func validateStructDeclarations(in *model.AnalysisResult) error {
+func validateStructDeclarations(in *model.AnalysisResult, o Options) error {
 	names := map[string]bool{"Queries": true, "DBTX": true, "Querier": true, "New": true, "validateDecimalParameter": true}
 	for _, q := range in.Queries {
 		if len(q.Parameters) > 1 {
@@ -212,7 +212,7 @@ func validateStructDeclarations(in *model.AnalysisResult) error {
 		names[name] = true
 		fields := map[string]bool{}
 		for _, column := range table.Columns {
-			field := goName(column.Name)
+			field := o.fieldName(column.Name)
 			if fields[field] {
 				return fmt.Errorf("embedded table %q: colliding model field %q", table.Name, column.Name)
 			}
