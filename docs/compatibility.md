@@ -33,7 +33,7 @@ Compatibility is tracked by individual CLI, configuration and generated API cont
 Only the commands and options above are implemented. In particular:
 
 - No `analyze`, `parse`, `fmt`, `completion`, `createdb`, `push`, `verify` or `vet` commands or cloud/remote workflow.
-- No `sqlc.slice` macro, type overrides, generated type-name overrides, driver batch APIs, COPY helpers or command-tag results. Go field names can be configured with [`gen.go.rename`](targets.md#gen-go).
+- No `sqlc.slice` macro, type overrides, query result/parameter type-name overrides, driver batch APIs, COPY helpers or command-tag results. Go field and embedded table model names can be configured with [`gen.go.rename`](targets.md#gen-go).
 - `--no-remote` skips the optional release check for `version`; analysis and generation run locally and may use the explicitly configured YDB connection. It conflicts with `version --upgrade`. `--remote` is unsupported; `--no-database` disables database-assisted analysis. `init` creates a version 2 configuration (`--v2` is also accepted); `version --verbose` and `version --upgrade` are sqlc-ydb extensions.
 - SQL parameters use YQL `$name` syntax. Driver-specific placeholder rewriting happens during generation; `$1`, `?` and `@name` are not accepted as an alternative input dialect.
 

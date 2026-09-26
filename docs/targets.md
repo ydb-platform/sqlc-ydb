@@ -14,7 +14,7 @@ Use `sqlc-ydb init --help` to list languages and their runtimes. For the options
 | --- | --- | --- | --- |
 | `out` | string | Required | Output directory, relative to sqlc.yaml. |
 | `package` | string | `basename(out)` | Generated Go package name; defaults to the output directory's base name. |
-| `rename` | map | `{}` | Map source column or parameter names to exported Go struct field names. |
+| `rename` | map | `{}` | Map SQL column and table names to exported Go struct field and model names; single scalar arguments are unchanged. |
 | `emit_json_tags` | boolean | `false` | Add JSON tags to generated struct fields. |
 | `emit_interface` | boolean | `false` | Generate the Querier interface implemented by Queries. |
 | `emit_empty_slices` | boolean | `false` | Return empty slices instead of nil for successful :many queries with no rows. |
@@ -87,7 +87,7 @@ Use `sqlc-ydb init --help` to list languages and their runtimes. For the options
 
 ## Runtime contracts
 
-`gen.go.rename` maps a SQL column name to the exact exported Go field name used in generated result rows and embedded table models; the same source name in parameter structs and YQL `Struct` inputs uses that name too. The mapping is scoped to one `sql[].gen.go` entry. SQL text, YDB parameter/result/Struct member names, and JSON tags retain their original names. Names that are invalid Go identifiers or collide with another generated field are errors. For example, `rename: {account_id: AccountID, display_name: Label}` generates `AccountID` and `Label` for the [renaming example](../examples/renaming). This option does not rename generated type or method names.
+`gen.go.rename` maps a SQL column name to the exact exported Go field name in result rows, parameter structs, YQL `Struct` inputs and embedded table models. It also maps an embedded table's basename to its Go model type and `sqlc.embed` row field. Keys apply throughout one `sql[].gen.go` entry, so the same source name cannot have different Go names in separate tables or queries. Single scalar parameters remain method arguments named `arg`; SQL text, YDB parameter/result/Struct member names, and JSON tags retain their original names. Empty source names, invalid Go identifiers and colliding generated names are errors; unused keys are accepted, as in upstream sqlc. For example, `rename: {accounts: Account, account_id: AccountID, display_name: Label}` produces the [renaming example](../examples/renaming). Query methods and row/parameter struct type names are unchanged.
 
 | Target | Configuration | Generated API |
 |---|---|---|

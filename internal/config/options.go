@@ -48,7 +48,7 @@ func Generators() []Generator {
 		generator("go", "sql_package", "database/sql", []string{"database/sql", "ydb"}, false,
 			out,
 			Option{Name: "package", Type: "string", Default: "basename(out)", Description: "Generated Go package name; defaults to the output directory's base name."},
-			Option{Name: "rename", Type: "map", Default: "{}", Description: "Map source column or parameter names to exported Go struct field names."},
+			Option{Name: "rename", Type: "map", Default: "{}", Description: "Map SQL column and table names to exported Go struct field and model names; single scalar arguments are unchanged."},
 			Option{Name: "emit_json_tags", Type: "boolean", Default: "false", Description: "Add JSON tags to generated struct fields."},
 			Option{Name: "emit_interface", Type: "boolean", Default: "false", Description: "Generate the Querier interface implemented by Queries."},
 			Option{Name: "emit_empty_slices", Type: "boolean", Default: "false", Description: "Return empty slices instead of nil for successful :many queries with no rows."}),

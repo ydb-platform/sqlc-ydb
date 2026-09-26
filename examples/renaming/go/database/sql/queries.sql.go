@@ -50,8 +50,8 @@ func (q *Queries) ListAccountModels(ctx context.Context) ([]ListAccountModelsRow
 	for rows.Next() {
 		var row ListAccountModelsRow
 		if err := rows.Scan(
-			&row.Accounts.AccountID,
-			&row.Accounts.Label,
+			&row.Account.AccountID,
+			&row.Account.Label,
 		); err != nil {
 			return nil, err
 		}

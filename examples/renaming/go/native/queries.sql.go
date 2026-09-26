@@ -86,8 +86,8 @@ func (q *Queries) ListAccountModels(ctx context.Context, opts ...query.ExecuteOp
 		}
 		var row ListAccountModelsRow
 		if err := r.ScanNamed(
-			query.Named("__sqlc_embed_0_0", &row.Accounts.AccountID),
-			query.Named("__sqlc_embed_0_1", &row.Accounts.Label),
+			query.Named("__sqlc_embed_0_0", &row.Account.AccountID),
+			query.Named("__sqlc_embed_0_1", &row.Account.Label),
 		); err != nil {
 			return nil, xerrors.WithStackTrace(err)
 		}

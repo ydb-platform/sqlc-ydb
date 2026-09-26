@@ -376,7 +376,7 @@ func TestGeneratedYDBNamedScanUsesWireNameAndGoFieldName(t *testing.T) {
 }
 
 func TestRenameGoFieldsPreservesSQLNames(t *testing.T) {
-	options := Options{Package: "db", Rename: map[string]string{"id": "Identifier", "author_id": "AuthorID", "name": "DisplayName"}, EmitJSONTags: true}
+	options := Options{Package: "db", Rename: map[string]string{"books": "BookModel", "id": "Identifier", "author_id": "AuthorID", "name": "DisplayName"}, EmitJSONTags: true}
 	for _, runtime := range []string{"ydb", "database/sql"} {
 		t.Run(runtime, func(t *testing.T) {
 			options.Runtime = runtime
@@ -394,10 +394,12 @@ func TestRenameGoFieldsPreservesSQLNames(t *testing.T) {
 			}
 			require.Regexp(t, "Identifier\\s+uint64\\s+`json:\"id\"`", models)
 			require.Regexp(t, "DisplayName\\s+string\\s+`json:\"name\"`", models)
-			require.Contains(t, query, "&row.Books.Identifier")
+			require.Contains(t, models, "type BookModel struct")
+			require.Contains(t, models, "BookModel BookModel `json:\"books\"`")
+			require.Contains(t, query, "&row.BookModel.Identifier")
 			require.Contains(t, query, "&row.Authors.AuthorID")
 			if runtime == "ydb" {
-				require.Contains(t, query, `query.Named("sqlc_embed_0_id", &row.Books.Identifier)`)
+				require.Contains(t, query, `query.Named("sqlc_embed_0_id", &row.BookModel.Identifier)`)
 			}
 			compileInput(t, in, options)
 
@@ -417,6 +419,7 @@ func TestRenameGoFieldsPreservesSQLNames(t *testing.T) {
 			require.Regexp(t, "DisplayName\\s+string\\s+`json:\"name\"`", models)
 			require.Contains(t, query, "arg.DisplayName")
 			require.Contains(t, query, "&row.Identifier")
+			require.Contains(t, query, "GetUser(ctx context.Context, arg uint64")
 			compileInput(t, simple, options)
 		})
 	}
@@ -429,10 +432,11 @@ func TestRenameGoFieldsRejectsInvalidAndCollidingNames(t *testing.T) {
 	}{
 		{"unexported", "id", "internal", "must be an exported Go identifier", sample()},
 		{"invalid", "id", "Bad-Name", "must be an exported Go identifier", sample()},
-		{"empty source", "", "Identifier", "must be an exported Go identifier", sample()},
+		{"empty source", "", "Identifier", "gen.go.rename contains an empty source name", sample()},
 		{"result collision", "id", "Name", "colliding result field", sample()},
 		{"parameter collision", "bio", "Name", "colliding parameter", sample()},
 		{"embedded model collision", "id", "AuthorID", "colliding model field", embeddedAnalysis()},
+		{"table type collision", "books", "Authors", "generated model name Authors collides", embeddedAnalysis()},
 		{"struct collision", "title", "Payload", "colliding field", structInput(model.StructField{Name: "title", Type: model.Type{Kind: "Utf8"}}, model.StructField{Name: "payload", Type: model.Type{Kind: "String"}})},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -440,6 +444,15 @@ func TestRenameGoFieldsRejectsInvalidAndCollidingNames(t *testing.T) {
 			require.ErrorContains(t, err, tc.want)
 		})
 	}
+}
+
+func TestRenameUnusedKeyMatchesUpstream(t *testing.T) {
+	in := sample()
+	baseline, err := Generate(in, Options{Package: "db", Runtime: "ydb"})
+	require.NoError(t, err)
+	withUnusedKey, err := Generate(in, Options{Package: "db", Runtime: "ydb", Rename: map[string]string{"unused_column": "UnusedField"}})
+	require.NoError(t, err)
+	require.Equal(t, baseline, withUnusedKey)
 }
 
 func TestGeneratedSQLSpecialCharacters(t *testing.T) {

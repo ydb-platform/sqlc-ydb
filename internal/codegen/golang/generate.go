@@ -97,7 +97,10 @@ func validateDecimalParameter(name string, value types.Decimal, precision, scale
 
 func validate(in *model.AnalysisResult, o Options) error {
 	for source, field := range o.Rename {
-		if source == "" || !token.IsIdentifier(field) || !ast.IsExported(field) {
+		if source == "" {
+			return fmt.Errorf("gen.go.rename contains an empty source name")
+		}
+		if !token.IsIdentifier(field) || !ast.IsExported(field) {
 			return fmt.Errorf("gen.go.rename[%q] must be an exported Go identifier, got %q", source, field)
 		}
 	}
@@ -131,10 +134,11 @@ func validate(in *model.AnalysisResult, o Options) error {
 		}
 		field := map[string]bool{}
 		for _, p := range q.Parameters {
-			if !ident(o.fieldName(p.Name)) || field[o.fieldName(p.Name)] {
+			name := o.fieldName(p.Name)
+			if !ident(name) || field[name] {
 				return fmt.Errorf("%s: colliding parameter %q", q.Name, p.Name)
 			}
-			field[o.fieldName(p.Name)] = true
+			field[name] = true
 			if _, err := parameterGoType(q, p); err != nil {
 				return fmt.Errorf("%s parameter %s: %w", q.Name, p.Name, err)
 			}
@@ -315,7 +319,7 @@ func models(in *model.AnalysisResult, o Options) []byte {
 		if !embeddedTableUsed(in, table.Name) {
 			continue
 		}
-		b.WriteString("type " + embeddedGoType(table.Name) + " struct {\n")
+		b.WriteString("type " + o.embeddedGoType(table.Name) + " struct {\n")
 		for _, c := range table.Columns {
 			typ, _ := goType(c.Type)
 			imports.add(c.Type)
@@ -339,7 +343,7 @@ func models(in *model.AnalysisResult, o Options) []byte {
 			for i, c := range r.Columns {
 				if embed := embeddingAt(r, i); embed != nil {
 					if embed.Start == i {
-						b.WriteString(o.fieldName(embed.Field) + " " + embeddedGoType(embed.Table))
+						b.WriteString(o.fieldName(embed.Field) + " " + o.embeddedGoType(embed.Table))
 						if o.EmitJSONTags {
 							b.WriteString(" `json:" + strconv.Quote(embed.Field) + "`")
 						}
@@ -886,7 +890,7 @@ func embeddedTableUsed(in *model.AnalysisResult, name string) bool {
 	return false
 }
 
-func embeddedGoType(table string) string { return goName(filepath.Base(table)) }
+func (o Options) embeddedGoType(table string) string { return o.fieldName(filepath.Base(table)) }
 func writeYDBParameter(b *bytes.Buffer, p model.Parameter, value string, index int) {
 	if strings.EqualFold(p.Type.Kind, "List") {
 		writeYDBListParameter(b, p, value, index)

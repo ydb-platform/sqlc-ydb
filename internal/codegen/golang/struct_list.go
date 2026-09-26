@@ -205,7 +205,7 @@ func validateStructDeclarations(in *model.AnalysisResult, o Options) error {
 		if !embeddedTableUsed(in, table.Name) {
 			continue
 		}
-		name := embeddedGoType(table.Name)
+		name := o.embeddedGoType(table.Name)
 		if names[name] {
 			return fmt.Errorf("embedded table %q: generated model name %s collides with another declaration", table.Name, name)
 		}
