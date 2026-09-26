@@ -18,12 +18,16 @@ type sqlcArgument struct {
 	start    int
 }
 
-type sqlcArgumentSourceMap struct {
+type querySourceMap struct {
 	original, rewritten string
 	replacements        []wildcardReplacement
+	parent              *querySourceMap
 }
 
 func lowerSQLCArguments(block *queryBlock) []model.Diagnostic {
+	if !strings.Contains(strings.ToLower(block.text), "sqlc") {
+		return nil
+	}
 	input := antlr.NewInputStream(block.text)
 	lexer := parser.NewYQLLexer(input)
 	tokens := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
@@ -62,7 +66,9 @@ func lowerSQLCArguments(block *queryBlock) []model.Diagnostic {
 			continue
 		}
 		startByte := runeByteOffset(block.text, start.GetStart())
-		arguments[name] = sqlcArgument{nullable: nullable, position: position, start: startByte}
+		if _, exists := arguments[name]; !exists {
+			arguments[name] = sqlcArgument{nullable: nullable, position: position, start: startByte}
+		}
 		parameterName := quotedYQLIdentifier(name)
 		if argument.GetTokenType() == parser.YQLLexerID_PLAIN {
 			parameterName = argument.GetText()
@@ -76,7 +82,7 @@ func lowerSQLCArguments(block *queryBlock) []model.Diagnostic {
 	rewrites := wildcardRewrites{source: block.text, replacements: replacements}
 	original := block.text
 	block.text, _ = rewrites.apply()
-	block.sourceMap = &sqlcArgumentSourceMap{original: original, rewritten: block.text, replacements: replacements}
+	block.sourceMap = &querySourceMap{original: original, rewritten: block.text, replacements: replacements}
 	for name, argument := range arguments {
 		shift := 0
 		for _, replacement := range replacements {
@@ -97,34 +103,36 @@ func (block queryBlock) originalDiagnostics(diagnostics []model.Diagnostic) []mo
 		return diagnostics
 	}
 	for i := range diagnostics {
-		position := diagnostics[i].Position
-		line, column, index := block.line, 1, 0
-		for index < len(block.sourceMap.rewritten) && (line < position.Line || column < position.Column) {
-			r, width := utf8.DecodeRuneInString(block.sourceMap.rewritten[index:])
-			index += width
-			if r == '\n' {
-				line++
-				column = 1
-			} else {
-				column++
+		for sourceMap := block.sourceMap; sourceMap != nil; sourceMap = sourceMap.parent {
+			position := diagnostics[i].Position
+			line, column, index := block.line, 1, 0
+			for index < len(sourceMap.rewritten) && (line < position.Line || line == position.Line && column < position.Column) {
+				r, width := utf8.DecodeRuneInString(sourceMap.rewritten[index:])
+				index += width
+				if r == '\n' {
+					line++
+					column = 1
+				} else {
+					column++
+				}
 			}
+			shift := 0
+			originalIndex := index
+			for _, replacement := range sourceMap.replacements {
+				start := replacement.start + shift
+				end := start + len(replacement.text)
+				if index < start {
+					break
+				}
+				if index < end {
+					originalIndex = replacement.start
+					break
+				}
+				shift += len(replacement.text) - (replacement.end - replacement.start)
+				originalIndex = index - shift
+			}
+			diagnostics[i].Position = positionInSQL(block.file, block.line, sourceMap.original, originalIndex)
 		}
-		shift := 0
-		originalIndex := index
-		for _, replacement := range block.sourceMap.replacements {
-			start := replacement.start + shift
-			end := start + len(replacement.text)
-			if index < start {
-				break
-			}
-			if index < end {
-				originalIndex = replacement.start
-				break
-			}
-			shift += len(replacement.text) - (replacement.end - replacement.start)
-			originalIndex = index - shift
-		}
-		diagnostics[i].Position = positionInSQL(block.file, block.line, block.sourceMap.original, originalIndex)
 	}
 	return diagnostics
 }

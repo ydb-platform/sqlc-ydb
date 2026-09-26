@@ -113,7 +113,8 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 			declared[name] = typeValue
 		}
 	}
-	for name, argument := range block.arguments {
+	for _, name := range slices.Sorted(maps.Keys(block.arguments)) {
+		argument := block.arguments[name]
 		if argument.nullable && declared[name].Kind != "" && !declared[name].IsOptional() {
 			diagnostics = append(diagnostics, model.Diagnostic{Position: argument.position, Message: fmt.Sprintf("sqlc.narg(%s) requires an Optional parameter type; DECLARE or analyzer.parameters specifies %s", name, declared[name].String())})
 		}
@@ -121,7 +122,8 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	inferred := map[string]model.Type{}
 	localPositions, localNames, localTypes, tabular, lambdas, localDiagnostics := localBindings(catalog, block, tree, declared, inferred, query.Syntax)
 	diagnostics = append(diagnostics, localDiagnostics...)
-	for name, argument := range block.arguments {
+	for _, name := range slices.Sorted(maps.Keys(block.arguments)) {
+		argument := block.arguments[name]
 		if localNames[name] {
 			diagnostics = append(diagnostics, model.Diagnostic{Position: argument.position, Message: fmt.Sprintf("sqlc argument %q conflicts with local $%s", name, name)})
 		}

@@ -70,6 +70,68 @@ func TestAnalyzeSQLCArgumentsShareExternalParameter(t *testing.T) {
 	require.Equal(t, "-- name: Read :many\nSELECT id FROM foo WHERE id = $id OR id = $id OR id = $`id`;", got.Queries[0].SQL)
 }
 
+func TestAnalyzeSQLCArgumentDiagnosticsHaveStableOrder(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE foo (id Uint64 NOT NULL, PRIMARY KEY (id));"}}
+	query := "-- name: Read :many\n$z = 1ul; $a = 2ul; SELECT id FROM foo WHERE id = sqlc.arg(z) OR id = sqlc.arg(a);"
+	for range 20 {
+		result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
+		require.Error(t, err)
+		var conflicts []string
+		for _, diagnostic := range result.Diagnostics {
+			if strings.Contains(diagnostic.Message, "conflicts with local") {
+				conflicts = append(conflicts, diagnostic.Message)
+			}
+		}
+		require.Equal(t, []string{`sqlc argument "a" conflicts with local $a`, `sqlc argument "z" conflicts with local $z`}, conflicts)
+	}
+}
+
+func TestAnalyzeSQLCArgumentConflictPointsToFirstCall(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE foo (id Uint64 NOT NULL, PRIMARY KEY (id));"}}
+	query := "-- name: Read :many\nDECLARE $id AS Uint64; SELECT id FROM foo WHERE id = sqlc.narg(id) OR id = sqlc.narg(id);"
+	result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
+	require.Error(t, err)
+	var positions []model.Position
+	for _, diagnostic := range result.Diagnostics {
+		if strings.Contains(diagnostic.Message, "requires an Optional parameter type") {
+			positions = append(positions, diagnostic.Position)
+		}
+	}
+	require.Equal(t, []model.Position{{File: "query.sql", Line: 2, Column: strings.Index(query[strings.IndexByte(query, '\n')+1:], "sqlc.narg") + 1}}, positions)
+}
+
+func TestAnalyzeSQLCArgumentWithWhitespaceAroundDot(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE foo (id Uint64 NOT NULL, PRIMARY KEY (id));"}}
+	query := "-- name: Read :many\nSELECT id FROM foo WHERE id = SQLC /* comment */ . Arg(id);"
+	got, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
+	require.NoError(t, err)
+	require.Equal(t, "-- name: Read :many\nSELECT id FROM foo WHERE id = $id;", got.Queries[0].SQL)
+}
+
+func TestAnalyzeSQLCArgumentDiagnosticsMapExpandedSQL(t *testing.T) {
+	query := "-- name: Read :many\nSELECT sqlc.embed(b) FROM books AS b WHERE b.book_id = sqlc.arg(id);"
+	catalog, diagnostics := buildCatalog(embedSchema)
+	require.Empty(t, diagnostics)
+	blocks, diagnostics := queryBlocks(model.Source{Name: "query.sql", Text: query})
+	require.Empty(t, diagnostics)
+	require.Len(t, blocks, 1)
+	block := blocks[0]
+	require.Empty(t, lowerSQLCArguments(&block))
+	result, diagnostics := analyzeExecutableQuery(catalog, &block)
+	require.Empty(t, diagnostics)
+	for _, target := range []struct{ expanded, original string }{
+		{expanded: "__sqlc_embed_0_0", original: "sqlc.embed(b)"},
+		{expanded: "WHERE", original: "WHERE"},
+		{expanded: "$id", original: "sqlc.arg(id)"},
+	} {
+		gotIndex := strings.Index(result.SQL, target.expanded)
+		require.NotEqual(t, -1, gotIndex)
+		got := block.originalDiagnostics([]model.Diagnostic{{Position: positionInSQL("query.sql", block.line, result.SQL, gotIndex)}})
+		wantIndex := strings.Index(query, target.original)
+		require.Equal(t, positionInSQL("query.sql", block.line, query, wantIndex), got[0].Position)
+	}
+}
+
 func TestAnalyzeSQLCArgumentPreservesOriginalDiagnosticPosition(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE foo (id Uint64 NOT NULL, PRIMARY KEY (id));"}}
 	for _, query := range []string{

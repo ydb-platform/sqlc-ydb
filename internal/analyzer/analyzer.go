@@ -106,8 +106,9 @@ func analyze(ctx context.Context, schema, queries []model.Source, options Option
 			result.Diagnostics = append(result.Diagnostics, originalBlockDiagnostics(allBlocks, diagnostics)...)
 		}
 		if database == nil || len(result.Diagnostics) == 0 {
-			for _, block := range allBlocks {
-				query, queryDiagnostics := analyzeExecutableQuery(catalog, block)
+			for _, originalBlock := range allBlocks {
+				block := originalBlock
+				query, queryDiagnostics := analyzeExecutableQuery(catalog, &block)
 				result.Diagnostics = append(result.Diagnostics, block.originalDiagnostics(queryDiagnostics)...)
 				if len(queryDiagnostics) == 0 {
 					if database != nil && len(query.ResultSets) != 0 && len(query.ResultSets[0].Embeds) != 0 {
@@ -203,7 +204,7 @@ type queryBlock struct {
 	parameters      map[string]model.Type
 	arguments       map[string]sqlcArgument
 	assumed         map[string]model.Type
-	sourceMap       *sqlcArgumentSourceMap
+	sourceMap       *querySourceMap
 	parsed          *parsedYQL
 	wildcards       *wildcardRewrites
 	tablePathPrefix string
