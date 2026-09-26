@@ -108,9 +108,26 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	diagnostics = append(diagnostics, declarationDiagnostics...)
 	declared, configuredDiagnostics := configuredDeclarations(block, declared)
 	diagnostics = append(diagnostics, configuredDiagnostics...)
+	for name, typeValue := range block.assumed {
+		if _, exists := declared[name]; !exists {
+			declared[name] = typeValue
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(block.arguments)) {
+		argument := block.arguments[name]
+		if argument.nullable && declared[name].Kind != "" && !declared[name].IsOptional() {
+			diagnostics = append(diagnostics, model.Diagnostic{Position: argument.position, Message: fmt.Sprintf("sqlc.narg(%s) requires an Optional parameter type; DECLARE or analyzer.parameters specifies %s", name, declared[name].String())})
+		}
+	}
 	inferred := map[string]model.Type{}
 	localPositions, localNames, localTypes, tabular, lambdas, localDiagnostics := localBindings(catalog, block, tree, declared, inferred, query.Syntax)
 	diagnostics = append(diagnostics, localDiagnostics...)
+	for _, name := range slices.Sorted(maps.Keys(block.arguments)) {
+		argument := block.arguments[name]
+		if localNames[name] {
+			diagnostics = append(diagnostics, model.Diagnostic{Position: argument.position, Message: fmt.Sprintf("sqlc argument %q conflicts with local $%s", name, name)})
+		}
+	}
 	block.tabular = tabular
 	block.lambdas = lambdas
 
@@ -202,6 +219,9 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	query.Parameters = parameters
 	for _, parameter := range parameters {
 		if previous, ok := resultParameters[parameter.Name]; ok && !previous.Equal(parameter.Type) {
+			if argument, exists := block.arguments[parameter.Name]; exists && argument.nullable && previous.UnwrapOptional().Equal(parameter.Type.UnwrapOptional()) {
+				continue
+			}
 			diagnostics = append(diagnostics, model.Diagnostic{Position: query.Source, Message: fmt.Sprintf("parameter $%s changes inferred type from %s to %s after the result statement; add DECLARE before the script to keep its result type stable", parameter.Name, previous.String(), parameter.Type.String())})
 		}
 	}
@@ -1391,7 +1411,7 @@ func inferInsert(block queryBlock, statement *parser.Into_table_stmtContext, tab
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, id, fmt.Sprintf("unknown column %q", id.GetText())))
 				continue
 			}
-			if err := validateDMLValue(expressions[i], *column, expressionScope{bindings: bindings, lambdas: block.lambdas, functions: block.functions}, inferred); err != nil {
+			if err := validateDMLValue(expressions[i], *column, expressionScope{bindings: bindings, arguments: block.arguments, lambdas: block.lambdas, functions: block.functions}, inferred); err != nil {
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, expressions[i], err.Error()))
 			}
 		}
@@ -1426,7 +1446,7 @@ func inferUpdate(block queryBlock, statement *parser.Update_stmtContext, table *
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, clause, fmt.Sprintf("unknown column %q", name)))
 			continue
 		}
-		if err := validateDMLValue(clause.Expr(), *column, expressionScope{relations: []relation{{table: table, alias: simpleTableName(statement.Simple_table_ref())}}, bindings: bindings, lambdas: block.lambdas, functions: block.functions}, inferred); err != nil {
+		if err := validateDMLValue(clause.Expr(), *column, expressionScope{relations: []relation{{table: table, alias: simpleTableName(statement.Simple_table_ref())}}, bindings: bindings, arguments: block.arguments, lambdas: block.lambdas, functions: block.functions}, inferred); err != nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, clause.Expr(), err.Error()))
 		}
 	}
@@ -1498,7 +1518,15 @@ func externalParameters(block queryBlock, binds []parser.IBind_parameterContext,
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, bind, fmt.Sprintf("cannot resolve type of external parameter $%s; add DECLARE", name)))
 			continue
 		}
-		if inferredType, inferredOK := inferred[name]; inferredOK && !compatibleTypes(typeValue, inferredType) {
+		if argument, exists := block.arguments[name]; exists && argument.nullable && !typeValue.IsOptional() {
+			typeValue = model.Optional(typeValue)
+		}
+		inferredType, inferredOK := inferred[name]
+		compatible := compatibleTypes(typeValue, inferredType)
+		if argument, exists := block.arguments[name]; exists && argument.nullable {
+			compatible = typeValue.UnwrapOptional().Equal(inferredType.UnwrapOptional())
+		}
+		if inferredOK && !compatible {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, bind, fmt.Sprintf("parameter $%s declared as %s but used with %s", name, typeValue.String(), inferredType.String())))
 			continue
 		}

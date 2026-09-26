@@ -483,6 +483,9 @@ func (r *jooqRenderer) expr(n antlr.Tree) string {
 		return r.expr(node.Expr()) + ".cast(YdbTypes.BOOL)"
 	case *parser.Bind_parameterContext:
 		key := strings.TrimPrefix(node.GetText(), "$")
+		if strings.HasPrefix(key, "`") && strings.HasSuffix(key, "`") {
+			key = strings.ReplaceAll(key[1:len(key)-1], "``", "`")
+		}
 		pn, ok := r.parameters[key]
 		if !ok {
 			return r.fail(n)

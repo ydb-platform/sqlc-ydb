@@ -28,6 +28,30 @@ public final class Queries {
         }
     }
 
+    // -- name: FindAuthors :many
+    public java.util.List<FindAuthorsRow> findAuthors(long minAuthorId, String filterName) throws java.sql.SQLException {
+        try (var _prepared = client.prepareStatement("""
+            SELECT author_id, name
+            FROM authors
+            WHERE author_id >= ?
+              AND (? IS NULL OR name = ?)
+            ORDER BY author_id;\
+            """)) {
+            _prepared.setObject(1, PrimitiveValue.newUint64(minAuthorId));
+            _prepared.setString(2, filterName);
+            _prepared.setString(3, filterName);
+            try (var _rows = _prepared.executeQuery()) {
+                var _items = new java.util.ArrayList<FindAuthorsRow>();
+                while (_rows.next()) {
+                    long _value0 = _rows.getLong(1);
+                    String _value1 = _rows.getString(2);
+                    _items.add(new FindAuthorsRow(_value0, _value1));
+                }
+                return _items;
+            }
+        }
+    }
+
     // -- name: GetBook :one
     public java.util.Optional<GetBookRow> getBook(long bookId) throws java.sql.SQLException {
         try (var _prepared = client.prepareStatement("""

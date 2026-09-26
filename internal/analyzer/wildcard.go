@@ -28,10 +28,25 @@ type wildcardRewrites struct {
 // Normalize once before any generator so executable SQL fixes the same column
 // order used by row models and positional decoders. The final parse supplies
 // jOOQ with token positions and resolved bindings for the rewritten SQL.
-func analyzeExecutableQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery, []model.Diagnostic) {
+func analyzeExecutableQuery(catalog model.Catalog, block *queryBlock) (model.AnalyzedQuery, []model.Diagnostic) {
 	rewrites := wildcardRewrites{source: block.text, usedEmbeds: map[int]bool{}, usedEmbedArgs: map[int]bool{}}
 	block.wildcards = &rewrites
-	query, diagnostics := analyzeQuery(catalog, block)
+	query, diagnostics := analyzeQuery(catalog, *block)
+	if len(diagnostics) == 0 {
+		for _, parameter := range query.Parameters {
+			if argument, exists := block.arguments[parameter.Name]; exists && argument.nullable && block.parameters[parameter.Name].Kind == "" {
+				if block.assumed == nil {
+					block.assumed = map[string]model.Type{}
+				}
+				block.assumed[parameter.Name] = parameter.Type
+			}
+		}
+		if len(block.assumed) != 0 {
+			rewrites = wildcardRewrites{source: block.text, usedEmbeds: map[int]bool{}, usedEmbedArgs: map[int]bool{}}
+			block.wildcards = &rewrites
+			query, diagnostics = analyzeQuery(catalog, *block)
+		}
+	}
 	if len(diagnostics) != 0 || len(rewrites.replacements) == 0 {
 		return query, diagnostics
 	}
@@ -39,6 +54,7 @@ func analyzeExecutableQuery(catalog model.Catalog, block queryBlock) (model.Anal
 	if err != nil {
 		return query, []model.Diagnostic{{Position: query.Source, Message: fmt.Sprintf("cannot expand query wildcards: %v", err)}}
 	}
+	replacements := rewrites.replacements
 	if len(rewrites.embeds) != 0 && !hasOrderedColumns(query.Syntax.Root.(parser.ISql_queryContext)) {
 		first := strings.IndexByte(sql, '\n')
 		if first < 0 {
@@ -48,12 +64,17 @@ func analyzeExecutableQuery(catalog model.Catalog, block queryBlock) (model.Anal
 		if first > 0 && sql[first-1] == '\r' {
 			newline = "\r\n"
 		}
-		sql = sql[:first+1] + "PRAGMA OrderedColumns;" + newline + sql[first+1:]
+		pragma := "PRAGMA OrderedColumns;" + newline
+		sql = sql[:first+1] + pragma + sql[first+1:]
+		replacements = append([]wildcardReplacement{{start: first + 1, end: first + 1, text: pragma}}, replacements...)
+	}
+	if block.sourceMap != nil {
+		block.sourceMap = &querySourceMap{original: block.text, rewritten: sql, replacements: replacements, parent: block.sourceMap}
 	}
 	block.text = sql
 	block.parsed = nil
 	block.wildcards = nil
-	expanded, diagnostics := analyzeQuery(catalog, block)
+	expanded, diagnostics := analyzeQuery(catalog, *block)
 	if len(diagnostics) == 0 && len(rewrites.embeds) != 0 {
 		if len(query.ResultSets) != 1 || len(expanded.ResultSets) != 1 || len(query.ResultSets[0].Columns) != len(expanded.ResultSets[0].Columns) {
 			return query, []model.Diagnostic{{Position: query.Source, Message: "sqlc.embed expansion changed the result shape"}}

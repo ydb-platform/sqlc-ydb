@@ -28,6 +28,16 @@ type GetAuthorRow struct {
 	Name     string `json:"name"`
 }
 
+type FindAuthorsRow struct {
+	AuthorID uint64 `json:"author_id"`
+	Name     string `json:"name"`
+}
+
+type FindAuthorsParams struct {
+	MinAuthorID uint64  `json:"min_author_id"`
+	FilterName  *string `json:"filter_name"`
+}
+
 type GetBookRow struct {
 	BookID          uint64    `json:"book_id"`
 	AuthorID        uint64    `json:"author_id"`
@@ -175,6 +185,7 @@ type InspectBookTextRow struct {
 
 type Querier interface {
 	GetAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorRow, error)
+	FindAuthors(ctx context.Context, arg FindAuthorsParams, opts ...query.ExecuteOption) ([]FindAuthorsRow, error)
 	GetBook(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetBookRow, error)
 	GetBookAndAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetBookAndAuthorRow, error)
 	DeleteBook(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error

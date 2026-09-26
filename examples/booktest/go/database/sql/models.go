@@ -24,6 +24,16 @@ type GetAuthorRow struct {
 	Name     string
 }
 
+type FindAuthorsRow struct {
+	AuthorID uint64
+	Name     string
+}
+
+type FindAuthorsParams struct {
+	MinAuthorID uint64
+	FilterName  *string
+}
+
 type GetBookRow struct {
 	BookID          uint64
 	AuthorID        uint64

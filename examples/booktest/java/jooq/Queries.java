@@ -33,6 +33,18 @@ public final class Queries {
                 .fetchOptional(mapping(GetAuthorRow::new));
     }
 
+    // -- name: FindAuthors :many
+    public List<FindAuthorsRow> findAuthors(ULong minAuthorId, String filterName) {
+        return dsl.select(AUTHORS.AUTHOR_ID, AUTHORS.NAME)
+                .from(AUTHORS)
+                .where(
+                    AUTHORS.AUTHOR_ID.ge(val(minAuthorId, YdbTypes.UINT64)).and(val(filterName, YdbTypes.UTF8).isNull().or(AUTHORS.NAME.eq(val(filterName, YdbTypes.UTF8))))
+                )
+                .orderBy(AUTHORS.AUTHOR_ID)
+                .coerce(field(name("author_id"), YdbTypes.UINT64), field(name("name"), YdbTypes.UTF8))
+                .fetch(mapping(FindAuthorsRow::new));
+    }
+
     // -- name: GetBook :one
     public Optional<GetBookRow> getBook(ULong bookId) {
         return dsl.select(

@@ -56,6 +56,56 @@ std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
     return sqlc_row;
 }
 
+// -- name: FindAuthors :many
+std::vector<FindAuthorsRow> Queries::FindAuthors(std::uint64_t min_author_id, const std::optional<std::string>& filter_name) const {
+    std::optional<NYdb::TResultSet> sqlc_result_set;
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_params = NYdb::TParamsBuilder()
+            .AddParam("$min_author_id").Uint64(min_author_id).Build()
+            .AddParam("$filter_name").OptionalUtf8(filter_name).Build()
+            .Build();
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            "SELECT author_id, name\n"
+            "FROM authors\n"
+            "WHERE author_id >= $min_author_id\n"
+            "  AND ($`filter_name` IS NULL OR name = $`filter_name`)\n"
+            "ORDER BY author_id;",
+            sqlc_tx,
+            sqlc_params,
+            this->execute_settings_
+        ).GetValueSync();
+        if (sqlc_result.IsSuccess()) {
+            if (sqlc_result.GetResultSets().size() != 1) {
+                throw std::runtime_error("expected exactly one result set");
+            }
+            sqlc_result_set = sqlc_result.GetResultSet(0);
+        }
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+    if (!sqlc_result_set) {
+        throw std::runtime_error("FindAuthors: successful query returned no result set");
+    }
+    NYdb::TResultSetParser sqlc_parser(*sqlc_result_set);
+    std::vector<FindAuthorsRow> sqlc_rows;
+    sqlc_rows.reserve(sqlc_result_set->RowsCount());
+    while (sqlc_parser.TryNextRow()) {
+        sqlc_rows.push_back(FindAuthorsRow{
+            sqlc_parser.ColumnParser("author_id").GetUint64(),
+            sqlc_parser.ColumnParser("name").GetUtf8(),
+        });
+    }
+    return sqlc_rows;
+}
+
 // -- name: GetBook :one
 std::optional<GetBookRow> Queries::GetBook(std::uint64_t book_id) const {
     std::optional<NYdb::TResultSet> sqlc_result_set;

@@ -25,6 +25,30 @@ class Queries(private val client: org.jetbrains.exposed.v1.jdbc.JdbcTransaction)
         }
     }
 
+    // -- name: FindAuthors :many
+    fun findAuthors(minAuthorId: Long, filterName: String?): List<FindAuthorsRow> {
+        val _connection = client.connection.connection as java.sql.Connection
+        _connection.prepareStatement(
+            "SELECT author_id, name\n" +
+            "FROM authors\n" +
+            "WHERE author_id >= ?\n" +
+            "  AND (? IS NULL OR name = ?)\n" +
+            "ORDER BY author_id;").use { _prepared ->
+            _prepared.setObject(1, PrimitiveValue.newUint64(minAuthorId))
+            _prepared.setString(2, filterName)
+            _prepared.setString(3, filterName)
+            _prepared.executeQuery().use { _rows ->
+                val _items = ArrayList<FindAuthorsRow>()
+                while (_rows.next()) {
+                    val _value0: Long = _rows.getLong(1)
+                    val _value1: String = _rows.getString(2)
+                    _items.add(FindAuthorsRow(_value0, _value1))
+                }
+                return _items
+            }
+        }
+    }
+
     // -- name: GetBook :one
     fun getBook(bookId: Long): GetBookRow? {
         val _connection = client.connection.connection as java.sql.Connection

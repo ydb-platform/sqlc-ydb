@@ -41,6 +41,61 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64, opts ...query.Execu
 	return row, nil
 }
 
+// -- name: FindAuthors :many
+func (q *Queries) FindAuthors(ctx context.Context, arg FindAuthorsParams, opts ...query.ExecuteOption) ([]FindAuthorsRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$min_author_id").Uint64(arg.MinAuthorID)
+	parameters = parameters.Param("$filter_name").BeginOptional().Text(arg.FilterName).EndOptional()
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	result, err := q.db.Query(ctx, ""+
+		"SELECT author_id, name\n"+
+		"FROM authors\n"+
+		"WHERE author_id >= $min_author_id\n"+
+		"  AND ($`filter_name` IS NULL OR name = $`filter_name`)\n"+
+		"ORDER BY author_id;",
+		callOptions...,
+	)
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
+	}
+	defer result.Close(ctx)
+
+	resultSet, err := result.NextResultSet(ctx)
+	if errors.Is(err, io.EOF) {
+		return nil, xerrors.WithStackTrace(query.ErrNoResultSets)
+	}
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
+	}
+
+	items := make([]FindAuthorsRow, 0)
+	for r, err := range resultSet.Rows(ctx) {
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+		var row FindAuthorsRow
+		if err := r.ScanNamed(
+			query.Named("author_id", &row.AuthorID),
+			query.Named("name", &row.Name),
+		); err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+		items = append(items, row)
+	}
+
+	_, err = result.NextResultSet(ctx)
+	if err == nil {
+		return nil, xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+	} else if !errors.Is(err, io.EOF) {
+		return nil, xerrors.WithStackTrace(err)
+	}
+
+	return items, nil
+}
+
 // -- name: GetBook :one
 func (q *Queries) GetBook(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetBookRow, error) {
 	parameters := ydb.ParamsBuilder()

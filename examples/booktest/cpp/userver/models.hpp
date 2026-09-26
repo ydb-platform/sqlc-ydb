@@ -32,6 +32,11 @@ struct GetAuthorRow final {
     ::userver::ydb::Utf8 name;
 };
 
+struct FindAuthorsRow final {
+    std::uint64_t author_id;
+    ::userver::ydb::Utf8 name;
+};
+
 struct GetBookRow final {
     std::uint64_t book_id;
     std::uint64_t author_id;

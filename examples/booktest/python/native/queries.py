@@ -42,6 +42,28 @@ class Querier:
             name=row["name"],
         )
 
+    # -- name: FindAuthors :many
+    def find_authors(self, min_author_id: int, filter_name: Optional[str]) -> list[_models.Authors]:
+        parameters = {
+            "$min_author_id": _ydb.TypedValue(min_author_id, _ydb.PrimitiveType.Uint64),
+            "$filter_name": _ydb.TypedValue(filter_name, _ydb.OptionalType(_ydb.PrimitiveType.Utf8)),
+        }
+        result_sets = self._execute(
+            ("SELECT author_id, name\n"
+             "FROM authors\n"
+             "WHERE author_id >= $min_author_id\n"
+             "  AND ($`filter_name` IS NULL OR name = $`filter_name`)\n"
+             "ORDER BY author_id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.Authors(
+            author_id=row["author_id"],
+            name=row["name"],
+        ) for row in rows]
+
     # -- name: GetBook :one
     def get_book(self, book_id: int) -> Optional[_models.Books]:
         parameters = {

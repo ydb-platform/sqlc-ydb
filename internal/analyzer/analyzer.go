@@ -67,14 +67,21 @@ func analyze(ctx context.Context, schema, queries []model.Source, options Option
 				return result, errors.Join(errList...)
 			}
 		}
+		validBlocks := make([]queryBlock, 0, len(allBlocks))
 		for i := range allBlocks {
 			allBlocks[i].parameters = options.Parameters[allBlocks[i].name]
+			macroDiagnostics := lowerSQLCArguments(&allBlocks[i])
+			result.Diagnostics = append(result.Diagnostics, macroDiagnostics...)
+			if len(macroDiagnostics) == 0 {
+				validBlocks = append(validBlocks, allBlocks[i])
+			}
 		}
+		allBlocks = validBlocks
 		if database != nil && len(result.Diagnostics) == 0 {
 			for i := range allBlocks {
 				block := &allBlocks[i]
 				embedded, parseDiagnostics := containsEmbedMacro(block)
-				result.Diagnostics = append(result.Diagnostics, parseDiagnostics...)
+				result.Diagnostics = append(result.Diagnostics, block.originalDiagnostics(parseDiagnostics)...)
 				if len(parseDiagnostics) != 0 || embedded {
 					continue
 				}
@@ -84,7 +91,7 @@ func analyze(ctx context.Context, schema, queries []model.Source, options Option
 					break
 				}
 				validationSQL, validationDiagnostics := queryValidationSQL(*block)
-				result.Diagnostics = append(result.Diagnostics, validationDiagnostics...)
+				result.Diagnostics = append(result.Diagnostics, block.originalDiagnostics(validationDiagnostics)...)
 				if len(validationDiagnostics) != 0 {
 					continue
 				}
@@ -96,17 +103,18 @@ func analyze(ctx context.Context, schema, queries []model.Source, options Option
 		if database != nil && len(result.Diagnostics) == 0 {
 			catalog, diagnostics = databaseCatalog(ctx, database, schema, catalog, allBlocks)
 			result.Catalog = catalog
-			result.Diagnostics = append(result.Diagnostics, diagnostics...)
+			result.Diagnostics = append(result.Diagnostics, originalBlockDiagnostics(allBlocks, diagnostics)...)
 		}
 		if database == nil || len(result.Diagnostics) == 0 {
-			for _, block := range allBlocks {
-				query, queryDiagnostics := analyzeExecutableQuery(catalog, block)
-				result.Diagnostics = append(result.Diagnostics, queryDiagnostics...)
+			for _, originalBlock := range allBlocks {
+				block := originalBlock
+				query, queryDiagnostics := analyzeExecutableQuery(catalog, &block)
+				result.Diagnostics = append(result.Diagnostics, block.originalDiagnostics(queryDiagnostics)...)
 				if len(queryDiagnostics) == 0 {
 					if database != nil && len(query.ResultSets) != 0 && len(query.ResultSets[0].Embeds) != 0 {
 						block.text = query.SQL
 						validationSQL, validationDiagnostics := queryValidationSQL(block)
-						result.Diagnostics = append(result.Diagnostics, validationDiagnostics...)
+						result.Diagnostics = append(result.Diagnostics, block.originalDiagnostics(validationDiagnostics)...)
 						if len(validationDiagnostics) != 0 {
 							continue
 						}
@@ -194,6 +202,9 @@ type queryBlock struct {
 	text            string
 	functions       *builtins.Registry
 	parameters      map[string]model.Type
+	arguments       map[string]sqlcArgument
+	assumed         map[string]model.Type
+	sourceMap       *querySourceMap
 	parsed          *parsedYQL
 	wildcards       *wildcardRewrites
 	tablePathPrefix string

@@ -25,7 +25,7 @@ Macro processing must run once per `sql` entry through `analyzer.Analyze`, befor
 
 Track the macros separately:
 
-1. `sqlc.arg` and `sqlc.narg`: lower to YDB parameters, infer types, preserve `narg` nullability, and diagnose conflicts with declarations or local bindings. Cover repeated uses and preserve existing public parameter names.
+1. `sqlc.arg` and `sqlc.narg`: implemented with YQL parameter lowering, inferred types, nullable `narg` inputs, and conflict diagnostics.
 2. `sqlc.embed`: physical table projections in a single top-level SELECT are implemented with catalog-backed result grouping; nullable outer-join sides and derived sources remain future work.
 3. `sqlc.slice`: define YDB `List<T>` semantics and verify each runtime's binding.
 

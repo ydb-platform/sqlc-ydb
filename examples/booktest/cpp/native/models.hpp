@@ -29,6 +29,11 @@ struct GetAuthorRow final {
     std::string name;
 };
 
+struct FindAuthorsRow final {
+    std::uint64_t author_id;
+    std::string name;
+};
+
 struct GetBookRow final {
     std::uint64_t book_id;
     std::uint64_t author_id;

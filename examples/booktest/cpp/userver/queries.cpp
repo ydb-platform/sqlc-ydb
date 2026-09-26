@@ -27,6 +27,33 @@ std::optional<GetAuthorRow> Queries::GetAuthor(std::uint64_t author_id) const {
     };
 }
 
+// -- name: FindAuthors :many
+std::vector<FindAuthorsRow> Queries::FindAuthors(std::uint64_t min_author_id, const std::optional<::userver::ydb::Utf8>& filter_name) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "SELECT author_id, name\n"
+        "FROM authors\n"
+        "WHERE author_id >= $min_author_id\n"
+        "  AND ($`filter_name` IS NULL OR name = $`filter_name`)\n"
+        "ORDER BY author_id;",
+        ::userver::ydb::Query::Name{"FindAuthors"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    auto sqlc_response =
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$min_author_id", min_author_id, "$filter_name", filter_name)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$min_author_id", min_author_id, "$filter_name", filter_name);
+    auto sqlc_cursor = sqlc_response.GetSingleCursor();
+    std::vector<FindAuthorsRow> sqlc_rows;
+    sqlc_rows.reserve(sqlc_cursor.size());
+    for (auto sqlc_row : sqlc_cursor) {
+        sqlc_rows.push_back(FindAuthorsRow{
+            sqlc_row.Get<std::uint64_t>("author_id"),
+            sqlc_row.Get<::userver::ydb::Utf8>("name"),
+        });
+    }
+    return sqlc_rows;
+}
+
 // -- name: GetBook :one
 std::optional<GetBookRow> Queries::GetBook(std::uint64_t book_id) const {
     const auto sqlc_query = ::userver::ydb::Query{

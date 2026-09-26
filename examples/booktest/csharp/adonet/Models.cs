@@ -24,6 +24,16 @@ public sealed record GetAuthorRow(
     string Name
 );
 
+public sealed record FindAuthorsParams(
+    ulong MinAuthorID,
+    string? FilterName
+);
+
+public sealed record FindAuthorsRow(
+    ulong AuthorID,
+    string Name
+);
+
 public sealed record GetBookRow(
     ulong BookID,
     ulong AuthorID,
