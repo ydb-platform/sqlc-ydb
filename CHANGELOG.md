@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.3.1
+
 ### Added
 
 - Resolve YQL `SELECT * WITHOUT` exclusions before wildcard expansion, including qualified JOIN columns and `IF EXISTS`, across generated runtimes.
