@@ -52,6 +52,35 @@ func (q *Queries) ListAuthors(ctx context.Context) ([]ListAuthorsRow, error) {
 	return items, nil
 }
 
+// -- name: ListAuthorsWithoutBio :many
+func (q *Queries) ListAuthorsWithoutBio(ctx context.Context) ([]ListAuthorsWithoutBioRow, error) {
+	rows, err := q.db.QueryContext(ctx, ""+
+		"SELECT `id`, `name` FROM authors ORDER BY id;",
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []ListAuthorsWithoutBioRow(nil)
+	for rows.Next() {
+		var row ListAuthorsWithoutBioRow
+		if err := rows.Scan(
+			&row.ID,
+			&row.Name,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, row)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
 // -- name: ListAuthorsPage :many
 func (q *Queries) ListAuthorsPage(ctx context.Context, arg ListAuthorsPageParams) ([]ListAuthorsPageRow, error) {
 	rows, err := q.db.QueryContext(ctx, ""+

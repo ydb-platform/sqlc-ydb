@@ -2,6 +2,8 @@
 
 The introductory sqlc workflow: create an author, fetch one row, list rows ordered by name, page through rows ordered by ID, and delete a row. `CreateAuthor` returns the inserted row. `UpsertAuthor` and `GetAuthorName` also demonstrate an idempotent write and a single-column result.
 
+`ListAuthorsWithoutBio` uses `SELECT * WITHOUT bio` to return the author ID and name without loading the nullable biography; the generated row type contains only those selected columns.
+
 Compared with [upstream](../README.md), IDs are explicit `Uint64` inputs rather than `SERIAL`/auto-increment values. YDB's `INSERT ... RETURNING` supplies the created row; there is no `LastInsertId` or `:execresult` contract. `bio` remains nullable. Most queries use named parameters whose types are inferred from their uses.
 
 `FindAuthorsByName` uses the synchronous `by_name` secondary index and fetches `bio` from the base table. `FindAuthorsByNameCovering` uses `by_name_covering`, which includes `bio` in `COVER`; the primary key is included in both indexes automatically. Both queries return the full author row, preserve its nullable biography, and demonstrate qualified and unqualified wildcards with `VIEW`. The covering query declares its parameter explicitly. These queries do not change transaction ownership or consistency settings.

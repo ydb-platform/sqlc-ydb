@@ -34,6 +34,122 @@ func TestAnalyzeExpandsWildcardSQL(t *testing.T) {
 	}
 }
 
+func TestAnalyzeSelectWithout(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, name Utf8 NOT NULL, payload String, PRIMARY KEY(id));"}}
+	for _, tc := range []struct {
+		name, sql, wantSQL string
+		wantNames          []string
+	}{
+		{"unqualified", "SELECT * WITHOUT payload FROM records;", "SELECT `id`, `name` FROM records;", []string{"id", "name"}},
+		{"qualified", "SELECT r.* WITHOUT r.payload FROM records AS r;", "SELECT r.`id` AS `id`, `r`.`name` AS `name` FROM records AS r;", []string{"id", "name"}},
+		{"multiple", "SELECT * WITHOUT name, payload FROM records;", "SELECT `id` FROM records;", []string{"id"}},
+		{"if exists", "SELECT * WITHOUT IF EXISTS missing, payload, payload FROM records;", "SELECT `id`, `name` FROM records;", []string{"id", "name"}},
+		{"trailing comma", "SELECT *, WITHOUT payload FROM records;", "SELECT `id`, `name` FROM records;", []string{"id", "name"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + tc.sql}})
+			require.NoError(t, err)
+			query := result.Queries[0]
+			require.Equal(t, "-- name: Read :many\n"+tc.wantSQL, query.SQL)
+			require.Len(t, query.ResultSets, 1)
+			var names []string
+			for _, column := range query.ResultSets[0].Columns {
+				names = append(names, column.Name)
+			}
+			require.Equal(t, tc.wantNames, names)
+		})
+	}
+}
+
+func TestAnalyzeSelectWithoutJoinsAndExplicitColumns(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, name Utf8 NOT NULL, payload String, PRIMARY KEY(id)); CREATE TABLE details (record_id Uint64 NOT NULL, note Utf8, PRIMARY KEY(record_id));"}}
+	for _, tc := range []struct {
+		name, sql, wantSQL string
+		wantNames          []string
+	}{
+		{
+			"joined qualified exclusion",
+			"SELECT * WITHOUT r.payload FROM records AS r JOIN details AS d ON r.id = d.record_id;",
+			"SELECT `r`.`id` AS `id`, `r`.`name` AS `name`, `d`.`record_id` AS `record_id`, `d`.`note` AS `note` FROM records AS r JOIN details AS d ON r.id = d.record_id;",
+			[]string{"id", "name", "record_id", "note"},
+		},
+		{
+			"qualified wildcard with expression",
+			"SELECT r.*, 3 AS extra WITHOUT r.payload FROM records AS r;",
+			"SELECT r.`id` AS `id`, `r`.`name` AS `name`, 3 AS extra FROM records AS r;",
+			[]string{"id", "name", "extra"},
+		},
+		{
+			"fully excluded leading wildcard",
+			"SELECT r.*, 3 AS extra WITHOUT r.id, r.name, r.payload FROM records AS r;",
+			"SELECT 3 AS extra FROM records AS r;",
+			[]string{"extra"},
+		},
+		{
+			"fully excluded trailing wildcard",
+			"SELECT 3 AS extra, r.* WITHOUT r.id, r.name, r.payload FROM records AS r;",
+			"SELECT 3 AS extra FROM records AS r;",
+			[]string{"extra"},
+		},
+		{
+			"no wildcard remains unchanged",
+			"SELECT name WITHOUT name FROM records;",
+			"SELECT name WITHOUT name FROM records;",
+			[]string{"name"},
+		},
+		{
+			"no wildcard if exists remains unchanged",
+			"SELECT name WITHOUT IF EXISTS missing FROM records;",
+			"SELECT name WITHOUT IF EXISTS missing FROM records;",
+			[]string{"name"},
+		},
+		{
+			"no wildcard ignores unknown exclusion",
+			"SELECT name WITHOUT missing FROM records;",
+			"SELECT name WITHOUT missing FROM records;",
+			[]string{"name"},
+		},
+		{
+			"other join source exclusion",
+			"SELECT d.* WITHOUT r.payload FROM records AS r JOIN details AS d ON r.id = d.record_id;",
+			"SELECT d.`record_id` AS `record_id`, `d`.`note` AS `note` FROM records AS r JOIN details AS d ON r.id = d.record_id;",
+			[]string{"record_id", "note"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + tc.sql}})
+			require.NoError(t, err)
+			require.Equal(t, "-- name: Read :many\n"+tc.wantSQL, result.Queries[0].SQL)
+			var names []string
+			for _, column := range result.Queries[0].ResultSets[0].Columns {
+				names = append(names, column.Name)
+			}
+			require.Equal(t, tc.wantNames, names)
+		})
+	}
+}
+
+func TestAnalyzeSelectWithoutDiagnostics(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, name Utf8 NOT NULL, PRIMARY KEY(id)); CREATE TABLE details (record_id Uint64 NOT NULL, note Utf8, PRIMARY KEY(record_id));"}}
+	for _, tc := range []struct{ name, sql, want string }{
+		{"unknown", "SELECT * WITHOUT missing FROM records;", `unknown SELECT WITHOUT column "missing"`},
+		{"duplicate", "SELECT * WITHOUT name, name FROM records;", `duplicate SELECT WITHOUT column "name"`},
+		{"unknown qualifier", "SELECT * WITHOUT other.name FROM records;", `unknown SELECT WITHOUT column "other.name"`},
+		{"unknown wildcard qualifier", "SELECT x.* WITHOUT x.name FROM records AS r;", `unknown table or alias "x"`},
+		{"unknown column on other join source", "SELECT d.* WITHOUT r.missing FROM records AS r JOIN details AS d ON r.id = d.record_id;", `unknown SELECT WITHOUT column "r.missing"`},
+		{"duplicate column on other join source", "SELECT d.* WITHOUT r.name, r.name FROM records AS r JOIN details AS d ON r.id = d.record_id;", `duplicate SELECT WITHOUT column "r.name"`},
+		{"join requires qualifier", "SELECT * WITHOUT name FROM records AS r JOIN details AS d ON r.id = d.record_id;", `SELECT WITHOUT column "name" in a JOIN requires a table alias`},
+		{"empty result", "SELECT * WITHOUT id, name FROM records;", "generated clients require at least one column"},
+		{"multiple empty wildcards after expression", "SELECT 3 AS keep, r.*, r.* WITHOUT r.id, r.name FROM records AS r;", "multiple wildcard projections"},
+		{"multiple empty wildcards before expression", "SELECT r.*, r.*, 3 AS keep WITHOUT r.id, r.name FROM records AS r;", "multiple wildcard projections"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + tc.sql}})
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
 func TestDatabaseWildcardExpansionPreservesCatalogOrderAndValidationSQL(t *testing.T) {
 	for _, local := range []bool{false, true} {
 		t.Run(map[bool]string{false: "discovery", true: "local"}[local], func(t *testing.T) {

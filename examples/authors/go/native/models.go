@@ -19,6 +19,11 @@ type ListAuthorsRow struct {
 	Bio  *string `json:"bio"`
 }
 
+type ListAuthorsWithoutBioRow struct {
+	ID   uint64 `json:"id"`
+	Name string `json:"name"`
+}
+
 type ListAuthorsPageRow struct {
 	ID   uint64  `json:"id"`
 	Name string  `json:"name"`
@@ -96,6 +101,7 @@ type EchoAuthorIDTextRow struct {
 type Querier interface {
 	GetAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorRow, error)
 	ListAuthors(ctx context.Context, opts ...query.ExecuteOption) ([]ListAuthorsRow, error)
+	ListAuthorsWithoutBio(ctx context.Context, opts ...query.ExecuteOption) ([]ListAuthorsWithoutBioRow, error)
 	ListAuthorsPage(ctx context.Context, arg ListAuthorsPageParams, opts ...query.ExecuteOption) ([]ListAuthorsPageRow, error)
 	GetAuthorName(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorNameRow, error)
 	CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts ...query.ExecuteOption) (CreateAuthorRow, error)

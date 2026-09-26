@@ -24,14 +24,15 @@ func TestGeneratedExample(t *testing.T) {
 	ctx := db.Context
 	n, s := native.New(db.Native), sq.New(db.SQL)
 	for _, tc := range []struct {
-		name       string
-		create     func(uint64, string, *string) (string, *string, error)
-		put        func(uint64, string, *string) error
-		get        func(uint64) (string, *string, error)
-		projection func(uint64) (string, error)
-		echo       func(string) (string, error)
-		list       func() (int, error)
-		remove     func(uint64) error
+		name           string
+		create         func(uint64, string, *string) (string, *string, error)
+		put            func(uint64, string, *string) error
+		get            func(uint64) (string, *string, error)
+		projection     func(uint64) (string, error)
+		echo           func(string) (string, error)
+		list           func() (int, error)
+		listWithoutBio func() ([]uint64, error)
+		remove         func(uint64) error
 	}{
 		{"native",
 			func(id uint64, name string, bio *string) (string, *string, error) {
@@ -45,6 +46,14 @@ func TestGeneratedExample(t *testing.T) {
 			func(id uint64) (string, error) { r, e := n.GetAuthorName(ctx, id); return r.Name, e },
 			func(id string) (string, error) { r, e := n.EchoAuthorIDText(ctx, id); return r.AuthorIDText, e },
 			func() (int, error) { r, e := n.ListAuthors(ctx); return len(r), e },
+			func() ([]uint64, error) {
+				rows, err := n.ListAuthorsWithoutBio(ctx)
+				var ids []uint64
+				for _, row := range rows {
+					ids = append(ids, row.ID)
+				}
+				return ids, err
+			},
 			func(id uint64) error { return n.DeleteAuthor(ctx, id) },
 		},
 		{"database/sql",
@@ -59,6 +68,14 @@ func TestGeneratedExample(t *testing.T) {
 			func(id uint64) (string, error) { r, e := s.GetAuthorName(ctx, id); return r.Name, e },
 			func(id string) (string, error) { r, e := s.EchoAuthorIDText(ctx, id); return r.AuthorIDText, e },
 			func() (int, error) { r, e := s.ListAuthors(ctx); return len(r), e },
+			func() ([]uint64, error) {
+				rows, err := s.ListAuthorsWithoutBio(ctx)
+				var ids []uint64
+				for _, row := range rows {
+					ids = append(ids, row.ID)
+				}
+				return ids, err
+			},
 			func(id uint64) error { return s.DeleteAuthor(ctx, id) },
 		},
 	} {
@@ -87,6 +104,9 @@ func TestGeneratedExample(t *testing.T) {
 			count, err := tc.list()
 			require.NoError(t, err)
 			require.Equal(t, 1, count)
+			ids, err := tc.listWithoutBio()
+			require.NoError(t, err)
+			require.Equal(t, []uint64{id}, ids)
 			require.NoError(t, tc.remove(id))
 			_, _, err = tc.get(id)
 			require.Error(t, err, "expected missing-row error")

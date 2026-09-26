@@ -69,6 +69,25 @@ public sealed class Queries
         reader.IsDBNull(2) ? null : reader.GetFieldValue<string>(2)
     );
 
+    // -- name: ListAuthorsWithoutBio :many
+    public async Task<IReadOnlyList<ListAuthorsWithoutBioRow>> ListAuthorsWithoutBioAsync(CancellationToken cancellationToken = default)
+    {
+        await using var command = new YdbCommand(
+            "SELECT `id`, `name` FROM authors ORDER BY id;", _connection) { Transaction = _transaction };
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        var rows = new List<ListAuthorsWithoutBioRow>();
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            rows.Add(ListAuthorsWithoutBioRowFrom(reader));
+        }
+        return rows;
+    }
+
+    private static ListAuthorsWithoutBioRow ListAuthorsWithoutBioRowFrom(DbDataReader reader) => new(
+        reader.GetFieldValue<ulong>(0),
+        reader.GetFieldValue<string>(1)
+    );
+
     // -- name: ListAuthorsPage :many
     public async Task<IReadOnlyList<ListAuthorsPageRow>> ListAuthorsPageAsync(ListAuthorsPageParams args, CancellationToken cancellationToken = default)
     {

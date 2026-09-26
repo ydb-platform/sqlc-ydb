@@ -50,6 +50,24 @@ class Querier:
         finally:
             cursor.close()
 
+    # -- name: ListAuthorsWithoutBio :many
+    def list_authors_without_bio(self) -> list[_models.ListAuthorsWithoutBioRow]:
+        parameters = {
+        }
+        cursor = self._connection.cursor()
+        try:
+            cursor.execute(
+                ("SELECT `id`, `name` FROM authors ORDER BY id;"),
+                parameters,
+            )
+            rows = cursor.fetchall()
+            return [_models.ListAuthorsWithoutBioRow(
+                id=row[0],
+                name=row[1],
+            ) for row in rows]
+        finally:
+            cursor.close()
+
     # -- name: ListAuthorsPage :many
     def list_authors_page(self, page_size: int, offset: int) -> list[_models.Authors]:
         parameters = {

@@ -54,6 +54,25 @@ class Querier:
             bio=row._mapping["bio"],
         ) for row in rows]
 
+    # -- name: ListAuthorsWithoutBio :many
+    def list_authors_without_bio(self) -> list[_models.ListAuthorsWithoutBioRow]:
+        parameters = {
+        }
+        result = self._connection.execute(
+            _text(
+                ("SELECT `id`, `name` FROM authors ORDER BY id;")
+            ),
+            parameters,
+        )
+        try:
+            rows = result.fetchall()
+        finally:
+            result.close()
+        return [_models.ListAuthorsWithoutBioRow(
+            id=row._mapping["id"],
+            name=row._mapping["name"],
+        ) for row in rows]
+
     # -- name: ListAuthorsPage :many
     def list_authors_page(self, page_size: int, offset: int) -> list[_models.Authors]:
         parameters = {

@@ -44,6 +44,24 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
             .collect()
     }
 
+    // -- name: ListAuthorsWithoutBio :many
+    #[builder(on(String, into))]
+    pub async fn list_authors_without_bio(
+        &mut self,
+    ) -> ydb::YdbResult<Vec<ListAuthorsWithoutBioRow>> {
+        self.client
+            .query_result_set("SELECT `id`, `name` FROM authors ORDER BY id;")
+            .await?
+            .rows()
+            .map(|mut row| {
+                Ok(ListAuthorsWithoutBioRow {
+                    id: row.remove_field(0)?.try_into()?,
+                    name: row.remove_field(1)?.try_into()?,
+                })
+            })
+            .collect()
+    }
+
     // -- name: ListAuthorsPage :many
     #[builder(on(String, into))]
     pub async fn list_authors_page(

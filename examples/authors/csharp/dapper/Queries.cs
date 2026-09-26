@@ -108,6 +108,21 @@ public sealed class Queries
         return (await _connection.QueryAsync<ListAuthorsRow>(command).ConfigureAwait(false)).AsList();
     }
 
+    // -- name: ListAuthorsWithoutBio :many
+    public async Task<IReadOnlyList<ListAuthorsWithoutBioRow>> ListAuthorsWithoutBioAsync(CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var command = new CommandDefinition(
+            commandText: """
+            SELECT `id`, `name` FROM authors ORDER BY id;
+            """,
+            parameters: null,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        return (await _connection.QueryAsync<ListAuthorsWithoutBioRow>(command).ConfigureAwait(false)).AsList();
+    }
+
     // -- name: ListAuthorsPage :many
     public async Task<IReadOnlyList<ListAuthorsPageRow>> ListAuthorsPageAsync(ListAuthorsPageParams args, CancellationToken cancellationToken = default, int? commandTimeout = null)
     {

@@ -15,6 +15,11 @@ type ListAuthorsRow struct {
 	Bio  *string
 }
 
+type ListAuthorsWithoutBioRow struct {
+	ID   uint64
+	Name string
+}
+
 type ListAuthorsPageRow struct {
 	ID   uint64
 	Name string

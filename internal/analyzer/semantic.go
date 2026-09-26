@@ -892,8 +892,10 @@ func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContex
 	var diagnostics []model.Diagnostic
 	var unnamed []implicitProjection
 	hasWildcard := false
-	if selectCore.Without_column_list() != nil {
-		return nil, []model.Diagnostic{diagnosticAt(block.file, block.line-1, selectCore.Without_column_list(), "SELECT WITHOUT is not yet supported")}
+	emptyWildcards := 0
+	excluded, withoutDiagnostics := selectWithoutColumns(block, selectCore, relations)
+	if len(withoutDiagnostics) != 0 {
+		return nil, withoutDiagnostics
 	}
 	for ordinal, result := range selectCore.AllResult_column() {
 		if result.ASTERISK() != nil {
@@ -907,6 +909,9 @@ func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContex
 				}
 				matched = true
 				for _, column := range rel.table.Columns {
+					if excluded[withoutColumn{rel.alias, column.Name}] {
+						continue
+					}
 					columns = append(columns, joinedColumn(column, rel.optional))
 					expression := quotedYQLIdentifier(column.Name)
 					if prefix != "" || len(relations) > 1 {
@@ -924,7 +929,12 @@ func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContex
 			if !matched {
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, result, fmt.Sprintf("unknown table or alias %q", prefix)))
 			} else if block.wildcards != nil {
-				block.wildcards.add(result.ASTERISK().GetSymbol(), expressions)
+				if len(expressions) == 0 {
+					emptyWildcards++
+					block.wildcards.removeResultColumn(selectCore, ordinal)
+				} else {
+					block.wildcards.add(result.ASTERISK().GetSymbol(), expressions)
+				}
 			}
 			continue
 		}
@@ -972,6 +982,12 @@ func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContex
 		}
 		columns = append(columns, column)
 	}
+	if selectCore.Without_column_list() != nil && len(columns) == 0 {
+		diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, selectCore.Without_column_list(), "SELECT WITHOUT removes every result column; generated clients require at least one column"))
+	}
+	if emptyWildcards > 1 {
+		diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, selectCore.Without_column_list(), "SELECT WITHOUT removes every column from multiple wildcard projections; select explicit columns"))
+	}
 	if block.wildcards != nil && len(block.wildcards.embeds) != 0 {
 		if len(unnamed) != 0 {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, selectCore, "sqlc.embed with computed result expressions requires explicit AS aliases"))
@@ -989,6 +1005,81 @@ func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContex
 		nameImplicitProjections(columns, unnamed, hasWildcard, block.wildcards)
 	}
 	return columns, diagnostics
+}
+
+type withoutColumn struct{ alias, column string }
+
+func selectWithoutColumns(block queryBlock, core *parser.Select_coreContext, relations []relation) (map[withoutColumn]bool, []model.Diagnostic) {
+	list := core.Without_column_list()
+	if list == nil {
+		return nil, nil
+	}
+	ifExists := core.IF() != nil
+	candidates := map[withoutColumn]bool{}
+	for _, result := range core.AllResult_column() {
+		if result.ASTERISK() == nil {
+			continue
+		}
+		prefix := identifier(strings.TrimSuffix(result.Opt_id_prefix().GetText(), "."))
+		for _, rel := range relations {
+			if prefix != "" && prefix != rel.alias {
+				continue
+			}
+			for _, column := range rel.table.Columns {
+				candidates[withoutColumn{rel.alias, column.Name}] = true
+			}
+		}
+	}
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+	available := map[withoutColumn]bool{}
+	for _, rel := range relations {
+		for _, column := range rel.table.Columns {
+			available[withoutColumn{rel.alias, column.Name}] = true
+		}
+	}
+	excluded := map[withoutColumn]bool{}
+	seen := map[withoutColumn]bool{}
+	var diagnostics []model.Diagnostic
+	for _, name := range list.AllWithout_column_name() {
+		qualifier, column := "", ""
+		if name.DOT() != nil {
+			qualifier, column = identifier(name.An_id(0).GetText()), identifier(name.An_id(1).GetText())
+		} else {
+			column = identifier(name.An_id_without().GetText())
+		}
+		if qualifier == "" && len(relations) > 1 {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, name, fmt.Sprintf("SELECT WITHOUT column %q in a JOIN requires a table alias", column)))
+			continue
+		}
+		var match withoutColumn
+		for key := range available {
+			if key.column != column || qualifier != "" && qualifier != key.alias {
+				continue
+			}
+			match = key
+			break
+		}
+		if match.column == "" {
+			if !ifExists {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, name, fmt.Sprintf("unknown SELECT WITHOUT column %q", name.GetText())))
+			}
+		} else if seen[match] {
+			if !ifExists {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, name, fmt.Sprintf("duplicate SELECT WITHOUT column %q", name.GetText())))
+			}
+		} else {
+			seen[match] = true
+			if candidates[match] {
+				excluded[match] = true
+			}
+		}
+	}
+	if len(diagnostics) == 0 && block.wildcards != nil {
+		block.wildcards.addWithout(core)
+	}
+	return excluded, diagnostics
 }
 
 func expressionColumn(expr parser.IExprContext, relations []relation, declared map[string]model.Type, grouped bool, functions *builtins.Registry, lambdas map[string]lambdaBinding) (model.Column, bool, error) {

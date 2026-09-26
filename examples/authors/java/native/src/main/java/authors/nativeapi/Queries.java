@@ -52,6 +52,24 @@ public final class Queries {
         return _items;
     }
 
+    // -- name: ListAuthorsWithoutBio :many
+    public java.util.List<ListAuthorsWithoutBioRow> listAuthorsWithoutBio() {
+        var _params = Params.create();
+        var _query = QueryReader.readFrom(
+                client.createQuery("""
+                    SELECT `id`, `name` FROM authors ORDER BY id;\
+                    """, _params)).join().getValue();
+        if (_query.getResultSetCount() != 1) throw new IllegalStateException("Expected one result set");
+        var _rows = _query.getResultSet(0);
+        var _items = new java.util.ArrayList<ListAuthorsWithoutBioRow>();
+        while (_rows.next()) {
+            long _value0 = _rows.getColumn(0).getUint64();
+            String _value1 = _rows.getColumn(1).getText();
+            _items.add(new ListAuthorsWithoutBioRow(_value0, _value1));
+        }
+        return _items;
+    }
+
     // -- name: ListAuthorsPage :many
     public java.util.List<ListAuthorsPageRow> listAuthorsPage(int pageSize, long offset) {
         if (offset < 0 || offset > 4294967295L) throw new IllegalArgumentException("parameter $offset is outside Uint32 range");

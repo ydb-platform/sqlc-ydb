@@ -71,6 +71,29 @@ class Queries {
         return _items
     }
 
+    // -- name: ListAuthorsWithoutBio :many
+    fun listAuthorsWithoutBio(): List<ListAuthorsWithoutBioRow> {
+        val _params = Params.create()
+        val _query = if (transaction != null) {
+            QueryReader.readFrom(transaction.createQuery(
+                "SELECT `id`, `name` FROM authors ORDER BY id;", _params)).join().getValue()
+        } else {
+            client!!.supplyResult { _session ->
+                QueryReader.readFrom(_session.createQuery(
+                    "SELECT `id`, `name` FROM authors ORDER BY id;", TxMode.SERIALIZABLE_RW, _params))
+            }.join().getValue()
+        }
+        kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
+        val _rows = _query.getResultSet(0)
+        val _items = ArrayList<ListAuthorsWithoutBioRow>()
+        while (_rows.next()) {
+            val _value0: Long = _rows.getColumn(0).getUint64()
+            val _value1: String = _rows.getColumn(1).getText()
+            _items.add(ListAuthorsWithoutBioRow(_value0, _value1))
+        }
+        return _items
+    }
+
     // -- name: ListAuthorsPage :many
     fun listAuthorsPage(pageSize: Int, offset: Long): List<ListAuthorsPageRow> {
         kotlin.require(offset >= 0 && offset <= 4294967295L) { "parameter \$offset is outside Uint32 range" }

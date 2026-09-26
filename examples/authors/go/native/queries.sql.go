@@ -85,6 +85,50 @@ func (q *Queries) ListAuthors(ctx context.Context, opts ...query.ExecuteOption) 
 	return items, nil
 }
 
+// -- name: ListAuthorsWithoutBio :many
+func (q *Queries) ListAuthorsWithoutBio(ctx context.Context, opts ...query.ExecuteOption) ([]ListAuthorsWithoutBioRow, error) {
+	result, err := q.db.Query(ctx, ""+
+		"SELECT `id`, `name` FROM authors ORDER BY id;",
+		opts...,
+	)
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
+	}
+	defer result.Close(ctx)
+
+	resultSet, err := result.NextResultSet(ctx)
+	if errors.Is(err, io.EOF) {
+		return nil, xerrors.WithStackTrace(query.ErrNoResultSets)
+	}
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
+	}
+
+	items := make([]ListAuthorsWithoutBioRow, 0)
+	for r, err := range resultSet.Rows(ctx) {
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+		var row ListAuthorsWithoutBioRow
+		if err := r.ScanNamed(
+			query.Named("id", &row.ID),
+			query.Named("name", &row.Name),
+		); err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+		items = append(items, row)
+	}
+
+	_, err = result.NextResultSet(ctx)
+	if err == nil {
+		return nil, xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+	} else if !errors.Is(err, io.EOF) {
+		return nil, xerrors.WithStackTrace(err)
+	}
+
+	return items, nil
+}
+
 // -- name: ListAuthorsPage :many
 func (q *Queries) ListAuthorsPage(ctx context.Context, arg ListAuthorsPageParams, opts ...query.ExecuteOption) ([]ListAuthorsPageRow, error) {
 	parameters := ydb.ParamsBuilder()

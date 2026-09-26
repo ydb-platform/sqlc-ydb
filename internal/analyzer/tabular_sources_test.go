@@ -188,7 +188,6 @@ func TestTabularSourceDiagnostics(t *testing.T) {
 		{"SELECT r.id FROM records AS r JOIN (SELECT id FROM records) ON r.id = id;", "derived SELECT requires an explicit alias"},
 		{"SELECT r.id FROM records AS r JOIN (VALUES (1u)) AS v ON r.id = v.column0;", "unsupported FROM or JOIN source"},
 		{"SELECT id FROM records WITH (FORCE_INDEX = idx);", "table hints and sampling are not yet supported"},
-		{"SELECT id WITHOUT id FROM records;", "SELECT WITHOUT is not yet supported"},
 	} {
 		result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + tc.sql}})
 		require.Error(t, err)
