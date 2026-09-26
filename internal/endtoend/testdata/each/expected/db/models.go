@@ -13,6 +13,16 @@ type VisitDevicesParams struct {
 	MaxID uint64 `json:"max_id"`
 }
 
+type VisitNamedDevicesRow struct {
+	ID   uint64  `json:"id"`
+	Name *string `json:"name"`
+}
+
+type VisitNamedDevicesParams struct {
+	MinName *string `json:"min_name"`
+	MaxName *string `json:"max_name"`
+}
+
 type VisitFromRow struct {
 	ID   uint64  `json:"id"`
 	Name *string `json:"name"`
@@ -30,6 +40,7 @@ type PutDevicesDevicesItem struct {
 
 type Querier interface {
 	VisitDevices(ctx context.Context, arg VisitDevicesParams, consume func(VisitDevicesRow) error) error
+	VisitNamedDevices(ctx context.Context, arg VisitNamedDevicesParams, consume func(VisitNamedDevicesRow) error) error
 	VisitFrom(ctx context.Context, arg uint64, consume func(VisitFromRow) error) error
 	VisitAll(ctx context.Context, consume func(VisitAllRow) error) error
 	PutDevices(ctx context.Context, arg []PutDevicesDevicesItem) error

@@ -81,6 +81,8 @@ func TestAnalyzeInfersDirectBetweenBounds(t *testing.T) {
 		{"update", `UPDATE records SET label = "matched"u WHERE id BETWEEN $low AND $high RETURNING id;`, []model.Parameter{{Name: "low", Type: model.Type{Kind: "Uint64"}}, {Name: "high", Type: model.Type{Kind: "Uint64"}}}},
 		{"symmetric", `SELECT id FROM records WHERE id BETWEEN SYMMETRIC $low AND $high;`, []model.Parameter{{Name: "low", Type: model.Type{Kind: "Uint64"}}, {Name: "high", Type: model.Type{Kind: "Uint64"}}}},
 		{"asymmetric", `SELECT id FROM records WHERE id BETWEEN ASYMMETRIC $low AND $high;`, []model.Parameter{{Name: "low", Type: model.Type{Kind: "Uint64"}}, {Name: "high", Type: model.Type{Kind: "Uint64"}}}},
+		{"wrapped column", `SELECT id FROM records WHERE (id) BETWEEN $low AND $high;`, []model.Parameter{{Name: "low", Type: model.Type{Kind: "Uint64"}}, {Name: "high", Type: model.Type{Kind: "Uint64"}}}},
+		{"wrapped bounds", `SELECT id FROM records WHERE id BETWEEN ($low) AND ($high);`, []model.Parameter{{Name: "low", Type: model.Type{Kind: "Uint64"}}, {Name: "high", Type: model.Type{Kind: "Uint64"}}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Rows :many\n" + tc.sql}})
@@ -95,6 +97,7 @@ func TestAnalyzeBetweenInferencePreservesTypeConstraints(t *testing.T) {
 	for _, tc := range []struct{ name, sql, want string }{
 		{"declared conflict", `DECLARE $low AS Utf8; SELECT id FROM records WHERE id BETWEEN $low AND 10u;`, "parameter $low declared as Utf8 but used with Uint64"},
 		{"inferred conflict", `SELECT id FROM records WHERE id BETWEEN $bound AND 10u AND label BETWEEN $bound AND "z"u;`, "external parameter $bound has incompatible inferred types"},
+		{"mixed-use conflict", `SELECT id FROM records WHERE id BETWEEN $bound AND 10u AND label = $bound;`, "external parameter $bound has incompatible inferred types"},
 		{"computed left", `SELECT id FROM records WHERE id + 1u BETWEEN $low AND $high;`, "cannot resolve type of external parameter $low; add DECLARE"},
 		{"ambiguous left", `SELECT a.id FROM records AS a JOIN records AS b ON id BETWEEN $low AND $high;`, `ambiguous column "id"`},
 	} {

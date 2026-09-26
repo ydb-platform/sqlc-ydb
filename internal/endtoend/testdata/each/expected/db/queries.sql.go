@@ -23,8 +23,6 @@ func (q *Queries) VisitDevices(ctx context.Context, arg VisitDevicesParams, cons
 	defer cancel()
 
 	rows, err := q.db.QueryContext(ctx, ""+
-		"DECLARE $min_id AS Uint64;\n"+
-		"DECLARE $max_id AS Uint64;\n"+
 		"SELECT id, name\n"+
 		"FROM devices\n"+
 		"WHERE id BETWEEN $min_id AND $max_id\n"+
@@ -57,6 +55,82 @@ func (q *Queries) VisitDevices(ctx context.Context, arg VisitDevicesParams, cons
 			return err
 		}
 		var row VisitDevicesRow
+		if err := rows.Scan(
+			&row.ID,
+			&row.Name,
+		); err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := consume(row); err != nil {
+			return err
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if rows.NextResultSet() {
+		return errors.New(":each requires exactly one result set")
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	exhausted = true
+
+	return nil
+}
+
+// -- name: VisitNamedDevices :each
+func (q *Queries) VisitNamedDevices(ctx context.Context, arg VisitNamedDevicesParams, consume func(VisitNamedDevicesRow) error) (err error) {
+	if consume == nil {
+		return errors.New("VisitNamedDevices: :each requires a non-nil callback")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	rows, err := q.db.QueryContext(ctx, ""+
+		"SELECT id, name\n"+
+		"FROM devices\n"+
+		"WHERE name BETWEEN $min_name AND $max_name\n"+
+		"ORDER BY id;",
+		sql.Named("min_name", arg.MinName),
+		sql.Named("max_name", arg.MaxName),
+	)
+	if err != nil {
+		return err
+	}
+	exhausted := false
+	defer func() {
+		// Cancel an unfinished stream before Close so early exit does not drain it.
+		if !exhausted {
+			cancel()
+		}
+		err = errors.Join(err, rows.Close())
+	}()
+
+	columns, err := rows.Columns()
+	if err != nil {
+		return err
+	}
+	if len(columns) == 0 {
+		return errors.New(":each requires a result set with columns")
+	}
+
+	for rows.Next() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		var row VisitNamedDevicesRow
 		if err := rows.Scan(
 			&row.ID,
 			&row.Name,

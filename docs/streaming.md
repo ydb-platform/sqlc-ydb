@@ -8,13 +8,13 @@ For a table with `id Uint64 NOT NULL` and nullable `name Utf8`, `queries.sql` ca
 
 ```sql
 -- name: VisitDevices :each
-DECLARE $min_id AS Uint64;
-DECLARE $max_id AS Uint64;
 SELECT id, name
 FROM devices
 WHERE id BETWEEN $min_id AND $max_id
 ORDER BY id;
 ```
+
+The analyzer infers the bounds' `Uint64` types from `id`, so this query does not need `DECLARE` statements for them.
 
 The generated types are:
 

@@ -1174,7 +1174,7 @@ func inferFromComparisons(root antlr.Tree, relations []relation, inferred map[st
 		case *parser.Xor_subexprContext:
 			if condition := node.Cond_expr(); condition != nil && condition.BETWEEN() != nil {
 				refs := columnRefs(node.Eq_subexpr())
-				if len(refs) != 1 || node.Eq_subexpr().GetText() != refs[0].ctx.GetText() {
+				if len(refs) != 1 || !sameOrWrappedExpression(node.Eq_subexpr(), refs[0].ctx) {
 					return
 				}
 				column, err := resolveColumn(relations, refs[0])
@@ -1182,9 +1182,11 @@ func inferFromComparisons(root antlr.Tree, relations []relation, inferred map[st
 					return
 				}
 				for _, bound := range condition.AllEq_subexpr() {
-					if bind := directBind(bound); bind != nil {
-						inferParameter(inferred, bindName(bind), column.Type)
-					}
+					scopeDescendants(bound, func(node antlr.Tree) {
+						if bind, ok := node.(parser.IBind_parameterContext); ok && sameOrWrappedExpression(bound, bind) {
+							inferParameter(inferred, bindName(bind), column.Type)
+						}
+					})
 				}
 				return
 			}
