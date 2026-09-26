@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -182,6 +183,18 @@ func TestEmbeddedResultUsesTableDTOsAndPhysicalWireOrder(t *testing.T) {
 
 	a.Queries[0].ResultSets[0].Embeds[1].Field = "books"
 	_, err = Generate(a, Options{})
+	require.ErrorContains(t, err, "property name collision")
+}
+
+func TestEmbeddedResultRejectsInconsistentAnalysis(t *testing.T) {
+	u64 := model.Type{Kind: "Uint64"}
+	a := &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "books", Columns: []model.Column{{Name: "id", Type: u64}}}}}, Queries: []model.AnalyzedQuery{{Name: "Read", Command: model.One, SQL: "SELECT id FROM books;", ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Int64"}}}, Embeds: []model.Embedding{{Start: 0, End: 1, Table: "books", Field: "books"}}}}}}}
+	_, err := Generate(a, Options{})
+	require.ErrorContains(t, err, `embedded table "books" does not match projected columns`)
+
+	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE books (id Uint64 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\nSELECT sqlc.embed(b), b.id AS books FROM books AS b;"}})
+	require.NoError(t, err)
+	_, err = Generate(analysis, Options{})
 	require.ErrorContains(t, err, "property name collision")
 }
 

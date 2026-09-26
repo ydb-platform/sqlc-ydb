@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -63,6 +64,13 @@ func TestAnalyzeRejectsUnsupportedEmbedForms(t *testing.T) {
 	}
 }
 
+func TestAnalyzeRejectsEmbedsWithMatchingTableBaseNames(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE `/one/books` (id Uint64 NOT NULL, PRIMARY KEY(id)); CREATE TABLE `/two/books` (id Uint64 NOT NULL, PRIMARY KEY(id));"}}
+	query := "-- name: Read :many\nSELECT sqlc.embed(a), sqlc.embed(b) FROM `/one/books` AS a JOIN `/two/books` AS b ON a.id = b.id;"
+	_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
+	require.ErrorContains(t, err, `repeats logical result field "books"`)
+}
+
 func TestAnalyzeEmbeddedEachAndLiteralText(t *testing.T) {
 	query := "-- name: Read :each\nSELECT 'sqlc.embed(b)' AS literal, sqlc.embed(b) FROM books b /* sqlc.embed(a) */;"
 	result, err := Analyze(embedSchema, []model.Source{{Name: "query.sql", Text: query}})
@@ -122,4 +130,25 @@ func TestDatabaseValidatesExpandedEmbeddedSQL(t *testing.T) {
 	require.Contains(t, database.validated[0], "PRAGMA OrderedColumns;")
 	require.True(t, strings.Contains(database.validated[0], "__sqlc_embed_0_0"))
 	require.Equal(t, database.validated[0], result.Queries[0].SQL)
+}
+
+func TestDatabaseReportsInvalidEmbedSyntaxBeforeValidation(t *testing.T) {
+	database := &fakeAnalysisDatabase{}
+	query := "-- name: Read :many\nSELECT sqlc.embed(b) FROM books AS b WHERE ("
+	_, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: query}}, Options{}, database)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "query.sql:2:")
+	require.Empty(t, database.validated)
+	require.Empty(t, database.described)
+}
+
+func TestDatabaseReportsExpandedEmbedValidationFailure(t *testing.T) {
+	database := &fakeAnalysisDatabase{tables: map[string]model.Table{
+		"books": {Name: "books", Columns: []model.Column{{Name: "book_id", Type: model.Type{Kind: "Uint64"}, Table: "books"}}, PrimaryKey: []string{"book_id"}},
+	}, validateError: errors.New("rejected expanded query")}
+	query := "-- name: Read :many\nSELECT sqlc.embed(b) FROM books AS b;"
+	_, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: query}}, Options{}, database)
+	require.ErrorContains(t, err, "database query validation failed: rejected expanded query")
+	require.Len(t, database.validated, 1)
+	require.Contains(t, database.validated[0], "__sqlc_embed_0_0")
 }

@@ -106,7 +106,13 @@ func databaseTableReferences(blocks []queryBlock) ([]databaseTableReference, []m
 	seen := map[string]bool{}
 	for i := range blocks {
 		block := &blocks[i]
-		parsed, parseDiagnostics := parseYQL(block.file, block.text, block.line-1)
+		var parsed parsedYQL
+		var parseDiagnostics []model.Diagnostic
+		if block.parsed == nil {
+			parsed, parseDiagnostics = parseYQL(block.file, block.text, block.line-1)
+		} else {
+			parsed = *block.parsed
+		}
 		diagnostics = append(diagnostics, parseDiagnostics...)
 		if len(parseDiagnostics) != 0 {
 			continue

@@ -95,6 +95,29 @@ FROM books b JOIN authors a ON b.author_id = a.author_id;`}}
 	}
 }
 
+func TestEmbeddedCppNamesRejectInvalidOrCollidingModels(t *testing.T) {
+	for _, tc := range []struct{ schema, query, diagnostic string }{
+		{"CREATE TABLE `1books` (id Uint64 NOT NULL, PRIMARY KEY(id));", "-- name: Read :many\nSELECT sqlc.embed(b) FROM `1books` AS b;", `invalid embedded C++ model "1books"`},
+		{"CREATE TABLE books (id Uint64 NOT NULL, PRIMARY KEY(id));", "-- name: Books :many\nSELECT sqlc.embed(b) FROM books AS b;", `query name "Books" collides with generated row type`},
+		{"CREATE TABLE books (id Uint64 NOT NULL, PRIMARY KEY(id));", "-- name: Read :many\nSELECT sqlc.embed(b), b.id AS books FROM books AS b;", `duplicate C++ result column "books"`},
+	} {
+		a, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: tc.schema}}, []model.Source{{Name: "query.sql", Text: tc.query}})
+		require.NoError(t, err)
+		_, err = Generate(a, Options{})
+		require.ErrorContains(t, err, tc.diagnostic)
+	}
+}
+
+func TestCppEmbeddedModelIsEmittedOnceAcrossQueries(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE books (id Uint64 NOT NULL, PRIMARY KEY(id));"}}
+	queries := []model.Source{{Name: "query.sql", Text: "-- name: First :many\nSELECT sqlc.embed(b) FROM books AS b;\n-- name: Second :many\nSELECT sqlc.embed(b) FROM books AS b;"}}
+	a, err := analyzer.Analyze(schema, queries)
+	require.NoError(t, err)
+	files, err := Generate(a, Options{})
+	require.NoError(t, err)
+	require.Equal(t, 1, strings.Count(generatedContent(t, files, "models.hpp"), "struct Books final"))
+}
+
 func TestGenerateNativeYDBAuthorsAPI(t *testing.T) {
 	files, err := Generate(authorsAnalysis(), Options{Namespace: "example::authors", Runtime: "ydb"})
 	require.NoError(t, err)

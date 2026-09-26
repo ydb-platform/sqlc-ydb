@@ -115,6 +115,18 @@ func TestEmbeddedResultKeepsWireKeysSeparateFromNestedRow(t *testing.T) {
 	require.ErrorContains(t, err, "embedded field name collision")
 }
 
+func TestEmbeddedResultRejectsInconsistentAnalysis(t *testing.T) {
+	u64 := model.Type{Kind: "Uint64"}
+	a := &model.AnalysisResult{Catalog: model.Catalog{Tables: []model.Table{{Name: "books", Columns: []model.Column{{Name: "id", Type: u64}}}}}, Queries: []model.AnalyzedQuery{{Name: "Read", Command: model.One, SQL: "SELECT id FROM books;", ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Int64"}}}, Embeds: []model.Embedding{{Start: 0, End: 1, Table: "books", Field: "books"}}}}}}}
+	_, err := Generate(a, Options{})
+	require.ErrorContains(t, err, `embedded table "books" does not match projected columns`)
+
+	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE books (id Uint64 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\nSELECT sqlc.embed(b), b.id AS books FROM books AS b;"}})
+	require.NoError(t, err)
+	_, err = Generate(analysis, Options{})
+	require.ErrorContains(t, err, "result field name collision")
+}
+
 func TestProjectionPreservesSQLAndWireNames(t *testing.T) {
 	for _, tc := range []struct{ sql, want string }{
 		{"SELECT display_name FROM authors;", "SELECT display_name FROM authors;"},

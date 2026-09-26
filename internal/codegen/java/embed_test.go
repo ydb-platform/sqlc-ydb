@@ -53,3 +53,21 @@ SELECT b.id AS front, sqlc.embed(b), b.author_id AS middle, sqlc.embed(a), a.nam
 		})
 	}
 }
+
+func TestJooqRejectsEmbeddedModelCollisions(t *testing.T) {
+	for _, tc := range []struct {
+		name, schema, query, want string
+	}{
+		{"model name", "CREATE TABLE Queries (id Uint64 NOT NULL, PRIMARY KEY(id));", "-- name: Read :many\nSELECT sqlc.embed(t) FROM Queries AS t;", "jOOQ model name collision: Queries"},
+		{"row name", "CREATE TABLE ReadRow (id Uint64 NOT NULL, PRIMARY KEY(id));", "-- name: Read :many\nSELECT sqlc.embed(t) FROM ReadRow AS t;", "jOOQ model name collision: ReadRow"},
+		{"model field", "CREATE TABLE books (id Uint64 NOT NULL, book_iD Uint64, bookID Uint64, PRIMARY KEY(id));", "-- name: Read :many\nSELECT sqlc.embed(t) FROM books AS t;", "jOOQ field name collision in Books: bookID"},
+		{"row field", "CREATE TABLE books (id Uint64 NOT NULL, PRIMARY KEY(id));", "-- name: Read :many\nSELECT sqlc.embed(t), t.id AS books FROM books AS t;", "Java field collision: books"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: tc.schema}}, []model.Source{{Name: "query.sql", Text: tc.query}})
+			require.NoError(t, err)
+			_, err = Generate(analysis, Options{Package: "embed", Runtime: "jooq"})
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}

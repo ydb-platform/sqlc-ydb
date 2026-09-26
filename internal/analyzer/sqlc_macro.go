@@ -10,14 +10,18 @@ import (
 
 const unsupportedSQLCMacroMessage = "sqlc macros are unsupported; use DECLARE parameters and explicit result columns instead"
 
-func containsEmbedMacro(block queryBlock) bool {
-	parsed, _ := parseYQL(block.file, block.text, block.line-1)
+func containsEmbedMacro(block *queryBlock) (bool, []model.Diagnostic) {
+	parsed, diagnostics := parseYQL(block.file, block.text, block.line-1)
+	if len(diagnostics) != 0 {
+		return false, diagnostics
+	}
+	block.parsed = &parsed
 	for _, call := range sqlcMacroCalls(parsed.tokens) {
 		if strings.EqualFold(call.name, "embed") {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 func unsupportedSQLCMacroDiagnostics(block queryBlock, tokens []antlr.Token) []model.Diagnostic {

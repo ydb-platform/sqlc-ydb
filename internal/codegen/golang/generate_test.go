@@ -93,6 +93,24 @@ func TestGenerateRejectsEmbeddedFieldCollision(t *testing.T) {
 	}
 }
 
+func TestGenerateRejectsEmbeddedModelCollisions(t *testing.T) {
+	for _, tc := range []struct {
+		name, schema, query, want string
+	}{
+		{"model name", "CREATE TABLE ReadRow (id Uint64 NOT NULL, PRIMARY KEY(id));", "-- name: Read :many\nSELECT sqlc.embed(t) FROM ReadRow AS t;", "generated model name ReadRow collides"},
+		{"model field", "CREATE TABLE books (id Uint64 NOT NULL, book_id Uint64, bookID Uint64, PRIMARY KEY(id));", "-- name: Read :many\nSELECT sqlc.embed(t) FROM books AS t;", `colliding model field "bookID"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: tc.schema}}, []model.Source{{Name: "query.sql", Text: tc.query}})
+			require.NoError(t, err)
+			for _, runtime := range []string{"ydb", "database/sql"} {
+				_, err := Generate(analysis, Options{Package: "db", Runtime: runtime})
+				require.ErrorContains(t, err, tc.want, runtime)
+			}
+		})
+	}
+}
+
 func TestGeneratedSQLUsesQuotedLinesAndPreservesText(t *testing.T) {
 	for _, tc := range []struct {
 		sql, wantLiteral, wantSQL string
