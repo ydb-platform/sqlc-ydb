@@ -64,4 +64,9 @@ struct VenueCountByCityRow final {
     std::uint64_t venue_count;
 };
 
+struct VenueCountByCityStatusRow final {
+    ::userver::ydb::Utf8 city_status;
+    std::uint64_t venue_count;
+};
+
 }  // namespace ondeck::userver

@@ -342,7 +342,7 @@ func analyzeDataStatement(catalog model.Catalog, block queryBlock, statement *pa
 		if len(ds) != 0 {
 			return nil, diagnostics
 		}
-		diagnostics = append(diagnostics, validatePredicateContexts(block, statement, relations, bindings, subqueries)...)
+		diagnostics = append(diagnostics, validatePredicateContexts(block, statement, relations, relations, bindings, subqueries)...)
 	}
 	if target != nil && len(tree.insert) == 1 {
 		if stmt := insertSelect(tree.insert[0]); stmt != nil {
@@ -767,6 +767,7 @@ type relation struct {
 	alias    string
 	optional bool
 	physical bool
+	grouping bool
 }
 
 func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser.Select_coreContext, bindings, inferred map[string]model.Type, syntax *model.QuerySyntax) ([]relation, []model.Diagnostic) {
@@ -913,7 +914,11 @@ func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContex
 	var unnamed []implicitProjection
 	hasWildcard := false
 	emptyWildcards := 0
-	excluded, withoutDiagnostics := selectWithoutColumns(block, selectCore, relations)
+	sources := relations
+	if len(sources) != 0 && sources[len(sources)-1].grouping {
+		sources = sources[:len(sources)-1]
+	}
+	excluded, withoutDiagnostics := selectWithoutColumns(block, selectCore, sources)
 	if len(withoutDiagnostics) != 0 {
 		return nil, withoutDiagnostics
 	}
@@ -923,7 +928,7 @@ func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContex
 			prefix := identifier(strings.TrimSuffix(result.Opt_id_prefix().GetText(), "."))
 			matched := false
 			var expressions []string
-			for _, rel := range relations {
+			for _, rel := range sources {
 				if prefix != "" && prefix != rel.alias {
 					continue
 				}
@@ -934,7 +939,7 @@ func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContex
 					}
 					columns = append(columns, joinedColumn(column, rel.optional))
 					expression := quotedYQLIdentifier(column.Name)
-					if prefix != "" || len(relations) > 1 {
+					if prefix != "" || len(sources) > 1 {
 						// The original qualifier before the first '*' is retained,
 						// including its whitespace and comments. Aliases preserve
 						// the unqualified result keys produced by table wildcards.
@@ -961,7 +966,7 @@ func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContex
 		expr := result.Expr()
 		if invoke, ok := directEmbedCall(expr); ok {
 			hasWildcard = true
-			embedColumns, embedding, expressions, err := embedProjection(block, selectCore, result, invoke, relations, ordinal, len(columns))
+			embedColumns, embedding, expressions, err := embedProjection(block, selectCore, result, invoke, sources, ordinal, len(columns))
 			if err != nil {
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, expr, err.Error()))
 				continue
@@ -994,7 +999,7 @@ func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContex
 		if alias == "" && !pure && namedResult {
 			unnamed = append(unnamed, implicitProjection{column: len(columns), ordinal: ordinal, expression: expr})
 		}
-		if alias == "" && pure && len(relations) > 1 {
+		if alias == "" && pure && len(sources) > 1 {
 			refs := columnRefs(expr)
 			if len(refs) == 1 && refs[0].qualifier != "" {
 				column.WireName = qualifiedName(refs[0])
@@ -1303,6 +1308,15 @@ func isOrderByReference(root antlr.Tree) bool {
 }
 
 func resolveColumn(relations []relation, ref columnRef) (model.Column, error) {
+	if ref.qualifier == "" {
+		for _, rel := range relations {
+			if rel.grouping {
+				if column := tableColumn(rel.table, ref.name); column != nil {
+					return *column, nil
+				}
+			}
+		}
+	}
 	var matches []model.Column
 	for _, rel := range relations {
 		if ref.qualifier != "" && ref.qualifier != rel.alias {
@@ -1331,6 +1345,7 @@ func joinedColumn(column model.Column, optional bool) model.Column {
 }
 
 func inferFromComparisons(root antlr.Tree, relations []relation, inferred map[string]model.Type) {
+	aliases := groupingAliasNames(root)
 	scopeDescendants(root, func(root antlr.Tree) {
 		switch node := root.(type) {
 		case *parser.Xor_subexprContext:
@@ -1339,7 +1354,7 @@ func inferFromComparisons(root antlr.Tree, relations []relation, inferred map[st
 				if len(refs) != 1 || !sameOrWrappedExpression(node.Eq_subexpr(), refs[0].ctx) {
 					return
 				}
-				column, err := resolveColumn(relations, refs[0])
+				column, err := groupingInferenceColumn(aliases, relations, refs[0])
 				if err != nil {
 					return
 				}
@@ -1369,7 +1384,7 @@ func inferFromComparisons(root antlr.Tree, relations []relation, inferred map[st
 		if len(binds) != 1 || !isDirectComparison(root, refs[0], binds[0]) {
 			return
 		}
-		column, err := resolveColumn(relations, refs[0])
+		column, err := groupingInferenceColumn(aliases, relations, refs[0])
 		if err != nil {
 			return
 		}

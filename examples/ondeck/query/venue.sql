@@ -49,3 +49,11 @@ SELECT
 FROM venue
 GROUP BY city
 ORDER BY city;
+
+-- name: VenueCountByCityStatus :many
+DECLARE $minimum_venues AS Uint64;
+SELECT city_status, COUNT(*) AS venue_count
+FROM venue
+GROUP BY city || "/"u || status AS city_status
+HAVING COUNT(*) >= $minimum_venues
+ORDER BY city_status;

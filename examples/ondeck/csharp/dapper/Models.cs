@@ -106,3 +106,8 @@ public sealed record VenueCountByCityRow(
     string City,
     ulong VenueCount
 );
+
+public sealed record VenueCountByCityStatusRow(
+    string CityStatus,
+    ulong VenueCount
+);

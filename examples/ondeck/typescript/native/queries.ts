@@ -92,6 +92,11 @@ export type VenueCountByCityRow = {
   readonly venue_count: bigint;
 };
 
+export type VenueCountByCityStatusRow = {
+  readonly city_status: string;
+  readonly venue_count: bigint;
+};
+
 export class Queries {
   readonly #sql: SQL;
 
@@ -266,6 +271,26 @@ export class Queries {
       "GROUP BY city\n" +
       "ORDER BY city;"
     );
+    configure?.(stmt);
+    const [rows] = await stmt;
+
+    return rows;
+  }
+
+  // -- name: VenueCountByCityStatus :many
+  async venueCountByCityStatus(minimumVenues: bigint, configure?: ConfigureQuery): Promise<VenueCountByCityStatusRow[]> {
+    const stmt = this.#sql<[VenueCountByCityStatusRow]>(
+      "DECLARE $minimum_venues AS Uint64;\n" +
+      "SELECT city_status, COUNT(*) AS venue_count\n" +
+      "FROM venue\n" +
+      "GROUP BY city || \"/\"u || status AS city_status\n" +
+      "HAVING COUNT(*) >= $minimum_venues\n" +
+      "ORDER BY city_status;"
+    );
+    // Keep explicit DECLARE statements; the SDK otherwise prepends duplicates.
+    Object.defineProperty(stmt, "text", { value: stmt.text, writable: false });
+    stmt
+      .parameter("minimum_venues", new Uint64(minimumVenues));
     configure?.(stmt);
     const [rows] = await stmt;
 

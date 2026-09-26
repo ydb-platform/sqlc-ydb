@@ -282,4 +282,31 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
             })
             .collect()
     }
+
+    // -- name: VenueCountByCityStatus :many
+    #[builder(on(String, into))]
+    pub async fn venue_count_by_city_status(
+        &mut self,
+        minimum_venues: u64,
+    ) -> ydb::YdbResult<Vec<VenueCountByCityStatusRow>> {
+        self.client
+            .query_result_set(concat!(
+                "DECLARE $minimum_venues AS Uint64;\n",
+                "SELECT city_status, COUNT(*) AS venue_count\n",
+                "FROM venue\n",
+                "GROUP BY city || \"/\"u || status AS city_status\n",
+                "HAVING COUNT(*) >= $minimum_venues\n",
+                "ORDER BY city_status;",
+            ))
+            .param("$minimum_venues", minimum_venues)
+            .await?
+            .rows()
+            .map(|mut row| {
+                Ok(VenueCountByCityStatusRow {
+                    city_status: row.remove_field(0)?.try_into()?,
+                    venue_count: row.remove_field(1)?.try_into()?,
+                })
+            })
+            .collect()
+    }
 }
