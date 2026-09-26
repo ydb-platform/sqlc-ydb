@@ -67,10 +67,16 @@ func analyze(ctx context.Context, schema, queries []model.Source, options Option
 				return result, errors.Join(errList...)
 			}
 		}
+		validBlocks := make([]queryBlock, 0, len(allBlocks))
 		for i := range allBlocks {
 			allBlocks[i].parameters = options.Parameters[allBlocks[i].name]
-			result.Diagnostics = append(result.Diagnostics, lowerSQLCArguments(&allBlocks[i])...)
+			macroDiagnostics := lowerSQLCArguments(&allBlocks[i])
+			result.Diagnostics = append(result.Diagnostics, macroDiagnostics...)
+			if len(macroDiagnostics) == 0 {
+				validBlocks = append(validBlocks, allBlocks[i])
+			}
 		}
+		allBlocks = validBlocks
 		if database != nil && len(result.Diagnostics) == 0 {
 			for i := range allBlocks {
 				block := &allBlocks[i]

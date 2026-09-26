@@ -98,9 +98,6 @@ func (block queryBlock) originalDiagnostics(diagnostics []model.Diagnostic) []mo
 	}
 	for i := range diagnostics {
 		position := diagnostics[i].Position
-		if position.File != block.file || position.Line < block.line {
-			continue
-		}
 		line, column, index := block.line, 1, 0
 		for index < len(block.sourceMap.rewritten) && (line < position.Line || column < position.Column) {
 			r, width := utf8.DecodeRuneInString(block.sourceMap.rewritten[index:])
@@ -111,9 +108,6 @@ func (block queryBlock) originalDiagnostics(diagnostics []model.Diagnostic) []mo
 			} else {
 				column++
 			}
-		}
-		if line != position.Line || column != position.Column {
-			continue
 		}
 		shift := 0
 		originalIndex := index
@@ -195,7 +189,7 @@ func containsEmbedMacro(block *queryBlock) (bool, []model.Diagnostic) {
 func unsupportedSQLCMacroDiagnostics(block queryBlock, tokens []antlr.Token) []model.Diagnostic {
 	var diagnostics []model.Diagnostic
 	for _, call := range sqlcMacroCalls(tokens) {
-		if strings.EqualFold(call.name, "embed") {
+		if !strings.EqualFold(call.name, "slice") {
 			continue
 		}
 		diagnostics = append(diagnostics, model.Diagnostic{

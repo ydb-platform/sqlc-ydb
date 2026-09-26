@@ -86,6 +86,14 @@ func TestAnalyzeSQLCArgumentPreservesOriginalDiagnosticPosition(t *testing.T) {
 	}
 }
 
+func TestAnalyzeSQLCArgumentPreservesEndOfInputDiagnosticPosition(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE foo (id Uint64 NOT NULL, PRIMARY KEY (id));"}}
+	query := "-- name: Read :many\nSELECT id FROM foo WHERE id = sqlc.arg(id) +"
+	_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
+	require.ErrorContains(t, err, "mismatched input '<EOF>'")
+	require.ErrorContains(t, err, "query.sql:2:"+strconv.Itoa(len([]rune(query[strings.IndexByte(query, '\n')+1:]))+1))
+}
+
 func TestAnalyzeSQLCNargConflictUsesOriginalMacroPosition(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE foo (id Uint64 NOT NULL, PRIMARY KEY (id));"}}
 	query := "-- name: Read :many\nDECLARE $id AS Uint64; SELECT id FROM foo WHERE id = sqlc.arg(other) OR id = sqlc.narg(id);"
@@ -150,6 +158,20 @@ func TestAnalyzeSQLCArgumentErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Invalid :many\n" + tt.sql}})
 			require.ErrorContains(t, err, tt.want)
+		})
+	}
+}
+
+func TestAnalyzeSQLCArgumentRejectsInvalidNamesWithoutCascadingErrors(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE foo (id Uint64 NOT NULL, PRIMARY KEY (id));"}}
+	for _, argument := range []string{"42", "''", `'a\b'`} {
+		t.Run(argument, func(t *testing.T) {
+			query := "-- name: Invalid :many\nSELECT id FROM foo WHERE id = sqlc.arg(" + argument + ");\n\n-- name: Valid :many\nSELECT id FROM foo;"
+			result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
+			require.ErrorContains(t, err, "sqlc.arg expects a nonempty identifier or quoted string parameter name")
+			require.Len(t, result.Diagnostics, 1)
+			require.Len(t, result.Queries, 1)
+			require.Equal(t, "Valid", result.Queries[0].Name)
 		})
 	}
 }
