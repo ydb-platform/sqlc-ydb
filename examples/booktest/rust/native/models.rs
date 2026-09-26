@@ -25,6 +25,12 @@ pub struct GetAuthorRow {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct FindAuthorsRow {
+    pub author_id: u64,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct GetBookRow {
     pub book_id: u64,
     pub author_id: u64,

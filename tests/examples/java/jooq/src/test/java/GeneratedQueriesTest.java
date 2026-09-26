@@ -63,6 +63,11 @@ class GeneratedQueriesTest {
                         assertFalse(sql.toLowerCase().contains("bio"), sql);
                         assertFalse(sql.toLowerCase().contains("without"), sql);
                     }
+                    if (family.equals("booktest") && method.getName().equals("findAuthors")) {
+                        assertTrue(sql.contains("author_id` >= ?"), sql);
+                        assertTrue(sql.contains("? is null or"), sql);
+                        assertTrue(sql.contains("name` = ?"), sql);
+                    }
                     if (List.of("listAuthorsWithRecentBooks", "listBooksWithRecentEditions", "deleteBooksByAuthorName").contains(method.getName())) {
                         assertTrue(sql.toLowerCase().contains(" in ("), sql);
                         assertTrue(sql.toLowerCase().contains("select"), sql);
@@ -96,7 +101,7 @@ class GeneratedQueriesTest {
                 }
             }
         }
-        assertEquals(67, statements.size());
+        assertEquals(68, statements.size());
     }
     @Test
     void declaredQueryReadsDialectCarriers() throws Exception {

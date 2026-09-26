@@ -32,6 +32,21 @@ func analyzeExecutableQuery(catalog model.Catalog, block queryBlock) (model.Anal
 	rewrites := wildcardRewrites{source: block.text, usedEmbeds: map[int]bool{}, usedEmbedArgs: map[int]bool{}}
 	block.wildcards = &rewrites
 	query, diagnostics := analyzeQuery(catalog, block)
+	if len(diagnostics) == 0 {
+		for _, parameter := range query.Parameters {
+			if argument, exists := block.arguments[parameter.Name]; exists && argument.nullable && block.parameters[parameter.Name].Kind == "" {
+				if block.assumed == nil {
+					block.assumed = map[string]model.Type{}
+				}
+				block.assumed[parameter.Name] = parameter.Type
+			}
+		}
+		if len(block.assumed) != 0 {
+			rewrites = wildcardRewrites{source: block.text, usedEmbeds: map[int]bool{}, usedEmbedArgs: map[int]bool{}}
+			block.wildcards = &rewrites
+			query, diagnostics = analyzeQuery(catalog, block)
+		}
+	}
 	if len(diagnostics) != 0 || len(rewrites.replacements) == 0 {
 		return query, diagnostics
 	}

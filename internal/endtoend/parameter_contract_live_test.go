@@ -40,4 +40,13 @@ func TestLiveYDBConfiguredParameterTypes(t *testing.T) {
 			require.Equal(t, []model.Parameter{{Name: tc.parameter, Type: typ}}, result.Queries[0].Parameters)
 		})
 	}
+	t.Run("nullable sqlc argument", func(t *testing.T) {
+		const text = "-- name: Read :one\nSELECT sqlc.narg('value') AS value;"
+		typ := model.Optional(model.Type{Kind: "Utf8"})
+		options := analyzer.Options{Parameters: map[string]map[string]model.Type{"Read": {"value": typ}}}
+		result, err := analyzer.AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: text}}, options, client)
+		require.NoError(t, err)
+		require.Equal(t, "-- name: Read :one\nSELECT $`value` AS value;", result.Queries[0].SQL)
+		require.Equal(t, []model.Parameter{{Name: "value", Type: typ}}, result.Queries[0].Parameters)
+	})
 }

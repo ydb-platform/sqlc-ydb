@@ -82,6 +82,25 @@ func TestGenerateCompileDiff(t *testing.T) {
 	require.Equal(t, original, data, "regeneration not deterministic")
 }
 
+func TestSQLCArgumentDiagnosticsAcrossCommands(t *testing.T) {
+	dir := t.TempDir()
+	put(t, filepath.Join(dir, "schema.sql"), "CREATE TABLE foo (id Uint64 NOT NULL, PRIMARY KEY(id));")
+	put(t, filepath.Join(dir, "queries.sql"), "-- name: Broken :many\nSELECT id FROM foo WHERE id = sqlc.narg();")
+	cfg := filepath.Join(dir, "sqlc.yaml")
+	put(t, cfg, "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n  gen:\n    go:\n      out: db\n")
+	var first string
+	for _, command := range []string{"compile", "generate", "diff"} {
+		code, _, stderr := invoke(command, "-f", cfg)
+		require.NotZero(t, code, command)
+		require.Contains(t, stderr, "sqlc.narg expects exactly one parameter name")
+		if first == "" {
+			first = stderr
+		} else {
+			require.Equal(t, first, stderr)
+		}
+	}
+}
+
 func TestGenerationErrorLeavesOutputsIntact(t *testing.T) {
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "sqlc.yaml")

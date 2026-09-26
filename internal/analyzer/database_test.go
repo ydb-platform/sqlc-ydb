@@ -264,7 +264,7 @@ func TestDatabaseAnalysisRejectsUnsupportedSourcesBeforeDiscovery(t *testing.T) 
 		"-- name: Read :one\nSELECT id FROM cluster.records;",
 		"-- name: Bad :exec\nCREATE TABLE records (id Uint64, PRIMARY KEY(id));",
 		"-- name: Bad :one\nSELECT id FROM records; SELECT id FROM records;",
-		"-- name: Bad :one\nSELECT sqlc.arg(id) FROM records;",
+		"-- name: Bad :one\nSELECT sqlc.slice(ids) FROM records;",
 		"-- name: Bad :one\nDECLARE $id AS Mystery; SELECT id FROM records;",
 	} {
 		t.Run(sql, func(t *testing.T) {

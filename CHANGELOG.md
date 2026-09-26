@@ -7,6 +7,7 @@
 ### Added
 
 - Resolve YQL `SELECT * WITHOUT` exclusions before wildcard expansion, including qualified JOIN columns and `IF EXISTS`, across generated runtimes.
+- Support named `sqlc.arg` and nullable `sqlc.narg` parameters across generated runtimes.
 
 ## v0.3.0
 

@@ -5,6 +5,8 @@ import tech.ydb.query.QueryTransaction;
 import tech.ydb.query.tools.QueryReader;
 import tech.ydb.table.query.Params;
 import tech.ydb.table.values.PrimitiveValue;
+import tech.ydb.table.values.PrimitiveType;
+import tech.ydb.table.values.OptionalType;
 
 // The caller owns the injected client and its lifecycle.
 public final class Queries {
@@ -30,6 +32,30 @@ public final class Queries {
         long _value0 = _rows.getColumn(0).getUint64();
         String _value1 = _rows.getColumn(1).getText();
         return java.util.Optional.of(new GetAuthorRow(_value0, _value1));
+    }
+
+    // -- name: FindAuthors :many
+    public java.util.List<FindAuthorsRow> findAuthors(long minAuthorId, String filterName) {
+        var _params = Params.create();
+        _params.put("$min_author_id", PrimitiveValue.newUint64(minAuthorId));
+        _params.put("$filter_name", filterName == null ? OptionalType.of(PrimitiveType.Text).emptyValue() : PrimitiveValue.newText(filterName).makeOptional());
+        var _query = QueryReader.readFrom(
+                client.createQuery("""
+                    SELECT author_id, name
+                    FROM authors
+                    WHERE author_id >= $min_author_id
+                      AND ($`filter_name` IS NULL OR name = $`filter_name`)
+                    ORDER BY author_id;\
+                    """, _params)).join().getValue();
+        if (_query.getResultSetCount() != 1) throw new IllegalStateException("Expected one result set");
+        var _rows = _query.getResultSet(0);
+        var _items = new java.util.ArrayList<FindAuthorsRow>();
+        while (_rows.next()) {
+            long _value0 = _rows.getColumn(0).getUint64();
+            String _value1 = _rows.getColumn(1).getText();
+            _items.add(new FindAuthorsRow(_value0, _value1));
+        }
+        return _items;
     }
 
     // -- name: GetBook :one

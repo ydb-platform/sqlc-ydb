@@ -50,6 +50,39 @@ class Queries {
         return GetAuthorRow(_value0, _value1)
     }
 
+    // -- name: FindAuthors :many
+    fun findAuthors(minAuthorId: Long, filterName: String?): List<FindAuthorsRow> {
+        val _params = Params.create()
+        _params.put("\$min_author_id", PrimitiveValue.newUint64(minAuthorId))
+        _params.put("\$filter_name", if (filterName == null) OptionalType.of(PrimitiveType.Text).emptyValue() else PrimitiveValue.newText(filterName).makeOptional())
+        val _query = if (transaction != null) {
+            QueryReader.readFrom(transaction.createQuery(
+                "SELECT author_id, name\n" +
+                "FROM authors\n" +
+                "WHERE author_id >= \$min_author_id\n" +
+                "  AND (\$`filter_name` IS NULL OR name = \$`filter_name`)\n" +
+                "ORDER BY author_id;", _params)).join().getValue()
+        } else {
+            client!!.supplyResult { _session ->
+                QueryReader.readFrom(_session.createQuery(
+                    "SELECT author_id, name\n" +
+                    "FROM authors\n" +
+                    "WHERE author_id >= \$min_author_id\n" +
+                    "  AND (\$`filter_name` IS NULL OR name = \$`filter_name`)\n" +
+                    "ORDER BY author_id;", TxMode.SERIALIZABLE_RW, _params))
+            }.join().getValue()
+        }
+        kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
+        val _rows = _query.getResultSet(0)
+        val _items = ArrayList<FindAuthorsRow>()
+        while (_rows.next()) {
+            val _value0: Long = _rows.getColumn(0).getUint64()
+            val _value1: String = _rows.getColumn(1).getText()
+            _items.add(FindAuthorsRow(_value0, _value1))
+        }
+        return _items
+    }
+
     // -- name: GetBook :one
     fun getBook(bookId: Long): GetBookRow? {
         val _params = Params.create()

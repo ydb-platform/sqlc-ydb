@@ -102,6 +102,57 @@ final class Queries
         return $rows[0] ?? null;
     }
 
+    /** @return list<FindAuthorsRow> */
+    // -- name: FindAuthors :many
+    public function findAuthors(FindAuthorsParams $params): array
+    {
+        $parameters = [
+            '$min_author_id' => YdbValueCodec::typedUint64($params->minAuthorId, 'min_author_id'),
+            '$filter_name' => YdbValueCodec::typedOptionalUtf8($params->filterName, 'filter_name'),
+        ];
+
+        $result = $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                SELECT author_id, name
+                FROM authors
+                WHERE author_id >= $min_author_id
+                  AND ($`filter_name` IS NULL OR name = $`filter_name`)
+                ORDER BY author_id;
+                SQLC_YDB_YQL)
+                ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0);
+            if ($this->txId !== null) {
+                $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
+            } else {
+                $query->beginTx('serializable_read_write');
+            }
+            if ($this->configure !== null) {
+                ($this->configure)($query);
+            }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
+
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
+        });
+
+        $rows = $this->decodeRows(
+            $result,
+            'FindAuthors',
+            [
+                ['author_id', PrimitiveTypeId::UINT64, false],
+                ['name', PrimitiveTypeId::UTF8, false],
+            ],
+            static fn($items): FindAuthorsRow => new FindAuthorsRow(
+                YdbValueCodec::uint64($items->offsetGet(0), 'FindAuthors.author_id'),
+                YdbValueCodec::utf8($items->offsetGet(1), 'FindAuthors.name'),
+            ),
+        );
+
+        return $rows;
+    }
+
     // -- name: GetBook :one
     public function getBook(string $bookId): ?GetBookRow
     {

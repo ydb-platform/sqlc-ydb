@@ -39,6 +39,34 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
         })
     }
 
+    // -- name: FindAuthors :many
+    #[builder(on(String, into))]
+    pub async fn find_authors(
+        &mut self,
+        min_author_id: u64,
+        #[builder(required, into)] filter_name: Option<String>,
+    ) -> ydb::YdbResult<Vec<FindAuthorsRow>> {
+        self.client
+            .query_result_set(concat!(
+                "SELECT author_id, name\n",
+                "FROM authors\n",
+                "WHERE author_id >= $min_author_id\n",
+                "  AND ($`filter_name` IS NULL OR name = $`filter_name`)\n",
+                "ORDER BY author_id;",
+            ))
+            .param("$min_author_id", min_author_id)
+            .param("$filter_name", filter_name)
+            .await?
+            .rows()
+            .map(|mut row| {
+                Ok(FindAuthorsRow {
+                    author_id: row.remove_field(0)?.try_into()?,
+                    name: row.remove_field(1)?.try_into()?,
+                })
+            })
+            .collect()
+    }
+
     // -- name: GetBook :one
     #[builder(on(String, into))]
     pub async fn book(&mut self, book_id: u64) -> ydb::YdbResult<GetBookRow> {

@@ -31,6 +31,14 @@ func TestGeneratedExample(t *testing.T) {
 	if got, err := s.GetAuthor(ctx, 100); err != nil || got.Name != author.Name {
 		require.FailNow(t, fmt.Sprintf("database/sql GetAuthor() = %#v, %v", got, err))
 	}
+	filtered, err := n.FindAuthors(ctx, native.FindAuthorsParams{MinAuthorID: 100, FilterName: &author.Name})
+	require.NoError(t, err)
+	require.Len(t, filtered, 1)
+	require.Equal(t, author.Name, filtered[0].Name)
+	all, err := s.FindAuthors(ctx, sq.FindAuthorsParams{MinAuthorID: 100, FilterName: nil})
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	require.Equal(t, author.AuthorID, all[0].AuthorID)
 
 	available := time.Now().UTC().Truncate(time.Microsecond)
 	first, err := n.CreateBook(ctx, native.CreateBookParams{

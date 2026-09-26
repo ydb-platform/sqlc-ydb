@@ -56,6 +56,31 @@ public sealed class Queries
         reader.GetFieldValue<string>(1)
     );
 
+    // -- name: FindAuthors :many
+    public async Task<IReadOnlyList<FindAuthorsRow>> FindAuthorsAsync(FindAuthorsParams args, CancellationToken cancellationToken = default)
+    {
+        await using var command = new YdbCommand(
+            "SELECT author_id, name\n" +
+            "FROM authors\n" +
+            "WHERE author_id >= $min_author_id\n" +
+            "  AND ($`filter_name` IS NULL OR name = $`filter_name`)\n" +
+            "ORDER BY author_id;", _connection) { Transaction = _transaction };
+        command.Parameters.Add(new YdbParameter("$min_author_id", DbType.UInt64, args.MinAuthorID));
+        command.Parameters.Add(new YdbParameter("$filter_name", YdbValue.MakeOptionalUtf8(args.FilterName)));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        var rows = new List<FindAuthorsRow>();
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            rows.Add(FindAuthorsRowFrom(reader));
+        }
+        return rows;
+    }
+
+    private static FindAuthorsRow FindAuthorsRowFrom(DbDataReader reader) => new(
+        reader.GetFieldValue<ulong>(0),
+        reader.GetFieldValue<string>(1)
+    );
+
     // -- name: GetBook :one
     public async Task<GetBookRow> GetBookAsync(ulong bookId, CancellationToken cancellationToken = default)
     {

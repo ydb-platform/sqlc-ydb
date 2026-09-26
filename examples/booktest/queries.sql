@@ -3,6 +3,13 @@ SELECT author_id, name
 FROM authors
 WHERE author_id = $author_id;
 
+-- name: FindAuthors :many
+SELECT author_id, name
+FROM authors
+WHERE author_id >= sqlc.arg(min_author_id)
+  AND (sqlc.narg('filter_name') IS NULL OR name = sqlc.narg('filter_name'))
+ORDER BY author_id;
+
 -- name: GetBook :one
 SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
 FROM books

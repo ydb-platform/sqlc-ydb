@@ -33,6 +33,30 @@ class Querier:
         finally:
             cursor.close()
 
+    # -- name: FindAuthors :many
+    def find_authors(self, min_author_id: int, filter_name: Optional[str]) -> list[_models.Authors]:
+        parameters = {
+            "$min_author_id": (min_author_id, _ydb.PrimitiveType.Uint64),
+            "$filter_name": (filter_name, _ydb.OptionalType(_ydb.PrimitiveType.Utf8)),
+        }
+        cursor = self._connection.cursor()
+        try:
+            cursor.execute(
+                ("SELECT author_id, name\n"
+                 "FROM authors\n"
+                 "WHERE author_id >= $min_author_id\n"
+                 "  AND ($`filter_name` IS NULL OR name = $`filter_name`)\n"
+                 "ORDER BY author_id;"),
+                parameters,
+            )
+            rows = cursor.fetchall()
+            return [_models.Authors(
+                author_id=row[0],
+                name=row[1],
+            ) for row in rows]
+        finally:
+            cursor.close()
+
     # -- name: GetBook :one
     def get_book(self, book_id: int) -> Optional[_models.Books]:
         parameters = {

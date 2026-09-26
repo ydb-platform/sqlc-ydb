@@ -12,6 +12,14 @@ func validateDMLValue(expr parser.IExprContext, column model.Column, scope expre
 	for inner := parenthesizedExpression(expr); inner != nil; inner = parenthesizedExpression(expr) {
 		expr = inner
 	}
+	if bind := directBind(expr); bind != nil {
+		if argument, exists := scope.arguments[bindName(bind)]; exists && argument.nullable {
+			typeValue := scope.bindings[bindName(bind)]
+			if typeValue.Kind != "" && !compatibleDMLAssignmentTypes(typeValue, column.Type) {
+				return fmt.Errorf("cannot assign %s to column %q of type %s; use a compatible value or an explicit CAST", typeValue.String(), column.Name, column.Type.String())
+			}
+		}
+	}
 	if inferDirectDMLBind(expr, column.Type, inferred) {
 		return nil
 	}

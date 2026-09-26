@@ -118,6 +118,11 @@ final class YdbValueCodec
         return self::typed(PrimitiveTypeId::TIMESTAMP, 'uint64_value', (string) $value);
     }
 
+    public static function typedOptionalUtf8(?string $value, string $where): TypedValue
+    {
+        return self::typedOptional($value === null ? null : self::typedUtf8($value, $where), PrimitiveTypeId::UTF8);
+    }
+
     public static function bool(Value $value, string $where): bool
     {
         $raw = self::read($value, 'bool_value', 'getBoolValue', $where);
@@ -194,6 +199,14 @@ final class YdbValueCodec
     private static function typed(int $typeId, string $case, mixed $value): TypedValue
     {
         return new TypedValue(['type' => self::type($typeId), 'value' => new Value([$case => $value])]);
+    }
+
+    private static function typedOptional(?TypedValue $value, int $typeId): TypedValue
+    {
+        return new TypedValue([
+            'type' => new Type(['optional_type' => new OptionalType(['item' => self::type($typeId)])]),
+            'value' => $value === null ? new Value(['null_flag_value' => NullValue::NULL_VALUE]) : $value->getValue(),
+        ]);
     }
 
     private static function type(int $typeId): Type

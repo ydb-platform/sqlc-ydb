@@ -25,6 +25,7 @@ public:
         : client_(nullptr), transaction_(&transaction), execute_settings_(execute_settings) {}
 
     std::optional<GetAuthorRow> GetAuthor(std::uint64_t author_id) const;
+    std::vector<FindAuthorsRow> FindAuthors(std::uint64_t min_author_id, const std::optional<std::string>& filter_name) const;
     std::optional<GetBookRow> GetBook(std::uint64_t book_id) const;
     std::optional<GetBookAndAuthorRow> GetBookAndAuthor(std::uint64_t book_id) const;
     void DeleteBook(std::uint64_t book_id) const;

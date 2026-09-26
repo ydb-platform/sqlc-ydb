@@ -49,6 +49,10 @@ public sealed class Queries
         {
             ["author_id"] = nameof(GetAuthorRow.AuthorID),
         }));
+        SqlMapper.SetTypeMap(typeof(FindAuthorsRow), new ColumnTypeMap(typeof(FindAuthorsRow), new Dictionary<string, string>
+        {
+            ["author_id"] = nameof(FindAuthorsRow.AuthorID),
+        }));
         SqlMapper.SetTypeMap(typeof(GetBookRow), new ColumnTypeMap(typeof(GetBookRow), new Dictionary<string, string>
         {
             ["book_id"] = nameof(GetBookRow.BookID),
@@ -171,6 +175,30 @@ public sealed class Queries
             cancellationToken: cancellationToken);
 
         return await _connection.QueryFirstAsync<GetAuthorRow>(command).ConfigureAwait(false);
+    }
+
+    // -- name: FindAuthors :many
+    public async Task<IReadOnlyList<FindAuthorsRow>> FindAuthorsAsync(FindAuthorsParams args, CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var parameters = new YdbParameters(
+            new YdbParameter("$min_author_id", DbType.UInt64, args.MinAuthorID),
+            new YdbParameter("$filter_name", YdbValue.MakeOptionalUtf8(args.FilterName))
+        );
+
+        var command = new CommandDefinition(
+            commandText: """
+            SELECT author_id, name
+            FROM authors
+            WHERE author_id >= $min_author_id
+              AND ($`filter_name` IS NULL OR name = $`filter_name`)
+            ORDER BY author_id;
+            """,
+            parameters: parameters,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        return (await _connection.QueryAsync<FindAuthorsRow>(command).ConfigureAwait(false)).AsList();
     }
 
     // -- name: GetBook :one

@@ -42,6 +42,8 @@ class LiveTest {
                 Instant available = Instant.parse("2026-01-01T00:00:00.123456Z");
                 assertEquals(id, queries.createAuthor(id, "Автор").orElseThrow().authorId());
                 assertEquals("Автор", queries.getAuthor(id).orElseThrow().name());
+                assertEquals(id, queries.findAuthors(id, "Автор").getFirst().authorId());
+                assertEquals(id, queries.findAuthors(id, null).getFirst().authorId());
                 var inserted = queries.createBook(id, id, "isbn", "paper", "Title", 2026, available, JSON.valueOf("[\"tag\"]")).orElseThrow();
                 assertEquals(id, inserted.bookId());
                 assertEquals(available, inserted.available());

@@ -25,6 +25,41 @@ func (q *Queries) GetAuthor(ctx context.Context, arg uint64) (GetAuthorRow, erro
 	return row, err
 }
 
+// -- name: FindAuthors :many
+func (q *Queries) FindAuthors(ctx context.Context, arg FindAuthorsParams) ([]FindAuthorsRow, error) {
+	rows, err := q.db.QueryContext(ctx, ""+
+		"SELECT author_id, name\n"+
+		"FROM authors\n"+
+		"WHERE author_id >= $min_author_id\n"+
+		"  AND ($`filter_name` IS NULL OR name = $`filter_name`)\n"+
+		"ORDER BY author_id;",
+		sql.Named("min_author_id", arg.MinAuthorID),
+		sql.Named("filter_name", arg.FilterName),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []FindAuthorsRow(nil)
+	for rows.Next() {
+		var row FindAuthorsRow
+		if err := rows.Scan(
+			&row.AuthorID,
+			&row.Name,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, row)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
 // -- name: GetBook :one
 func (q *Queries) GetBook(ctx context.Context, arg uint64) (GetBookRow, error) {
 	var row GetBookRow

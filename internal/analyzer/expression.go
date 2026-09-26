@@ -13,6 +13,7 @@ import (
 type expressionScope struct {
 	relations    []relation
 	bindings     map[string]model.Type
+	arguments    map[string]sqlcArgument
 	lambdas      map[string]lambdaBinding
 	grouped      bool
 	functions    *builtins.Registry
