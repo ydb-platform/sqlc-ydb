@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.4.0
+
 ### Added
 
 - Support named `sqlc.arg` and nullable `sqlc.narg` parameters across generated runtimes.
