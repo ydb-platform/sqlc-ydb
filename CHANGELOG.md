@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.5.0
+
 ### Added
 
 - Add upstream-compatible `gen.go.rename` for generated Go struct fields and embedded table models, including result rows and parameter structs.
