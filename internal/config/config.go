@@ -39,12 +39,13 @@ func (p *Paths) UnmarshalYAML(n *yaml.Node) error {
 }
 
 type Go struct {
-	Package         string `yaml:"package"`
-	Out             string `yaml:"out"`
-	SQLPackage      string `yaml:"sql_package"`
-	EmitJSONTags    bool   `yaml:"emit_json_tags"`
-	EmitInterface   bool   `yaml:"emit_interface"`
-	EmitEmptySlices bool   `yaml:"emit_empty_slices"`
+	Package         string            `yaml:"package"`
+	Out             string            `yaml:"out"`
+	SQLPackage      string            `yaml:"sql_package"`
+	Rename          map[string]string `yaml:"rename"`
+	EmitJSONTags    bool              `yaml:"emit_json_tags"`
+	EmitInterface   bool              `yaml:"emit_interface"`
+	EmitEmptySlices bool              `yaml:"emit_empty_slices"`
 }
 
 type Python struct {
@@ -228,6 +229,9 @@ func Parse(data []byte) (*Config, error) {
 			return nil, err
 		}
 		if g := s.Gen.Go; g != nil {
+			if len(g.Rename) == 0 {
+				g.Rename = nil
+			}
 			if g.Out == "" {
 				return nil, fmt.Errorf("sql[%d].gen.go.out is required", i)
 			}

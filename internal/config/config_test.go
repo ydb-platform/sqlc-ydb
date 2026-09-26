@@ -32,6 +32,23 @@ sql:
 	}
 }
 
+func TestGoRenameConfiguration(t *testing.T) {
+	c, err := Parse([]byte(`version: "2"
+sql:
+- engine: ydb
+  schema: schema.sql
+  queries: queries.sql
+  gen:
+    go:
+      out: generated
+      rename:
+        spotify_url: SpotifyURL
+        id: Identifier
+`))
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"spotify_url": "SpotifyURL", "id": "Identifier"}, c.SQL[0].Gen.Go.Rename)
+}
+
 func TestRejectUnsupportedConfiguration(t *testing.T) {
 	base := "version: '2'\nsql:\n- engine: ydb\n  schema: s.sql\n  queries: q.sql\n"
 	for _, tc := range []struct{ name, input, want string }{

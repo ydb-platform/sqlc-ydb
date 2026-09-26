@@ -32,6 +32,22 @@ func TestEachRuntime(t *testing.T) {
 	}
 }
 
+func TestEachRenamedResultFields(t *testing.T) {
+	for _, runtime := range []string{"ydb", "database/sql"} {
+		options := Options{Package: "db", Runtime: runtime, Rename: map[string]string{"id": "DeviceID", "name": "Label"}}
+		files, err := Generate(eachInput(), options)
+		require.NoError(t, err)
+		for _, file := range files {
+			if file.Name != "queries.sql.go" {
+				continue
+			}
+			require.Contains(t, string(file.Content), "&row.DeviceID")
+			require.Contains(t, string(file.Content), "&row.Label")
+		}
+		compileInput(t, eachInput(), options)
+	}
+}
+
 func TestEachShapes(t *testing.T) {
 	for _, runtime := range []string{"ydb", "database/sql"} {
 		in := eachInput()

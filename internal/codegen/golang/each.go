@@ -15,7 +15,7 @@ func writeEachPreamble(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 	b.WriteString("if err := ctx.Err(); err != nil { return err }\n\n")
 }
 
-func writeSQLEach(b *bytes.Buffer, q model.AnalyzedQuery, parameters []string) {
+func writeSQLEach(b *bytes.Buffer, q model.AnalyzedQuery, parameters []string, o Options) {
 	b.WriteString("ctx, cancel := context.WithCancel(ctx)\ndefer cancel()\n\n")
 	b.WriteString("rows, err := " + generatedCall("q.db.QueryContext", querySQL(q), parameters) + "\n")
 	b.WriteString(`if err != nil { return err }
@@ -34,7 +34,7 @@ func writeSQLEach(b *bytes.Buffer, q model.AnalyzedQuery, parameters []string) {
   if err := ctx.Err(); err != nil { return err }
  `)
 	b.WriteString("var row " + q.Name + "Row\n")
-	b.WriteString("if err := " + scanCall("rows.Scan", scanDestinations(q.ResultSets[0])) + "; err != nil { return err }\n")
+	b.WriteString("if err := " + scanCall("rows.Scan", scanDestinations(q.ResultSets[0], o)) + "; err != nil { return err }\n")
 	b.WriteString(`if err := ctx.Err(); err != nil { return err }
   if err := consume(row); err != nil { return err }
  }
@@ -49,7 +49,7 @@ func writeSQLEach(b *bytes.Buffer, q model.AnalyzedQuery, parameters []string) {
 `)
 }
 
-func writeYDBEach(b *bytes.Buffer, q model.AnalyzedQuery, opt string) {
+func writeYDBEach(b *bytes.Buffer, q model.AnalyzedQuery, opt string, o Options) {
 	b.WriteString("ctx, cancel := context.WithCancel(ctx)\ndefer cancel()\n\n")
 	b.WriteString("result, err := " + ydbCall("q.db.Query", querySQL(q), opt) + "\n")
 	b.WriteString(`if err != nil { return err }
@@ -71,7 +71,7 @@ func writeYDBEach(b *bytes.Buffer, q model.AnalyzedQuery, opt string) {
   if err != nil { return err }
  `)
 	b.WriteString("var row " + q.Name + "Row\n")
-	b.WriteString("if err := r.ScanNamed(\n" + scanNamed(q.ResultSets[0]) + ",\n); err != nil { return err }\n")
+	b.WriteString("if err := r.ScanNamed(\n" + scanNamed(q.ResultSets[0], o) + ",\n); err != nil { return err }\n")
 	b.WriteString(`if err := ctx.Err(); err != nil { return err }
   if err := consume(row); err != nil { return err }
  }

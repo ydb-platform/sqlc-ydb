@@ -40,6 +40,15 @@ func TestInitDefaultSelection(t *testing.T) {
 	require.False(t, g.Go == nil || g.Go.Out != "db" || g.Go.SQLPackage != "ydb" || g.Python == nil || g.Python.Out != "queries" || g.Python.Runtime != "ydb", "legacy default selection changed: %#v", g)
 }
 
+func TestInitGoRenameIsAnEmptyMapping(t *testing.T) {
+	data, err := initYAML("go", "ydb")
+	require.NoError(t, err)
+	require.Contains(t, string(data), "rename: {}")
+	c, err := Parse(data)
+	require.NoError(t, err)
+	require.Nil(t, c.SQL[0].Gen.Go.Rename)
+}
+
 func TestInitInvalidSelection(t *testing.T) {
 	for _, args := range [][2]string{{"", "ydb"}, {"javascript", ""}, {"go", "native"}, {"python", "native"}, {"java", "hibernate"}, {"csharp", "linq2db"}} {
 		_, err := initYAML(args[0], args[1])

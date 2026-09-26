@@ -1,0 +1,30 @@
+version: "2"
+sql:
+  - name: native
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      go:
+        package: renaming
+        out: go/native
+        sql_package: ydb
+        rename:
+          accounts: Account
+          account_id: AccountID
+          display_name: Label
+        emit_json_tags: true
+  - name: database-sql
+    engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      go:
+        package: renaming
+        out: go/database/sql
+        sql_package: database/sql
+        rename:
+          accounts: Account
+          account_id: AccountID
+          display_name: Label
+        emit_json_tags: true

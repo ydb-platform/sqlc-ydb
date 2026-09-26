@@ -58,6 +58,26 @@ func TestNames(t *testing.T){ fields,err:=types.StructFields(bindUpdateBookBook(
 	}
 }
 
+func TestRenamedStructParameterMembersBindByWireName(t *testing.T) {
+	in := structInput(model.StructField{Name: "title", Type: model.Type{Kind: "Utf8"}}, model.StructField{Name: "payload", Type: model.Type{Kind: "String"}})
+	for _, runtime := range []string{"ydb", "database/sql"} {
+		runGeneratedRuntimeTest(t, in, Options{Package: "db", Runtime: runtime, Rename: map[string]string{"title": "Heading", "payload": "Data"}}, `package db
+import("testing";"github.com/ydb-platform/ydb-go-sdk/v3/types")
+func TestNames(t *testing.T){ fields,err:=types.StructFields(bindUpdateBookBook(UpdateBookBook{Heading:"book",Data:[]byte("text")}));if err!=nil{t.Fatal(err)};var title string;var payload []byte;if err:=types.CastTo(fields["title"],&title);err!=nil{t.Fatal(err)};if err:=types.CastTo(fields["payload"],&payload);err!=nil{t.Fatal(err)};if title!="book"||string(payload)!="text"{t.Fatalf("title=%q payload=%q",title,payload)} }
+`)
+	}
+}
+
+func TestRenamedStructListMembersBindByWireName(t *testing.T) {
+	in := batchInput(model.StructField{Name: "book_id", Type: model.Type{Kind: "Uint64"}}, model.StructField{Name: "tags", Type: model.Type{Kind: "Json"}})
+	for _, runtime := range []string{"ydb", "database/sql"} {
+		runGeneratedRuntimeTest(t, in, Options{Package: "db", Runtime: runtime, Rename: map[string]string{"book_id": "BookIdentifier", "tags": "Labels"}}, `package db
+import("testing";"github.com/ydb-platform/ydb-go-sdk/v3/types")
+func TestNames(t *testing.T){ values,err:=types.ListItems(bindCreateBooksBooksItem([]CreateBooksBooksItem{{BookIdentifier:7,Labels:"{}"}}));if err!=nil{t.Fatal(err)};fields,err:=types.StructFields(values[0]);if err!=nil{t.Fatal(err)};var id uint64;var tags string;if err:=types.CastTo(fields["book_id"],&id);err!=nil{t.Fatal(err)};if err:=types.CastTo(fields["tags"],&tags);err!=nil{t.Fatal(err)};if id!=7||tags!="{}"{t.Fatalf("id=%d tags=%q",id,tags)} }
+`)
+	}
+}
+
 func TestStructParameterScalarFieldsCompile(t *testing.T) {
 	var fields []model.StructField
 	for _, kind := range []string{"Bool", "Int8", "Int16", "Int32", "Int64", "Uint8", "Uint16", "Uint32", "Uint64", "Float", "Double", "String", "Utf8", "Json", "JsonDocument", "Yson", "Date", "Datetime", "Timestamp", "Interval", "UUID", "Decimal"} {
