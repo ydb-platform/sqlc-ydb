@@ -106,18 +106,7 @@ func databaseTableReferences(blocks []queryBlock) ([]databaseTableReference, []m
 	seen := map[string]bool{}
 	for i := range blocks {
 		block := &blocks[i]
-		var parsed parsedYQL
-		var parseDiagnostics []model.Diagnostic
-		if block.parsed == nil {
-			parsed, parseDiagnostics = parseYQL(block.file, block.text, block.line-1)
-		} else {
-			parsed = *block.parsed
-		}
-		diagnostics = append(diagnostics, parseDiagnostics...)
-		if len(parseDiagnostics) != 0 {
-			continue
-		}
-		block.parsed = &parsed
+		parsed := *block.parsed
 		prefix, prefixDiagnostics := tablePathPrefix(block.file, block.line-1, parsed.tree)
 		diagnostics = append(diagnostics, prefixDiagnostics...)
 		if len(prefixDiagnostics) != 0 {
