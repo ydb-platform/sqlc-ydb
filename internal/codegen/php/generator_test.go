@@ -198,6 +198,31 @@ func TestEmbeddedResultRejectsInconsistentAnalysis(t *testing.T) {
 	require.ErrorContains(t, err, "property name collision")
 }
 
+func TestEmbeddedResultRejectsInvalidModel(t *testing.T) {
+	u64 := model.Type{Kind: "Uint64"}
+	for _, tc := range []struct {
+		name   string
+		change func(*model.AnalysisResult)
+		want   string
+	}{
+		{"unsupported result type", func(a *model.AnalysisResult) {
+			a.Queries[0].ResultSets[0].Columns = append(a.Queries[0].ResultSets[0].Columns, model.Column{Name: "extra", Type: model.Type{Kind: "Tuple"}})
+		}, `result column "extra": unsupported YQL type "Tuple"`},
+		{"invalid range", func(a *model.AnalysisResult) { a.Queries[0].ResultSets[0].Embeds[0].End = 2 }, "invalid embedded column range"},
+		{"missing table", func(a *model.AnalysisResult) { a.Queries[0].ResultSets[0].Embeds[0].Table = "missing" }, `embedded table "missing" does not match projected columns`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &model.AnalysisResult{
+				Catalog: model.Catalog{Tables: []model.Table{{Name: "books", Columns: []model.Column{{Name: "id", Type: u64}}}}},
+				Queries: []model.AnalyzedQuery{{Name: "Read", Command: model.One, SQL: "SELECT id FROM books;", ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: u64}}, Embeds: []model.Embedding{{Start: 0, End: 1, Table: "books", Field: "books"}}}}}},
+			}
+			tc.change(a)
+			_, err := Generate(a, Options{})
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
 func TestSQLLiteralRoundTripsThroughPHP(t *testing.T) {
 	php, err := exec.LookPath("php")
 	if err != nil {

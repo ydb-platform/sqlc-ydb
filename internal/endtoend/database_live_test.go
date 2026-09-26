@@ -213,6 +213,15 @@ func TestDatabaseGeneratedRuntime(t *testing.T) {
 	if row.ID != highID || row.Amount == nil || *row.Amount != -7 || row.Ztext == nil || *row.Ztext != "original" {
 		t.Fatalf("wildcard values: %+v", row)
 	}
+	embedded, err := q.ReadEmbeddedRecord(ctx, highID)
+	if err != nil { t.Fatal(err) }
+	embeddedValue := reflect.ValueOf(embedded).Field(0)
+	for _, name := range ` + fmt.Sprintf("%#v", fieldNames) + ` {
+		field := embeddedValue.FieldByName(name)
+		if !field.IsValid() || !reflect.DeepEqual(field.Interface(), reflect.ValueOf(row).FieldByName(name).Interface()) {
+			t.Fatalf("embedded %s differs from wildcard row: %+v vs %+v", name, embedded, row)
+		}
+	}
 	typ := reflect.TypeOf(row)
 	names := []string{typ.Field(0).Name, typ.Field(1).Name, typ.Field(2).Name}
 	if !reflect.DeepEqual(names, ` + fmt.Sprintf("%#v", fieldNames) + `) { t.Fatalf("wildcard order: %v", names) }
@@ -238,6 +247,9 @@ with ydb.Driver(config) as driver:
         q = Querier(pool)
         row = q.read_record(18446744073709551615)
         assert row.id == 18446744073709551615 and row.amount == -7 and row.ztext == "original", row
+        embedded = q.read_embedded_record(18446744073709551615)
+        nested = getattr(embedded, dataclasses.fields(embedded)[0].name)
+        assert dataclasses.asdict(nested) == dataclasses.asdict(row), (nested, row)
         assert [field.name for field in dataclasses.fields(row)] == sys.argv[1:]
         row = q.read_record(42)
         assert row.id == 42 and row.amount is None and row.ztext is None, row

@@ -41,3 +41,35 @@ SELECT b.id AS front, sqlc.embed(b), b.author_id AS middle, sqlc.embed(a), a.nam
 		})
 	}
 }
+
+func TestEmbeddedRowsRejectInvalidModel(t *testing.T) {
+	u64 := model.Type{Kind: "Uint64"}
+	for _, tc := range []struct {
+		name   string
+		change func(*model.AnalysisResult)
+		want   string
+	}{
+		{"row type collision", func(a *model.AnalysisResult) {
+			a.Catalog.Tables[0].Name = "ReadRow"
+			a.Queries[0].ResultSets[0].Embeds[0].Table = "ReadRow"
+		}, "Kotlin type name collision: ReadRow"},
+		{"invalid embedded model name", func(a *model.AnalysisResult) { a.Queries[0].ResultSets[0].Embeds[0].Table = "!" }, "cannot represent"},
+		{"unsupported scalar beside embed", func(a *model.AnalysisResult) {
+			a.Queries[0].ResultSets[0].Columns = append(a.Queries[0].ResultSets[0].Columns, model.Column{Name: "extra", Type: model.Type{Kind: "Tuple"}})
+		}, "unsupported Kotlin type Tuple"},
+		{"invalid embedded field", func(a *model.AnalysisResult) { a.Queries[0].ResultSets[0].Embeds[0].Field = "!" }, "cannot represent"},
+		{"duplicate row field", func(a *model.AnalysisResult) {
+			a.Queries[0].ResultSets[0].Columns = append(a.Queries[0].ResultSets[0].Columns, model.Column{Name: "books", Type: u64})
+		}, "Kotlin field name collision in ReadRow: books"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &model.AnalysisResult{
+				Catalog: model.Catalog{Tables: []model.Table{{Name: "books", Columns: []model.Column{{Name: "id", Type: u64}}}}},
+				Queries: []model.AnalyzedQuery{{Name: "Read", Command: model.One, SQL: "SELECT id FROM books;", ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: u64}}, Embeds: []model.Embedding{{Start: 0, End: 1, Table: "books", Field: "books"}}}}}},
+			}
+			tc.change(a)
+			_, err := Generate(a, Options{Runtime: "ydb"})
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}

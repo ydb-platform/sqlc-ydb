@@ -42,6 +42,7 @@ func TestAnalyzeRejectsUnsupportedEmbedForms(t *testing.T) {
 		{"unknown alias", "SELECT sqlc.embed(missing) FROM books b;", "unknown table or alias"},
 		{"argument expression", "SELECT sqlc.embed(b.book_id) FROM books b;", "expects a table or relation alias"},
 		{"multiple arguments", "SELECT sqlc.embed(b, b) FROM books b;", "expects one table or relation alias"},
+		{"named argument", "SELECT sqlc.embed(b AS source) FROM books b;", "expects a table or relation alias"},
 		{"result alias", "SELECT sqlc.embed(b) AS nested FROM books b;", "cannot have an AS alias"},
 		{"outer join", "SELECT sqlc.embed(a) FROM books b LEFT JOIN authors a ON b.author_id = a.author_id;", "nullable OUTER JOIN side"},
 		{"derived table", "SELECT sqlc.embed(x) FROM (SELECT book_id FROM books) AS x;", "requires a physical catalog table"},
@@ -52,7 +53,9 @@ func TestAnalyzeRejectsUnsupportedEmbedForms(t *testing.T) {
 		{"where call", "SELECT book_id FROM books b WHERE sqlc.embed(b) = 1;", "must be a direct result expression"},
 		{"union", "SELECT sqlc.embed(b) FROM books b UNION ALL SELECT sqlc.embed(b) FROM books b;", "single top-level SELECT"},
 		{"multiple statements", "SELECT sqlc.embed(b) FROM books b; SELECT book_id FROM books;", "multi-statement queries support at most one result-producing statement"},
+		{"DML followed by embed", "UPSERT INTO books (book_id, author_id) VALUES (1ul, 2ul); SELECT sqlc.embed(b) FROM books b;", "sqlc.embed requires a single row-returning SELECT statement"},
 		{"computed scalar", "SELECT sqlc.embed(b), b.book_id + 1 FROM books b;", "requires explicit AS aliases"},
+		{"result column collision", "SELECT sqlc.embed(b), b.book_id AS `__sqlc_embed_0_0` FROM books b;", "collides with another projection"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

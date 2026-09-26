@@ -127,6 +127,35 @@ func TestEmbeddedResultRejectsInconsistentAnalysis(t *testing.T) {
 	require.ErrorContains(t, err, "result field name collision")
 }
 
+func TestEmbeddedResultRejectsInvalidModel(t *testing.T) {
+	u64 := model.Type{Kind: "Uint64"}
+	for _, tc := range []struct {
+		name   string
+		change func(*model.AnalysisResult)
+		want   string
+	}{
+		{"invalid range", func(a *model.AnalysisResult) { a.Queries[0].ResultSets[0].Embeds[0].End = 2 }, "invalid embedded column range"},
+		{"missing table", func(a *model.AnalysisResult) { a.Queries[0].ResultSets[0].Embeds[0].Table = "missing" }, `embedded table "missing" does not match projected columns`},
+		{"generated model name collision", func(a *model.AnalysisResult) {
+			a.Catalog.Tables = append(a.Catalog.Tables, model.Table{Name: "authors", Columns: []model.Column{{Name: "id", Type: u64}}})
+			a.Queries[0].ResultSets[0].Columns = append(a.Queries[0].ResultSets[0].Columns, model.Column{Name: "id", WireName: "other_id", Type: u64})
+			a.Queries[0].ResultSets[0].Embeds = append(a.Queries[0].ResultSets[0].Embeds, model.Embedding{Start: 1, End: 2, Table: "authors", Field: "Books"})
+		}, `embedded model name collision "Books"`},
+		{"reserved generated model", func(a *model.AnalysisResult) { a.Queries[0].ResultSets[0].Embeds[0].Field = "queries" }, `embedded model type name collision "Queries"`},
+		{"generated row name", func(a *model.AnalysisResult) { a.Queries[0].ResultSets[0].Embeds[0].Field = "read_row" }, `embedded model type name collision "ReadRow"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &model.AnalysisResult{
+				Catalog: model.Catalog{Tables: []model.Table{{Name: "books", Columns: []model.Column{{Name: "id", Type: u64}}}}},
+				Queries: []model.AnalyzedQuery{{Name: "Read", Command: model.One, SQL: "SELECT id FROM books;", ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", WireName: "book_id", Type: u64}}, Embeds: []model.Embedding{{Start: 0, End: 1, Table: "books", Field: "books"}}}}}},
+			}
+			tc.change(a)
+			_, err := Generate(a, Options{})
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
 func TestProjectionPreservesSQLAndWireNames(t *testing.T) {
 	for _, tc := range []struct{ sql, want string }{
 		{"SELECT display_name FROM authors;", "SELECT display_name FROM authors;"},
