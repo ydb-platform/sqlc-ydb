@@ -36,6 +36,10 @@ SELECT c.* FROM counters AS c WHERE c.id = $id;
 -- name: ListCounters :many
 SELECT * FROM counters ORDER BY id;
 
+-- name: CounterSummary :one
+SELECT COUNT(*) AS total, SUM_IF(value, enabled) AS enabled_total, AVG_IF(value, enabled) AS enabled_average
+FROM counters;
+
 -- name: ReadThenIncrement :exec
 DECLARE $id AS Utf8;
 DECLARE $delta AS Int64;

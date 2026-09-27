@@ -69,6 +69,17 @@ func TestDateTimeCallableUDF(t *testing.T) {
 	}
 }
 
+func TestDateTimeMakeTzDateProjection(t *testing.T) {
+	for _, tc := range []struct{ sql, want string }{
+		{`SELECT DateTime::ToSeconds(DateTime::MakeTzDate(UNWRAP(DateTime::FromSeconds(1704239100u)))) AS day_start;`, "Uint32"},
+		{`SELECT DateTime::ToSeconds(DateTime::MakeTzDate(DateTime::FromSeconds(1704239100u))) AS day_start;`, "Optional<Uint32>"},
+	} {
+		result, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: "-- name: LocalZone :one\n" + tc.sql}})
+		require.NoError(t, err)
+		require.Equal(t, tc.want, result.Queries[0].ResultSets[0].Columns[0].Type.String())
+	}
+}
+
 func TestYsonConvertToTypeArgument(t *testing.T) {
 	for _, tc := range []struct{ sql, want string }{
 		{"SELECT Yson::ConvertTo(Yson::ParseJson(\"[\\\"x\\\"]\"), List<String>) AS values;", "Optional<List<String>>"},

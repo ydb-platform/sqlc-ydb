@@ -398,4 +398,33 @@ class Queries {
         val _value0: String = _rows.getColumn(0).getText()
         return EchoAuthorIDTextRow(_value0)
     }
+
+    // -- name: ListAuthorNameWords :many
+    fun listAuthorNameWords(): List<ListAuthorNameWordsRow> {
+        val _params = Params.create()
+        val _query = if (transaction != null) {
+            QueryReader.readFrom(transaction.createQuery(
+                "SELECT id, word\n" +
+                "FROM (SELECT id, Unicode::SplitToList(name, \" \"u) AS words FROM authors)\n" +
+                "FLATTEN LIST BY words AS word\n" +
+                "ORDER BY id, word;", _params)).join().getValue()
+        } else {
+            client!!.supplyResult { _session ->
+                QueryReader.readFrom(_session.createQuery(
+                    "SELECT id, word\n" +
+                    "FROM (SELECT id, Unicode::SplitToList(name, \" \"u) AS words FROM authors)\n" +
+                    "FLATTEN LIST BY words AS word\n" +
+                    "ORDER BY id, word;", TxMode.SERIALIZABLE_RW, _params))
+            }.join().getValue()
+        }
+        kotlin.check(_query.getResultSetCount() == 1) { "Expected one result set" }
+        val _rows = _query.getResultSet(0)
+        val _items = ArrayList<ListAuthorNameWordsRow>()
+        while (_rows.next()) {
+            val _value0: Long = _rows.getColumn(0).getUint64()
+            val _value1: String = _rows.getColumn(1).getText()
+            _items.add(ListAuthorNameWordsRow(_value0, _value1))
+        }
+        return _items
+    }
 }

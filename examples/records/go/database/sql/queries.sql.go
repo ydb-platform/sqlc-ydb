@@ -429,3 +429,37 @@ func (q *Queries) RankDistinctGroups(ctx context.Context, arg uint64) ([]RankDis
 
 	return items, nil
 }
+
+// -- name: ListRecordDays :many
+func (q *Queries) ListRecordDays(ctx context.Context, arg uint64) ([]ListRecordDaysRow, error) {
+	rows, err := q.db.QueryContext(ctx, ""+
+		"DECLARE $owner_id AS Uint64;\n"+
+		"SELECT record_id, DateTime::ToSeconds(DateTime::MakeTzDate(created_at)) AS created_day_start\n"+
+		"FROM records\n"+
+		"WHERE owner_hash = Digest::CityHash(CAST($owner_id AS String))\n"+
+		"ORDER BY record_id;",
+		sql.Named("owner_id", arg),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []ListRecordDaysRow(nil)
+	for rows.Next() {
+		var row ListRecordDaysRow
+		if err := rows.Scan(
+			&row.RecordID,
+			&row.CreatedDayStart,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, row)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}

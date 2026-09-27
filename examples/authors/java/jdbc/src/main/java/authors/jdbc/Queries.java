@@ -275,4 +275,24 @@ public final class Queries {
             }
         }
     }
+
+    // -- name: ListAuthorNameWords :many
+    public java.util.List<ListAuthorNameWordsRow> listAuthorNameWords() throws java.sql.SQLException {
+        try (var _prepared = client.prepareStatement("""
+            SELECT id, word
+            FROM (SELECT id, Unicode::SplitToList(name, \" \"u) AS words FROM authors)
+            FLATTEN LIST BY words AS word
+            ORDER BY id, word;\
+            """)) {
+            try (var _rows = _prepared.executeQuery()) {
+                var _items = new java.util.ArrayList<ListAuthorNameWordsRow>();
+                while (_rows.next()) {
+                    long _value0 = _rows.getLong(1);
+                    String _value1 = _rows.getString(2);
+                    _items.add(new ListAuthorNameWordsRow(_value0, _value1));
+                }
+                return _items;
+            }
+        }
+    }
 }

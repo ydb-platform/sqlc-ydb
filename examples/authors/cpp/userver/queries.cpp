@@ -344,4 +344,30 @@ std::optional<EchoAuthorIDTextRow> Queries::EchoAuthorIDText(const ::userver::yd
     };
 }
 
+// -- name: ListAuthorNameWords :many
+std::vector<ListAuthorNameWordsRow> Queries::ListAuthorNameWords() const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "SELECT id, word\n"
+        "FROM (SELECT id, Unicode::SplitToList(name, \" \"u) AS words FROM authors)\n"
+        "FLATTEN LIST BY words AS word\n"
+        "ORDER BY id, word;",
+        ::userver::ydb::Query::Name{"ListAuthorNameWords"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    auto sqlc_response =
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query);
+    auto sqlc_cursor = sqlc_response.GetSingleCursor();
+    std::vector<ListAuthorNameWordsRow> sqlc_rows;
+    sqlc_rows.reserve(sqlc_cursor.size());
+    for (auto sqlc_row : sqlc_cursor) {
+        sqlc_rows.push_back(ListAuthorNameWordsRow{
+            sqlc_row.Get<std::uint64_t>("id"),
+            sqlc_row.Get<::userver::ydb::Utf8>("word"),
+        });
+    }
+    return sqlc_rows;
+}
+
 }  // namespace authors::userver

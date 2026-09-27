@@ -12,7 +12,7 @@ import (
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
-func TestAnalyzeRejectsUnsupportedSQLCMacrosInEveryQueryContext(t *testing.T) {
+func TestAnalyzeSQLCSliceInQueryContexts(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE foo (
  id Uint64 NOT NULL,
  name Utf8 NOT NULL,
@@ -23,20 +23,109 @@ func TestAnalyzeRejectsUnsupportedSQLCMacrosInEveryQueryContext(t *testing.T) {
 		command model.Command
 		query   string
 	}{
+		{name: "one", command: model.One, query: "SELECT id FROM foo WHERE id IN sqlc.slice(ids) LIMIT 1;"},
+		{name: "each", command: model.Each, query: "SELECT id FROM foo WHERE id IN sqlc.slice(ids);"},
 		{name: "slice in nested select", command: model.Many, query: "SELECT id FROM (SELECT id FROM foo WHERE id IN sqlc.slice(ids)) nested;"},
 		{name: "slice in update where", command: model.Exec, query: "UPDATE foo SET name = $name WHERE id IN sqlc.slice(ids);"},
+		{name: "insert select", command: model.Exec, query: "INSERT INTO foo (id, name) SELECT id, name FROM foo WHERE id IN sqlc.slice(ids);"},
+		{name: "shared script", command: model.Exec, query: "UPDATE foo SET name = $name WHERE id IN sqlc.slice(ids); DELETE FROM foo WHERE id IN sqlc.slice(ids);"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			query := "-- name: Invalid " + string(tt.command) + "\n" + tt.query
+			query := "-- name: Selected " + string(tt.command) + "\n" + tt.query
 			result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
-			require.Error(t, err)
-			require.NotNil(t, result)
-			require.NotEqual(t, 0, len(result.Diagnostics))
-			require.Contains(t, err.Error(), "sqlc.slice is unsupported")
+			require.NoError(t, err)
+			require.Contains(t, result.Queries[0].SQL, "id IN $ids")
+			require.Contains(t, result.Queries[0].Parameters, model.Parameter{Name: "ids", Type: model.Type{Kind: "List", Elem: &model.Type{Kind: "Uint64"}}})
 		})
 	}
+}
+
+func TestAnalyzeSQLCSliceLowersParenthesizedIN(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE foo (id Uint64 NOT NULL, PRIMARY KEY (id));"}}
+	for _, tc := range []struct{ statement, parameter string }{
+		{`SELECT id FROM foo WHERE id IN (sqlc.slice("ids")) ORDER BY id;`, "$`ids`"},
+		{`SELECT id FROM foo WHERE id NOT IN (SQLC /* gap */ . SLICE('ids')) ORDER BY id;`, "$`ids`"},
+		{`SELECT id FROM foo WHERE id IN ( /* before */ sqlc.slice(ids) /* after */ ) ORDER BY id;`, "$ids"},
+	} {
+		t.Run(tc.statement, func(t *testing.T) {
+			query := "-- name: Selected :many\n" + tc.statement
+			result, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
+			require.NoError(t, err)
+			require.Equal(t, []model.Parameter{{Name: "ids", Type: model.Type{Kind: "List", Elem: &model.Type{Kind: "Uint64"}}}}, result.Queries[0].Parameters)
+			require.NotContains(t, result.Queries[0].SQL, "sqlc.slice(")
+			require.Contains(t, result.Queries[0].SQL, tc.parameter)
+			if strings.Contains(tc.statement, "before") {
+				require.Contains(t, result.Queries[0].SQL, "IN  /* before */ $ids /* after */ ")
+			}
+		})
+	}
+}
+
+func TestAnalyzeSQLCSlicePreservesSourcePositions(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE foo (id Uint64 NOT NULL, PRIMARY KEY (id));"}}
+	query := "-- name: Selected :many\r\n-- 🪄 sqlc.slice(ghost)\r\nSELECT id FROM foo WHERE id IN (sqlc.slice(\"ids\")) AND missing = 1u;"
+	_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: query}})
+	require.ErrorContains(t, err, `unknown column "missing"`)
+	line := query[strings.LastIndex(query, "\n")+1:]
+	require.ErrorContains(t, err, "query.sql:3:"+strconv.Itoa(len([]rune(line[:strings.Index(line, "missing")]))+1))
+}
+
+func TestAnalyzeSQLCSliceRejectsInvalidUses(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE foo (id Uint64 NOT NULL, name Utf8 NOT NULL, PRIMARY KEY (id));"}}
+	for _, tc := range []struct{ sql, want string }{
+		{`SELECT sqlc.slice(ids) FROM foo;`, "sqlc.slice must be directly after IN"},
+		{`SELECT id FROM foo WHERE id IN (sqlc.slice(ids), 2ul);`, "sqlc.slice must be directly after IN"},
+		{`SELECT id FROM foo WHERE id IN ((sqlc.slice(ids)));`, "without additional parentheses"},
+		{`SELECT id FROM foo WHERE id IN (sqlc.slice());`, "sqlc.slice expects exactly one parameter name"},
+		{`SELECT id FROM foo WHERE id IN (sqlc.slice(42));`, "sqlc.slice expects a nonempty identifier or quoted string"},
+		{`SELECT id FROM foo WHERE id IN (sqlc.slice(ids + 1u));`, "sqlc.slice expects exactly one parameter name"},
+		{`DECLARE $ids AS List<Utf8>; SELECT id FROM foo WHERE id IN (sqlc.slice(ids));`, "IN operands have incompatible types"},
+		{`$ids = ListCreate(Uint64); SELECT id FROM foo WHERE id IN (sqlc.slice(ids));`, `sqlc argument "ids" conflicts with local`},
+		{`SELECT id FROM foo WHERE id IN (sqlc.slice(ids)) OR id = sqlc.narg(ids);`, `cannot use both sqlc.slice and sqlc.narg`},
+		{`SELECT id FROM foo WHERE id = sqlc.narg(ids) OR id IN (sqlc.slice(ids));`, `cannot use both sqlc.slice and sqlc.narg`},
+		{`SELECT id FROM foo WHERE id IN (sqlc.slice(ids)) OR id = sqlc.arg(ids);`, `cannot use both sqlc.slice and sqlc.arg`},
+		{`SELECT id FROM foo WHERE id = sqlc.arg(ids) OR id IN (sqlc.slice(ids));`, `cannot use both sqlc.slice and sqlc.arg`},
+	} {
+		t.Run(tc.sql, func(t *testing.T) {
+			_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Invalid :many\n" + tc.sql}})
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
+func TestDatabaseAnalysisLowersSQLCSliceBeforeValidation(t *testing.T) {
+	query := "-- name: Selected :many\nDECLARE $ids AS List<Uint64>;\nSELECT id FROM foo WHERE id IN (sqlc.slice(\"ids\"));"
+	database := &fakeAnalysisDatabase{tables: map[string]model.Table{"foo": databaseTestTable("name")}}
+	result, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: query}}, Options{}, database)
+	require.NoError(t, err)
+	require.Equal(t, []string{"-- name: Selected :many\nDECLARE $ids AS List<Uint64>;\nSELECT id FROM foo WHERE id IN $`ids`;"}, database.validated)
+	require.Equal(t, "List<Uint64>", result.Queries[0].Parameters[0].Type.String())
+}
+
+func TestDatabaseAnalysisSQLCSliceRequiresExplicitInputType(t *testing.T) {
+	query := "-- name: Selected :many\nSELECT id FROM foo WHERE id IN (sqlc.slice(ids));"
+	database := &fakeAnalysisDatabase{validateError: errors.New("Unknown name: $ids")}
+	_, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: query}}, Options{}, database)
+	require.ErrorContains(t, err, "database query validation failed: Unknown name: $ids")
+	require.Equal(t, []string{"-- name: Selected :many\nSELECT id FROM foo WHERE id IN $ids;"}, database.validated)
+
+	database = &fakeAnalysisDatabase{tables: map[string]model.Table{"foo": databaseTestTable("name")}}
+	list := model.Type{Kind: "List", Elem: &model.Type{Kind: "Uint64"}}
+	options := Options{Parameters: map[string]map[string]model.Type{"Selected": {"ids": list}}}
+	result, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: query}}, options, database)
+	require.NoError(t, err)
+	require.Equal(t, []string{"DECLARE $`ids` AS List<Uint64>; -- name: Selected :many\nSELECT id FROM foo WHERE id IN $ids;"}, database.validated)
+	require.Equal(t, list, result.Queries[0].Parameters[0].Type)
+}
+
+func TestDatabaseAnalysisRejectsInvalidSQLCSliceBeforeServerCalls(t *testing.T) {
+	database := &fakeAnalysisDatabase{}
+	_, err := AnalyzeWithDatabase(context.Background(), nil, []model.Source{{Name: "query.sql", Text: "-- name: Invalid :one\nSELECT sqlc.slice(ids) FROM records;"}}, Options{}, database)
+	require.ErrorContains(t, err, "sqlc.slice must be directly after IN")
+	require.Empty(t, database.validated)
+	require.Empty(t, database.described)
 }
 
 func TestAnalyzeSQLCArguments(t *testing.T) {
