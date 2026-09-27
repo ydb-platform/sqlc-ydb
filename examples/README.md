@@ -12,6 +12,7 @@ YDB adaptations of all five families in [sqlc's examples](https://github.com/sql
 | [records](records) | Typed INSERT/UPSERT/UPDATE/DELETE SELECT, Struct/list parameters, Digest, JSON tag predicates and configured function signatures; Go native and `database/sql` |
 | [counters](counters) | Computed DML, constants, fixed wildcard projections and opt-in live schema checking/discovery; Go native and `database/sql` |
 | [streaming](streaming) | Typed callback exports; Go native SDK and database/sql |
+| [multi_results](multi_results) | Several typed SELECT result sets from one request; Go native SDK and database/sql |
 | [namespaces](namespaces) | Static TablePathPrefix, two catalogs with identically named tables, indexed reads and cross-catalog joins; all built-in languages |
 | [renaming](renaming) | Upstream-style `gen.go.rename` for Go struct fields; native SDK and `database/sql` |
 
@@ -35,4 +36,4 @@ Example READMEs document SQL changes and unsupported upstream contracts. These a
 
 The first five SQL/schema scenarios are adapted from upstream commit `3c2546a4b47fabbcec3e07df420effb1a464728f`; generated code comes from sqlc-ydb.
 
-The `records`, `counters`, `streaming`, `namespaces` and `renaming` recipes are native sqlc-ydb examples. Their default configurations are offline and included in the same generation/Go checks; the counters README documents the optional connected configurations.
+The `records`, `counters`, `streaming`, `multi_results`, `namespaces` and `renaming` recipes are native sqlc-ydb examples. Their default configurations are offline and included in the same generation/Go checks; the counters README documents the optional connected configurations.

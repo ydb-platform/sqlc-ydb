@@ -4,6 +4,10 @@ This maintainer reference records API snapshots and non-obvious SDK behavior use
 
 Language-level generated API, value mappings and ownership contracts remain in the public guides under `docs/`. C++ build details are in [C++ development](cpp-development.md), and additional C# source evidence is in [C# SDK evidence](csharp-sdk-evidence.md).
 
+## Go multiple result sets (2026-09-27)
+
+The pinned Go SDK v3.151.1 exposes `query.Result.NextResultSet(ctx)` and `query.ResultSet.Columns()`, `ColumnTypes()` and `NextRow(ctx)` in [`internal/query/result/result.go`](https://github.com/ydb-platform/ydb-go-sdk/blob/v3.151.1/internal/query/result/result.go). Each column type implements `Yql()` through the public `types.Type` alias. The Query Service `database/sql` adapter exposes names through `Rows.Columns()` and YQL type strings through `Rows.ColumnTypes()[i].DatabaseTypeName()`, sourced from [`internal/xsql/xquery/rows.go`](https://github.com/ydb-platform/ydb-go-sdk/blob/v3.151.1/internal/xsql/xquery/rows.go). Its first `NextResultSet` call acknowledges the already loaded first set; subsequent calls advance the stream. Generated methods therefore inspect and drain the first set before advancing. Local generated-runtime tests cover an empty first set, later-set errors, schema drift and cleanup, and `TestGeneratedMultiResultSets` executed both Go adapters with client and transaction executors against a disposable local YDB.
+
 ## Python script completion
 
 On 2026-09-23, the pinned Python packages were checked for mixed DML and one result: `ydb` 3.29.7 `QuerySessionPool.execute_with_retries` materializes the complete result iterator, and the generated caller-transaction path explicitly applies `list` to `QueryTxContext.execute`. In `ydb-dbapi` 0.1.23, `Cursor._materialize` consumes the whole iterator before `_fill_buffer` for both autocommit and caller-owned transactions. The SQLAlchemy profile uses this DBAPI through `ydb-sqlalchemy` 0.1.22. Fetching the first buffered row therefore does not leave later script statements unread; these profiles require no additional reader-draining code.

@@ -90,6 +90,13 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		return query, diagnostics
 	}
 	query.DeclarationOnly = isDeclarationOnlyExec(block, tree)
+	var resultNames []string
+	if block.command == model.Multi {
+		resultNames, diagnostics = multiResultNames(block, parsed, tree)
+		if len(diagnostics) != 0 {
+			return query, diagnostics
+		}
+	}
 	if contextDiagnostics := validateINSubqueryContexts(block, parsed.tree); len(contextDiagnostics) != 0 {
 		return query, append(diagnostics, contextDiagnostics...)
 	}
@@ -140,6 +147,7 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		bindings[name] = typeValue
 	}
 	var resultColumns []model.Column
+	var resultSets []model.ResultSet
 	resultParameters := map[string]model.Type{}
 	dataStatements := 0
 	for _, statement := range tree.statements {
@@ -155,6 +163,9 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		}
 		if len(columns) != 0 {
 			resultColumns = columns
+			if block.command == model.Multi {
+				resultSets = append(resultSets, model.ResultSet{Name: resultNames[len(resultSets)], Columns: columns})
+			}
 			if core.Select_stmt() != nil {
 				for _, bind := range collectQueryTree(statement).binds {
 					if lambdaPositions[bind.GetStart().GetStart()] {
@@ -228,7 +239,14 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		}
 	}
 
-	for _, column := range resultColumns {
+	columnsToValidate := resultColumns
+	if block.command == model.Multi {
+		columnsToValidate = nil
+		for _, result := range resultSets {
+			columnsToValidate = append(columnsToValidate, result.Columns...)
+		}
+	}
+	for _, column := range columnsToValidate {
 		if column.Type.Kind == "Null" {
 			diagnostics = append(diagnostics, model.Diagnostic{Position: query.Source, Message: fmt.Sprintf("result column %q has unresolved Null type; cast it or combine it with a concrete compatible type", column.Name)})
 		}
@@ -245,7 +263,9 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 			diagnostics = append(diagnostics, model.Diagnostic{Position: query.Source, Message: fmt.Sprintf("command %s cannot be used with a row-returning statement", block.command)})
 		}
 	}
-	if returnsRows {
+	if block.command == model.Multi {
+		query.ResultSets = resultSets
+	} else if returnsRows {
 		result := model.ResultSet{Columns: resultColumns}
 		if block.wildcards != nil {
 			result.Embeds = block.wildcards.embeds
@@ -520,6 +540,17 @@ func validateQueryStatements(block queryBlock, tree queryTree) []model.Diagnosti
 				return []model.Diagnostic{diagnosticAt(block.file, block.line-1, declaration, "DECLARE statements must precede local assignments in a script")}
 			}
 		}
+	}
+	if block.command == model.Multi {
+		for _, statement := range dataStatements {
+			if statement.Sql_stmt_core().Select_stmt() == nil {
+				return []model.Diagnostic{diagnosticAt(block.file, block.line-1, statement, ":multi supports only top-level SELECT statements")}
+			}
+		}
+		if len(dataStatements) < 2 {
+			return []model.Diagnostic{{Position: model.Position{File: block.file, Line: block.line, Column: 1}, Message: ":multi requires at least two top-level SELECT statements"}}
+		}
+		return nil
 	}
 	if len(dataStatements) == 1 {
 		return nil

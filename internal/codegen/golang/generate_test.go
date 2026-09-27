@@ -617,7 +617,7 @@ func generatedSQLValue(t *testing.T, source []byte) string {
 			return true
 		}
 		selector, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok || (selector.Sel.Name != "QueryRowContext" && selector.Sel.Name != "QueryRow") {
+		if !ok || (selector.Sel.Name != "QueryRowContext" && selector.Sel.Name != "QueryRow" && selector.Sel.Name != "QueryContext" && selector.Sel.Name != "Query") {
 			return true
 		}
 		found = true

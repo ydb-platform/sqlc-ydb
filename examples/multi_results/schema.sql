@@ -1,0 +1,1 @@
+-- The queries use typed literals and need no tables.
