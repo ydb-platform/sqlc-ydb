@@ -124,7 +124,6 @@ func databaseTableReferences(blocks []queryBlock) ([]databaseTableReference, []m
 			}
 		}
 		diagnostics = append(diagnostics, validateQueryStatements(*block, tree)...)
-		diagnostics = append(diagnostics, unsupportedSQLCMacroDiagnostics(*block, parsed.tokens)...)
 		_, _, declarationDiagnostics := declarations(*block, tree)
 		diagnostics = append(diagnostics, declarationDiagnostics...)
 		add := func(name string, node antlr.ParserRuleContext) {
