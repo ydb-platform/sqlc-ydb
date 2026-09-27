@@ -74,9 +74,15 @@ func validateQuery(q model.AnalyzedQuery, o Options) error {
 		}
 		seen := map[string]bool{}
 		for _, rs := range q.ResultSets {
+			if len(rs.Columns) == 0 {
+				return fmt.Errorf("python generator: query %q: :multi result %q requires at least one column", q.Name, rs.Name)
+			}
 			name := fieldName(rs.Name)
-			if len(rs.Columns) == 0 || !validPythonName(name) || name == "self" || seen[name] {
-				return fmt.Errorf("python generator: query %q: invalid or colliding :multi result %q", q.Name, rs.Name)
+			if !validPythonName(name) || name == "self" {
+				return fmt.Errorf("python generator: query %q: :multi result %q has invalid generated Python field name %q; rename the result", q.Name, rs.Name, name)
+			}
+			if seen[name] {
+				return fmt.Errorf("python generator: query %q: :multi result %q collides at Python field name %q", q.Name, rs.Name, name)
 			}
 			seen[name] = true
 		}
@@ -119,11 +125,6 @@ func validateQuery(q model.AnalyzedQuery, o Options) error {
 			}
 			if _, err := pyType(c.Type); err != nil {
 				return fmt.Errorf("python generator: query %q column %q: %w", q.Name, c.Name, err)
-			}
-			if q.Command == model.Multi {
-				if _, err := ydbTypeExpr(c.Type); err != nil {
-					return fmt.Errorf("python generator: query %q column %q: %w", q.Name, c.Name, err)
-				}
 			}
 		}
 	}
@@ -509,9 +510,13 @@ func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQ
 		b.WriteString("        if len(result_sets) != " + strconv.Itoa(len(q.ResultSets)) + ":\n            raise ValueError(\"expected " + strconv.Itoa(len(q.ResultSets)) + " YDB result sets\")\n")
 		for i, rs := range q.ResultSets {
 			index := strconv.Itoa(i)
-			b.WriteString("        if result_sets[" + index + "].truncated or [(column.name, column.type) for column in result_sets[" + index + "].columns] != [\n")
+			b.WriteString("        if result_sets[" + index + "].truncated:\n            raise ValueError(\"YDB result set " + strconv.Itoa(i+1) + " was truncated by the server\")\n")
+			b.WriteString("        if [(column.name, column.type) for column in result_sets[" + index + "].columns] != [\n")
 			for _, c := range rs.Columns {
-				typ, _ := ydbTypeExpr(c.Type)
+				typ, err := ydbTypeExpr(c.Type)
+				if err != nil {
+					return fmt.Errorf("python generator: query %q column %q: %w", q.Name, c.Name, err)
+				}
 				b.WriteString("            (" + pyString(c.ResultName()) + ", " + typ + ".proto),\n")
 			}
 			b.WriteString("        ]:\n            raise ValueError(\"YDB result set " + strconv.Itoa(i+1) + " schema mismatch\")\n")

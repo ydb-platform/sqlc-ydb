@@ -35,15 +35,21 @@ class Querier:
         )
         if len(result_sets) != 3:
             raise ValueError("expected 3 YDB result sets")
-        if result_sets[0].truncated or [(column.name, column.type) for column in result_sets[0].columns] != [
+        if result_sets[0].truncated:
+            raise ValueError("YDB result set 1 was truncated by the server")
+        if [(column.name, column.type) for column in result_sets[0].columns] != [
             ("id", _ydb.PrimitiveType.Uint64.proto),
         ]:
             raise ValueError("YDB result set 1 schema mismatch")
-        if result_sets[1].truncated or [(column.name, column.type) for column in result_sets[1].columns] != [
+        if result_sets[1].truncated:
+            raise ValueError("YDB result set 2 was truncated by the server")
+        if [(column.name, column.type) for column in result_sets[1].columns] != [
             ("enabled", _ydb.PrimitiveType.Bool.proto),
         ]:
             raise ValueError("YDB result set 2 schema mismatch")
-        if result_sets[2].truncated or [(column.name, column.type) for column in result_sets[2].columns] != [
+        if result_sets[2].truncated:
+            raise ValueError("YDB result set 3 was truncated by the server")
+        if [(column.name, column.type) for column in result_sets[2].columns] != [
             ("status", _ydb.PrimitiveType.Utf8.proto),
         ]:
             raise ValueError("YDB result set 3 schema mismatch")
@@ -71,15 +77,21 @@ class Querier:
         )
         if len(result_sets) != 3:
             raise ValueError("expected 3 YDB result sets")
-        if result_sets[0].truncated or [(column.name, column.type) for column in result_sets[0].columns] != [
+        if result_sets[0].truncated:
+            raise ValueError("YDB result set 1 was truncated by the server")
+        if [(column.name, column.type) for column in result_sets[0].columns] != [
             ("column0", _ydb.PrimitiveType.Int32.proto),
         ]:
             raise ValueError("YDB result set 1 schema mismatch")
-        if result_sets[1].truncated or [(column.name, column.type) for column in result_sets[1].columns] != [
+        if result_sets[1].truncated:
+            raise ValueError("YDB result set 2 was truncated by the server")
+        if [(column.name, column.type) for column in result_sets[1].columns] != [
             ("column0", _ydb.PrimitiveType.Utf8.proto),
         ]:
             raise ValueError("YDB result set 2 schema mismatch")
-        if result_sets[2].truncated or [(column.name, column.type) for column in result_sets[2].columns] != [
+        if result_sets[2].truncated:
+            raise ValueError("YDB result set 3 was truncated by the server")
+        if [(column.name, column.type) for column in result_sets[2].columns] != [
             ("column0", _ydb.PrimitiveType.Bool.proto),
         ]:
             raise ValueError("YDB result set 3 schema mismatch")

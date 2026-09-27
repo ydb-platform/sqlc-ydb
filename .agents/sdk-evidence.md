@@ -10,7 +10,7 @@ The pinned Go SDK v3.151.1 exposes `query.Result.NextResultSet(ctx)` and `query.
 
 ## Python multiple result sets (2026-09-27)
 
-The pinned native SDK `ydb` 3.29.7 returns a materialized `List[convert.ResultSet]` from `QuerySessionPool.execute_with_retries`; transaction calls are materialized by the generated `_execute` helper. `convert.ResultSet.columns` exposes each column's name and protobuf type, including for empty row sets. The native generator compares these to the analyzed schema before creating typed result dataclasses. The pinned `ydb-dbapi` 0.1.23 `BufferedCursor._fill_buffer` chains rows from all result sets into one iterator; its `nextset()` returns `False`. The `ydb-sqlalchemy` 0.1.22 profile uses that driver, so both profiles reject `:multi` rather than losing result boundaries.
+The pinned native SDK `ydb` 3.29.7 returns a materialized `List[convert.ResultSet]` from `QuerySessionPool.execute_with_retries`; transaction calls are materialized by the generated `_execute` helper. `convert.ResultSet.columns` exposes each column's name and protobuf type, including for empty row sets. The native generator compares these to the analyzed schema before creating typed result dataclasses. `TestLiveYDBNativeMultiResultSets` passed against local YDB 26.3.1.16 for pool and caller-owned transaction execution, including an empty first result and three unaliased literal results with the server's `column0` name. The pinned `ydb-dbapi` 0.1.23 `BufferedCursor._fill_buffer` chains rows from all result sets into one iterator; its `nextset()` returns `False`. The `ydb-sqlalchemy` 0.1.22 profile uses that driver, so both profiles reject `:multi` rather than losing result boundaries.
 
 ## Python script completion
 

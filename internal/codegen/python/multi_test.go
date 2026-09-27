@@ -21,7 +21,12 @@ func multiAnalysis(t *testing.T) *model.AnalysisResult {
 SELECT 1 AS id FROM (SELECT 1 AS x) AS source WHERE false;
 -- result: Flags
 SELECT true AS enabled LIMIT 1;
-SELECT "ready"u AS status;`}})
+SELECT "ready"u AS status;
+
+-- name: BareLiterals :multi
+SELECT 1;
+SELECT "2"u;
+SELECT false;`}})
 	require.NoError(t, err)
 	return a
 }
@@ -63,12 +68,21 @@ result = q.fetch_summary()
 assert isinstance(result, FetchSummaryResult)
 assert result.item == [] and result.flags[0].enabled is True and result.result3[0].status == "ready"
 
-for broken in [sets[:-1], sets + sets[:1], [ResultSet("wrong", "Int32", []), *sets[1:]],
-               [ResultSet("id", "Bool", []), *sets[1:]],
-               [ResultSet("id", "Int32", [], True), *sets[1:]]]:
+literal_sets = [ResultSet("column0", "Int32", [{"column0": 1}]), ResultSet("column0", "Utf8", [{"column0": "2"}]), ResultSet("column0", "Bool", [{"column0": False}])]
+q._execute = lambda sql, params: literal_sets
+bare = q.bare_literals()
+assert [row.column0 for row in bare.result1] == [1]
+assert [row.column0 for row in bare.result2] == ["2"]
+assert [row.column0 for row in bare.result3] == [False]
+
+for broken, message in [(sets[:-1], "expected 3 YDB result sets"),
+                        (sets + sets[:1], "expected 3 YDB result sets"),
+                        ([ResultSet("wrong", "Int32", []), *sets[1:]], "schema mismatch"),
+                        ([ResultSet("id", "Bool", []), *sets[1:]], "schema mismatch"),
+                        ([ResultSet("id", "Int32", [], True), *sets[1:]], "truncated by the server")]:
     q._execute = lambda sql, params: broken
     try: q.fetch_summary()
-    except ValueError: pass
+    except ValueError as exc: assert message in str(exc), str(exc)
     else: raise AssertionError("invalid result sets accepted")
 
 def late_error():
@@ -108,9 +122,9 @@ func TestMultiRejectsMalformedPythonResults(t *testing.T) {
 		want   string
 	}{
 		{"one result", func(q *model.AnalyzedQuery) { q.ResultSets = q.ResultSets[:1] }, "requires at least two result sets"},
-		{"empty columns", func(q *model.AnalyzedQuery) { q.ResultSets[0].Columns = nil }, "invalid or colliding :multi result"},
-		{"field collision", func(q *model.AnalyzedQuery) { q.ResultSets[1].Name = "Item_" }, "invalid or colliding :multi result"},
-		{"receiver name", func(q *model.AnalyzedQuery) { q.ResultSets[0].Name = "Self" }, "invalid or colliding :multi result"},
+		{"empty columns", func(q *model.AnalyzedQuery) { q.ResultSets[0].Columns = nil }, "requires at least one column"},
+		{"field collision", func(q *model.AnalyzedQuery) { q.ResultSets[1].Name = "Item_" }, "collides at Python field name \"item\""},
+		{"receiver name", func(q *model.AnalyzedQuery) { q.ResultSets[0].Name = "Self" }, "invalid generated Python field name \"self\""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			a := multiAnalysis(t)
@@ -149,6 +163,10 @@ try:
         assert [r.status for r in value.result3] == ["ready"]
     check(Querier(pool))
     pool.retry_tx_sync(lambda tx: check(Querier(tx)))
+    bare = Querier(pool).bare_literals()
+    assert [row.column0 for row in bare.result1] == [1]
+    assert [row.column0 for row in bare.result2] == ["2"]
+    assert [row.column0 for row in bare.result3] == [False]
 finally:
     driver.stop()
 `
