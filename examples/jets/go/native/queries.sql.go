@@ -12,10 +12,12 @@ import (
 	"github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 
+const CountPilots = "" +
+	"SELECT COUNT(*) AS pilot_count FROM pilots;"
+
 // -- name: CountPilots :one
 func (q *Queries) CountPilots(ctx context.Context, opts ...query.ExecuteOption) (CountPilotsRow, error) {
-	result, err := q.db.QueryRow(ctx, ""+
-		"SELECT COUNT(*) AS pilot_count FROM pilots;",
+	result, err := q.db.QueryRow(ctx, CountPilots,
 		opts...,
 	)
 	if err != nil {
@@ -32,10 +34,12 @@ func (q *Queries) CountPilots(ctx context.Context, opts ...query.ExecuteOption) 
 	return row, nil
 }
 
+const ListPilots = "" +
+	"SELECT id, name FROM pilots ORDER BY id LIMIT 5;"
+
 // -- name: ListPilots :many
 func (q *Queries) ListPilots(ctx context.Context, opts ...query.ExecuteOption) ([]ListPilotsRow, error) {
-	result, err := q.db.Query(ctx, ""+
-		"SELECT id, name FROM pilots ORDER BY id LIMIT 5;",
+	result, err := q.db.Query(ctx, ListPilots,
 		opts...,
 	)
 	if err != nil {
@@ -76,6 +80,9 @@ func (q *Queries) ListPilots(ctx context.Context, opts ...query.ExecuteOption) (
 	return items, nil
 }
 
+const DeletePilot = "" +
+	"DELETE FROM pilots WHERE id = $pilot_id;"
+
 // -- name: DeletePilot :exec
 func (q *Queries) DeletePilot(ctx context.Context, arg int32, opts ...query.ExecuteOption) error {
 	parameters := ydb.ParamsBuilder()
@@ -84,8 +91,7 @@ func (q *Queries) DeletePilot(ctx context.Context, arg int32, opts ...query.Exec
 	callOptions := append([]query.ExecuteOption(nil), opts...)
 	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
 
-	err := q.db.Exec(ctx, ""+
-		"DELETE FROM pilots WHERE id = $pilot_id;",
+	err := q.db.Exec(ctx, DeletePilot,
 		callOptions...,
 	)
 

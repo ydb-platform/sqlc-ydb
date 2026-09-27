@@ -69,6 +69,24 @@ func TestGoQueryParameterLimit(t *testing.T) {
 	require.ErrorContains(t, err, "sql[0].gen.go.query_parameter_limit must not be negative")
 }
 
+func TestGoEmitExportedQueriesConfiguration(t *testing.T) {
+	base := "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n  gen:\n    go:\n      out: db\n"
+	for _, tc := range []struct {
+		name, option string
+		want         bool
+	}{
+		{"default", "", false},
+		{"enabled", "      emit_exported_queries: true\n", true},
+		{"disabled", "      emit_exported_queries: false\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := Parse([]byte(base + tc.option))
+			require.NoError(t, err)
+			require.Equal(t, tc.want, c.SQL[0].Gen.Go.EmitExportedQueries)
+		})
+	}
+}
+
 func TestGoOverrideConfiguration(t *testing.T) {
 	c, err := Parse([]byte(`version: "2"
 sql:
