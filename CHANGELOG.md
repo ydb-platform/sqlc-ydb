@@ -4,6 +4,7 @@
 
 ### Added
 
+- Resolve YQL `SUM_IF` and `AVG_IF` over supported numeric values and Boolean predicates, retaining nullable results when no rows match, including within a group.
 - Support `FLATTEN LIST BY` for list-valued YQL source columns, including optional lists and named element columns.
 - Resolve `DateTime::MakeTzDate` for basic-range DateTime values, including nullable inputs.
 

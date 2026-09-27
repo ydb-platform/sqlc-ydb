@@ -244,6 +244,29 @@ func (q *Queries) ListCounters(ctx context.Context, opts ...query.ExecuteOption)
 	return items, nil
 }
 
+// -- name: CounterSummary :one
+func (q *Queries) CounterSummary(ctx context.Context, opts ...query.ExecuteOption) (CounterSummaryRow, error) {
+	result, err := q.db.QueryRow(ctx, ""+
+		"SELECT COUNT(*) AS total, SUM_IF(value, enabled) AS enabled_total, AVG_IF(value, enabled) AS enabled_average\n"+
+		"FROM counters;",
+		opts...,
+	)
+	if err != nil {
+		return CounterSummaryRow{}, xerrors.WithStackTrace(err)
+	}
+
+	var row CounterSummaryRow
+	if err := result.ScanNamed(
+		query.Named("total", &row.Total),
+		query.Named("enabled_total", &row.EnabledTotal),
+		query.Named("enabled_average", &row.EnabledAverage),
+	); err != nil {
+		return CounterSummaryRow{}, xerrors.WithStackTrace(err)
+	}
+
+	return row, nil
+}
+
 // -- name: ReadThenIncrement :exec
 func (q *Queries) ReadThenIncrement(ctx context.Context, arg ReadThenIncrementParams, opts ...query.ExecuteOption) error {
 	parameters := ydb.ParamsBuilder()

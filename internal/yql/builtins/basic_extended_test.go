@@ -54,6 +54,43 @@ func TestCountIfType(t *testing.T) {
 	}
 }
 
+func TestConditionalAggregateTypes(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value model.Type
+		want  model.Type
+	}{
+		{"SUM_IF", scalar("Int32"), model.Optional(scalar("Int64"))},
+		{"SUM_IF", model.Optional(scalar("Uint32")), model.Optional(scalar("Uint64"))},
+		{"SUM_IF", model.Type{Kind: "Decimal", Precision: 22, Scale: 9}, model.Optional(model.Type{Kind: "Decimal", Precision: 35, Scale: 9})},
+		{"AVG_IF", scalar("Int32"), model.Optional(scalar("Double"))},
+		{"AVG_IF", scalar("Float"), model.Optional(scalar("Double"))},
+		{"AVG_IF", scalar("Interval"), model.Optional(scalar("Double"))},
+		{"AVG_IF", model.Type{Kind: "Decimal", Precision: 22, Scale: 9}, model.Optional(model.Type{Kind: "Decimal", Precision: 22, Scale: 9})},
+	} {
+		for _, predicate := range []model.Type{scalar("Bool"), model.Optional(scalar("Bool")), scalar("Null")} {
+			assertResolved(t, tc.name, []model.Type{tc.value, predicate}, tc.want)
+		}
+	}
+	for _, tc := range []struct {
+		name string
+		args []model.Type
+		want string
+	}{
+		{"SUM_IF", nil, "expects 2"},
+		{"AVG_IF", []model.Type{scalar("Int32")}, "expects 2"},
+		{"SUM_IF", []model.Type{scalar("Int32"), scalar("Bool"), scalar("Bool")}, "expects 2"},
+		{"SUM_IF", []model.Type{scalar("String"), scalar("Bool")}, "SUM_IF argument 1 must be numeric"},
+		{"AVG_IF", []model.Type{scalar("String"), scalar("Bool")}, "AVG_IF argument 1 must be numeric or Interval"},
+		{"SUM_IF", []model.Type{scalar("Int32"), scalar("Int32")}, "Bool"},
+		{"AVG_IF", []model.Type{scalar("Int32"), scalar("String")}, "Bool"},
+		{"SUM_IF", []model.Type{scalar("Int32"), model.Optional(model.Optional(scalar("Bool")))}, "SUM_IF argument 2: nested Optional types are not supported"},
+	} {
+		_, err := Resolve(tc.name, tc.args)
+		require.ErrorContains(t, err, tc.want)
+	}
+}
+
 func TestCurrentTimezoneBuiltinTypes(t *testing.T) {
 	for name, kind := range map[string]string{"CurrentTzDate": "TzDate", "CurrentTzDatetime": "TzDatetime", "CurrentTzTimestamp": "TzTimestamp"} {
 		for _, zone := range []model.Type{scalar("String"), model.Optional(scalar("String")), scalar("Null")} {
