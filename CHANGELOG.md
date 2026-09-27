@@ -6,6 +6,12 @@
 
 - Allow `:exec` scripts with one SELECT or DML RETURNING result alongside mutations, consuming and discarding rows before reporting execution status in supported runtimes.
 
+## v0.10.0
+
+### Added
+
+- Support upstream-compatible `gen.go.build_tags` for every generated Go file in both YDB SDK profiles.
+
 ## v0.9.0
 
 ### Added

@@ -23,6 +23,7 @@ type Options struct {
 	Runtime             string // ydb or database/sql
 	Rename              map[string]string
 	Overrides           []config.GoOverride
+	BuildTags           string
 	EmitJSONTags        bool
 	JSONTagsCaseStyle   string
 	EmitInterface       bool
@@ -54,6 +55,9 @@ func Generate(in *model.AnalysisResult, o Options) ([]model.File, error) {
 	case "", "none", "camel", "pascal", "snake":
 	default:
 		return nil, fmt.Errorf("json_tags_case_style %q must be none, camel, pascal, or snake", o.JSONTagsCaseStyle)
+	}
+	if err := config.ValidateGoBuildTags(o.BuildTags); err != nil {
+		return nil, err
 	}
 	if o.QueryParameterLimit == nil {
 		limit := int32(1)
@@ -103,7 +107,11 @@ func validateDecimalParameter(name string, value types.Decimal, precision, scale
 		files = append(files, model.File{Name: outputName(n), Content: queryFile(n, bySource[n], o)})
 	}
 	for i := range files {
-		formatted, err := format.Source(files[i].Content)
+		content := files[i].Content
+		if o.BuildTags != "" {
+			content = append([]byte("//go:build "+o.BuildTags+"\n\n"), content...)
+		}
+		formatted, err := format.Source(content)
 		if err != nil {
 			return nil, fmt.Errorf("format %s: %w", files[i].Name, err)
 		}
