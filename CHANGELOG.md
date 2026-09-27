@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Support `FLATTEN LIST BY` for list-valued YQL source columns, including optional lists and named element columns.
+
 ## v0.12.0
 
 ### Added
