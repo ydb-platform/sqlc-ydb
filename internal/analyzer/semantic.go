@@ -83,9 +83,6 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	query.Syntax = &model.QuerySyntax{Root: parsed.tree, Columns: map[int]model.ColumnBinding{}, Selects: map[int]model.SelectBinding{}, Tables: resolvedTableReferences(parsed.tree, block.tablePathPrefix), TablePathPrefix: block.tablePathPrefix}
 	tree := collectQueryTree(parsed.tree)
 	lambdaPositions := lambdaLocalBindPositions(parsed.tree)
-	if diagnostics = unsupportedSQLCMacroDiagnostics(block, parsed.tokens); len(diagnostics) != 0 {
-		return query, diagnostics
-	}
 	if diagnostics = validateQueryStatements(block, tree); len(diagnostics) != 0 {
 		return query, diagnostics
 	}
