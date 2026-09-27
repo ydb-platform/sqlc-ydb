@@ -199,7 +199,8 @@ FROM records GROUP BY enabled HAVING SUM_IF(id, optional_flag) > 0ul;`}}
 
 	for _, tc := range []struct{ statement, message string }{
 		{"SELECT SUM_IF(id, id) AS total FROM records;", "Bool"},
-		{"SELECT AVG_IF(label, enabled) AS average FROM records;", "numeric"},
+		{"SELECT SUM_IF(label, enabled) AS total FROM records;", "SUM_IF argument 1 must be numeric"},
+		{"SELECT AVG_IF(label, enabled) AS average FROM records;", "AVG_IF argument 1 must be numeric or Interval"},
 		{"SELECT SUM_IF(COUNT(*), enabled) AS total FROM records;", "cannot contain another aggregate"},
 		{"SELECT id FROM records WHERE SUM_IF(id, enabled) > 0ul;", "aggregate functions are not allowed in WHERE"},
 	} {

@@ -112,11 +112,11 @@ func lookupCore(name string) functionResolver {
 	case "MIN", "MAX":
 		return func(args []model.Type) (model.Type, error) { return resolveMinMax(name, args) }
 	case "SUM":
-		return resolveSum
+		return func(args []model.Type) (model.Type, error) { return resolveSum("SUM", args) }
 	case "SUM_IF", "AVG_IF":
 		return func(args []model.Type) (model.Type, error) { return resolveConditionalAggregate(name, args) }
 	case "AVG":
-		return resolveAvg
+		return func(args []model.Type) (model.Type, error) { return resolveAvg("AVG", args) }
 	case "AGGREGATE_LIST", "AGG_LIST", "AGGREGATE_LIST_DISTINCT", "AGG_LIST_DISTINCT":
 		return resolveAggregateList
 	default:
@@ -185,17 +185,21 @@ func resolveCountIf(args []model.Type) (model.Type, error) {
 }
 
 func resolveConditionalAggregate(name string, args []model.Type) (model.Type, error) {
+	name = strings.ToUpper(name)
 	if err := arity(name, args, 2); err != nil {
 		return model.Type{}, err
 	}
 	predicate, _, err := baseType(args[1])
-	if err != nil || (predicate.Kind != "Bool" && predicate.Kind != "Null") {
+	if err != nil {
+		return model.Type{}, fmt.Errorf("%s argument 2: %w", name, err)
+	}
+	if predicate.Kind != "Bool" && predicate.Kind != "Null" {
 		return model.Type{}, fmt.Errorf("%s argument 2 must be Bool or Optional<Bool>", name)
 	}
-	if strings.EqualFold(name, "SUM_IF") {
-		return resolveSum(args[:1])
+	if name == "SUM_IF" {
+		return resolveSum(name, args[:1])
 	}
-	return resolveAvg(args[:1])
+	return resolveAvg(name, args[:1])
 }
 
 func resolveAggregateList(args []model.Type) (model.Type, error) {
@@ -360,13 +364,13 @@ func resolveMinMax(name string, args []model.Type) (model.Type, error) {
 	return optional(base), nil
 }
 
-func resolveSum(args []model.Type) (model.Type, error) {
-	if err := arity("SUM", args, 1); err != nil {
+func resolveSum(name string, args []model.Type) (model.Type, error) {
+	if err := arity(name, args, 1); err != nil {
 		return model.Type{}, err
 	}
 	base, _, err := baseType(args[0])
 	if err != nil || !isPrimitiveNumber(base.Kind) {
-		return model.Type{}, fmt.Errorf("SUM argument 1 must be numeric")
+		return model.Type{}, fmt.Errorf("%s argument 1 must be numeric", name)
 	}
 	if signed, bits := integerInfo(base.Kind); bits != 0 {
 		if signed {
@@ -380,13 +384,13 @@ func resolveSum(args []model.Type) (model.Type, error) {
 	return optional(base), nil
 }
 
-func resolveAvg(args []model.Type) (model.Type, error) {
-	if err := arity("AVG", args, 1); err != nil {
+func resolveAvg(name string, args []model.Type) (model.Type, error) {
+	if err := arity(name, args, 1); err != nil {
 		return model.Type{}, err
 	}
 	base, _, err := baseType(args[0])
 	if err != nil || (!isPrimitiveNumber(base.Kind) && base.Kind != "Interval" && base.Kind != "Interval64") {
-		return model.Type{}, fmt.Errorf("AVG argument 1 must be numeric or Interval")
+		return model.Type{}, fmt.Errorf("%s argument 1 must be numeric or Interval", name)
 	}
 	if isInteger(base.Kind) || base.Kind == "Float" || base.Kind == "Interval" || base.Kind == "Interval64" {
 		base = model.Type{Kind: "Double"}

@@ -80,10 +80,11 @@ func TestConditionalAggregateTypes(t *testing.T) {
 		{"SUM_IF", nil, "expects 2"},
 		{"AVG_IF", []model.Type{scalar("Int32")}, "expects 2"},
 		{"SUM_IF", []model.Type{scalar("Int32"), scalar("Bool"), scalar("Bool")}, "expects 2"},
-		{"SUM_IF", []model.Type{scalar("String"), scalar("Bool")}, "numeric"},
-		{"AVG_IF", []model.Type{scalar("String"), scalar("Bool")}, "numeric or Interval"},
+		{"SUM_IF", []model.Type{scalar("String"), scalar("Bool")}, "SUM_IF argument 1 must be numeric"},
+		{"AVG_IF", []model.Type{scalar("String"), scalar("Bool")}, "AVG_IF argument 1 must be numeric or Interval"},
 		{"SUM_IF", []model.Type{scalar("Int32"), scalar("Int32")}, "Bool"},
 		{"AVG_IF", []model.Type{scalar("Int32"), scalar("String")}, "Bool"},
+		{"SUM_IF", []model.Type{scalar("Int32"), model.Optional(model.Optional(scalar("Bool")))}, "SUM_IF argument 2: nested Optional types are not supported"},
 	} {
 		_, err := Resolve(tc.name, tc.args)
 		require.ErrorContains(t, err, tc.want)
