@@ -99,6 +99,14 @@ func TestDateTimeDocumentedResourceOverloads(t *testing.T) {
 	}
 }
 
+func TestDateTimeMakeTzDate(t *testing.T) {
+	resource := udfKind(dateTimeTM)
+	checkDocumentedUDF(t, "DateTime::MakeTzDate", []model.Type{resource}, udfKind("TzDate"))
+	checkDocumentedUDF(t, "DateTime::MakeTzDate", []model.Type{model.Optional(resource)}, model.Optional(udfKind("TzDate")))
+	_, err := Resolve("DateTime::MakeTzDate", []model.Type{udfKind(dateTimeTM64)})
+	require.Error(t, err)
+}
+
 func TestDateTimeDocumentedScalarOverloads(t *testing.T) {
 	for _, tc := range []struct{ name, input, result string }{
 		{"FromSeconds", "Uint32", "Timestamp"}, {"FromSeconds64", "Int64", "Timestamp64"},

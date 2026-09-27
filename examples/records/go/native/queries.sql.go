@@ -462,3 +462,57 @@ func (q *Queries) ReverseGroupLabel(ctx context.Context, arg *string, opts ...qu
 
 	return row, nil
 }
+
+// -- name: ListRecordDays :many
+func (q *Queries) ListRecordDays(ctx context.Context, arg uint64, opts ...query.ExecuteOption) ([]ListRecordDaysRow, error) {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$owner_id").Uint64(arg)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	result, err := q.db.Query(ctx, ""+
+		"DECLARE $owner_id AS Uint64;\n"+
+		"SELECT record_id, DateTime::ToSeconds(DateTime::MakeTzDate(created_at)) AS created_day_start\n"+
+		"FROM records\n"+
+		"WHERE owner_hash = Digest::CityHash(CAST($owner_id AS String))\n"+
+		"ORDER BY record_id;",
+		callOptions...,
+	)
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
+	}
+	defer result.Close(ctx)
+
+	resultSet, err := result.NextResultSet(ctx)
+	if errors.Is(err, io.EOF) {
+		return nil, xerrors.WithStackTrace(query.ErrNoResultSets)
+	}
+	if err != nil {
+		return nil, xerrors.WithStackTrace(err)
+	}
+
+	items := []ListRecordDaysRow(nil)
+	for r, err := range resultSet.Rows(ctx) {
+		if err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+		var row ListRecordDaysRow
+		if err := r.ScanNamed(
+			query.Named("record_id", &row.RecordID),
+			query.Named("created_day_start", &row.CreatedDayStart),
+		); err != nil {
+			return nil, xerrors.WithStackTrace(err)
+		}
+		items = append(items, row)
+	}
+
+	_, err = result.NextResultSet(ctx)
+	if err == nil {
+		return nil, xerrors.WithStackTrace(query.ErrMoreThanOneResultSet)
+	} else if !errors.Is(err, io.EOF) {
+		return nil, xerrors.WithStackTrace(err)
+	}
+
+	return items, nil
+}

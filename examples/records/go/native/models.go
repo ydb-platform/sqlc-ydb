@@ -99,3 +99,8 @@ type FindRecordsByTagsRow struct {
 type ReverseGroupLabelRow struct {
 	ReversedLabel *string
 }
+
+type ListRecordDaysRow struct {
+	RecordID        string
+	CreatedDayStart uint32
+}
