@@ -77,6 +77,12 @@ func analyzeSelectCore(catalog model.Catalog, block queryBlock, core *parser.Sel
 	if len(relations) == 0 && containsAggregate(core) {
 		return nil, []model.Diagnostic{diagnosticAt(block.file, block.line-1, core, "aggregate functions require a FROM source")}
 	}
+	if len(relations) == 0 && hasWindowCall(core) {
+		return nil, []model.Diagnostic{diagnosticAt(block.file, block.line-1, core, "window functions require a FROM source")}
+	}
+	block.windows, ds = rowNumberWindows(block, core, relations)
+	diagnostics = append(diagnostics, ds...)
+	diagnostics = append(diagnostics, validateWindowPlacement(block, core)...)
 	recordColumnBindings(syntax, core, relations)
 	sources := relations
 	inferFromComparisons(core, sources, inferred)

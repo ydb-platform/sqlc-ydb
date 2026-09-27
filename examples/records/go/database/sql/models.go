@@ -99,3 +99,14 @@ type FindRecordsByTagsRow struct {
 type ReverseGroupLabelRow struct {
 	ReversedLabel *string
 }
+
+type RankRecordsWithinGroupRow struct {
+	RecordID string
+	GroupID  string
+	RowNum   uint64
+}
+
+type RankDistinctGroupsRow struct {
+	GroupID string
+	RowNum  uint64
+}
