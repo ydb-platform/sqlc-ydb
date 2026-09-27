@@ -7,6 +7,7 @@
 - Resolve YQL `SUM_IF` and `AVG_IF` over supported numeric values and Boolean predicates, retaining nullable results when no rows match, including within a group.
 - Support `FLATTEN LIST BY` for list-valued YQL source columns, including optional lists and named element columns.
 - Resolve `DateTime::MakeTzDate` for basic-range DateTime values, including nullable inputs.
+- Add Java JDBC `:multi` queries with named typed lists, empty-result schema validation and complete result traversal.
 
 ## v0.12.0
 
@@ -45,7 +46,6 @@
 ### Added
 
 - Add Go `:multi` queries for two or more read-only SELECT result sets in one YDB request, with typed slices, optional result names and exact result-set validation.
-- Add Java JDBC `:multi` queries with named typed lists, empty-result schema validation and complete result traversal.
 
 ## v0.8.0
 
