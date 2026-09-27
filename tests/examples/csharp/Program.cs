@@ -284,6 +284,8 @@ internal static class Program
     private static async Task ExerciseBooktestDapperAsync(YdbConnection connection, CancellationToken cancellationToken)
     {
         var queries = new BooktestDapper.Queries(connection);
+        await queries.NoOpWithParameterAsync(1, cancellationToken);
+        await new BooktestAdoNet.Queries(connection).NoOpWithParameterAsync(2, cancellationToken);
         const ulong id = ulong.MaxValue;
         var at = TestTimestamp();
         await queries.CreateAuthorAsync(new BooktestDapper.CreateAuthorParams(id, "Octavia"), cancellationToken);

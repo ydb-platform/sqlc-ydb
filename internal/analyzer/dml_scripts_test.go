@@ -98,7 +98,7 @@ func TestDMLScriptRejectsUnsupportedShapes(t *testing.T) {
 		{"unsupported command", ":exec", "DELETE FROM records; COMMIT; DELETE FROM copies;", "unsupported statement in named query: \"COMMIT\""},
 		{"no data for rows", ":one", "DECLARE $id AS Uint64;", "named query requires a SELECT, INSERT/UPSERT, UPDATE, or DELETE statement"},
 		{"pragma only", ":exec", "PRAGMA OrderedColumns;", "named query requires a SELECT, INSERT/UPSERT, UPDATE, or DELETE statement"},
-		{"pragma and declaration", ":exec", "PRAGMA OrderedColumns; DECLARE $id AS Uint64;", "named query requires a SELECT, INSERT/UPSERT, UPDATE, or DELETE statement"},
+		{"pragma and declaration", ":exec", "PRAGMA OrderedColumns; DECLARE $id AS Uint64;", "PRAGMA is not allowed in a declaration-only query"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := Analyze(dmlScriptSchema, []model.Source{{Name: "query.sql", Text: "-- name: Change " + tc.command + "\n" + tc.sql}})

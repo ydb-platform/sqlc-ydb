@@ -15,6 +15,7 @@ public final class BatchSmoke {
             connection.createStatement().execute(SCHEMA);
             try {
                 var jdbc = new batch.jdbc.Queries(connection);
+                new booktest.jdbc.Queries(connection).noOpWithParameter(1L);
                 jdbc.createBooks(List.of());
                 check(jdbc.booksByYear(2026).isEmpty());
                 jdbc.createBooks(List.of(new batch.jdbc.CreateBooksBooksItem(-1L, 42L, "isbn", "paper", "First", 2026, Instant.EPOCH, "[1,true]"),
@@ -31,6 +32,7 @@ public final class BatchSmoke {
                     retry.supplyResult(session -> {
                         var tx = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
                         var nativeQueries = new batch.nativeapi.Queries(tx);
+                        new booktest.nativeapi.Queries(tx).noOpWithParameter(1L);
                         nativeQueries.createBooks(List.of());
                         nativeQueries.createBooks(List.of(new batch.nativeapi.CreateBooksBooksItem(9L, 42L, "native", "paper", "Native", 2028, Instant.EPOCH, "[false]")));
                         check(nativeQueries.booksByYear(2028).get(0).tags().equals("[false]"));

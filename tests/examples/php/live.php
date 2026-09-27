@@ -200,6 +200,7 @@ function runBooktest(Table $table): void
     $createdTables = createTables($table, source('booktest/schema.sql'), ['authors', 'books']);
     try {
         $queries = new Booktest\Native\Queries($table);
+        $queries->noOpWithParameter('1');
         $authorId = '91';
         $bookId = '92';
         $queries->createAuthor(new Booktest\Native\CreateAuthorParams(

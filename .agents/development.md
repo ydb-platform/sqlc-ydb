@@ -145,9 +145,11 @@ cd tests/examples/go
 YDB_CONNECTION_STRING=grpc://localhost:2136/local go test -p 1 -count=1 -timeout=180s -v ./...
 cd ../../../examples/authors
 YDB_CONNECTION_STRING=grpc://localhost:2136/local python -m python.smoke
+cd ../booktest
+YDB_CONNECTION_STRING=grpc://localhost:2136/local python -m python.smoke
 ```
 
-From `examples/authors`, the Python interpreter needs `pip install -r python/requirements.txt`. Run the smoke test as a module from this directory so the generated `python/sqlalchemy` package does not shadow the installed SQLAlchemy library. Integration checks include the maximum Uint64 value, UTF-8 text, optional values, single-column projections, list queries, writes and missing rows.
+The Python interpreter needs `pip install -r examples/authors/python/requirements.txt`. Run each smoke test as a module from its example directory so the generated `python/sqlalchemy` package does not shadow the installed SQLAlchemy library. Integration checks include the maximum Uint64 value, UTF-8 text, optional values, single-column projections, list queries, writes and missing rows.
 
 From `examples/authors`, the additional live checks are:
 

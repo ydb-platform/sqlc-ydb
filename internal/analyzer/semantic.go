@@ -498,8 +498,15 @@ func validateQueryStatements(block queryBlock, tree queryTree) []model.Diagnosti
 		return diagnostics
 	}
 	if len(dataStatements) == 0 {
-		if block.command == model.Exec && len(tree.declares) != 0 && len(tree.statements) == len(tree.declares) {
-			return nil
+		if block.command == model.Exec && len(tree.declares) != 0 {
+			if len(tree.statements) == len(tree.declares) {
+				return nil
+			}
+			for _, statement := range tree.statements {
+				if statement.Sql_stmt_core().Pragma_stmt() != nil {
+					return []model.Diagnostic{diagnosticAt(block.file, block.line-1, statement, "PRAGMA is not allowed in a declaration-only query")}
+				}
+			}
 		}
 		return []model.Diagnostic{{Position: model.Position{File: block.file, Line: block.line, Column: 1}, Message: "named query requires a SELECT, INSERT/UPSERT, UPDATE, or DELETE statement"}}
 	}

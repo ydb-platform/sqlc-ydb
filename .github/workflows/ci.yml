@@ -236,9 +236,12 @@ jobs:
         run: |
           cd tests/examples/go
           go test -p 1 -count=1 -timeout=180s ./... -v
-      - name: Run Python authors example
+      - name: Run Python authors and booktest examples
         working-directory: examples/authors
-        run: python3 -m python.smoke
+        run: |
+          python3 -m python.smoke
+          cd ../booktest
+          python3 -m python.smoke
       - name: Run C# ADO.NET example
         working-directory: examples/authors
         env:
