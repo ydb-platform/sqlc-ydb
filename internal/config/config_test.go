@@ -49,6 +49,26 @@ sql:
 	require.Equal(t, map[string]string{"spotify_url": "SpotifyURL", "id": "Identifier"}, c.SQL[0].Gen.Go.Rename)
 }
 
+func TestGoQueryParameterLimit(t *testing.T) {
+	base := "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n  gen:\n    go:\n      out: db\n"
+	for _, tc := range []struct {
+		name, option string
+		want         int32
+	}{
+		{"default", "", 1},
+		{"struct for all parameters", "      query_parameter_limit: 0\n", 0},
+		{"two positional parameters", "      query_parameter_limit: 2\n", 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := Parse([]byte(base + tc.option))
+			require.NoError(t, err)
+			require.Equal(t, tc.want, *c.SQL[0].Gen.Go.QueryParameterLimit)
+		})
+	}
+	_, err := Parse([]byte(base + "      query_parameter_limit: -1\n"))
+	require.ErrorContains(t, err, "sql[0].gen.go.query_parameter_limit must not be negative")
+}
+
 func TestRejectUnsupportedConfiguration(t *testing.T) {
 	base := "version: '2'\nsql:\n- engine: ydb\n  schema: s.sql\n  queries: q.sql\n"
 	for _, tc := range []struct{ name, input, want string }{

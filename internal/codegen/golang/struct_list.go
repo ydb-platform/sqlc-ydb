@@ -194,7 +194,7 @@ func writeStructDecimalValidations(b *bytes.Buffer, q model.AnalyzedQuery, p mod
 func validateStructDeclarations(in *model.AnalysisResult, o Options) error {
 	names := map[string]bool{"Queries": true, "DBTX": true, "Querier": true, "New": true, "validateDecimalParameter": true}
 	for _, q := range in.Queries {
-		if len(q.Parameters) > 1 {
+		if useParamsStruct(q, o) {
 			names[q.Name+"Params"] = true
 		}
 		if q.Command == model.One || q.Command == model.Many || q.Command == model.Each {
