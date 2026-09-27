@@ -5,6 +5,7 @@
 ### Added
 
 - Support `FLATTEN LIST BY` for list-valued YQL source columns, including optional lists and named element columns.
+- Resolve `DateTime::MakeTzDate` for basic-range DateTime values, including nullable inputs.
 
 ## v0.12.0
 
