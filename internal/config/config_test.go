@@ -65,6 +65,23 @@ func TestGoJSONTagCaseStyleConfiguration(t *testing.T) {
 	require.ErrorContains(t, err, `json_tags_case_style "kebab" must be none, camel, pascal, or snake`)
 }
 
+func TestGoDBTagsConfiguration(t *testing.T) {
+	for _, tc := range []struct {
+		name, option string
+		want         bool
+	}{
+		{"default", "", false},
+		{"enabled", "      emit_db_tags: true\n", true},
+		{"disabled", "      emit_db_tags: false\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := Parse([]byte("version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n  gen:\n    go:\n      out: db\n" + tc.option))
+			require.NoError(t, err)
+			require.Equal(t, tc.want, c.SQL[0].Gen.Go.EmitDBTags)
+		})
+	}
+}
+
 func TestGoQueryParameterLimit(t *testing.T) {
 	base := "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n  gen:\n    go:\n      out: db\n"
 	for _, tc := range []struct {

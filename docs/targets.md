@@ -17,6 +17,7 @@ Use `sqlc-ydb init --help` to list languages and their runtimes. For the options
 | `rename` | map | `{}` | Map SQL column and table names to exported Go struct field and model names; single scalar arguments are unchanged. |
 | `overrides` | list | `[]` | Override supported scalar Go types by YQL db_type or physical table.column; see compatibility for binding and decoding limits. |
 | `build_tags` | string | `(empty)` | Go build expression added to every generated Go file; empty emits no constraint. |
+| `emit_db_tags` | boolean | `false` | Add DB tags to generated struct fields. |
 | `emit_json_tags` | boolean | `false` | Add JSON tags to generated struct fields. |
 | `json_tags_case_style` | enum | `none` | Case style for JSON tags from SQL names (not rename) when emit_json_tags is true; none preserves names, camel keeps the first segment and uses Id for later id segments, pascal uses ID for id segments, and snake inserts underscores at case boundaries only when the SQL name has no underscores already. Values: `none`, `camel`, `pascal`, `snake`. |
 | `emit_interface` | boolean | `false` | Generate the Querier interface implemented by Queries. |

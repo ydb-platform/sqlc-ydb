@@ -24,13 +24,13 @@ func TestStructParameterAPIAndBinding(t *testing.T) {
 	)
 	for _, runtime := range []string{"ydb", "database/sql"} {
 		t.Run(runtime, func(t *testing.T) {
-			files, err := Generate(in, Options{Package: "db", Runtime: runtime, EmitInterface: true, EmitJSONTags: true})
+			files, err := Generate(in, Options{Package: "db", Runtime: runtime, EmitInterface: true, EmitDBTags: true, EmitJSONTags: true})
 			require.NoError(t, err)
 			source := ""
 			for _, f := range files {
 				source += string(f.Content)
 			}
-			for _, want := range []string{"type UpdateBookBook struct", "Title   *string", "Payload []byte", "Tags    string", "json:\"payload\"", "arg UpdateBookBook"} {
+			for _, want := range []string{"type UpdateBookBook struct", "Title   *string", "Payload []byte", "Tags    string", "`db:\"payload\" json:\"payload\"`", "arg UpdateBookBook"} {
 				require.Contains(t, source, want, "missing %q:\n%s", want, source)
 			}
 			runGeneratedRuntimeTest(t, in, Options{Package: "db", Runtime: runtime}, `package db

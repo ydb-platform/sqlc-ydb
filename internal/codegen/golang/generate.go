@@ -24,6 +24,7 @@ type Options struct {
 	Rename              map[string]string
 	Overrides           []config.GoOverride
 	BuildTags           string
+	EmitDBTags          bool
 	EmitJSONTags        bool
 	JSONTagsCaseStyle   string
 	EmitInterface       bool
@@ -394,9 +395,7 @@ func models(in *model.AnalysisResult, o Options) []byte {
 				imports.add(c.Type)
 			}
 			b.WriteString(o.fieldName(c.Name) + " " + typ)
-			if o.EmitJSONTags {
-				b.WriteString(" `json:" + strconv.Quote(o.jsonTagName(c.Name)) + "`")
-			}
+			b.WriteString(o.structTags(c.Name))
 			b.WriteString("\n")
 		}
 		b.WriteString("}\n\n")
@@ -418,9 +417,7 @@ func models(in *model.AnalysisResult, o Options) []byte {
 					if embed := embeddingAt(r, i); embed != nil {
 						if embed.Start == i {
 							b.WriteString(o.fieldName(embed.Field) + " " + o.embeddedGoType(embed.Table))
-							if o.EmitJSONTags {
-								b.WriteString(" `json:" + strconv.Quote(o.jsonTagName(embed.Field)) + "`")
-							}
+							b.WriteString(o.structTags(embed.Field))
 							b.WriteString("\n")
 						}
 						continue
@@ -432,9 +429,7 @@ func models(in *model.AnalysisResult, o Options) []byte {
 						imports.add(c.Type)
 					}
 					b.WriteString(o.fieldName(c.Name) + " " + typ)
-					if o.EmitJSONTags {
-						b.WriteString(" `json:" + strconv.Quote(o.jsonTagName(c.Name)) + "`")
-					}
+					b.WriteString(o.structTags(c.Name))
 					b.WriteString("\n")
 				}
 				b.WriteString("}\n\n")
@@ -459,9 +454,7 @@ func models(in *model.AnalysisResult, o Options) []byte {
 					}
 				}
 				b.WriteString(o.fieldName(p.Name) + " " + typ)
-				if o.EmitJSONTags {
-					b.WriteString(" `json:" + strconv.Quote(o.jsonTagName(p.Name)) + "`")
-				}
+				b.WriteString(o.structTags(p.Name))
 				b.WriteString("\n")
 			}
 			b.WriteString("}\n\n")
@@ -519,6 +512,20 @@ func models(in *model.AnalysisResult, o Options) []byte {
 		head.WriteString("import (" + strings.Join(packages, ";") + ")\n\n")
 	}
 	return append([]byte(head.String()), b.Bytes()...)
+}
+
+func (o Options) structTags(name string) string {
+	if !o.EmitDBTags && !o.EmitJSONTags {
+		return ""
+	}
+	var tags []string
+	if o.EmitDBTags {
+		tags = append(tags, "db:"+strings.ReplaceAll(strconv.Quote(name), "`", `\x60`))
+	}
+	if o.EmitJSONTags {
+		tags = append(tags, "json:"+strings.ReplaceAll(strconv.Quote(o.jsonTagName(name)), "`", `\x60`))
+	}
+	return " `" + strings.Join(tags, " ") + "`"
 }
 
 type typeImports struct{ time, decimal, uuid bool }
