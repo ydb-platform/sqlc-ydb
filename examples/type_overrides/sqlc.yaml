@@ -1,0 +1,44 @@
+version: "2"
+sql:
+  - engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      go:
+        out: go/native
+        package: native
+        sql_package: ydb
+        overrides:
+          - db_type: Utf8
+            go_type: example.com/sqlc-ydb-examples/type_overrides/domain.CustomerName
+          - db_type: Utf8
+            nullable: true
+            go_type:
+              import: example.com/sqlc-ydb-examples/type_overrides/domain
+              package: domain
+              type: Note
+          - column: customers.id
+            go_type:
+              import: example.com/sqlc-ydb-examples/type_overrides/domain
+              type: CustomerID
+  - engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      go:
+        out: go/sql
+        package: sql
+        sql_package: database/sql
+        overrides:
+          - db_type: Utf8
+            go_type: example.com/sqlc-ydb-examples/type_overrides/domain.CustomerName
+          - db_type: Utf8
+            nullable: true
+            go_type:
+              import: example.com/sqlc-ydb-examples/type_overrides/domain
+              package: domain
+              type: Note
+          - column: customers.id
+            go_type:
+              import: example.com/sqlc-ydb-examples/type_overrides/domain
+              type: CustomerID

@@ -217,6 +217,7 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		}
 	}
 	query.Parameters = parameters
+	query.ParameterColumns = parameterColumns(catalog, block, tree, query.Syntax)
 	for _, parameter := range parameters {
 		if previous, ok := resultParameters[parameter.Name]; ok && !previous.Equal(parameter.Type) {
 			if argument, exists := block.arguments[parameter.Name]; exists && argument.nullable && previous.UnwrapOptional().Equal(parameter.Type.UnwrapOptional()) {

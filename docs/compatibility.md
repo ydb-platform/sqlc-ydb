@@ -33,7 +33,7 @@ Compatibility is tracked by individual CLI, configuration and generated API cont
 Only the commands and options above are implemented. In particular:
 
 - No `analyze`, `parse`, `fmt`, `completion`, `createdb`, `push`, `verify` or `vet` commands or cloud/remote workflow.
-- No `sqlc.slice` macro, type overrides, query result/parameter type-name overrides, driver batch APIs, COPY helpers or command-tag results. Go field and embedded table model names can be configured with [`gen.go.rename`](targets.md#gen-go).
+- No `sqlc.slice` macro, query result/parameter type-name overrides, driver batch APIs, COPY helpers or command-tag results. Go field and embedded table model names can be configured with [`gen.go.rename`](targets.md#gen-go), and supported scalar types with [`gen.go.overrides`](#go-type-overrides).
 - `--no-remote` skips the optional release check for `version`; analysis and generation run locally and may use the explicitly configured YDB connection. It conflicts with `version --upgrade`. `--remote` is unsupported; `--no-database` disables database-assisted analysis. `init` creates a version 2 configuration (`--v2` is also accepted); `version --verbose` and `version --upgrade` are sqlc-ydb extensions.
 - SQL parameters use YQL `$name` syntax. Driver-specific placeholder rewriting happens during generation; `$1`, `?` and `@name` are not accepted as an alternative input dialect.
 
@@ -42,6 +42,14 @@ These are explicit errors, not successful no-ops. The comparison uses upstream's
 Other database engines and external plugins are intentionally excluded. ORM entity/CRUD generation for Hibernate, Spring JPA and linq2db is also excluded: a query projection does not define an entity lifecycle. TypeScript is the supported Node.js target; JavaScript output is not provided.
 
 Query analysis and runtime type support are separate: a resolved type that a selected adapter cannot bind or decode is a generation error. Check the [target reference](targets.md) before choosing a runtime.
+
+### Go type overrides
+
+`sql[].gen.go.overrides` accepts one `db_type` or `column` selector and a `go_type` per entry, following [upstream sqlc's override precedence](https://docs.sqlc.dev/en/stable/howto/overrides.html). `db_type` is a case-insensitive YQL scalar kind; `nullable: true` matches only `Optional<T>`, while the default matches only required `T`. Add two entries to cover both. `column` is an exact physical `table.column` name from the analyzed schema, including the full table path when applicable, and takes precedence over `db_type` regardless of nullability. Unused column selectors are accepted, as with `gen.go.rename`; duplicate selectors and unsupported types produce generation errors.
+
+`go_type` may be a local Go type name such as `CustomerID`, an import-qualified string such as `example.com/domain.CustomerName`, or a mapping with `import`, optional `package`, and `type`. Generated imports use unique aliases, so an import path whose last component differs from its package name is supported. The custom type must be defined with the same underlying type as the YQL value's default Go representation: for example, `type CustomerID uint64`, `type CustomerName string`, or `type Payload []byte`. Supported YQL kinds are Bool, Int32, Uint64, Double, Utf8 and String, whose named Go values the pinned YDB Go SDK can decode. The generator converts custom inputs to the SDK's built-in Go type and scans outputs into the custom type; optional values use pointers. `pointer`, `slice`, `unsigned`, `go_struct_tag`, global overrides, other scalar kinds and composite or special YQL types such as List, Struct, UUID, Decimal and temporal types are unsupported and fail explicitly when configured or matched.
+
+`db_type` applies to scalar parameters and result fields. A `column` override applies to physical result fields, embedded table models, and parameters directly bound to that column in INSERT/UPSERT VALUES, UPDATE SET, comparisons and BETWEEN. A parameter reused with columns that select different Go types is rejected; use separate parameters or an aligned `db_type` override. Derived expressions and parameters without direct column lineage use `db_type` only. See the [type override example](../examples/type_overrides) for both Go runtimes, nullable values and imported domain types.
 
 ## Output ownership
 
