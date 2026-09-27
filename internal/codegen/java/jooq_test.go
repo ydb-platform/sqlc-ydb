@@ -42,6 +42,10 @@ func TestJooqAllExampleQueries(t *testing.T) {
 			content := string(files[len(files)-1].Content)
 			for _, q := range a.Queries {
 				require.Contains(t, content, "// "+model.QueryAnnotation(q), "missing method for %s", q.Name)
+				if q.Name == "NoOpWithParameter" {
+					require.Contains(t, content, model.WithoutQueryAnnotation(q.SQL), "declared query was not retained")
+					continue
+				}
 				require.False(t, strings.Contains(content, model.WithoutQueryAnnotation(q.SQL)), "embedded query: %s", q.Name)
 			}
 		})

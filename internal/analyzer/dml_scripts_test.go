@@ -96,7 +96,9 @@ func TestDMLScriptRejectsUnsupportedShapes(t *testing.T) {
 		{"declaration after local", ":exec", "$local=$id; DECLARE $id AS Uint64; DELETE FROM records WHERE id=$local; DELETE FROM copies;", "DECLARE statements must precede local assignments in a script"},
 		{"late local", ":exec", "DECLARE $id AS Uint64; DELETE FROM records; $local=$id; DELETE FROM copies WHERE id=$local;", "DECLARE and local assignments must precede all data statements in a script"},
 		{"unsupported command", ":exec", "DELETE FROM records; COMMIT; DELETE FROM copies;", "unsupported statement in named query: \"COMMIT\""},
-		{"no data", ":exec", "DECLARE $id AS Uint64;", "named query requires a SELECT, INSERT/UPSERT, UPDATE, or DELETE statement"},
+		{"no data for rows", ":one", "DECLARE $id AS Uint64;", "named query requires a SELECT, INSERT/UPSERT, UPDATE, or DELETE statement"},
+		{"pragma only", ":exec", "PRAGMA OrderedColumns;", "named query requires a SELECT, INSERT/UPSERT, UPDATE, or DELETE statement"},
+		{"pragma and declaration", ":exec", "PRAGMA OrderedColumns; DECLARE $id AS Uint64;", "named query requires a SELECT, INSERT/UPSERT, UPDATE, or DELETE statement"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := Analyze(dmlScriptSchema, []model.Source{{Name: "query.sql", Text: "-- name: Change " + tc.command + "\n" + tc.sql}})
@@ -105,6 +107,19 @@ func TestDMLScriptRejectsUnsupportedShapes(t *testing.T) {
 			require.Equal(t, tc.want, result.Diagnostics[0].Message)
 		})
 	}
+}
+
+func TestDeclareOnlyExecRetainsUnusedParameters(t *testing.T) {
+	const sql = "-- name: DeclareOnly :exec\nDECLARE $id AS Uint64;\nDECLARE $name AS Optional<Utf8>;"
+	result, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: sql}})
+	require.NoError(t, err)
+	require.Len(t, result.Queries, 1)
+	q := result.Queries[0]
+	require.Equal(t, sql, q.SQL)
+	require.Equal(t, []model.Parameter{{Name: "id", Type: model.Type{Kind: "Uint64"}}, {Name: "name", Type: model.Optional(model.Type{Kind: "Utf8"})}}, q.Parameters)
+	require.Equal(t, []string{"id", "name"}, q.DeclaredParameters)
+	require.Empty(t, q.ResultSets)
+	require.False(t, q.MultipleStatements)
 }
 
 func TestDMLScriptDatabaseDiscoversAllTargetsAndValidatesOnce(t *testing.T) {

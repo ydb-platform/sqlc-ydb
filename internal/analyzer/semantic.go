@@ -498,6 +498,9 @@ func validateQueryStatements(block queryBlock, tree queryTree) []model.Diagnosti
 		return diagnostics
 	}
 	if len(dataStatements) == 0 {
+		if block.command == model.Exec && len(tree.declares) != 0 && len(tree.statements) == len(tree.declares) {
+			return nil
+		}
 		return []model.Diagnostic{{Position: model.Position{File: block.file, Line: block.line, Column: 1}, Message: "named query requires a SELECT, INSERT/UPSERT, UPDATE, or DELETE statement"}}
 	}
 	if lateBinding != nil {

@@ -98,6 +98,18 @@ public final class Queries {
                 .execute();
     }
 
+    // -- name: NoOpWithParameter :exec
+    public void noOpWithParameter(ULong value) {
+        dsl.connection(_connection -> {
+            try (var _prepared = _connection.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+                DECLARE $value AS Uint64;\
+                """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+                _prepared.setObject("value", tech.ydb.table.values.PrimitiveValue.newUint64(value.longValue()));
+                _prepared.execute();
+            }
+        });
+    }
+
     // -- name: BooksByTitleYear :many
     public List<BooksByTitleYearRow> booksByTitleYear(String title, Integer publicationYear) {
         return dsl.select(

@@ -140,6 +140,17 @@ class Querier:
         )
         return None
 
+    # -- name: NoOpWithParameter :exec
+    def no_op_with_parameter(self, value: int) -> None:
+        parameters = {
+            "$value": _ydb.TypedValue(value, _ydb.PrimitiveType.Uint64),
+        }
+        result_sets = self._execute(
+            ("DECLARE $value AS Uint64;"),
+            parameters,
+        )
+        return None
+
     # -- name: BooksByTitleYear :many
     def books_by_title_year(self, title: str, publication_year: int) -> list[_models.Books]:
         parameters = {

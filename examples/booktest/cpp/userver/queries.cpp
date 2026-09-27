@@ -137,6 +137,20 @@ void Queries::DeleteBook(std::uint64_t book_id) const {
     );
 }
 
+// -- name: NoOpWithParameter :exec
+void Queries::NoOpWithParameter(std::uint64_t value) const {
+    const auto sqlc_query = ::userver::ydb::Query{
+        "DECLARE $value AS Uint64;",
+        ::userver::ydb::Query::Name{"NoOpWithParameter"},
+        ::userver::ydb::Query::LogMode::kNameOnly,
+    };
+    static_cast<void>(
+        this->transaction_ != nullptr
+        ? this->transaction_->Execute(this->execute_settings_, sqlc_query, "$value", value)
+        : this->client_->ExecuteQuery(this->operation_settings_, sqlc_query, "$value", value)
+    );
+}
+
 // -- name: BooksByTitleYear :many
 std::vector<BooksByTitleYearRow> Queries::BooksByTitleYear(const ::userver::ydb::Utf8& title, std::int32_t publication_year) const {
     const auto sqlc_query = ::userver::ydb::Query{

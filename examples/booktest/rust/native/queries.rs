@@ -135,6 +135,15 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
             .await
     }
 
+    // -- name: NoOpWithParameter :exec
+    #[builder(on(String, into))]
+    pub async fn no_op_with_parameter(&mut self, value: u64) -> ydb::YdbResult<()> {
+        self.client
+            .exec("DECLARE $value AS Uint64;")
+            .param("$value", value)
+            .await
+    }
+
     // -- name: BooksByTitleYear :many
     #[builder(on(String, into))]
     pub async fn books_by_title_year(

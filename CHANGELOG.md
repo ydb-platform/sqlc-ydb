@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Generate `:exec` methods for declaration-only YQL queries, retaining and binding every declared parameter.
+
 ## v0.7.0
 
 ### Added

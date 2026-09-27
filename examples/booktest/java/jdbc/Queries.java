@@ -115,6 +115,16 @@ public final class Queries {
         }
     }
 
+    // -- name: NoOpWithParameter :exec
+    public void noOpWithParameter(long value) throws java.sql.SQLException {
+        try (var _prepared = client.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+            DECLARE $value AS Uint64;\
+            """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+            _prepared.setObject("value", PrimitiveValue.newUint64(value));
+            _prepared.execute();
+        }
+    }
+
     // -- name: BooksByTitleYear :many
     public java.util.List<BooksByTitleYearRow> booksByTitleYear(String title, int publicationYear) throws java.sql.SQLException {
         try (var _prepared = client.prepareStatement("""

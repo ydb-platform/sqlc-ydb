@@ -187,6 +187,22 @@ func (q *Queries) DeleteBook(ctx context.Context, arg uint64, opts ...query.Exec
 	return xerrors.WithStackTrace(err)
 }
 
+// -- name: NoOpWithParameter :exec
+func (q *Queries) NoOpWithParameter(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$value").Uint64(arg)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	err := q.db.Exec(ctx, ""+
+		"DECLARE $value AS Uint64;",
+		callOptions...,
+	)
+
+	return xerrors.WithStackTrace(err)
+}
+
 // -- name: BooksByTitleYear :many
 func (q *Queries) BooksByTitleYear(ctx context.Context, arg BooksByTitleYearParams, opts ...query.ExecuteOption) ([]BooksByTitleYearRow, error) {
 	parameters := ydb.ParamsBuilder()

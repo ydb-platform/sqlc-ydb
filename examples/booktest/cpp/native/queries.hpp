@@ -29,6 +29,7 @@ public:
     std::optional<GetBookRow> GetBook(std::uint64_t book_id) const;
     std::optional<GetBookAndAuthorRow> GetBookAndAuthor(std::uint64_t book_id) const;
     void DeleteBook(std::uint64_t book_id) const;
+    void NoOpWithParameter(std::uint64_t value) const;
     std::vector<BooksByTitleYearRow> BooksByTitleYear(const std::string& title, std::int32_t publication_year) const;
     std::vector<BooksByTagsRow> BooksByTags(const std::string& tags) const;
     std::optional<CreateAuthorRow> CreateAuthor(std::uint64_t author_id, const std::string& name) const;

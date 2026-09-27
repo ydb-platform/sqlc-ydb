@@ -291,6 +291,19 @@ export class Queries {
     await stmt;
   }
 
+  // -- name: NoOpWithParameter :exec
+  async noOpWithParameter(value: bigint, configure?: ConfigureQuery): Promise<void> {
+    const stmt = this.#sql(
+      "DECLARE $value AS Uint64;"
+    );
+    // Keep explicit DECLARE statements; the SDK otherwise prepends duplicates.
+    Object.defineProperty(stmt, "text", { value: stmt.text, writable: false });
+    stmt
+      .parameter("value", new Uint64(value));
+    configure?.(stmt);
+    await stmt;
+  }
+
   // -- name: BooksByTitleYear :many
   async booksByTitleYear(args: BooksByTitleYearParams, configure?: ConfigureQuery): Promise<BooksByTitleYearRow[]> {
     const stmt = this.#sql<[BooksByTitleYearRow]>(

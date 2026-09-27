@@ -23,6 +23,8 @@ func TestGeneratedExample(t *testing.T) {
 	ctx := db.Context
 	n := native.New(db.Native)
 	s := sq.New(db.SQL)
+	require.NoError(t, n.NoOpWithParameter(ctx, 1))
+	require.NoError(t, s.NoOpWithParameter(ctx, 2))
 
 	author, err := n.CreateAuthor(ctx, native.CreateAuthorParams{AuthorID: 100, Name: "Ursula Le Guin"})
 	require.NoError(t, err)
