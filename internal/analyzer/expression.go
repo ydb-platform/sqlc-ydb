@@ -18,6 +18,7 @@ type expressionScope struct {
 	grouped      bool
 	functions    *builtins.Registry
 	inSubqueries map[int]model.Type
+	windows      map[string]parser.IWindow_specificationContext
 }
 
 func resolveExpression(expr parser.IExprContext, scope expressionScope) (model.Type, error) {
@@ -581,6 +582,31 @@ func dateTimeFormatInput(value model.Type) bool {
 }
 
 func resolveFunction(name string, invoke *parser.Invoke_exprContext, scope expressionScope) (model.Type, error) {
+	if tail := invoke.Invoke_expr_tail(); tail != nil && tail.OVER() != nil {
+		if !strings.EqualFold(name, "ROW_NUMBER") {
+			return model.Type{}, fmt.Errorf("window function %q is not yet supported", name)
+		}
+		if invoke.ASTERISK() != nil || invoke.Named_expr_list() != nil || invoke.Opt_set_quantifier() != nil && invoke.Opt_set_quantifier().GetText() != "" {
+			return model.Type{}, fmt.Errorf("ROW_NUMBER expects no arguments")
+		}
+		if tail.Filter_clause() != nil || tail.Null_treatment() != nil {
+			return model.Type{}, fmt.Errorf("ROW_NUMBER does not support FILTER or NULL treatment")
+		}
+		window := tail.Window_name_or_specification()
+		if window.Window_name() != nil {
+			name := identifier(window.Window_name().GetText())
+			_, ok := scope.windows[name]
+			if !ok {
+				return model.Type{}, fmt.Errorf("unknown window %q", name)
+			}
+		} else if err := validateRowNumberWindow(window.Window_specification(), scope.relations); err != nil {
+			return model.Type{}, err
+		}
+		return model.Type{Kind: "Uint64"}, nil
+	}
+	if strings.EqualFold(name, "ROW_NUMBER") {
+		return model.Type{}, fmt.Errorf("ROW_NUMBER requires OVER")
+	}
 	if invoke.Opt_set_quantifier() != nil && invoke.Opt_set_quantifier().GetText() != "" {
 		quantifier := invoke.Opt_set_quantifier().GetText()
 		if !strings.EqualFold(name, "count") || !strings.EqualFold(quantifier, "ALL") && !strings.EqualFold(quantifier, "DISTINCT") {

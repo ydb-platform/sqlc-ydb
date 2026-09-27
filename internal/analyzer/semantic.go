@@ -1025,7 +1025,7 @@ func selectProjectionMode(block queryBlock, selectCore *parser.Select_coreContex
 			block.wildcards.addExpression(expr, expressions)
 			continue
 		}
-		column, pure, err := expressionColumn(expr, relations, declared, selectCore.Group_by_clause() != nil, block.functions, block.lambdas)
+		column, pure, err := expressionColumn(expr, relations, declared, selectCore.Group_by_clause() != nil, block.functions, block.lambdas, block.windows)
 		if err != nil {
 			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, expr, err.Error()))
 			continue
@@ -1152,11 +1152,11 @@ func selectWithoutColumns(block queryBlock, core *parser.Select_coreContext, rel
 	return excluded, diagnostics
 }
 
-func expressionColumn(expr parser.IExprContext, relations []relation, declared map[string]model.Type, grouped bool, functions *builtins.Registry, lambdas map[string]lambdaBinding) (model.Column, bool, error) {
+func expressionColumn(expr parser.IExprContext, relations []relation, declared map[string]model.Type, grouped bool, functions *builtins.Registry, lambdas map[string]lambdaBinding, windows map[string]parser.IWindow_specificationContext) (model.Column, bool, error) {
 	for inner := parenthesizedExpression(expr); inner != nil; inner = parenthesizedExpression(expr) {
 		expr = inner
 	}
-	scope := expressionScope{relations: relations, bindings: declared, lambdas: lambdas, grouped: grouped, functions: functions}
+	scope := expressionScope{relations: relations, bindings: declared, lambdas: lambdas, grouped: grouped, functions: functions, windows: windows}
 	if typeValue, ok, err := resolveMemberAccess(expr, scope); ok {
 		return model.Column{Type: typeValue}, false, err
 	}

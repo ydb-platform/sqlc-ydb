@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Support `ROW_NUMBER() OVER` with inline or named windows, direct-column partitioning and ordering, and a `Uint64` result.
+
 ## v0.11.0
 
 ### Added
