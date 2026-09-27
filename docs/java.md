@@ -28,7 +28,7 @@ The smoke sources are compile-time examples and require a running target only wh
 
 Published dependencies are pinned to YDB SDK BOM `2.4.11` and JDBC `2.4.1`.
 
-The native constructor receives a borrowed `tech.ydb.query.QueryTransaction`. The application owns retry, commit, rollback and the transaction lifecycle. Native `:exec` methods call `createQuery(...).execute()` and check the returned status; only methods returning rows use `QueryReader`. The JDBC constructor receives a borrowed `java.sql.Connection`; statements and result sets are method-owned and the connection remains application-owned.
+The native constructor receives a borrowed `tech.ydb.query.QueryTransaction`. The application owns retry, commit, rollback and the transaction lifecycle. Native `:exec` methods call `createQuery(...).execute()` and check the returned status; only methods returning rows use `QueryReader`. The JDBC constructor receives a borrowed `java.sql.Connection`; statements and result sets are method-owned and the connection remains application-owned. Java JDBC also supports [`:each` streaming callbacks](streaming.md#java-jdbc) when its connection has `useStreamResultSets=true`; native and jOOQ do not.
 
 Without explicit declarations, JDBC binds each `?` occurrence in SQL order using standard setters or typed SDK values. `Uint64` preserves all bits of a Java `long`, including `-1L`; narrower unsigned inputs are checked before execution to prevent truncation. Explicit declarations use the [named preparation path](#explicit-declarations). SDK setter and nullable-getter choices are documented in [JDBC evidence](../.agents/sdk-evidence.md#jdbc-declarations-and-scalar-setters).
 

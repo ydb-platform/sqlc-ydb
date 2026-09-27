@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Generate typed `:each` streaming callbacks for Java JDBC with a required streaming result-set connection mode and caller-owned transactions.
+
 ## v0.11.0
 
 ### Added

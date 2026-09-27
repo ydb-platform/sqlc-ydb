@@ -322,7 +322,10 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		}
 		ret := "void"
 		switch q.Command {
-		case model.One, model.Many:
+		case model.One, model.Many, model.Each:
+			if q.Command == model.Each && o.Runtime != "jdbc" {
+				return nil, fmt.Errorf("%s: Java %s does not support %s", q.Name, o.Runtime, q.Command)
+			}
 			if len(q.ResultSets) != 1 || len(q.ResultSets[0].Columns) == 0 {
 				return nil, fmt.Errorf("%s: %s requires one nonempty result set", q.Name, q.Command)
 			}
@@ -331,7 +334,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			}
 			if q.Command == model.One {
 				ret = "java.util.Optional<" + row + ">"
-			} else {
+			} else if q.Command == model.Many {
 				ret = "java.util.List<" + row + ">"
 			}
 		case model.Exec:
@@ -340,7 +343,7 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		}
 		params := []string{}
 		paramNames := []string{}
-		seen := map[string]bool{"client": true, "_params": true, "_query": true, "_connection": true, "_statement": true, "_prepared": true, "_rows": true, "_items": true, "_batchItem": true, "tech": true}
+		seen := map[string]bool{"client": true, "consume": q.Command == model.Each, "_params": true, "_query": true, "_connection": true, "_statement": true, "_prepared": true, "_rows": true, "_items": true, "_batchItem": true, "tech": true}
 		for _, p := range q.Parameters {
 			n, err := name(p.Name, false)
 			if err != nil {
@@ -374,7 +377,15 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 		if o.Runtime == "jdbc" {
 			throws = " throws java.sql.SQLException"
 		}
+		if q.Command == model.Each {
+			params = append(params, "java.util.function.Consumer<"+row+"> consume")
+		}
 		fmt.Fprintf(&b, "\n    // %s\n    public %s %s(%s)%s {\n", model.QueryAnnotation(q), ret, method, strings.Join(params, ", "), throws)
+		if q.Command == model.Each {
+			b.WriteString("        java.util.Objects.requireNonNull(consume, \"consume\");\n")
+			b.WriteString("        if (!client.unwrap(tech.ydb.jdbc.YdbConnection.class).getCtx().getOperationProperties().getUseStreamResultSets()) {\n")
+			b.WriteString("            throw new java.sql.SQLException(\":each requires useStreamResultSets=true\");\n        }\n")
+		}
 		// Java's wider signed carriers must not be silently narrowed by the SDK.
 		// Uint64 deliberately uses all 64 bits of long and needs no range check.
 		emitUnsignedChecks(&b, q, paramNames)
@@ -505,6 +516,9 @@ func emitRows(b *strings.Builder, q model.AnalyzedQuery, row, indent string, nat
 		} else {
 			b.WriteString(indent + "if (!_rows.next()) return java.util.Optional.empty();\n")
 		}
+	} else if q.Command == model.Each {
+		fmt.Fprintf(b, "%swhile (_rows.next()) {\n", indent)
+		indent += "    "
 	} else {
 		fmt.Fprintf(b, "%svar _items = new java.util.ArrayList<%s>();\n%swhile (_rows.next()) {\n", indent, row, indent)
 		indent += "    "
@@ -539,6 +553,11 @@ func emitRows(b *strings.Builder, q model.AnalyzedQuery, row, indent string, nat
 			emitJDBCScriptFinish(b, indent)
 		}
 		fmt.Fprintf(b, "%sreturn java.util.Optional.of(%s);\n", indent, newRow)
+	} else if q.Command == model.Each {
+		fmt.Fprintf(b, "%sconsume.accept(%s);\n", indent, newRow)
+		indent = strings.TrimSuffix(indent, "    ")
+		b.WriteString(indent + "}\n")
+		emitJDBCScriptFinish(b, indent)
 	} else {
 		fmt.Fprintf(b, "%s_items.add(%s);\n", indent, newRow)
 		indent = strings.TrimSuffix(indent, "    ")
