@@ -32,6 +32,9 @@ func TestExecDiscardGenerationByRuntime(t *testing.T) {
 		{"go-sql", func() ([]model.File, error) {
 			return golang.Generate(analysis, golang.Options{Runtime: "database/sql"})
 		}, "for rows.Next() {"},
+		{"go-sql-exported", func() ([]model.File, error) {
+			return golang.Generate(analysis, golang.Options{Runtime: "database/sql", EmitExportedQueries: true})
+		}, "q.db.QueryContext(ctx, DiscardRows,"},
 		{"cpp-ydb", func() ([]model.File, error) { return cpp.Generate(analysis, cpp.Options{Runtime: "ydb"}) }, "ThrowOnError(sqlc_status)"},
 		{"cpp-userver", func() ([]model.File, error) { return cpp.Generate(analysis, cpp.Options{Runtime: "userver"}) }, "static_cast<void>("},
 		{"csharp-adonet", func() ([]model.File, error) { return csharp.Generate(analysis, csharp.Options{Runtime: "adonet"}) }, "ExecuteNonQueryAsync("},
