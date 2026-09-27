@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/config"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
@@ -34,16 +35,31 @@ func overrideOptions(runtime string) Options {
 }
 
 func TestGoOverridesGeneratedRuntime(t *testing.T) {
+	embedded, err := analyzer.Analyze(
+		[]model.Source{{Name: "schema.sql", Text: "CREATE TABLE authors (id Uint64 NOT NULL, name Utf8 NOT NULL, PRIMARY KEY(id));"}},
+		[]model.Source{{Name: "query.sql", Text: "-- name: GetAuthor :one\nSELECT sqlc.embed(a) FROM authors AS a;"}},
+	)
+	require.NoError(t, err)
+	require.Empty(t, embedded.Diagnostics)
 	for _, runtime := range []string{"database/sql", "ydb"} {
 		t.Run(runtime, func(t *testing.T) {
-			files, err := Generate(overrideInput(), overrideOptions(runtime))
+			input := overrideInput()
+			input.Catalog = embedded.Catalog
+			input.Queries = append(input.Queries, embedded.Queries...)
+			options := overrideOptions(runtime)
+			options.Overrides = append(options.Overrides, config.GoOverride{Column: "authors.name", GoType: config.GoType{Import: "generated/domain", Type: "AuthorName"}})
+			files, err := Generate(input, options)
 			require.NoError(t, err)
 			dir := t.TempDir()
 			for _, file := range files {
+				if file.Name == "models.go" {
+					require.Regexp(t, `(?s)type Authors struct \{[^}]*Name\s+sqlcOverride0\.AuthorName`, string(file.Content))
+					require.Regexp(t, `(?s)type GetAuthorRow struct \{[^}]*Authors\s+Authors`, string(file.Content))
+				}
 				require.NoError(t, os.WriteFile(filepath.Join(dir, file.Name), file.Content, 0600))
 			}
 			require.NoError(t, os.Mkdir(filepath.Join(dir, "domain"), 0700))
-			require.NoError(t, os.WriteFile(filepath.Join(dir, "domain", "domain.go"), []byte("package domain\ntype CustomerName string\n"), 0600))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "domain", "domain.go"), []byte("package domain\ntype CustomerName string\ntype AuthorName string\n"), 0600))
 			require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module generated\n\ngo 1.26.0\n\nrequire github.com/ydb-platform/ydb-go-sdk/v3 v3.151.1\n"), 0600))
 			source := overrideSQLRuntime
 			if runtime == "ydb" {
@@ -145,6 +161,28 @@ func TestGoOverrideConflictAndUnsupportedTypes(t *testing.T) {
 		}
 	}
 	require.True(t, strings.Contains(models, `"generated/domain"`))
+}
+
+func TestColumnOverrideRejectsUnsupportedMatchedTypes(t *testing.T) {
+	for _, tc := range []struct {
+		name, want string
+		change     func(*model.AnalysisResult)
+	}{
+		{"scalar parameter", "PutCustomer parameter name: Go type overrides support only", func(input *model.AnalysisResult) {
+			input.Queries[1].Parameters[1].Type = model.Type{Kind: "Int8"}
+			input.Queries[1].ParameterColumns["name"][0].Type = model.Type{Kind: "Int8"}
+		}},
+		{"composite result", "GetCustomer column name: Go type overrides support only", func(input *model.AnalysisResult) {
+			input.Queries[0].ResultSets[0].Columns[1].Type = model.Type{Kind: "List", Elem: &model.Type{Kind: "Uint64"}}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			input := overrideInput()
+			tc.change(input)
+			_, err := Generate(input, Options{Package: "db", Runtime: "ydb", Overrides: []config.GoOverride{{Column: "customers.name", GoType: config.GoType{Type: "CustomName"}}}})
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
 }
 
 func TestColumnOverridePrecedesDBTypeForInputAndOutput(t *testing.T) {
