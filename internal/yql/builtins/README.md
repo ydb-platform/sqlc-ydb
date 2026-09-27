@@ -67,4 +67,4 @@ On 2026-09-09, the package's supported scalar and library signatures were also c
 
 The function inventory was also compared with `ydb-platform/sqlc@8eed5d890396eb03953248a3ec4ab7e28dfaed45`, especially `internal/engine/ydb/lib/{basic,aggregate,cpp}.go`. Those archived descriptors used broad `any` arguments and incomplete nullability, so they are provenance and coverage input rather than executable type authority.
 
-This resolver intentionally omits unverified archived names, window functions, resource-valued `DateTime` transformations, collection functions, and functions whose overload selection depends on information absent from `model.Type`.
+This resolver intentionally omits unverified archived names, window functions (the analyzer handles the supported `ROW_NUMBER` subset), resource-valued `DateTime` transformations, collection functions, and functions whose overload selection depends on information absent from `model.Type`.

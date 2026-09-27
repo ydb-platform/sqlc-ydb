@@ -159,7 +159,7 @@ func selectINProjection(block queryBlock, core *parser.Select_coreContext, relat
 	results := core.AllResult_column()
 	if len(results) == 1 && results[0].Expr() != nil && len(tupleExpressions(results[0].Expr())) > 1 && core.Without_column_list() == nil {
 		result := results[0]
-		typ, err := resolveINOperand(result.Expr(), expressionScope{relations: relations, bindings: bindings, lambdas: block.lambdas, grouped: core.Group_by_clause() != nil, functions: block.functions})
+		typ, err := resolveINOperand(result.Expr(), expressionScope{relations: relations, bindings: bindings, lambdas: block.lambdas, grouped: core.Group_by_clause() != nil, functions: block.functions, windows: block.windows})
 		if err != nil {
 			return nil, []model.Diagnostic{diagnosticAt(block.file, block.line-1, result, err.Error())}
 		}

@@ -4,6 +4,7 @@
 
 ### Added
 
+- Support `ROW_NUMBER() OVER` with inline or named windows, direct-column partitioning and ordering, and a `Uint64` result.
 - Generate typed `:each` streaming callbacks for Java JDBC with a required streaming result-set connection mode and caller-owned transactions.
 
 ## v0.11.0
