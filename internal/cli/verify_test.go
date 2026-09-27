@@ -72,6 +72,17 @@ func TestVerifyRejectsChangedParameterType(t *testing.T) {
 	require.Contains(t, stderr, "String")
 }
 
+func TestVerifyRejectsSequenceGeneratedInsertDrift(t *testing.T) {
+	released, proposed, _ := verifyFixture(t,
+		"CREATE TABLE records (id Serial, value Utf8 NOT NULL, PRIMARY KEY(id));",
+		"CREATE TABLE records (id Uint64 NOT NULL, value Utf8 NOT NULL, PRIMARY KEY(id));",
+		"-- name: AddRecord :exec\nINSERT INTO records (value) SELECT 'x'u;",
+		"-- name: Current :one\nSELECT id FROM records;")
+	code, _, stderr := invoke("verify", "--against", released, "-f", proposed)
+	require.NotZero(t, code)
+	require.Contains(t, stderr, `missing primary key column "id"`)
+}
+
 func TestVerifyMatchesNamedSetsAfterReordering(t *testing.T) {
 	released, proposed, dir := verifyFixture(t,
 		"CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));",
@@ -185,6 +196,13 @@ func TestVerifyResolvedQueryContract(t *testing.T) {
 		ResultSets: []model.ResultSet{{Name: "Rows", Columns: []model.Column{{Name: "value", Type: utf8Type}}}},
 	}
 	require.NoError(t, verifyQuery(old, old))
+	t.Run("column order", func(t *testing.T) {
+		before := old
+		before.ResultSets = []model.ResultSet{{Name: "Rows", Columns: []model.Column{{Name: "first", Type: utf8Type}, {Name: "second", Type: utf8Type}}}}
+		after := before
+		after.ResultSets = []model.ResultSet{{Name: "Rows", Columns: []model.Column{{Name: "second", Type: utf8Type}, {Name: "first", Type: utf8Type}}}}
+		require.ErrorContains(t, verifyQuery(before, after), "result set 1 column 1 changed from first Utf8 to second Utf8")
+	})
 	for _, tc := range []struct {
 		name    string
 		updated model.AnalyzedQuery
@@ -194,7 +212,8 @@ func TestVerifyResolvedQueryContract(t *testing.T) {
 		{"parameter count", model.AnalyzedQuery{Name: old.Name, Command: old.Command, ResultSets: old.ResultSets}, "parameter count changed"},
 		{"parameter name", model.AnalyzedQuery{Name: old.Name, Command: old.Command, Parameters: []model.Parameter{{Name: "other", Type: uint64Type}}, ResultSets: old.ResultSets}, "parameter $id is missing"},
 		{"result count", model.AnalyzedQuery{Name: old.Name, Command: old.Command, Parameters: old.Parameters}, "result-set count changed"},
-		{"result name", model.AnalyzedQuery{Name: old.Name, Command: old.Command, Parameters: old.Parameters, ResultSets: []model.ResultSet{{Name: "Other", Columns: old.ResultSets[0].Columns}}}, "result set 1 changed shape"},
+		{"result name", model.AnalyzedQuery{Name: old.Name, Command: old.Command, Parameters: old.Parameters, ResultSets: []model.ResultSet{{Name: "Other", Columns: old.ResultSets[0].Columns}}}, `result set 1 changed name from "Rows" to "Other"`},
+		{"column count", model.AnalyzedQuery{Name: old.Name, Command: old.Command, Parameters: old.Parameters, ResultSets: []model.ResultSet{{Name: "Rows"}}}, "result set 1 changed shape"},
 		{"column name", model.AnalyzedQuery{Name: old.Name, Command: old.Command, Parameters: old.Parameters, ResultSets: []model.ResultSet{{Name: "Rows", Columns: []model.Column{{Name: "renamed", Type: utf8Type}}}}}, "column 1 changed"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

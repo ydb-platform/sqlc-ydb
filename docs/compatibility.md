@@ -13,7 +13,7 @@ Compatibility is tracked by individual CLI, configuration and generated API cont
 
 ## Implemented workflow
 
-- `generate`, `compile`, `verify`, `diff`, `init`, `version`, `--help`, `-f` / `--file`. [`verify`](schema-verification.md) checks released executable queries against a proposed schema and resolved parameter/result types without writing files.
+- `generate`, `compile`, `verify`, `diff`, `init`, `version`, `--help`, `-f` / `--file`, `--against` (verify only). [`verify`](schema-verification.md) checks released executable queries against a proposed schema and resolved parameter/result types without writing files.
 - `init` supports `--language`, `--runtime`, `--all-options`, and generator-specific help. See the [generator option reference](targets.md#generator-options).
 - `version` prints the version and optionally a newer-stable-release notification; `version --verbose` also prints the commit embedded by release builds. Ordinary source builds report `unknown` unless the commit is supplied through linker flags. The update check times out after two seconds and hides failures. Use `--no-remote` for version output without a network check.
 - `version --upgrade` replaces the running executable with the verified latest stable release, resolving symlinks and preserving their paths. Download and verification failures preserve the installed binary. See [installation](installation.md#update-the-installed-executable). Automatic in-place upgrades are supported on Linux and macOS. On Windows, `version --upgrade` prints manual upgrade instructions.

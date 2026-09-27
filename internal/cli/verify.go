@@ -123,7 +123,10 @@ func verifyQuery(old, next model.AnalyzedQuery) error {
 	}
 	for i, result := range old.ResultSets {
 		updated := next.ResultSets[i]
-		if result.Name != updated.Name || len(result.Columns) != len(updated.Columns) {
+		if result.Name != updated.Name {
+			return fmt.Errorf("result set %d changed name from %q to %q", i+1, result.Name, updated.Name)
+		}
+		if len(result.Columns) != len(updated.Columns) {
 			return fmt.Errorf("result set %d changed shape", i+1)
 		}
 		for j, col := range result.Columns {
