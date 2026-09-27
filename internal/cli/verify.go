@@ -57,7 +57,8 @@ func verify(proposed *config.Config, against string, noDatabase bool) error {
 		for k, q := range original.Queries {
 			executable[k] = model.Source{Name: q.Source.File, Text: q.SQL}
 		}
-		next.Analyzer = old.Analyzer
+		next.Analyzer.Functions = old.Analyzer.Functions
+		next.Analyzer.Parameters = old.Analyzer.Parameters
 		checked, err := analyzeSources(proposed.Dir, next, newSchema, executable, noDatabase)
 		if err != nil {
 			return fmt.Errorf("released sql[%d] against proposed sql[%d]: %w", i, j, err)

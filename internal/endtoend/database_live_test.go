@@ -145,6 +145,42 @@ UPDATE records SET ztext = $ztext WHERE id = $id;
 		})
 	}
 	runDatabasePython(t, dir, databaseGeneratedPython, columnNames...)
+	t.Run("verify released database mode", func(t *testing.T) {
+		write("verify-schema.sql", "CREATE TABLE "+table+" (ztext Utf8, id Uint64 NOT NULL, amount Int32, PRIMARY KEY(id));")
+		write("verify-current.sql", "-- name: Current :one\nSELECT id FROM "+table+";")
+		write("verify-released.sql", "-- name: Released :one\nSELECT Acme::Hash(id) AS value FROM "+table+";")
+		write("verify-released.yaml", `version: '2'
+sql:
+- name: records
+  engine: ydb
+  schema: verify-schema.sql
+  queries: verify-released.sql
+  analyzer:
+    database: false
+    functions:
+    - name: Acme::Hash
+      args:
+      - {name: value, type: Uint64}
+      returns: Uint64
+`)
+		write("verify-proposed.yaml", `version: '2'
+sql:
+- name: records
+  engine: ydb
+  schema: verify-schema.sql
+  queries: verify-current.sql
+  database:
+    uri: ${YDB_CONNECTION_STRING}
+`)
+		args := []string{"verify", "--against", filepath.Join(dir, "verify-released.yaml"), "-f", filepath.Join(dir, "verify-proposed.yaml")}
+		var out, stderr bytes.Buffer
+		require.Zero(t, cli.Run(append(args, "--no-database"), &out, &stderr), stderr.String())
+		out.Reset()
+		stderr.Reset()
+		require.NotZero(t, cli.Run(args, &out, &stderr), "released query bypassed proposed database validation")
+		require.Contains(t, stderr.String(), "YDB ")
+		require.Contains(t, stderr.String(), "Acme")
+	})
 }
 
 func runDatabasePython(t *testing.T, dir, script string, args ...string) string {
