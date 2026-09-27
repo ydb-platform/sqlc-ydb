@@ -583,6 +583,9 @@ func dateTimeFormatInput(value model.Type) bool {
 
 func resolveFunction(name string, invoke *parser.Invoke_exprContext, scope expressionScope) (model.Type, error) {
 	if tail := invoke.Invoke_expr_tail(); tail != nil && tail.OVER() != nil {
+		if !directWindowProjection(invoke) {
+			return model.Type{}, fmt.Errorf("window functions are supported only as direct SELECT projections")
+		}
 		if !strings.EqualFold(name, "ROW_NUMBER") {
 			return model.Type{}, fmt.Errorf("window function %q is not yet supported", name)
 		}

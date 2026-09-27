@@ -44,6 +44,7 @@ func TestRowNumberWindowDiagnostics(t *testing.T) {
 		{`SELECT ROW_NUMBER() OVER child AS row_num FROM records WINDOW base AS (ORDER BY id), child AS (base);`, "inherited window"},
 		{`SELECT SUM(id) OVER (ORDER BY id) AS total FROM records;`, "window function"},
 		{`SELECT id FROM records WHERE ROW_NUMBER() OVER (ORDER BY id) = 1;`, "SELECT projection"},
+		{`$rank = ROW_NUMBER() OVER (); SELECT $rank AS row_num FROM records;`, "SELECT projection"},
 	} {
 		t.Run(tc.statement, func(t *testing.T) {
 			_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: RankRecords :many\n" + tc.statement}})

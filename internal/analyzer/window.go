@@ -73,15 +73,23 @@ func validateWindowPlacement(block queryBlock, core *parser.Select_coreContext) 
 		if !ok || invoke.Invoke_expr_tail() == nil || invoke.Invoke_expr_tail().OVER() == nil {
 			return
 		}
-		for parent := invoke.GetParent(); parent != nil && parent != core; parent = parent.GetParent() {
-			if result, ok := parent.(*parser.Result_columnContext); ok {
-				_, direct, matched := directFunctionCall(result.Expr())
-				if matched && direct == invoke {
-					return
-				}
-			}
+		if !directWindowProjection(invoke) {
+			diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, invoke, "window functions are supported only as direct SELECT projections"))
 		}
-		diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, invoke, "window functions are supported only as direct SELECT projections"))
 	})
 	return diagnostics
+}
+
+func directWindowProjection(invoke *parser.Invoke_exprContext) bool {
+	direct := false
+	for parent := invoke.GetParent(); parent != nil; parent = parent.GetParent() {
+		if result, ok := parent.(*parser.Result_columnContext); ok {
+			_, call, matched := directFunctionCall(result.Expr())
+			direct = matched && call == invoke
+		}
+		if _, ok := parent.(*parser.Select_coreContext); ok {
+			return direct
+		}
+	}
+	return false
 }
