@@ -80,12 +80,26 @@ func validateWindowPlacement(block queryBlock, core *parser.Select_coreContext) 
 	return diagnostics
 }
 
+func hasWindowCall(root antlr.Tree) bool {
+	found := false
+	scopeDescendants(root, func(node antlr.Tree) {
+		invoke, ok := node.(*parser.Invoke_exprContext)
+		found = found || ok && invoke.Invoke_expr_tail() != nil && invoke.Invoke_expr_tail().OVER() != nil
+	})
+	return found
+}
+
 func directWindowProjection(invoke *parser.Invoke_exprContext) bool {
 	direct := false
 	for parent := invoke.GetParent(); parent != nil; parent = parent.GetParent() {
 		if result, ok := parent.(*parser.Result_columnContext); ok {
-			_, call, matched := directFunctionCall(result.Expr())
+			expr := unwrapOrderByColumn(result.Expr())
+			_, call, matched := directFunctionCall(expr)
 			direct = matched && call == invoke
+			for _, item := range tupleExpressions(expr) {
+				_, call, matched := directFunctionCall(unwrapOrderByColumn(item))
+				direct = direct || matched && call == invoke
+			}
 		}
 		if _, ok := parent.(*parser.Select_coreContext); ok {
 			return direct

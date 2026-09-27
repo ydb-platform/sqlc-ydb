@@ -393,3 +393,39 @@ func (q *Queries) RankRecordsWithinGroup(ctx context.Context, arg uint64) ([]Ran
 
 	return items, nil
 }
+
+// -- name: RankDistinctGroups :many
+func (q *Queries) RankDistinctGroups(ctx context.Context, arg uint64) ([]RankDistinctGroupsRow, error) {
+	rows, err := q.db.QueryContext(ctx, ""+
+		"DECLARE $owner_id AS Uint64;\n"+
+		"SELECT group_id, ROW_NUMBER() OVER w AS row_num\n"+
+		"FROM records\n"+
+		"WHERE owner_hash = Digest::CityHash(CAST($owner_id AS String))\n"+
+		"GROUP BY group_id\n"+
+		"WINDOW w AS (ORDER BY group_id)\n"+
+		"ORDER BY group_id;",
+		sql.Named("owner_id", arg),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []RankDistinctGroupsRow(nil)
+	for rows.Next() {
+		var row RankDistinctGroupsRow
+		if err := rows.Scan(
+			&row.GroupID,
+			&row.RowNum,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, row)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}

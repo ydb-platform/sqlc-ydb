@@ -14,6 +14,7 @@ A record store with a hashed owner key, batch writes and filtered reads/deletes.
 | `FindRecordsByTags` | JSON arrays of tags are converted with `Yson::ConvertToStringList` and compared with a scalar list using `ToSet` and `SetIsDisjoint`. Store JSON arrays in `attributes` for this query. |
 | `ReverseGroupLabel` | The built-in `Unicode::Reverse` signature accepts a nullable label through AutoMap and returns the reversed Unicode text. |
 | `RankRecordsWithinGroup` | `ROW_NUMBER() OVER w` numbers records within each group in record ID order; the result is `Uint64`. |
+| `RankDistinctGroups` | `GROUP BY` first reduces rows to distinct groups, then `ROW_NUMBER() OVER w` numbers those groups in group ID order. |
 
 The built-in [`Unicode::Reverse`](https://ydb.tech/docs/en/yql/reference/udf/list/unicode) contract is `Utf8{Flags:AutoMap} -> Utf8`. AutoMap makes a null input return null, represented as `*string` in Go. See [function signatures](../../docs/functions.md).
 

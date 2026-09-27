@@ -94,3 +94,12 @@ FROM records
 WHERE owner_hash = Digest::CityHash(CAST($owner_id AS String))
 WINDOW w AS (PARTITION BY group_id ORDER BY record_id)
 ORDER BY record_id;
+
+-- name: RankDistinctGroups :many
+DECLARE $owner_id AS Uint64;
+SELECT group_id, ROW_NUMBER() OVER w AS row_num
+FROM records
+WHERE owner_hash = Digest::CityHash(CAST($owner_id AS String))
+GROUP BY group_id
+WINDOW w AS (ORDER BY group_id)
+ORDER BY group_id;
