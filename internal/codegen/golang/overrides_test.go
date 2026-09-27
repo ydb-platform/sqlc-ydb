@@ -41,12 +41,19 @@ func TestGoOverridesGeneratedRuntime(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Empty(t, embedded.Diagnostics)
+	limit := int32(2)
 	for _, runtime := range []string{"database/sql", "ydb"} {
 		t.Run(runtime, func(t *testing.T) {
 			input := overrideInput()
 			input.Catalog = embedded.Catalog
 			input.Queries = append(input.Queries, embedded.Queries...)
+			input.Queries = append(input.Queries, model.AnalyzedQuery{
+				Name: "RenameCustomer", Command: model.Exec, SQL: "DECLARE $id AS Uint64; DECLARE $name AS Utf8; UPDATE customers SET name = $name WHERE id = $id;",
+				Parameters:       []model.Parameter{{Name: "id", Type: model.Type{Kind: "Uint64"}}, {Name: "name", Type: model.Type{Kind: "Utf8"}}},
+				ParameterColumns: map[string][]model.Column{"id": {{Name: "id", Table: "customers", Type: model.Type{Kind: "Uint64"}}}, "name": {{Name: "name", Table: "customers", Type: model.Type{Kind: "Utf8"}}}},
+			})
 			options := overrideOptions(runtime)
+			options.QueryParameterLimit = &limit
 			options.EmitInterface = true
 			options.Overrides = append(options.Overrides, config.GoOverride{Column: "authors.name", GoType: config.GoType{Import: "generated/domain", Type: "AuthorName"}})
 			files, err := Generate(input, options)
@@ -66,6 +73,15 @@ func TestGoOverridesGeneratedRuntime(t *testing.T) {
 			source := overrideSQLRuntime
 			if runtime == "ydb" {
 				source = overrideNativeRuntime
+			}
+			if runtime == "database/sql" {
+				source += `
+func TestRenameOverride(t *testing.T){sql.Register("override-rename",testDriver{});db,err:=sql.Open("override-rename","");if err!=nil{t.Fatal(err)};defer db.Close();q:=New(db);if err:=q.RenameCustomer(context.Background(),CustomerID(7),domain.CustomerName("Ada"));err!=nil{t.Fatal(err)};if captured[0].Value!=int64(7)||captured[1].Value!="Ada"{t.Fatalf("rename args=%#v",captured)}}
+`
+			} else {
+				source += `
+func TestRenameOverride(t *testing.T){q:=New(testDB{});if err:=q.RenameCustomer(context.Background(),CustomerID(7),domain.CustomerName("Ada"));err!=nil{t.Fatal(err)}}
+`
 			}
 			require.NoError(t, os.WriteFile(filepath.Join(dir, "runtime_test.go"), []byte(source), 0600))
 			cmd := exec.Command("go", "test", "-mod=mod", ".")
@@ -129,7 +145,7 @@ func TestGoOverrideConflictAndUnsupportedTypes(t *testing.T) {
 	_, err = Generate(overrideInput(), options)
 	require.ErrorContains(t, err, "Go type overrides support only")
 
-	for _, kind := range []string{"Int8", "Int16", "Int64", "Uint8", "Uint16", "Uint32", "Float", "Json", "JsonDocument", "Yson"} {
+	for _, kind := range []string{"Int8", "Int16", "Int64", "Uint8", "Uint16", "Uint32", "Float", "Json", "JsonDocument", "Yson", "List<Utf8>"} {
 		t.Run(kind, func(t *testing.T) {
 			options := overrideOptions("ydb")
 			options.Overrides[0].DBType = kind
@@ -163,6 +179,50 @@ func TestGoOverrideConflictAndUnsupportedTypes(t *testing.T) {
 		}
 	}
 	require.True(t, strings.Contains(models, `"generated/domain"`))
+}
+
+func TestDBTypeOverrideUsesParameterOptionality(t *testing.T) {
+	input := overrideInput()
+	input.Queries[1].Parameters[2].Type = model.Type{Kind: "Utf8"}
+	input.Queries[1].SQL = strings.Replace(input.Queries[1].SQL, "DECLARE $note AS Optional<Utf8>;", "DECLARE $note AS Utf8;", 1)
+	for _, runtime := range []string{"database/sql", "ydb"} {
+		t.Run(runtime, func(t *testing.T) {
+			files, err := Generate(input, Options{Package: "db", Runtime: runtime, Overrides: []config.GoOverride{
+				{DBType: "Utf8", GoType: config.GoType{Type: "RequiredText"}},
+				{DBType: "Utf8", Nullable: true, GoType: config.GoType{Type: "OptionalText"}},
+			}})
+			require.NoError(t, err)
+			var models string
+			for _, file := range files {
+				if file.Name == "models.go" {
+					models = string(file.Content)
+				}
+			}
+			require.NotEmpty(t, models)
+			require.Regexp(t, `(?s)type GetCustomerRow struct \{[^}]*Note\s+\*OptionalText`, models)
+			require.Regexp(t, `(?s)type PutCustomerParams struct \{[^}]*Note\s+RequiredText`, models)
+		})
+	}
+}
+
+func TestDBTypeOverrideDoesNotChangeListElements(t *testing.T) {
+	list := model.Type{Kind: "List", Elem: &model.Type{Kind: "Utf8"}}
+	input := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name: "UseList", Command: model.Exec, SQL: "DECLARE $items AS List<Utf8>; UPSERT INTO customers (id, name) VALUES (1ul, ListHead($items));",
+		Parameters: []model.Parameter{{Name: "items", Type: list}},
+	}}}
+	for _, runtime := range []string{"database/sql", "ydb"} {
+		t.Run(runtime, func(t *testing.T) {
+			files, err := Generate(input, Options{Package: "db", Runtime: runtime, Overrides: []config.GoOverride{{DBType: "Utf8", GoType: config.GoType{Type: "CustomText"}}}})
+			require.NoError(t, err)
+			var generated string
+			for _, file := range files {
+				generated += string(file.Content)
+			}
+			require.Contains(t, generated, "arg []string")
+			require.NotContains(t, generated, "CustomText")
+		})
+	}
 }
 
 func TestGoOverrideInvalidRuleDiagnostics(t *testing.T) {
