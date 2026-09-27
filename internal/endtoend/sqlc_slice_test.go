@@ -20,7 +20,7 @@ func TestSQLCSliceInvalidContextHasConsistentCLIDiagnostic(t *testing.T) {
 			status := cli.Run([]string{command, "--no-remote", "-f", filepath.Join(dir, "sqlc.yaml")}, &stdout, &stderr)
 			require.NotZero(t, status)
 			require.Empty(t, stdout.String())
-			require.Contains(t, stderr.String(), "sqlc.slice requires IN (sqlc.slice(name)) or IN sqlc.slice(name)")
+			require.Contains(t, stderr.String(), "sqlc.slice must be directly after IN or directly inside IN (...), without additional parentheses")
 		})
 	}
 }

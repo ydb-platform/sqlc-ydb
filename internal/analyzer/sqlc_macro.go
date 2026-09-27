@@ -63,13 +63,17 @@ func lowerSQLCArguments(block *queryBlock) []model.Diagnostic {
 		}
 		parenthesizedSlice := slice && i >= 2 && i+6 < len(significant) && significant[i-1].GetTokenType() == parser.YQLLexerLPAREN && significant[i-2].GetTokenType() == parser.YQLLexerIN && significant[i+6].GetTokenType() == parser.YQLLexerRPAREN
 		if slice && !parenthesizedSlice && (i == 0 || significant[i-1].GetTokenType() != parser.YQLLexerIN) {
-			diagnostics = append(diagnostics, model.Diagnostic{Position: position, Message: "sqlc.slice requires IN (sqlc.slice(name)) or IN sqlc.slice(name)"})
+			diagnostics = append(diagnostics, model.Diagnostic{Position: position, Message: "sqlc.slice must be directly after IN or directly inside IN (...), without additional parentheses"})
 			continue
 		}
-		if previous, exists := arguments[name]; exists && previous.nullable != nullable {
+		if previous, exists := arguments[name]; exists && (previous.nullable != nullable || previous.slice != slice) {
 			message := fmt.Sprintf("parameter %q cannot use both sqlc.arg and sqlc.narg", name)
 			if slice || previous.slice {
-				message = fmt.Sprintf("parameter %q cannot use both sqlc.slice and sqlc.narg", name)
+				other := "arg"
+				if nullable || previous.nullable {
+					other = "narg"
+				}
+				message = fmt.Sprintf("parameter %q cannot use both sqlc.slice and sqlc.%s", name, other)
 			}
 			diagnostics = append(diagnostics, model.Diagnostic{Position: position, Message: message})
 			continue
