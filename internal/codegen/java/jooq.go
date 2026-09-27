@@ -376,6 +376,11 @@ func jooqRequiresFullSQL(q model.AnalyzedQuery) bool {
 	if q.Syntax == nil {
 		return false
 	}
+	for _, source := range jooqNodes[*parser.Flatten_sourceContext](q.Syntax.Root) {
+		if source.FLATTEN() != nil {
+			return true
+		}
+	}
 	for _, group := range jooqNodes[*parser.Group_by_clauseContext](q.Syntax.Root) {
 		for _, named := range jooqNodes[*parser.Named_exprContext](group) {
 			if named.AS() != nil {
@@ -752,6 +757,9 @@ func (r *jooqRenderer) statement() string {
 
 // Keep VIEW as a table query part so the dialect still maps the base table.
 func (r *jooqRenderer) tableSource(source parser.IFlatten_sourceContext, rel model.TableBinding) string {
+	if source.FLATTEN() != nil {
+		return r.fail(source)
+	}
 	named := source.Named_single_source()
 	ref := named.Hinted_single_source().Single_source().Table_ref()
 	if ref == nil || ref.Table_key() == nil {

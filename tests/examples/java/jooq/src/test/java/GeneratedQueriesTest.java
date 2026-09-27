@@ -63,6 +63,9 @@ class GeneratedQueriesTest {
                         assertFalse(sql.toLowerCase().contains("bio"), sql);
                         assertFalse(sql.toLowerCase().contains("without"), sql);
                     }
+                    if (family.equals("authors") && method.getName().equals("listAuthorNameWords")) {
+                        assertTrue(sql.contains("FLATTEN LIST BY words AS word"), sql);
+                    }
                     if (family.equals("booktest") && method.getName().equals("findAuthors")) {
                         assertTrue(sql.contains("author_id` >= ?"), sql);
                         assertTrue(sql.contains("? is null or"), sql);
@@ -108,7 +111,7 @@ class GeneratedQueriesTest {
                 }
             }
         }
-        assertEquals(70, statements.size());
+        assertEquals(71, statements.size());
     }
     @Test
     void declaredQueryReadsDialectCarriers() throws Exception {
@@ -138,11 +141,11 @@ class GeneratedQueriesTest {
                 GeneratedQueriesTest.class.getClassLoader(), new Class<?>[]{tech.ydb.jdbc.YdbConnection.class}, (proxy, method, args) -> {
                     if (!method.getName().equals("prepareStatement")) throw new AssertionError(method);
                     assertEquals(tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY, args[1]);
-                    assertTrue(((String) args[0]).contains("DECLARE"));
                     var statement = connection.prepareStatement((String) args[0]);
                     return java.lang.reflect.Proxy.newProxyInstance(GeneratedQueriesTest.class.getClassLoader(),
                             new Class<?>[]{tech.ydb.jdbc.YdbPreparedStatement.class}, (statementProxy, operation, values) -> {
                                 if (operation.getName().startsWith("set") && values[0] instanceof String) {
+                                    assertTrue(((String) args[0]).contains("DECLARE"));
                                     if (operation.getName().equals("setObject")) assertInstanceOf(tech.ydb.table.values.Value.class, values[1]);
                                     return null;
                                 }

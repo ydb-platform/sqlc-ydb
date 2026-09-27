@@ -48,3 +48,8 @@ class GetAuthorExportMetadataRow:
 @dataclass
 class EchoAuthorIDTextRow:
     author_id_text: str
+
+@dataclass
+class ListAuthorNameWordsRow:
+    id: int
+    word: str
