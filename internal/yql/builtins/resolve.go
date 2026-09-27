@@ -113,6 +113,8 @@ func lookupCore(name string) functionResolver {
 		return func(args []model.Type) (model.Type, error) { return resolveMinMax(name, args) }
 	case "SUM":
 		return resolveSum
+	case "SUM_IF", "AVG_IF":
+		return func(args []model.Type) (model.Type, error) { return resolveConditionalAggregate(name, args) }
 	case "AVG":
 		return resolveAvg
 	case "AGGREGATE_LIST", "AGG_LIST", "AGGREGATE_LIST_DISTINCT", "AGG_LIST_DISTINCT":
@@ -180,6 +182,20 @@ func resolveCountIf(args []model.Type) (model.Type, error) {
 		return model.Type{}, fmt.Errorf("COUNT_IF argument must be Bool or Optional<Bool>")
 	}
 	return model.Type{Kind: "Uint64"}, nil
+}
+
+func resolveConditionalAggregate(name string, args []model.Type) (model.Type, error) {
+	if err := arity(name, args, 2); err != nil {
+		return model.Type{}, err
+	}
+	predicate, _, err := baseType(args[1])
+	if err != nil || (predicate.Kind != "Bool" && predicate.Kind != "Null") {
+		return model.Type{}, fmt.Errorf("%s argument 2 must be Bool or Optional<Bool>", name)
+	}
+	if strings.EqualFold(name, "SUM_IF") {
+		return resolveSum(args[:1])
+	}
+	return resolveAvg(args[:1])
 }
 
 func resolveAggregateList(args []model.Type) (model.Type, error) {

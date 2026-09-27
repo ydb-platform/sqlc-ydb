@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Resolve YQL `SUM_IF` and `AVG_IF` over supported numeric values and Boolean predicates, retaining nullable results when no rows match, including within a group.
+
 ## v0.11.0
 
 ### Added

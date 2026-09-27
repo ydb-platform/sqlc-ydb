@@ -81,7 +81,7 @@ Prerequisite labels below are work still required, not supported overloads: **S*
 | SUM | Resolved subset: Supported numeric subset; widening and empty/grouped nullability. |
 | AVG | Resolved subset: Supported numeric/Interval subset; empty/grouped nullability. |
 | COUNT_IF | Resolved subset: Bool/Optional<Bool>/NULL input; Uint64 result, including empty input. |
-| SUM_IF and AVG_IF | Not implemented — A: argument/result types and empty/grouped behavior. |
+| SUM_IF and AVG_IF | Resolved subset: SUM/AVG value types and Bool/Optional<Bool>/NULL predicates; optional results on empty input or a group with no matching rows. |
 | SOME | Not implemented — A: argument/result types and empty/grouped behavior. |
 | CountDistinctEstimate, HyperLogLog, and HLL | Not implemented — A: argument/result types and empty/grouped behavior. |
 | AGGREGATE_LIST | Resolved subset: List of the non-null input element type, optional checked integer limit, grouped and empty-input behavior. |

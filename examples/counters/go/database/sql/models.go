@@ -59,6 +59,12 @@ type ListCountersRow struct {
 	Enabled       bool
 }
 
+type CounterSummaryRow struct {
+	Total          uint64
+	EnabledTotal   *int64
+	EnabledAverage *float64
+}
+
 type ReadThenIncrementParams struct {
 	ID    string
 	Delta int64
