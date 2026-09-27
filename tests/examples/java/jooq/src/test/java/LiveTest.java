@@ -38,6 +38,7 @@ class LiveTest {
                 create(connection, created, prefix + "authors", "author_id Uint64 NOT NULL, name Utf8 NOT NULL, PRIMARY KEY(author_id)");
                 create(connection, created, prefix + "books", "book_id Uint64 NOT NULL, author_id Uint64 NOT NULL, isbn Utf8 NOT NULL, book_type Utf8 NOT NULL, title Utf8 NOT NULL, publication_year Int32 NOT NULL, available Timestamp NOT NULL, tags Json NOT NULL, PRIMARY KEY(book_id)");
                 var queries = new booktest.jooq.Queries(dsl);
+                queries.noOpWithParameter(ULong.valueOf(1));
                 ULong id = ULong.MAX;
                 Instant available = Instant.parse("2026-01-01T00:00:00.123456Z");
                 assertEquals(id, queries.createAuthor(id, "Автор").orElseThrow().authorId());

@@ -189,6 +189,7 @@ type Querier interface {
 	GetBook(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetBookRow, error)
 	GetBookAndAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetBookAndAuthorRow, error)
 	DeleteBook(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error
+	NoOpWithParameter(ctx context.Context, arg uint64, opts ...query.ExecuteOption) error
 	BooksByTitleYear(ctx context.Context, arg BooksByTitleYearParams, opts ...query.ExecuteOption) ([]BooksByTitleYearRow, error)
 	BooksByTags(ctx context.Context, arg string, opts ...query.ExecuteOption) ([]BooksByTagsRow, error)
 	CreateAuthor(ctx context.Context, arg CreateAuthorParams, opts ...query.ExecuteOption) (CreateAuthorRow, error)

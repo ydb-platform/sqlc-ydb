@@ -88,6 +88,27 @@ func TestJDBCUsesStandardPositionalParameters(t *testing.T) {
 	require.Contains(t, generated, wantPrepared, "generated JDBC API did not use positional SQL:\n%s", generated)
 }
 
+func TestJDBCDeclarationOnlySkipsUnusedBinding(t *testing.T) {
+	const sql = "-- name: NoOpWithParameter :exec\nDECLARE $value AS Uint64;\nDECLARE $name AS Utf8;"
+	analysis, err := analyzer.Analyze(nil, []model.Source{{Name: "queries.sql", Text: sql}})
+	require.NoError(t, err)
+	for _, runtime := range []string{"jdbc", "jooq"} {
+		t.Run(runtime, func(t *testing.T) {
+			files, err := Generate(analysis, Options{Runtime: runtime})
+			require.NoError(t, err)
+			generated := string(files[len(files)-1].Content)
+			signature := "noOpWithParameter(long value, String name)"
+			if runtime == "jooq" {
+				signature = "noOpWithParameter(ULong value, String name)"
+			}
+			require.Contains(t, generated, signature)
+			require.Contains(t, generated, "DECLARE $value AS Uint64;")
+			require.Contains(t, generated, "DECLARE $name AS Utf8;")
+			require.NotRegexp(t, `_prepared\.set\w+\(`, generated)
+		})
+	}
+}
+
 func TestGenerateRejectsInvalidContracts(t *testing.T) {
 	utf8 := model.Type{Kind: "Utf8"}
 	for _, tc := range []struct {

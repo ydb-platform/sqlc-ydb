@@ -102,10 +102,13 @@ class GeneratedQueriesTest {
                     if (method.getName().equals("deleteAuthorWithBooks")) {
                         assertEquals("DECLARE $author_id AS Uint64;\nDELETE FROM `books` WHERE author_id = $author_id;\nDELETE FROM `authors` WHERE author_id = $author_id;", sql);
                     }
+                    if (family.equals("booktest") && method.getName().equals("noOpWithParameter")) {
+                        assertEquals("DECLARE $value AS Uint64;", sql);
+                    }
                 }
             }
         }
-        assertEquals(69, statements.size());
+        assertEquals(70, statements.size());
     }
     @Test
     void declaredQueryReadsDialectCarriers() throws Exception {

@@ -380,7 +380,11 @@ func emitJDBC(b *strings.Builder, q model.AnalyzedQuery, names []string, binding
 	}
 	if jdbc.HasDeclarations(q) {
 		fmt.Fprintf(b, "        %s.unwrap(tech.ydb.jdbc.YdbConnection::class.java).prepareStatement(%s, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY).use { _prepared ->\n", connection, sql)
-		for i, p := range q.Parameters {
+		boundParameters := q.Parameters
+		if q.DeclarationOnly {
+			boundParameters = nil
+		}
+		for i, p := range boundParameters {
 			kind := p.Type.UnwrapOptional().Kind
 			if !isStructList(p.Type) && kind != "Uint64" {
 				scalar, _, _ := typeInfo(p.Type)

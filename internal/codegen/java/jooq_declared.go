@@ -140,7 +140,11 @@ func emitJooqDeclared(b *strings.Builder, q model.AnalyzedQuery, names []string,
 		callback = "return dsl.connectionResult"
 	}
 	fmt.Fprintf(b, "        %s(_connection -> {\n            try (var _prepared = _connection.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement(%s, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {\n", callback, sql)
-	for i, p := range q.Parameters {
+	boundParameters := q.Parameters
+	if q.DeclarationOnly {
+		boundParameters = nil
+	}
+	for i, p := range boundParameters {
 		_, _, scalarErr := typeInfo(p.Type)
 		if p.Type.UnwrapOptional().Kind == "Uint64" || scalarErr != nil {
 			fmt.Fprintf(b, "                _prepared.setObject(%s, %s);\n", quoted(p.Name), jooqDeclaredValue(p, names[i]))

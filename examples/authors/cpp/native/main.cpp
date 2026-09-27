@@ -1,5 +1,6 @@
 #include "queries.hpp"
 #include "../../../batch/cpp/native/queries.hpp"
+#include "../../../booktest/cpp/native/queries.hpp"
 
 #include <ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb-cpp-sdk/client/query/client.h>
@@ -97,6 +98,7 @@ int main() {
         ExecuteStatement(client, ReadSchema());
         CreatedAuthorsTable created_table{client};
         authors::native::Queries queries{client};
+        booktest::native::Queries{client}.NoOpWithParameter(1);
 
         constexpr std::uint64_t kMaxId = std::numeric_limits<std::uint64_t>::max();
         queries.UpsertAuthor(kMaxId, "C++ SDK", std::optional<std::string>{"present"});

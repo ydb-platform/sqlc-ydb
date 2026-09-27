@@ -93,6 +93,7 @@ async function runBooktest() {
   await executeFile("../../../examples/booktest/schema.sql");
   try {
     const queries = new BooktestQueries(client);
+    await queries.noOpWithParameter(1n);
     const authorId = 91n;
     const bookId = 92n;
     await queries.createAuthor({ authorId, name: "Ursula" });

@@ -119,6 +119,16 @@ func (q *Queries) DeleteBook(ctx context.Context, arg uint64) error {
 	return err
 }
 
+// -- name: NoOpWithParameter :exec
+func (q *Queries) NoOpWithParameter(ctx context.Context, arg uint64) error {
+	_, err := q.db.ExecContext(ctx, ""+
+		"DECLARE $value AS Uint64;",
+		sql.Named("value", arg),
+	)
+
+	return err
+}
+
 // -- name: BooksByTitleYear :many
 func (q *Queries) BooksByTitleYear(ctx context.Context, arg BooksByTitleYearParams) ([]BooksByTitleYearRow, error) {
 	rows, err := q.db.QueryContext(ctx, ""+

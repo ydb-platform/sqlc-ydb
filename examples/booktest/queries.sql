@@ -25,6 +25,9 @@ WHERE b.book_id = $book_id;
 DELETE FROM books
 WHERE book_id = $book_id;
 
+-- name: NoOpWithParameter :exec
+DECLARE $value AS Uint64;
+
 -- name: BooksByTitleYear :many
 SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags
 FROM books

@@ -2,6 +2,7 @@
 
 #include "queries.hpp"
 #include "../../../batch/cpp/userver/queries.hpp"
+#include "../../../booktest/cpp/userver/queries.hpp"
 
 #include <userver/formats/json.hpp>
 
@@ -61,6 +62,7 @@ std::string SmokeHandler::HandleRequest(server::http::HttpRequest&, server::requ
     client_->ExecuteSchemeQuery(ReadSchema());
     CreatedAuthorsTable created_table{*client_};
     ::authors::userver::Queries queries{*client_};
+    ::booktest::userver::Queries{*client_}.NoOpWithParameter(1);
     constexpr std::uint64_t kMaxId = std::numeric_limits<std::uint64_t>::max();
     queries.UpsertAuthor(
         kMaxId,

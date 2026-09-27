@@ -181,6 +181,7 @@ async fn booktest_smoke(client: &mut ydb::QueryClient) -> ydb::YdbResult<()> {
     .await?;
     let result = async {
         let mut queries = booktest::queries::Queries::new(client);
+        queries.no_op_with_parameter().value(1).call().await?;
         let available = SystemTime::UNIX_EPOCH + Duration::from_secs(1_710_000_000);
         queries
             .create_book()

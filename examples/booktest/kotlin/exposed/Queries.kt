@@ -110,6 +110,15 @@ class Queries(private val client: org.jetbrains.exposed.v1.jdbc.JdbcTransaction)
         }
     }
 
+    // -- name: NoOpWithParameter :exec
+    fun noOpWithParameter(value_: Long): Unit {
+        val _connection = client.connection.connection as java.sql.Connection
+        _connection.unwrap(tech.ydb.jdbc.YdbConnection::class.java).prepareStatement(
+            "DECLARE \$value AS Uint64;", tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY).use { _prepared ->
+            _prepared.execute()
+        }
+    }
+
     // -- name: BooksByTitleYear :many
     fun booksByTitleYear(title: String, publicationYear: Int): List<BooksByTitleYearRow> {
         val _connection = client.connection.connection as java.sql.Connection

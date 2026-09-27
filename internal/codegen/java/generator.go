@@ -431,7 +431,7 @@ func emitJDBCOn(b *strings.Builder, q model.AnalyzedQuery, names []string, bindi
 		fmt.Fprintf(b, "%stry (var _prepared = %s.prepareStatement(%s)) {\n", indent, connection, sql)
 	}
 	indent += "    "
-	if jdbc.HasDeclarations(q) {
+	if jdbc.HasDeclarations(q) && !q.DeclarationOnly {
 		for i, p := range q.Parameters {
 			emitJDBCNamedParameter(b, p, names[i], indent)
 		}

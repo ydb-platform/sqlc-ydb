@@ -120,6 +120,15 @@ public final class Queries {
             """, _params).execute().join().getStatus().expectSuccess();
     }
 
+    // -- name: NoOpWithParameter :exec
+    public void noOpWithParameter(long value) {
+        var _params = Params.create();
+        _params.put("$value", PrimitiveValue.newUint64(value));
+        client.createQuery("""
+            DECLARE $value AS Uint64;\
+            """, _params).execute().join().getStatus().expectSuccess();
+    }
+
     // -- name: BooksByTitleYear :many
     public java.util.List<BooksByTitleYearRow> booksByTitleYear(String title, int publicationYear) {
         var _params = Params.create();

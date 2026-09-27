@@ -153,6 +153,15 @@ public sealed class Queries
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    // -- name: NoOpWithParameter :exec
+    public async Task NoOpWithParameterAsync(ulong value, CancellationToken cancellationToken = default)
+    {
+        await using var command = new YdbCommand(
+            "DECLARE $value AS Uint64;", _connection) { Transaction = _transaction };
+        command.Parameters.Add(new YdbParameter("$value", DbType.UInt64, value));
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     // -- name: BooksByTitleYear :many
     public async Task<IReadOnlyList<BooksByTitleYearRow>> BooksByTitleYearAsync(BooksByTitleYearParams args, CancellationToken cancellationToken = default)
     {

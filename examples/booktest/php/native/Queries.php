@@ -312,6 +312,36 @@ final class Queries
         });
     }
 
+    // -- name: NoOpWithParameter :exec
+    public function noOpWithParameter(string $value): void
+    {
+        $parameters = [
+            '$value' => YdbValueCodec::typedUint64($value, 'value'),
+        ];
+
+        $this->execute(function (Session $session) use ($parameters): ExecuteQueryResult {
+            $query = $session->newQuery(<<<'SQLC_YDB_YQL'
+                DECLARE $value AS Uint64;
+                SQLC_YDB_YQL)
+                ->parameters($parameters)
+                ->keepInCache(count($parameters) > 0);
+            if ($this->txId !== null) {
+                $query->txControl(new TransactionControl(['tx_id' => $this->txId]));
+                $txControl = $query->getRequestData()['tx_control']->serializeToString();
+            } else {
+                $query->beginTx('serializable_read_write');
+            }
+            if ($this->configure !== null) {
+                ($this->configure)($query);
+            }
+            if ($this->txId !== null && $query->getRequestData()['tx_control']->serializeToString() !== $txControl) {
+                throw new \LogicException('configure must not change transaction control on a transaction-bound Queries');
+            }
+
+            return (new YdbRawExecutor($this->table))->execute($session, $query, $this->txId === null);
+        });
+    }
+
     /** @return list<BooksByTitleYearRow> */
     // -- name: BooksByTitleYear :many
     public function booksByTitleYear(BooksByTitleYearParams $params): array

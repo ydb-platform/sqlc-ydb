@@ -168,6 +168,21 @@ class Queries {
         }
     }
 
+    // -- name: NoOpWithParameter :exec
+    fun noOpWithParameter(value_: Long): Unit {
+        val _params = Params.create()
+        _params.put("\$value", PrimitiveValue.newUint64(value_))
+        if (transaction != null) {
+            transaction.createQuery(
+                "DECLARE \$value AS Uint64;", _params).execute().join().getStatus().expectSuccess()
+        } else {
+            client!!.supplyResult { _session ->
+                _session.createQuery(
+                    "DECLARE \$value AS Uint64;", TxMode.SERIALIZABLE_RW, _params).execute()
+            }.join().getStatus().expectSuccess()
+        }
+    }
+
     // -- name: BooksByTitleYear :many
     fun booksByTitleYear(title: String, publicationYear: Int): List<BooksByTitleYearRow> {
         val _params = Params.create()

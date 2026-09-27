@@ -19,6 +19,7 @@ fun main() {
         connection.createStatement().use { it.execute(SCHEMA) }
         try {
             val jdbc = batch.jdbc.Queries(connection)
+            booktest.jdbc.Queries(connection).noOpWithParameter(1)
             jdbc.createBooks(emptyList())
             check(jdbc.booksByYear(2026).isEmpty())
             jdbc.createBooks(listOf(
@@ -35,6 +36,7 @@ fun main() {
                 QueryClient.newClient(transport).build().use { client ->
                     val retry = SessionRetryContext.create(client).build()
                     val native = batch.nativeapi.Queries(retry)
+                    booktest.nativeapi.Queries(retry).noOpWithParameter(1)
                     native.createBooks(emptyList())
                     native.createBooks(listOf(batch.nativeapi.CreateBooksBooksItem(9, 42, "native", "paper", "Native", 2028, Instant.EPOCH, "[false]")))
                     check(jdbc.booksByYear(2028).single().tags == "[false]")
@@ -50,6 +52,7 @@ fun main() {
             val database = Database.connect("jdbc:ydb:$endpoint", driver = "tech.ydb.jdbc.YdbDriver", databaseConfig = DatabaseConfig { useNestedTransactions = false })
             ydbTransaction(database) {
                 val exposed = batch.exposed.Queries(this)
+                booktest.exposed.Queries(this).noOpWithParameter(1)
                 exposed.createBooks(emptyList())
                 exposed.createBooks(listOf(batch.exposed.CreateBooksBooksItem(11, 42, "exposed", "paper", "Exposed", 2030, Instant.EPOCH, "[true]")))
                 check(jdbc.booksByYear(2030).isEmpty())

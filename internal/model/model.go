@@ -215,6 +215,7 @@ type AnalyzedQuery struct {
 	Parameters         []Parameter         // names without the leading dollar sign
 	ParameterColumns   map[string][]Column `json:"-"`          // direct physical-column uses of each parameter
 	DeclaredParameters []string            `json:",omitempty"` // names explicitly declared in the original SQL
+	DeclarationOnly    bool                `json:",omitempty"` // :exec with declarations and no data statement
 	MultipleStatements bool                `json:",omitempty"` // more than one top-level data statement, excluding declarations and locals
 	ResultSets         []ResultSet
 	Source             Position
