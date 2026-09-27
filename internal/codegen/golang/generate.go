@@ -659,7 +659,11 @@ func varRef(q model.AnalyzedQuery, p model.Parameter, o Options) string {
 }
 
 func useParamsStruct(q model.AnalyzedQuery, o Options) bool {
-	return len(q.Parameters) > 0 && len(q.Parameters) > int(*o.QueryParameterLimit)
+	limit := int32(1)
+	if o.QueryParameterLimit != nil {
+		limit = *o.QueryParameterLimit
+	}
+	return len(q.Parameters) > 0 && len(q.Parameters) > int(limit)
 }
 func sqlArgumentList(q model.AnalyzedQuery, o Options) []string {
 	x := make([]string, len(q.Parameters))
