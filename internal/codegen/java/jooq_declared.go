@@ -140,26 +140,28 @@ func emitJooqDeclared(b *strings.Builder, q model.AnalyzedQuery, names []string,
 		callback = "return dsl.connectionResult"
 	}
 	fmt.Fprintf(b, "        %s(_connection -> {\n            try (var _prepared = _connection.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement(%s, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {\n", callback, sql)
-	if !q.DeclarationOnly {
-		for i, p := range q.Parameters {
-			_, _, scalarErr := typeInfo(p.Type)
-			if p.Type.UnwrapOptional().Kind == "Uint64" || scalarErr != nil {
-				fmt.Fprintf(b, "                _prepared.setObject(%s, %s);\n", quoted(p.Name), jooqDeclaredValue(p, names[i]))
-			} else {
-				input := names[i]
-				switch p.Type.UnwrapOptional().Kind {
-				case "Uint8", "Uint16":
-					input += ".intValue()"
-				case "Uint32":
-					input += ".longValue()"
-				case "Json", "JsonDocument":
-					input += ".data()"
-				}
-				if input != names[i] && p.Type.IsOptional() {
-					input = "(" + names[i] + " == null ? null : " + input + ")"
-				}
-				emitJDBCNamedParameter(b, p, input, "                ")
+	boundParameters := q.Parameters
+	if q.DeclarationOnly {
+		boundParameters = nil
+	}
+	for i, p := range boundParameters {
+		_, _, scalarErr := typeInfo(p.Type)
+		if p.Type.UnwrapOptional().Kind == "Uint64" || scalarErr != nil {
+			fmt.Fprintf(b, "                _prepared.setObject(%s, %s);\n", quoted(p.Name), jooqDeclaredValue(p, names[i]))
+		} else {
+			input := names[i]
+			switch p.Type.UnwrapOptional().Kind {
+			case "Uint8", "Uint16":
+				input += ".intValue()"
+			case "Uint32":
+				input += ".longValue()"
+			case "Json", "JsonDocument":
+				input += ".data()"
 			}
+			if input != names[i] && p.Type.IsOptional() {
+				input = "(" + names[i] + " == null ? null : " + input + ")"
+			}
+			emitJDBCNamedParameter(b, p, input, "                ")
 		}
 	}
 	if q.Command == model.Exec {
