@@ -3,6 +3,7 @@ package golang
 import (
 	"bytes"
 	"fmt"
+	"go/ast"
 	"strconv"
 	"strings"
 
@@ -248,6 +249,18 @@ func validateStructDeclarations(in *model.AnalysisResult, o Options) error {
 				}
 				names[name] = true
 			}
+		}
+	}
+	if o.EmitExportedQueries {
+		for _, q := range in.Queries {
+			name := exportedQueryName(q.Name)
+			if !ast.IsExported(name) {
+				return fmt.Errorf("%s: query name cannot form an exported Go constant", q.Name)
+			}
+			if names[name] {
+				return fmt.Errorf("%s: exported query constant %s conflicts with generated declaration", q.Name, name)
+			}
+			names[name] = true
 		}
 	}
 	return nil

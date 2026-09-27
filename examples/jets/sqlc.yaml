@@ -23,6 +23,7 @@ sql:
         package: jets
         out: go/native
         sql_package: ydb
+        emit_exported_queries: true
   - name: portable
     engine: ydb
     schema: schema.sql
@@ -32,6 +33,7 @@ sql:
         package: jets
         out: go/database/sql
         sql_package: database/sql
+        emit_exported_queries: true
   - name: dapper
     engine: ydb
     schema: schema.sql

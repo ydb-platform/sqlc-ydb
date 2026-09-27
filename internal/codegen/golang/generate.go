@@ -25,6 +25,7 @@ type Options struct {
 	EmitJSONTags        bool
 	EmitInterface       bool
 	EmitEmptySlices     bool
+	EmitExportedQueries bool
 	QueryParameterLimit *int32
 }
 
@@ -624,6 +625,9 @@ func queryFile(source string, qs []model.AnalyzedQuery, o Options) []byte {
 	b.WriteString(")\n\n")
 
 	for _, q := range qs {
+		if o.EmitExportedQueries {
+			b.WriteString("const " + exportedQueryName(q.Name) + " = " + querySQL(q) + "\n\n")
+		}
 		writeQuery(&b, q, o)
 		for _, p := range q.Parameters {
 			if isStructList(p.Type) {
@@ -689,6 +693,21 @@ func querySQL(q model.AnalyzedQuery) string {
 		}
 	}
 	return sqlLiteral(sql)
+}
+
+func querySQLReference(q model.AnalyzedQuery, o Options) string {
+	if o.EmitExportedQueries {
+		return exportedQueryName(q.Name)
+	}
+	return querySQL(q)
+}
+
+func exportedQueryName(name string) string {
+	runes := []rune(name)
+	if len(runes) != 0 {
+		runes[0] = unicode.ToTitle(runes[0])
+	}
+	return string(runes)
 }
 
 func queryAnnotation(line string) bool {
@@ -810,10 +829,10 @@ func writeSQL(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 	parameters := sqlArgumentList(q, o)
 	switch q.Command {
 	case model.Exec:
-		call := generatedCall("q.db.ExecContext", querySQL(q), parameters)
+		call := generatedCall("q.db.ExecContext", querySQLReference(q, o), parameters)
 		b.WriteString("_, err := " + call + "\n\nreturn err\n")
 	case model.One:
-		call := generatedCall("q.db.QueryRowContext", querySQL(q), parameters)
+		call := generatedCall("q.db.QueryRowContext", querySQLReference(q, o), parameters)
 		b.WriteString("var row " + q.Name + "Row\n")
 		b.WriteString("err := " + scanCall(call+".Scan", scanDestinations(q.ResultSets[0], o)) + "\n\n")
 		b.WriteString("return row, err\n")
@@ -826,7 +845,7 @@ func writeSQL(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 		if o.EmitEmptySlices {
 			init = "make([]" + q.Name + "Row, 0)"
 		}
-		call := generatedCall("q.db.QueryContext", querySQL(q), parameters)
+		call := generatedCall("q.db.QueryContext", querySQLReference(q, o), parameters)
 		b.WriteString("rows, err := " + call + "\n")
 		b.WriteString("if err != nil { return nil, err }\n")
 		b.WriteString("defer rows.Close()\n\n")
@@ -870,18 +889,18 @@ func writeYDB(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 		return
 	}
 	if q.Command == model.Exec {
-		b.WriteString("err := " + ydbCall("q.db.Exec", querySQL(q), opt) + "\n\nreturn xerrors.WithStackTrace(err)\n")
+		b.WriteString("err := " + ydbCall("q.db.Exec", querySQLReference(q, o), opt) + "\n\nreturn xerrors.WithStackTrace(err)\n")
 		return
 	}
 	if q.Command == model.One {
-		b.WriteString("result, err := " + ydbCall("q.db.QueryRow", querySQL(q), opt) + "\nif err != nil { return " + q.Name + "Row{}, xerrors.WithStackTrace(err) }\n\nvar row " + q.Name + "Row\nif err := result.ScanNamed(\n" + scanNamed(q.ResultSets[0], o) + ",\n); err != nil { return " + q.Name + "Row{}, xerrors.WithStackTrace(err) }\n\nreturn row, nil\n")
+		b.WriteString("result, err := " + ydbCall("q.db.QueryRow", querySQLReference(q, o), opt) + "\nif err != nil { return " + q.Name + "Row{}, xerrors.WithStackTrace(err) }\n\nvar row " + q.Name + "Row\nif err := result.ScanNamed(\n" + scanNamed(q.ResultSets[0], o) + ",\n); err != nil { return " + q.Name + "Row{}, xerrors.WithStackTrace(err) }\n\nreturn row, nil\n")
 		return
 	}
 	init := "[]" + q.Name + "Row(nil)"
 	if o.EmitEmptySlices {
 		init = "make([]" + q.Name + "Row, 0)"
 	}
-	b.WriteString("result, err := " + ydbCall("q.db.Query", querySQL(q), opt) + "\n")
+	b.WriteString("result, err := " + ydbCall("q.db.Query", querySQLReference(q, o), opt) + "\n")
 	b.WriteString("if err != nil { return nil, xerrors.WithStackTrace(err) }\n")
 	b.WriteString("defer result.Close(ctx)\n\n")
 	b.WriteString("resultSet, err := result.NextResultSet(ctx)\n")

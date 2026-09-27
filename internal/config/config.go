@@ -47,6 +47,7 @@ type Go struct {
 	EmitJSONTags        bool              `yaml:"emit_json_tags"`
 	EmitInterface       bool              `yaml:"emit_interface"`
 	EmitEmptySlices     bool              `yaml:"emit_empty_slices"`
+	EmitExportedQueries bool              `yaml:"emit_exported_queries"`
 	QueryParameterLimit *int32            `yaml:"query_parameter_limit"`
 }
 

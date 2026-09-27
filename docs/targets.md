@@ -19,6 +19,7 @@ Use `sqlc-ydb init --help` to list languages and their runtimes. For the options
 | `emit_json_tags` | boolean | `false` | Add JSON tags to generated struct fields. |
 | `emit_interface` | boolean | `false` | Generate the Querier interface implemented by Queries. |
 | `emit_empty_slices` | boolean | `false` | Return empty slices instead of nil for successful :many queries with no rows. |
+| `emit_exported_queries` | boolean | `false` | Export each query's executable YQL as a Go constant named after the query. |
 | `query_parameter_limit` | integer | `1` | Maximum number of positional query arguments; 0 always uses a Params struct for queries with parameters. |
 | `sql_package` | enum | `database/sql` | SDK or framework used by the generated helpers. Values: `database/sql`, `ydb`. |
 

@@ -6,6 +6,12 @@
 
 - Add Go `:multi` queries for two or more read-only SELECT result sets in one YDB request, with typed slices, optional result names and exact result-set validation.
 
+## v0.8.0
+
+### Added
+
+- Support `gen.go.emit_exported_queries` with upstream-compatible option and constant names; the exported Go YQL omits `-- name:` annotations in both YDB SDK profiles.
+
 ## v0.7.1
 
 ### Added

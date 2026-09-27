@@ -53,6 +53,7 @@ func Generators() []Generator {
 			Option{Name: "emit_json_tags", Type: "boolean", Default: "false", Description: "Add JSON tags to generated struct fields."},
 			Option{Name: "emit_interface", Type: "boolean", Default: "false", Description: "Generate the Querier interface implemented by Queries."},
 			Option{Name: "emit_empty_slices", Type: "boolean", Default: "false", Description: "Return empty slices instead of nil for successful :many queries with no rows."},
+			Option{Name: "emit_exported_queries", Type: "boolean", Default: "false", Description: "Export each query's executable YQL as a Go constant named after the query."},
 			Option{Name: "query_parameter_limit", Type: "integer", Default: "1", Description: "Maximum number of positional query arguments; 0 always uses a Params struct for queries with parameters."}),
 		generator("python", "runtime", "ydb", []string{"ydb", "dbapi", "sqlalchemy"}, false,
 			out,

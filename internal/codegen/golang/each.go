@@ -17,7 +17,7 @@ func writeEachPreamble(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 
 func writeSQLEach(b *bytes.Buffer, q model.AnalyzedQuery, parameters []string, o Options) {
 	b.WriteString("ctx, cancel := context.WithCancel(ctx)\ndefer cancel()\n\n")
-	b.WriteString("rows, err := " + generatedCall("q.db.QueryContext", querySQL(q), parameters) + "\n")
+	b.WriteString("rows, err := " + generatedCall("q.db.QueryContext", querySQLReference(q, o), parameters) + "\n")
 	b.WriteString(`if err != nil { return err }
  exhausted := false
  defer func() {
@@ -51,7 +51,7 @@ func writeSQLEach(b *bytes.Buffer, q model.AnalyzedQuery, parameters []string, o
 
 func writeYDBEach(b *bytes.Buffer, q model.AnalyzedQuery, opt string, o Options) {
 	b.WriteString("ctx, cancel := context.WithCancel(ctx)\ndefer cancel()\n\n")
-	b.WriteString("result, err := " + ydbCall("q.db.Query", querySQL(q), opt) + "\n")
+	b.WriteString("result, err := " + ydbCall("q.db.Query", querySQLReference(q, o), opt) + "\n")
 	b.WriteString(`if err != nil { return err }
  exhausted := false
  defer func() {
