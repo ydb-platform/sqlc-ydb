@@ -850,6 +850,15 @@ func writeSQL(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 	parameters := sqlArgumentList(q, o)
 	switch q.Command {
 	case model.Exec:
+		if q.MultipleStatements && len(q.ResultSets) != 0 {
+			call := generatedCall("q.db.QueryContext", querySQLReference(q, o), parameters)
+			b.WriteString("rows, err := " + call + "\n")
+			b.WriteString("if err != nil { return err }\n")
+			b.WriteString("for rows.Next() {}\n")
+			b.WriteString("if err := rows.Close(); err != nil { return err }\n")
+			b.WriteString("return rows.Err()\n")
+			return
+		}
 		call := generatedCall("q.db.ExecContext", querySQLReference(q, o), parameters)
 		b.WriteString("_, err := " + call + "\n\nreturn err\n")
 	case model.One:

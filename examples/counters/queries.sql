@@ -35,3 +35,14 @@ SELECT c.* FROM counters AS c WHERE c.id = $id;
 
 -- name: ListCounters :many
 SELECT * FROM counters ORDER BY id;
+
+-- name: ReadThenIncrement :exec
+DECLARE $id AS Utf8;
+DECLARE $delta AS Int64;
+SELECT value FROM counters WHERE id = $id;
+UPDATE counters SET value = value + $delta WHERE id = $id;
+
+-- name: IncrementReturningThenIncrement :exec
+DECLARE $id AS Utf8;
+UPDATE counters SET value = value + 1 WHERE id = $id RETURNING value;
+UPDATE counters SET value = value + 1 WHERE id = $id;

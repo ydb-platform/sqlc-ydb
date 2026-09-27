@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Allow `:exec` scripts with one SELECT or DML RETURNING result alongside mutations, consuming and discarding rows before reporting execution status in supported runtimes.
+
 ## v0.9.0
 
 ### Added

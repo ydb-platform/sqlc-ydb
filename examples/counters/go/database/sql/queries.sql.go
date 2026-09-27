@@ -152,3 +152,43 @@ func (q *Queries) ListCounters(ctx context.Context) ([]ListCountersRow, error) {
 
 	return items, nil
 }
+
+// -- name: ReadThenIncrement :exec
+func (q *Queries) ReadThenIncrement(ctx context.Context, arg ReadThenIncrementParams) error {
+	rows, err := q.db.QueryContext(ctx, ""+
+		"DECLARE $id AS Utf8;\n"+
+		"DECLARE $delta AS Int64;\n"+
+		"SELECT value FROM counters WHERE id = $id;\n"+
+		"UPDATE counters SET value = value + $delta WHERE id = $id;",
+		sql.Named("id", arg.ID),
+		sql.Named("delta", arg.Delta),
+	)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	return rows.Err()
+}
+
+// -- name: IncrementReturningThenIncrement :exec
+func (q *Queries) IncrementReturningThenIncrement(ctx context.Context, arg string) error {
+	rows, err := q.db.QueryContext(ctx, ""+
+		"DECLARE $id AS Utf8;\n"+
+		"UPDATE counters SET value = value + 1 WHERE id = $id RETURNING value;\n"+
+		"UPDATE counters SET value = value + 1 WHERE id = $id;",
+		sql.Named("id", arg),
+	)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	return rows.Err()
+}

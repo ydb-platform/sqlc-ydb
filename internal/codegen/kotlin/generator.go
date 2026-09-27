@@ -289,9 +289,6 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 				ret = "List<" + row + ">"
 			}
 		case model.Exec:
-			if len(q.ResultSets) != 0 {
-				return nil, fmt.Errorf("%s: Kotlin :exec does not support result sets", q.Name)
-			}
 		default:
 			return nil, fmt.Errorf("%s: Kotlin does not support %s", q.Name, q.Command)
 		}
@@ -412,7 +409,11 @@ func emitJDBC(b *strings.Builder, q model.AnalyzedQuery, names []string, binding
 		emitJDBCParameter(b, q.Parameters[parameter], names[parameter], position+1)
 	}
 	if q.Command == model.Exec {
-		b.WriteString("            _prepared.execute()\n")
+		if q.MultipleStatements && len(q.ResultSets) != 0 {
+			b.WriteString("            _prepared.execute()\n            while (true) {\n                _prepared.resultSet?.use { _rows -> while (_rows.next()) {} }\n                if (!_prepared.moreResults && _prepared.updateCount == -1) break\n            }\n")
+		} else {
+			b.WriteString("            _prepared.execute()\n")
+		}
 	} else {
 		if q.MultipleStatements {
 			b.WriteString("            _prepared.execute()\n            while (_prepared.resultSet == null && _prepared.updateCount != -1) {\n                _prepared.moreResults\n            }\n            _prepared.resultSet.use { _rows ->\n                if (_rows == null) throw java.sql.SQLException(\"Expected one result set\")\n")

@@ -93,6 +93,11 @@ func TestCountersNative(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, id, incremented.ID)
 	require.Equal(t, int64(13), incremented.Value)
+	require.NoError(t, q.ReadThenIncrement(ctx, native.ReadThenIncrementParams{ID: id, Delta: 1}))
+	require.NoError(t, q.IncrementReturningThenIncrement(ctx, id))
+	row, err = q.ReadCounter(ctx, id)
+	require.NoError(t, err)
+	require.Equal(t, int64(16), row.Value)
 }
 
 func TestCountersDatabaseSQL(t *testing.T) {
@@ -173,4 +178,9 @@ func TestCountersDatabaseSQL(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, id, incremented.ID)
 	require.Equal(t, int64(13), incremented.Value)
+	require.NoError(t, q.ReadThenIncrement(ctx, sq.ReadThenIncrementParams{ID: id, Delta: 1}))
+	require.NoError(t, q.IncrementReturningThenIncrement(ctx, id))
+	row, err = q.ReadCounter(ctx, id)
+	require.NoError(t, err)
+	require.Equal(t, int64(16), row.Value)
 }

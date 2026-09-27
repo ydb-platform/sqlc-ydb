@@ -45,11 +45,37 @@ func TestMixedScriptPreservesOneResultInEveryPosition(t *testing.T) {
 	}
 }
 
+func TestMixedExecDiscardsOneResultInEveryPosition(t *testing.T) {
+	for _, resultSQL := range []string{
+		"SELECT id FROM records WHERE id=$id;",
+		"INSERT INTO records(id,payload) VALUES($id,'new'u) RETURNING id;",
+		"UPSERT INTO records(id,payload) VALUES($id,'new'u) RETURNING id;",
+		"UPDATE records SET payload='new'u WHERE id=$id RETURNING id;",
+		"DELETE FROM records WHERE id=$id RETURNING id;",
+	} {
+		for _, sql := range []string{
+			resultSQL + " DELETE FROM copies WHERE id=$id;",
+			"DELETE FROM copies WHERE id=$id; " + resultSQL,
+			"UPDATE records SET payload='changed'u WHERE id=$id; " + resultSQL + " DELETE FROM copies WHERE id=$id;",
+		} {
+			t.Run(sql, func(t *testing.T) {
+				result, err := Analyze(dmlScriptSchema, []model.Source{{Name: "query.sql", Text: "-- name: Change :exec\n" + sql}})
+				require.NoError(t, err)
+				require.Len(t, result.Queries, 1)
+				q := result.Queries[0]
+				require.True(t, q.MultipleStatements)
+				require.Len(t, q.ResultSets, 1)
+				require.Equal(t, "id", q.ResultSets[0].Columns[0].Name)
+				require.Equal(t, []model.Parameter{{Name: "id", Type: model.Type{Kind: "Uint64"}}}, q.Parameters)
+			})
+		}
+	}
+}
+
 func TestMixedScriptRejectsResultCountAndCommand(t *testing.T) {
 	for _, tc := range []struct{ name, command, sql, want string }{
 		{"two selects", ":many", "SELECT id FROM records; SELECT id FROM copies;", "multi-statement queries support at most one result-producing statement; found 2"},
 		{"two results with writes", ":one", "DELETE FROM records; SELECT id FROM records; DELETE FROM copies RETURNING id;", "multi-statement queries support at most one result-producing statement; found 2"},
-		{"exec result", ":exec", "SELECT id FROM records; DELETE FROM copies;", "command :exec cannot be used with a row-returning script; use :one or :many"},
 		{"one no result", ":one", "DELETE FROM records; DELETE FROM copies;", "command :one requires exactly one result-producing statement in a script"},
 		{"many no result", ":many", "DELETE FROM records; DELETE FROM copies;", "command :many requires exactly one result-producing statement in a script"},
 		{"each writes", ":each", "SELECT id FROM records; DELETE FROM copies;", "multi-statement :each is unsupported; use :one or :many to consume the result before returning"},

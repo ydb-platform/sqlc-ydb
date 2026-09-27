@@ -280,6 +280,19 @@ DELETE FROM records; SELECT 42 AS answer; DELETE FROM records;`}})
 	}
 }
 
+func TestJDBCExecDiscardsMixedScriptResults(t *testing.T) {
+	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));"}}, []model.Source{{Name: "queries.sql", Text: "-- name: Clear :exec\nSELECT id FROM records; DELETE FROM records;"}})
+	require.NoError(t, err)
+	for _, runtime := range []string{"jdbc", "exposed"} {
+		files, err := Generate(analysis, Options{Package: "scripts", Runtime: runtime})
+		require.NoError(t, err)
+		code := string(files[len(files)-1].Content)
+		require.Contains(t, code, "while (_rows.next()) {}")
+		require.Contains(t, code, "_prepared.moreResults")
+		require.NotContains(t, code, "_prepared.executeQuery()")
+	}
+}
+
 func TestGeneratedJDBCUsesTypedDriverValuesAndGuardsUnsignedRanges(t *testing.T) {
 	maven := os.Getenv("SQLC_YDB_TEST_MAVEN")
 	if maven == "" {

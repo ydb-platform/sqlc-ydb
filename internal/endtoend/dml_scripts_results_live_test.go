@@ -37,6 +37,23 @@ INSERT INTO copies (id, value, label) VALUES ($id, 999l, 'duplicate'u);
 DECLARE $id AS Uint64;
 UPDATE records SET value = value + 10 WHERE id = $id RETURNING id, value, label;
 UPDATE records SET value = value + 100 WHERE id = $id;
+
+-- name: DiscardBeforeMutating :exec
+DECLARE $id AS Uint64;
+SELECT id, value FROM records WHERE id = $id;
+UPDATE records SET value = value + 10 WHERE id = $id;
+
+-- name: DiscardReturningBetweenMutations :exec
+DECLARE $id AS Uint64;
+UPDATE records SET value = value + 10 WHERE id = $id RETURNING id;
+UPDATE records SET value = value + 100 WHERE id = $id;
+
+-- name: FailAfterDiscard :exec
+DECLARE $id AS Uint64;
+DECLARE $minimum AS Int64;
+SELECT id FROM records WHERE id = $id AND value >= $minimum;
+UPDATE records SET value = value + 10 WHERE id = $id;
+INSERT INTO copies (id, value, label) VALUES ($id, 999l, 'duplicate'u);
 `
 
 const dmlScriptsResultGoRuntime = `
@@ -133,6 +150,31 @@ func checkMixedDMLScripts(t *testing.T,ctx context.Context,q *Queries,withTx fun
  returned,err := q.ReturnBeforeMutating(ctx,4)
  if err != nil || returned.ID!=4 || returned.Value!=21 || returned.Label!="mixed" {t.Fatalf("RETURNING before DML: %+v %v",returned,err)}
  check(121)
+
+ reset()
+ before = counter.execs+counter.queries
+ if err := q.DiscardBeforeMutating(ctx,4);err != nil {t.Fatal(err)}
+ if counter.execs+counter.queries != before+1 {t.Fatal("discarding SELECT required more than one request")}
+ check(21)
+
+ reset()
+ if err := q.DiscardReturningBetweenMutations(ctx,4);err != nil {t.Fatal(err)}
+ check(121)
+
+ for _,minimum := range []int64{0,1000} {
+  reset()
+  err := q.FailAfterDiscard(ctx,FailAfterDiscardParams{ID:4,Minimum:minimum})
+  if !ydb.IsOperationError(err,Ydb.StatusIds_PRECONDITION_FAILED) {t.Fatalf("late failure after discarded SELECT minimum=%d: %v",minimum,err)}
+  check(11)
+ }
+
+ reset()
+ err = withTx(func(ctx context.Context,tx *Queries)error {
+  if err := tx.DiscardBeforeMutating(ctx,4);err != nil {return err}
+  return checkScriptRows(ctx,tx,4,21,10,"mixed")
+ })
+ if err != nil {t.Fatal(err)}
+ check(21)
 }
 `
 

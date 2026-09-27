@@ -32,3 +32,16 @@ func TestOneScriptConsumesStreamBeforeReturningFirstRow(t *testing.T) {
 		})
 	}
 }
+
+func TestExecScriptConsumesRowsAndCompletion(t *testing.T) {
+	analysis, err := analyzer.Analyze(
+		[]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));"}},
+		[]model.Source{{Name: "query.sql", Text: "-- name: Clear :exec\nSELECT id FROM records; DELETE FROM records;"}},
+	)
+	require.NoError(t, err)
+	_, queries := generated(t, analysis)
+	require.Contains(t, queries, "await command.ExecuteNonQueryAsync(cancellationToken)")
+	files, err := Generate(analysis, Options{Namespace: "Generated", Runtime: "dapper"})
+	require.NoError(t, err)
+	require.Contains(t, string(files[1].Content), "await _connection.ExecuteAsync(command)")
+}

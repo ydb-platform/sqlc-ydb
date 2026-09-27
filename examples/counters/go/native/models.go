@@ -58,3 +58,8 @@ type ListCountersRow struct {
 	Label         *string
 	Enabled       bool
 }
+
+type ReadThenIncrementParams struct {
+	ID    string
+	Delta int64
+}
