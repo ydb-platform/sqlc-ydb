@@ -26,11 +26,12 @@ err := q.VisitDevices(ctx, devices.VisitDevicesParams{MinID: 1, MaxID: 1000},
 
 The `database/sql` profile has the same callback shape and accepts `*sql.DB`, `*sql.Conn` or `*sql.Tx`. Native `New(client)` is also supported and retains the SDK's materialized-result behavior; the generated method uses the selected executor directly. The [runnable acceptance test](../../tests/examples/go/streaming/streaming_test.go) compiles and executes native client, session and transaction calls plus SQL client and transaction calls. Its SDK-owned operations explicitly use a zero retry budget because replaying an export could duplicate output; generation adds no retry policy.
 
-Java JDBC requires `useStreamResultSets=true` on the caller-owned connection. Its generated method rejects buffered connections before executing SQL. A caller can stream rows into a writer while propagating an unchecked writer failure:
+Java JDBC requires `useStreamResultSets=true` and `useQueryService=true` (the driver default) on the caller-owned connection. Its generated method rejects buffered connections before executing SQL. A caller can stream rows into a writer while propagating an unchecked writer failure:
 
 ```java
 var properties = new java.util.Properties();
 properties.setProperty("useStreamResultSets", "true");
+properties.setProperty("useQueryService", "true");
 try (var connection = java.sql.DriverManager.getConnection("jdbc:ydb:" + endpoint, properties)) {
     var queries = new streaming.jdbc.Queries(connection);
     queries.visitDevices(1L, 1000L, row -> writeJsonLine(row));

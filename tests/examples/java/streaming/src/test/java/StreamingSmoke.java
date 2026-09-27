@@ -21,8 +21,20 @@ public final class StreamingSmoke {
                 if (!expected.getMessage().contains("useStreamResultSets=true")) throw new AssertionError(expected);
             }
         }
+        var tableServiceProperties = new Properties();
+        tableServiceProperties.setProperty("useStreamResultSets", "true");
+        tableServiceProperties.setProperty("useQueryService", "false");
+        try (var tableService = DriverManager.getConnection("jdbc:ydb:" + endpoint, tableServiceProperties)) {
+            try {
+                new Queries(tableService).visitAllDevices(row -> { throw new AssertionError("table service query executed"); });
+                throw new AssertionError("buffered Table Service executor was accepted");
+            } catch (SQLException expected) {
+                if (!expected.getMessage().contains("useQueryService=true")) throw new AssertionError(expected);
+            }
+        }
         var properties = new Properties();
         properties.setProperty("useStreamResultSets", "true");
+        properties.setProperty("useQueryService", "true");
         try (var connection = DriverManager.getConnection("jdbc:ydb:" + endpoint, properties)) {
             try (var statement = connection.createStatement()) { statement.execute(SCHEMA); }
             try {

@@ -24,6 +24,7 @@ func TestJDBCEachConsumesRowsAndClosesOnEveryExit(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "tech", "ydb", "jdbc", "YdbConnection.java"), []byte(`package tech.ydb.jdbc;
 public interface YdbConnection extends java.sql.Connection {
     Context getCtx();
+    tech.ydb.jdbc.context.YdbExecutor getExecutor();
     record Context(boolean streaming) {
         public Properties getOperationProperties() { return new Properties(streaming); }
     }
@@ -31,6 +32,13 @@ public interface YdbConnection extends java.sql.Connection {
         public boolean getUseStreamResultSets() { return streaming; }
     }
 }
+`), 0600))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "tech", "ydb", "jdbc", "context"), 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tech", "ydb", "jdbc", "context", "YdbExecutor.java"), []byte(`package tech.ydb.jdbc.context;
+public interface YdbExecutor {}
+`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tech", "ydb", "jdbc", "context", "QueryServiceExecutor.java"), []byte(`package tech.ydb.jdbc.context;
+public final class QueryServiceExecutor implements YdbExecutor {}
 `), 0600))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "Main.java"), []byte(`package streaming;
 import java.lang.reflect.Proxy;
@@ -41,7 +49,7 @@ import java.sql.SQLException;
 
 public final class Main {
     private int next, reads, preparedCloses, resultCloses, executions;
-    private boolean lateError, extraSet, streaming = true;
+    private boolean lateError, extraSet, streaming = true, queryService = true;
 
     private ResultSet rows() {
         return (ResultSet) Proxy.newProxyInstance(Main.class.getClassLoader(), new Class<?>[]{ResultSet.class}, (proxy, method, args) -> switch (method.getName()) {
@@ -69,6 +77,7 @@ public final class Main {
         var connection = (Connection) Proxy.newProxyInstance(Main.class.getClassLoader(), new Class<?>[]{tech.ydb.jdbc.YdbConnection.class}, (proxy, method, args) -> switch (method.getName()) {
             case "unwrap" -> proxy;
             case "getCtx" -> new tech.ydb.jdbc.YdbConnection.Context(streaming);
+            case "getExecutor" -> queryService ? new tech.ydb.jdbc.context.QueryServiceExecutor() : new tech.ydb.jdbc.context.YdbExecutor() {};
             case "prepareStatement" -> statement;
             default -> throw new AssertionError(method.getName());
         });
@@ -115,11 +124,17 @@ public final class Main {
         try { buffered.queries().visit(row -> {}); throw new AssertionError("buffered driver accepted"); }
         catch (SQLException e) { if (!e.getMessage().contains("useStreamResultSets=true")) throw e; }
         if (buffered.executions != 0 || buffered.preparedCloses != 0) throw new AssertionError("executed in buffered mode");
+
+        var tableService = new Main();
+        tableService.queryService = false;
+        try { tableService.queries().visit(row -> {}); throw new AssertionError("table service accepted"); }
+        catch (SQLException e) { if (!e.getMessage().contains("useQueryService=true")) throw e; }
+        if (tableService.executions != 0 || tableService.preparedCloses != 0) throw new AssertionError("executed with table service");
     }
 }
 `), 0600))
 	classes := filepath.Join(dir, "classes")
-	compile := exec.Command("javac", "--release", "17", "-d", classes, "Queries.java", "VisitRow.java", "Main.java", "tech/ydb/jdbc/YdbConnection.java")
+	compile := exec.Command("javac", "--release", "17", "-d", classes, "Queries.java", "VisitRow.java", "Main.java", "tech/ydb/jdbc/YdbConnection.java", "tech/ydb/jdbc/context/YdbExecutor.java", "tech/ydb/jdbc/context/QueryServiceExecutor.java")
 	compile.Dir = dir
 	out, err := compile.CombinedOutput()
 	require.NoError(t, err, "%s", out)

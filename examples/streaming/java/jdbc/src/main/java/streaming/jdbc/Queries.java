@@ -32,6 +32,9 @@ public final class Queries {
         if (!client.unwrap(tech.ydb.jdbc.YdbConnection.class).getCtx().getOperationProperties().getUseStreamResultSets()) {
             throw new java.sql.SQLException(":each requires useStreamResultSets=true");
         }
+        if (!(client.unwrap(tech.ydb.jdbc.YdbConnection.class).getExecutor() instanceof tech.ydb.jdbc.context.QueryServiceExecutor)) {
+            throw new java.sql.SQLException(":each requires useQueryService=true");
+        }
         try (var _prepared = client.prepareStatement("""
             SELECT id, name
             FROM streaming_devices
@@ -58,6 +61,9 @@ public final class Queries {
         java.util.Objects.requireNonNull(consume, "consume");
         if (!client.unwrap(tech.ydb.jdbc.YdbConnection.class).getCtx().getOperationProperties().getUseStreamResultSets()) {
             throw new java.sql.SQLException(":each requires useStreamResultSets=true");
+        }
+        if (!(client.unwrap(tech.ydb.jdbc.YdbConnection.class).getExecutor() instanceof tech.ydb.jdbc.context.QueryServiceExecutor)) {
+            throw new java.sql.SQLException(":each requires useQueryService=true");
         }
         try (var _prepared = client.prepareStatement("""
             SELECT id, name FROM streaming_devices ORDER BY id;\

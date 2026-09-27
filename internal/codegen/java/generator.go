@@ -385,6 +385,8 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			b.WriteString("        java.util.Objects.requireNonNull(consume, \"consume\");\n")
 			b.WriteString("        if (!client.unwrap(tech.ydb.jdbc.YdbConnection.class).getCtx().getOperationProperties().getUseStreamResultSets()) {\n")
 			b.WriteString("            throw new java.sql.SQLException(\":each requires useStreamResultSets=true\");\n        }\n")
+			b.WriteString("        if (!(client.unwrap(tech.ydb.jdbc.YdbConnection.class).getExecutor() instanceof tech.ydb.jdbc.context.QueryServiceExecutor)) {\n")
+			b.WriteString("            throw new java.sql.SQLException(\":each requires useQueryService=true\");\n        }\n")
 		}
 		// Java's wider signed carriers must not be silently narrowed by the SDK.
 		// Uint64 deliberately uses all 64 bits of long and needs no range check.
