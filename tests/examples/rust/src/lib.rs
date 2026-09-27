@@ -15,3 +15,6 @@ pub mod ondeck;
 
 #[path = "../../../../examples/namespaces/rust/native/lib.rs"]
 pub mod namespaces;
+
+#[path = "../../../../examples/slice/rust/native/lib.rs"]
+pub mod slice;
