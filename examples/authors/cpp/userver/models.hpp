@@ -68,6 +68,7 @@ struct GetAuthorStatisticsRow final {
     std::uint64_t with_bio;
     std::uint64_t with_nonempty_bio;
     bool column3;
+    std::uint64_t distinct_biographies;
 };
 
 struct GetAuthorExportMetadataRow final {

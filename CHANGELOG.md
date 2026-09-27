@@ -4,6 +4,7 @@
 
 ### Added
 
+- Resolve `COUNT(DISTINCT direct_column)` as a required `Uint64` across generated runtimes.
 - Support upstream-compatible `gen.go.query_parameter_limit` for Go query method arguments in both YDB SDK profiles.
 
 ## v0.5.1

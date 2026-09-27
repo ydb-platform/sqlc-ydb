@@ -227,7 +227,8 @@ public final class Queries {
                         COUNT(*) AS total,
                         COUNT_IF(bio IS NOT NULL) AS with_bio,
                         COUNT_IF(bio != \"\"u) AS with_nonempty_bio,
-                        CAST(COUNT(*) AS Bool)
+                        CAST(COUNT(*) AS Bool),
+                        COUNT(DISTINCT bio) AS distinct_biographies
                     FROM authors;\
                     """, _params)).join().getValue();
         if (_query.getResultSetCount() != 1) throw new IllegalStateException("Expected one result set");
@@ -237,7 +238,8 @@ public final class Queries {
         long _value1 = _rows.getColumn(1).getUint64();
         long _value2 = _rows.getColumn(2).getUint64();
         boolean _value3 = _rows.getColumn(3).getBool();
-        return java.util.Optional.of(new GetAuthorStatisticsRow(_value0, _value1, _value2, _value3));
+        long _value4 = _rows.getColumn(4).getUint64();
+        return java.util.Optional.of(new GetAuthorStatisticsRow(_value0, _value1, _value2, _value3, _value4));
     }
 
     // -- name: GetAuthorExportMetadata :one

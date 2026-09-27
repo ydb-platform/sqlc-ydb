@@ -82,7 +82,8 @@ public sealed record GetAuthorStatisticsRow(
     ulong Total,
     ulong WithBio,
     ulong WithNonemptyBio,
-    bool Column3
+    bool Column3,
+    ulong DistinctBiographies
 );
 
 public sealed record GetAuthorExportMetadataRow(

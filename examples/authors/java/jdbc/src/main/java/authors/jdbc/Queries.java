@@ -213,7 +213,8 @@ public final class Queries {
                 COUNT(*) AS total,
                 COUNT_IF(bio IS NOT NULL) AS with_bio,
                 COUNT_IF(bio != \"\"u) AS with_nonempty_bio,
-                CAST(COUNT(*) AS Bool)
+                CAST(COUNT(*) AS Bool),
+                COUNT(DISTINCT bio) AS distinct_biographies
             FROM authors;\
             """)) {
             try (var _rows = _prepared.executeQuery()) {
@@ -222,7 +223,8 @@ public final class Queries {
                 long _value1 = _rows.getLong(2);
                 long _value2 = _rows.getLong(3);
                 boolean _value3 = _rows.getBoolean(4);
-                return java.util.Optional.of(new GetAuthorStatisticsRow(_value0, _value1, _value2, _value3));
+                long _value4 = _rows.getLong(5);
+                return java.util.Optional.of(new GetAuthorStatisticsRow(_value0, _value1, _value2, _value3, _value4));
             }
         }
     }

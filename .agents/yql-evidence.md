@@ -32,6 +32,8 @@ The authors jOOQ acceptance harness executed both the DSL ordinary-index query a
 
 ## Function contracts
 
+The [GROUP BY DISTINCT reference](https://ydb.tech/docs/en/yql/reference/syntax/select/group-by#distinct) documents `COUNT(DISTINCT value)` for a direct column and excludes computed DISTINCT arguments. On 2026-09-27, read-only queries against local YDB returned 2 for distinct values `[1, 1, 2]`, 1 for nullable values `["a", "a", NULL]`, 0 for an empty input, and counts 2 and 1 for groups `"a": [1, 1, 2]` and `"b": [3]` respectively. These results support a required `Uint64` output for nullable, grouped and empty cases without rewriting executable SQL.
+
 On 2026-09-15, local YDB accepted `SELECT "plain"u = "plain"` and `CAST("101" AS Decimal(22,9)) > 100`, both returning true. It rejected `SELECT 1ul IN (AsList(1ul,2ul))` with `Can't compare Uint64 with List<Uint64>`. This supports keeping parenthesized List operands distinct from the unparenthesized `IN $ids` form.
 
 `TestLiveYDBSemanticTypes` compares the analyzer's result types against server metadata. On the same local image it confirmed all 21 shipped Digest functions with plain and optional inputs, including omitted, NULL and named seeds where supported. A seed's optionality does not itself make the return type optional; AutoMap on the input does. These are offline signatures, not UDF implementations. User-defined contracts belong to one SQL configuration entry and do not execute or install code.

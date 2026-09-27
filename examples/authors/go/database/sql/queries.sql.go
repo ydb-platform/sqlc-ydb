@@ -278,13 +278,15 @@ func (q *Queries) GetAuthorStatistics(ctx context.Context) (GetAuthorStatisticsR
 		"    COUNT(*) AS total,\n"+
 		"    COUNT_IF(bio IS NOT NULL) AS with_bio,\n"+
 		"    COUNT_IF(bio != \"\"u) AS with_nonempty_bio,\n"+
-		"    CAST(COUNT(*) AS Bool)\n"+
+		"    CAST(COUNT(*) AS Bool),\n"+
+		"    COUNT(DISTINCT bio) AS distinct_biographies\n"+
 		"FROM authors;",
 	).Scan(
 		&row.Total,
 		&row.WithBio,
 		&row.WithNonemptyBio,
 		&row.Column3,
+		&row.DistinctBiographies,
 	)
 
 	return row, err

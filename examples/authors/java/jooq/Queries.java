@@ -175,10 +175,11 @@ public final class Queries {
             count().coerce(YdbTypes.UINT64).as("total"),
             function(systemName("COUNT_IF"), YdbTypes.UINT64, AUTHORS.BIO.isNotNull()).as("with_bio"),
             function(systemName("COUNT_IF"), YdbTypes.UINT64, AUTHORS.BIO.ne(inline("", YdbTypes.UTF8))).as("with_nonempty_bio"),
-            count().coerce(YdbTypes.UINT64).cast(YdbTypes.BOOL)
+            count().coerce(YdbTypes.UINT64).cast(YdbTypes.BOOL),
+            countDistinct(AUTHORS.BIO).coerce(YdbTypes.UINT64).as("distinct_biographies")
         )
                 .from(AUTHORS)
-                .coerce(field(name("total"), YdbTypes.UINT64), field(name("with_bio"), YdbTypes.UINT64), field(name("with_nonempty_bio"), YdbTypes.UINT64), field(name("column3"), YdbTypes.BOOL))
+                .coerce(field(name("total"), YdbTypes.UINT64), field(name("with_bio"), YdbTypes.UINT64), field(name("with_nonempty_bio"), YdbTypes.UINT64), field(name("column3"), YdbTypes.BOOL), field(name("distinct_biographies"), YdbTypes.UINT64))
                 .fetchOptional(mapping(GetAuthorStatisticsRow::new));
     }
 

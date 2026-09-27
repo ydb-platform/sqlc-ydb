@@ -40,6 +40,7 @@ public sealed class Queries
         {
             ["with_bio"] = nameof(GetAuthorStatisticsRow.WithBio),
             ["with_nonempty_bio"] = nameof(GetAuthorStatisticsRow.WithNonemptyBio),
+            ["distinct_biographies"] = nameof(GetAuthorStatisticsRow.DistinctBiographies),
         }));
         SqlMapper.SetTypeMap(typeof(GetAuthorExportMetadataRow), new ColumnTypeMap(typeof(GetAuthorExportMetadataRow), new Dictionary<string, string>
         {
@@ -300,7 +301,8 @@ public sealed class Queries
                 COUNT(*) AS total,
                 COUNT_IF(bio IS NOT NULL) AS with_bio,
                 COUNT_IF(bio != ""u) AS with_nonempty_bio,
-                CAST(COUNT(*) AS Bool)
+                CAST(COUNT(*) AS Bool),
+                COUNT(DISTINCT bio) AS distinct_biographies
             FROM authors;
             """,
             parameters: null,

@@ -256,7 +256,8 @@ class Querier:
                  "    COUNT(*) AS total,\n"
                  "    COUNT_IF(bio IS NOT NULL) AS with_bio,\n"
                  "    COUNT_IF(bio != \"\"u) AS with_nonempty_bio,\n"
-                 "    CAST(COUNT(*) AS Bool)\n"
+                 "    CAST(COUNT(*) AS Bool),\n"
+                 "    COUNT(DISTINCT bio) AS distinct_biographies\n"
                  "FROM authors;")
             ),
             parameters,
@@ -272,6 +273,7 @@ class Querier:
             with_bio=row._mapping["with_bio"],
             with_nonempty_bio=row._mapping["with_nonempty_bio"],
             column3=row._mapping["column3"],
+            distinct_biographies=row._mapping["distinct_biographies"],
         )
 
     # -- name: GetAuthorExportMetadata :one

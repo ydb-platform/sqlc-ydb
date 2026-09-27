@@ -552,6 +552,12 @@ func (r *jooqRenderer) expr(n antlr.Tree) string {
 				if inv.GetText() == "(*)" {
 					return "count().coerce(YdbTypes.UINT64)"
 				}
+				if len(args) == 1 {
+					if inv.Opt_set_quantifier() != nil && strings.EqualFold(inv.Opt_set_quantifier().GetText(), "DISTINCT") {
+						return "countDistinct(" + args[0] + ").coerce(YdbTypes.UINT64)"
+					}
+					return "count(" + args[0] + ").coerce(YdbTypes.UINT64)"
+				}
 			case "yson::converttostringlist", "toset":
 				return jooqCall("function", append([]string{"systemName(" + quoted(function) + ")", "SQLDataType.OTHER"}, args...))
 			case "setisdisjoint":

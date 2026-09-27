@@ -3,4 +3,4 @@ package authors.jooq;
 
 import org.jooq.types.ULong;
 
-public record GetAuthorStatisticsRow(ULong total, ULong withBio, ULong withNonemptyBio, Boolean column3) {}
+public record GetAuthorStatisticsRow(ULong total, ULong withBio, ULong withNonemptyBio, Boolean column3, ULong distinctBiographies) {}

@@ -211,7 +211,8 @@ class Queries(private val client: org.jetbrains.exposed.v1.jdbc.JdbcTransaction)
             "    COUNT(*) AS total,\n" +
             "    COUNT_IF(bio IS NOT NULL) AS with_bio,\n" +
             "    COUNT_IF(bio != \"\"u) AS with_nonempty_bio,\n" +
-            "    CAST(COUNT(*) AS Bool)\n" +
+            "    CAST(COUNT(*) AS Bool),\n" +
+            "    COUNT(DISTINCT bio) AS distinct_biographies\n" +
             "FROM authors;").use { _prepared ->
             _prepared.executeQuery().use { _rows ->
                 if (!_rows.next()) return null
@@ -219,7 +220,8 @@ class Queries(private val client: org.jetbrains.exposed.v1.jdbc.JdbcTransaction)
                 val _value1: Long = _rows.getLong(2)
                 val _value2: Long = _rows.getLong(3)
                 val _value3: Boolean = _rows.getBoolean(4)
-                return GetAuthorStatisticsRow(_value0, _value1, _value2, _value3)
+                val _value4: Long = _rows.getLong(5)
+                return GetAuthorStatisticsRow(_value0, _value1, _value2, _value3, _value4)
             }
         }
     }

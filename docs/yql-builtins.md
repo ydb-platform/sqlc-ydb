@@ -76,7 +76,7 @@ Prerequisite labels below are work still required, not supported overloads: **S*
 
 | Reference section | Current coverage / prerequisite |
 | --- | --- |
-| COUNT | Resolved subset: Uint64; COUNT(*) and typed argument; DISTINCT not yet supported. |
+| COUNT | Resolved subset: Uint64; COUNT(*), typed argument, COUNT(ALL expression) and COUNT(DISTINCT direct column). |
 | MIN and MAX | Resolved subset: Supported comparable scalar subset; empty/grouped nullability. |
 | SUM | Resolved subset: Supported numeric subset; widening and empty/grouped nullability. |
 | AVG | Resolved subset: Supported numeric/Interval subset; empty/grouped nullability. |

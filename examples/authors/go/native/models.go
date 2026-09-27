@@ -77,10 +77,11 @@ type FindAuthorsByNamePrefixRow struct {
 }
 
 type GetAuthorStatisticsRow struct {
-	Total           uint64 `json:"total"`
-	WithBio         uint64 `json:"with_bio"`
-	WithNonemptyBio uint64 `json:"with_nonempty_bio"`
-	Column3         bool   `json:"column3"`
+	Total               uint64 `json:"total"`
+	WithBio             uint64 `json:"with_bio"`
+	WithNonemptyBio     uint64 `json:"with_nonempty_bio"`
+	Column3             bool   `json:"column3"`
+	DistinctBiographies uint64 `json:"distinct_biographies"`
 }
 
 type GetAuthorExportMetadataRow struct {

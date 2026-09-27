@@ -253,7 +253,8 @@ public sealed class Queries
             "    COUNT(*) AS total,\n" +
             "    COUNT_IF(bio IS NOT NULL) AS with_bio,\n" +
             "    COUNT_IF(bio != \"\"u) AS with_nonempty_bio,\n" +
-            "    CAST(COUNT(*) AS Bool)\n" +
+            "    CAST(COUNT(*) AS Bool),\n" +
+            "    COUNT(DISTINCT bio) AS distinct_biographies\n" +
             "FROM authors;", _connection) { Transaction = _transaction };
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
@@ -267,7 +268,8 @@ public sealed class Queries
         reader.GetFieldValue<ulong>(0),
         reader.GetFieldValue<ulong>(1),
         reader.GetFieldValue<ulong>(2),
-        reader.GetFieldValue<bool>(3)
+        reader.GetFieldValue<bool>(3),
+        reader.GetFieldValue<ulong>(4)
     );
 
     // -- name: GetAuthorExportMetadata :one

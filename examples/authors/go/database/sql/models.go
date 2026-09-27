@@ -73,10 +73,11 @@ type FindAuthorsByNamePrefixRow struct {
 }
 
 type GetAuthorStatisticsRow struct {
-	Total           uint64
-	WithBio         uint64
-	WithNonemptyBio uint64
-	Column3         bool
+	Total               uint64
+	WithBio             uint64
+	WithNonemptyBio     uint64
+	Column3             bool
+	DistinctBiographies uint64
 }
 
 type GetAuthorExportMetadataRow struct {

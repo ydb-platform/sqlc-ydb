@@ -443,7 +443,8 @@ func (q *Queries) GetAuthorStatistics(ctx context.Context, opts ...query.Execute
 		"    COUNT(*) AS total,\n"+
 		"    COUNT_IF(bio IS NOT NULL) AS with_bio,\n"+
 		"    COUNT_IF(bio != \"\"u) AS with_nonempty_bio,\n"+
-		"    CAST(COUNT(*) AS Bool)\n"+
+		"    CAST(COUNT(*) AS Bool),\n"+
+		"    COUNT(DISTINCT bio) AS distinct_biographies\n"+
 		"FROM authors;",
 		opts...,
 	)
@@ -457,6 +458,7 @@ func (q *Queries) GetAuthorStatistics(ctx context.Context, opts ...query.Execute
 		query.Named("with_bio", &row.WithBio),
 		query.Named("with_nonempty_bio", &row.WithNonemptyBio),
 		query.Named("column3", &row.Column3),
+		query.Named("distinct_biographies", &row.DistinctBiographies),
 	); err != nil {
 		return GetAuthorStatisticsRow{}, xerrors.WithStackTrace(err)
 	}
