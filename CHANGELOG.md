@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Support upstream-compatible `gen.go.build_tags` for every generated Go file in both YDB SDK profiles.
+
 ## v0.9.0
 
 ### Added

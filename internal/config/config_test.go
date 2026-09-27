@@ -103,6 +103,18 @@ func TestGoEmitExportedQueriesConfiguration(t *testing.T) {
 	}
 }
 
+func TestGoBuildTagsConfiguration(t *testing.T) {
+	base := "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n  gen:\n    go:\n      out: db\n"
+	c, err := Parse([]byte(base))
+	require.NoError(t, err)
+	require.Empty(t, c.SQL[0].Gen.Go.BuildTags)
+	c, err = Parse([]byte(base + "      build_tags: 'linux && !cgo'\n"))
+	require.NoError(t, err)
+	require.Equal(t, "linux && !cgo", c.SQL[0].Gen.Go.BuildTags)
+	_, err = Parse([]byte(base + "      build_tags: 'linux &&'\n"))
+	require.ErrorContains(t, err, "gen.go.build_tags")
+}
+
 func TestGoOverrideConfiguration(t *testing.T) {
 	c, err := Parse([]byte(`version: "2"
 sql:

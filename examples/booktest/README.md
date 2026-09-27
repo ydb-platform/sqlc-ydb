@@ -2,6 +2,8 @@
 
 This example adapts sqlc's `booktest` examples at commit `3c2546a4b47fabbcec3e07df420effb1a464728f` to YDB and generates all 18 runtime profiles configured in [`sqlc.yaml`](sqlc.yaml).
 
+Both Go profiles use `build_tags: "!sqlc_ydb_exclude"`, so their generated files participate in ordinary builds and are excluded when the `sqlc_ydb_exclude` build tag is set.
+
 The adaptation keeps the author and book CRUD queries, title/year lookup, author join, tag-overlap lookup, and greeting query covered by the upstream dialect variants. Create queries take explicit `Uint64` identifiers in place of upstream serial keys. The upstream enum is represented as `Utf8` (`FICTION` or `NONFICTION`), availability uses YDB `Timestamp`, and tags use YDB `Json`. The tag query converts each JSON array to a string list and uses a YQL set to test for overlap, following the PostgreSQL variant rather than the serialized string equality in MySQL/SQLite. `SayHello` uses YQL string concatenation with a required `Utf8` input in place of the PostgreSQL user-defined function.
 
 `GetBookAndAuthor` uses `sqlc.embed` for a book and its author. Both tables have an `author_id` column; the generated SQL gives the projected columns distinct result names while the generated row keeps the two table models nested.

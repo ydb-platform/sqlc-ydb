@@ -50,6 +50,7 @@ func Generators() []Generator {
 			Option{Name: "package", Type: "string", Default: "basename(out)", Description: "Generated Go package name; defaults to the output directory's base name."},
 			Option{Name: "rename", Type: "map", Default: "{}", Description: "Map SQL column and table names to exported Go struct field and model names; single scalar arguments are unchanged."},
 			Option{Name: "overrides", Type: "list", Default: "[]", Description: "Override supported scalar Go types by YQL db_type or physical table.column; see compatibility for binding and decoding limits."},
+			Option{Name: "build_tags", Type: "string", Default: "(empty)", Description: "Go build expression added to every generated Go file; empty emits no constraint."},
 			Option{Name: "emit_json_tags", Type: "boolean", Default: "false", Description: "Add JSON tags to generated struct fields."},
 			Option{Name: "json_tags_case_style", Type: "enum", Default: "none", Description: "Case style for JSON tags from SQL names (not rename) when emit_json_tags is true; none preserves names, camel keeps the first segment and uses Id for later id segments, pascal uses ID for id segments, and snake inserts underscores at case boundaries only when the SQL name has no underscores already.", Values: []string{"none", "camel", "pascal", "snake"}},
 			Option{Name: "emit_interface", Type: "boolean", Default: "false", Description: "Generate the Querier interface implemented by Queries."},
@@ -166,6 +167,8 @@ func InitYAML(profiles []InitProfile) ([]byte, error) {
 				value = profile.Runtime
 			case "out":
 				value = profile.Out
+			case "build_tags":
+				value = ""
 			case "package":
 				if g.Language == "go" {
 					value = "db"

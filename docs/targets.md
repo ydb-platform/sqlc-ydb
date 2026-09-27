@@ -16,6 +16,7 @@ Use `sqlc-ydb init --help` to list languages and their runtimes. For the options
 | `package` | string | `basename(out)` | Generated Go package name; defaults to the output directory's base name. |
 | `rename` | map | `{}` | Map SQL column and table names to exported Go struct field and model names; single scalar arguments are unchanged. |
 | `overrides` | list | `[]` | Override supported scalar Go types by YQL db_type or physical table.column; see compatibility for binding and decoding limits. |
+| `build_tags` | string | `(empty)` | Go build expression added to every generated Go file; empty emits no constraint. |
 | `emit_json_tags` | boolean | `false` | Add JSON tags to generated struct fields. |
 | `json_tags_case_style` | enum | `none` | Case style for JSON tags from SQL names (not rename) when emit_json_tags is true; none preserves names, camel keeps the first segment and uses Id for later id segments, pascal uses ID for id segments, and snake inserts underscores at case boundaries only when the SQL name has no underscores already. Values: `none`, `camel`, `pascal`, `snake`. |
 | `emit_interface` | boolean | `false` | Generate the Querier interface implemented by Queries. |
@@ -90,6 +91,8 @@ Use `sqlc-ydb init --help` to list languages and their runtimes. For the options
 <!-- END GENERATED GENERATOR OPTIONS -->
 
 ## Runtime contracts
+
+`gen.go.build_tags` accepts a Go build expression such as `linux && !cgo`. When set, it places `//go:build <expression>` before the generated header in every Go file for that profile, followed by a blank line. An empty value leaves files unconstrained; invalid or multiline expressions are errors. See the [booktest example](../examples/booktest/sqlc.yaml) for both Go runtimes.
 
 `gen.go.rename` maps a SQL column name to the exact exported Go field name in result rows, parameter structs, YQL `Struct` inputs and embedded table models. It also maps an embedded table's basename to its Go model type and `sqlc.embed` row field. Keys apply throughout one `sql[].gen.go` entry, so the same source name cannot have different Go names in separate tables or queries. Positional argument identifiers for a single parameter remain `arg`; with multiple positional parameters, they follow the mapped field names. SQL text, YDB parameter/result/Struct member names, and JSON tags retain their original names. Empty source names, invalid Go identifiers and colliding generated names are errors; unused keys are accepted, as in upstream sqlc. For example, `rename: {accounts: Account, account_id: AccountID, display_name: Label}` produces the [renaming example](../examples/renaming). Query methods and row/parameter struct type names are unchanged.
 

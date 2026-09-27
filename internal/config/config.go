@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"go/build/constraint"
 	"io"
 	"os"
 	"path/filepath"
@@ -44,6 +45,7 @@ type Go struct {
 	SQLPackage          string            `yaml:"sql_package"`
 	Rename              map[string]string `yaml:"rename"`
 	Overrides           []GoOverride      `yaml:"overrides"`
+	BuildTags           string            `yaml:"build_tags"`
 	EmitJSONTags        bool              `yaml:"emit_json_tags"`
 	JSONTagsCaseStyle   string            `yaml:"json_tags_case_style"`
 	EmitInterface       bool              `yaml:"emit_interface"`
@@ -56,6 +58,19 @@ type GoType struct {
 	Import  string `yaml:"import"`
 	Package string `yaml:"package"`
 	Type    string `yaml:"type"`
+}
+
+func ValidateGoBuildTags(tags string) error {
+	if tags == "" {
+		return nil
+	}
+	if strings.ContainsAny(tags, "\r\n") {
+		return fmt.Errorf("gen.go.build_tags must be one Go build expression")
+	}
+	if _, err := constraint.Parse("//go:build " + tags); err != nil {
+		return fmt.Errorf("gen.go.build_tags: %w", err)
+	}
+	return nil
 }
 
 func (t *GoType) UnmarshalYAML(node *yaml.Node) error {
@@ -303,6 +318,9 @@ func Parse(data []byte) (*Config, error) {
 			case "none", "camel", "pascal", "snake":
 			default:
 				return nil, fmt.Errorf("sql[%d].gen.go.json_tags_case_style %q must be none, camel, pascal, or snake", i, g.JSONTagsCaseStyle)
+			}
+			if err := ValidateGoBuildTags(g.BuildTags); err != nil {
+				return nil, fmt.Errorf("sql[%d].%w", i, err)
 			}
 			if g.QueryParameterLimit == nil {
 				limit := int32(1)
