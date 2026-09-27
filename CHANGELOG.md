@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Add local `verify --against` for checking released queries and resolved parameter/result types against a proposed YDB schema, with optional non-executing server validation.
+
 ## v0.11.0
 
 ### Added

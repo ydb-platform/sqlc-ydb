@@ -13,7 +13,7 @@ Compatibility is tracked by individual CLI, configuration and generated API cont
 
 ## Implemented workflow
 
-- `generate`, `compile`, `diff`, `init`, `version`, `--help`, `-f` / `--file`.
+- `generate`, `compile`, `verify`, `diff`, `init`, `version`, `--help`, `-f` / `--file`. [`verify`](schema-verification.md) checks released executable queries against a proposed schema and resolved parameter/result types without writing files.
 - `init` supports `--language`, `--runtime`, `--all-options`, and generator-specific help. See the [generator option reference](targets.md#generator-options).
 - `version` prints the version and optionally a newer-stable-release notification; `version --verbose` also prints the commit embedded by release builds. Ordinary source builds report `unknown` unless the commit is supplied through linker flags. The update check times out after two seconds and hides failures. Use `--no-remote` for version output without a network check.
 - `version --upgrade` replaces the running executable with the verified latest stable release, resolving symlinks and preserving their paths. Download and verification failures preserve the installed binary. See [installation](installation.md#update-the-installed-executable). Automatic in-place upgrades are supported on Linux and macOS. On Windows, `version --upgrade` prints manual upgrade instructions.
@@ -32,7 +32,7 @@ Compatibility is tracked by individual CLI, configuration and generated API cont
 
 Only the commands and options above are implemented. In particular:
 
-- No `analyze`, `parse`, `fmt`, `completion`, `createdb`, `push`, `verify` or `vet` commands or cloud/remote workflow.
+- No `analyze`, `parse`, `fmt`, `completion`, `createdb`, `push` or `vet` commands or cloud/remote workflow. `verify` uses a local released configuration rather than an uploaded cloud snapshot.
 - No `sqlc.slice` macro, query result/parameter type-name overrides, driver batch APIs, COPY helpers or command-tag results. Go field and embedded table model names can be configured with [`gen.go.rename`](targets.md#gen-go), and supported scalar types with [`gen.go.overrides`](#go-type-overrides).
 - `--no-remote` skips the optional release check for `version`; analysis and generation run locally and may use the explicitly configured YDB connection. It conflicts with `version --upgrade`. `--remote` is unsupported; `--no-database` disables database-assisted analysis. `init` creates a version 2 configuration (`--v2` is also accepted); `version --verbose` and `version --upgrade` are sqlc-ydb extensions.
 - SQL parameters use YQL `$name` syntax. Driver-specific placeholder rewriting happens during generation; `$1`, `?` and `@name` are not accepted as an alternative input dialect.
