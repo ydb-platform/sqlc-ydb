@@ -51,6 +51,11 @@ func resolveOrderByProjections(block queryBlock, core *parser.Select_coreContext
 		if !ok {
 			return
 		}
+		for parent := order.GetParent(); parent != nil && parent != core; parent = parent.GetParent() {
+			if _, ok := parent.(*parser.Window_order_clauseContext); ok {
+				return
+			}
+		}
 		direct := isPureColumnExpression(unwrapOrderByColumn(order.Expr()))
 		for _, ref := range columnRefs(order.Expr()) {
 			output, exists := outputs[ref.name]

@@ -20,3 +20,7 @@ sql:
         sql_package: database/sql
         emit_json_tags: true
         emit_interface: true
+      java:
+        package: streaming.jdbc
+        out: java/jdbc/src/main/java/streaming/jdbc
+        runtime: jdbc
