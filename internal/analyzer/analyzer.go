@@ -210,6 +210,7 @@ type queryBlock struct {
 	tablePathPrefix string
 	tabular         map[string]*model.Table
 	lambdas         map[string]lambdaBinding
+	windows         map[string]parser.IWindow_specificationContext
 }
 
 func queryBlocks(source model.Source) ([]queryBlock, []model.Diagnostic) {

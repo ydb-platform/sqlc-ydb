@@ -10,10 +10,9 @@ import (
 	parser "github.com/ydb-platform/yql-parsers/go"
 )
 
-const unsupportedSQLCMacroMessage = "sqlc.slice is unsupported; use a typed List parameter instead"
-
 type sqlcArgument struct {
 	nullable bool
+	slice    bool
 	position model.Position
 	start    int
 }
@@ -47,11 +46,12 @@ func lowerSQLCArguments(block *queryBlock) []model.Diagnostic {
 			continue
 		}
 		nullable := strings.EqualFold(function.GetText(), "narg")
-		if !nullable && !strings.EqualFold(function.GetText(), "arg") {
+		slice := strings.EqualFold(function.GetText(), "slice")
+		if !nullable && !slice && !strings.EqualFold(function.GetText(), "arg") {
 			continue
 		}
 		position := model.Position{File: block.file, Line: block.line - 1 + start.GetLine(), Column: start.GetColumn() + 1}
-		if i+5 >= len(significant) || significant[i+5].GetTokenType() != parser.YQLLexerRPAREN {
+		if i+5 >= len(significant) || significant[i+4].GetTokenType() == parser.YQLLexerRPAREN || significant[i+5].GetTokenType() != parser.YQLLexerRPAREN {
 			diagnostics = append(diagnostics, model.Diagnostic{Position: position, Message: fmt.Sprintf("sqlc.%s expects exactly one parameter name", function.GetText())})
 			continue
 		}
@@ -61,20 +61,43 @@ func lowerSQLCArguments(block *queryBlock) []model.Diagnostic {
 			diagnostics = append(diagnostics, model.Diagnostic{Position: position, Message: fmt.Sprintf("sqlc.%s expects a nonempty identifier or quoted string parameter name", function.GetText())})
 			continue
 		}
-		if previous, exists := arguments[name]; exists && previous.nullable != nullable {
-			diagnostics = append(diagnostics, model.Diagnostic{Position: position, Message: fmt.Sprintf("parameter %q cannot use both sqlc.arg and sqlc.narg", name)})
+		parenthesizedSlice := slice && i >= 2 && i+6 < len(significant) && significant[i-1].GetTokenType() == parser.YQLLexerLPAREN && significant[i-2].GetTokenType() == parser.YQLLexerIN && significant[i+6].GetTokenType() == parser.YQLLexerRPAREN
+		if slice && !parenthesizedSlice && (i == 0 || significant[i-1].GetTokenType() != parser.YQLLexerIN) {
+			diagnostics = append(diagnostics, model.Diagnostic{Position: position, Message: "sqlc.slice must be directly after IN or directly inside IN (...), without additional parentheses"})
+			continue
+		}
+		if previous, exists := arguments[name]; exists && (previous.nullable != nullable || previous.slice != slice) {
+			message := fmt.Sprintf("parameter %q cannot use both sqlc.arg and sqlc.narg", name)
+			if slice || previous.slice {
+				other := "arg"
+				if nullable || previous.nullable {
+					other = "narg"
+				}
+				message = fmt.Sprintf("parameter %q cannot use both sqlc.slice and sqlc.%s", name, other)
+			}
+			diagnostics = append(diagnostics, model.Diagnostic{Position: position, Message: message})
 			continue
 		}
 		startByte := runeByteOffset(block.text, start.GetStart())
 		if _, exists := arguments[name]; !exists {
-			arguments[name] = sqlcArgument{nullable: nullable, position: position, start: startByte}
+			arguments[name] = sqlcArgument{nullable: nullable, slice: slice, position: position, start: startByte}
 		}
 		parameterName := quotedYQLIdentifier(name)
 		if argument.GetTokenType() == parser.YQLLexerID_PLAIN {
 			parameterName = argument.GetText()
 		}
+		if parenthesizedSlice {
+			left := significant[i-1]
+			replacements = append(replacements, wildcardReplacement{start: runeByteOffset(block.text, left.GetStart()), end: runeByteOffset(block.text, left.GetStop()+1)})
+		}
 		replacements = append(replacements, wildcardReplacement{start: startByte, end: runeByteOffset(block.text, significant[i+5].GetStop()+1), text: "$" + parameterName})
-		i += 5
+		if parenthesizedSlice {
+			right := significant[i+6]
+			replacements = append(replacements, wildcardReplacement{start: runeByteOffset(block.text, right.GetStart()), end: runeByteOffset(block.text, right.GetStop()+1)})
+			i += 6
+		} else {
+			i += 5
+		}
 	}
 	if len(diagnostics) != 0 || len(replacements) == 0 {
 		return diagnostics
@@ -171,10 +194,13 @@ func sqlcArgumentName(token antlr.Token) (string, bool) {
 		return identifier(token.GetText()), true
 	case parser.YQLLexerSTRING_VALUE:
 		text := token.GetText()
-		if len(text) < 2 || text[0] != '\'' || text[len(text)-1] != '\'' || strings.Contains(text[1:len(text)-1], "\\") {
+		if len(text) < 2 || text[0] != text[len(text)-1] || text[0] != '\'' && text[0] != '"' || strings.Contains(text[1:len(text)-1], "\\") {
 			return "", false
 		}
-		return strings.ReplaceAll(text[1:len(text)-1], "''", "'"), true
+		if text[0] == '\'' {
+			return strings.ReplaceAll(text[1:len(text)-1], "''", "'"), true
+		}
+		return text[1 : len(text)-1], true
 	default:
 		return "", false
 	}
@@ -192,20 +218,6 @@ func containsEmbedMacro(block *queryBlock) (bool, []model.Diagnostic) {
 		}
 	}
 	return false, nil
-}
-
-func unsupportedSQLCMacroDiagnostics(block queryBlock, tokens []antlr.Token) []model.Diagnostic {
-	var diagnostics []model.Diagnostic
-	for _, call := range sqlcMacroCalls(tokens) {
-		if !strings.EqualFold(call.name, "slice") {
-			continue
-		}
-		diagnostics = append(diagnostics, model.Diagnostic{
-			Position: model.Position{File: block.file, Line: block.line - 1 + call.token.GetLine(), Column: call.token.GetColumn() + 1},
-			Message:  unsupportedSQLCMacroMessage,
-		})
-	}
-	return diagnostics
 }
 
 type sqlcMacroCall struct {
