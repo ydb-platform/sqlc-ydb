@@ -27,7 +27,7 @@ Track the macros separately:
 
 1. `sqlc.arg` and `sqlc.narg`: implemented with YQL parameter lowering, inferred types, nullable `narg` inputs, and conflict diagnostics.
 2. `sqlc.embed`: physical table projections in a single top-level SELECT are implemented with catalog-backed result grouping; nullable outer-join sides and derived sources remain future work.
-3. `sqlc.slice`: define YDB `List<T>` semantics and verify each runtime's binding.
+3. `sqlc.slice`: implemented with one typed YDB `List<T>` parameter in IN/NOT IN predicates; each runtime still requires scalar-list binding support.
 
 Resolve each rewrite against the catalog and validate the final YQL. Record external parameter occurrences and update their ranges after rewrites. Driver placeholder rendering, such as SQLAlchemy's `:name`, then uses those ranges without rediscovering parameters.
 

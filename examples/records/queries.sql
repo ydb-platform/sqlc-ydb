@@ -87,6 +87,23 @@ ORDER BY record_id;
 DECLARE $label AS Utf8?;
 SELECT Unicode::Reverse($label) AS reversed_label;
 
+-- name: RankRecordsWithinGroup :many
+DECLARE $owner_id AS Uint64;
+SELECT record_id, group_id, ROW_NUMBER() OVER w AS row_num
+FROM records
+WHERE owner_hash = Digest::CityHash(CAST($owner_id AS String))
+WINDOW w AS (PARTITION BY group_id ORDER BY record_id)
+ORDER BY record_id;
+
+-- name: RankDistinctGroups :many
+DECLARE $owner_id AS Uint64;
+SELECT group_id, ROW_NUMBER() OVER w AS row_num
+FROM records
+WHERE owner_hash = Digest::CityHash(CAST($owner_id AS String))
+GROUP BY group_id
+WINDOW w AS (ORDER BY group_id)
+ORDER BY group_id;
+
 -- name: ListRecordDays :many
 DECLARE $owner_id AS Uint64;
 SELECT record_id, DateTime::ToSeconds(DateTime::MakeTzDate(created_at)) AS created_day_start

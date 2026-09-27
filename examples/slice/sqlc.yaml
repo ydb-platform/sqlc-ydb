@@ -1,0 +1,24 @@
+version: "2"
+sql:
+  - engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      go:
+        package: slice
+        out: go/native
+        sql_package: ydb
+  - engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      go:
+        package: slice
+        out: go/database/sql
+        sql_package: database/sql
+  - engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      rust:
+        out: rust/native

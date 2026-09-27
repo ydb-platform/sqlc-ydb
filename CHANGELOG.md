@@ -6,6 +6,14 @@
 
 - Resolve `DateTime::MakeTzDate` for basic-range DateTime values, including nullable inputs.
 
+## v0.12.0
+
+### Added
+
+- Accept `sqlc.slice` in IN and NOT IN predicates, lowering it to one typed YQL list parameter before generation.
+- Support `ROW_NUMBER() OVER` with inline or named windows, direct-column partitioning and ordering, and a `Uint64` result.
+- Generate typed `:each` streaming callbacks for Java JDBC with a required streaming result-set connection mode and caller-owned transactions.
+
 ## v0.11.0
 
 ### Added

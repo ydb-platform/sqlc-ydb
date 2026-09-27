@@ -358,6 +358,78 @@ func (q *Queries) ReverseGroupLabel(ctx context.Context, arg *string) (ReverseGr
 	return row, err
 }
 
+// -- name: RankRecordsWithinGroup :many
+func (q *Queries) RankRecordsWithinGroup(ctx context.Context, arg uint64) ([]RankRecordsWithinGroupRow, error) {
+	rows, err := q.db.QueryContext(ctx, ""+
+		"DECLARE $owner_id AS Uint64;\n"+
+		"SELECT record_id, group_id, ROW_NUMBER() OVER w AS row_num\n"+
+		"FROM records\n"+
+		"WHERE owner_hash = Digest::CityHash(CAST($owner_id AS String))\n"+
+		"WINDOW w AS (PARTITION BY group_id ORDER BY record_id)\n"+
+		"ORDER BY record_id;",
+		sql.Named("owner_id", arg),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []RankRecordsWithinGroupRow(nil)
+	for rows.Next() {
+		var row RankRecordsWithinGroupRow
+		if err := rows.Scan(
+			&row.RecordID,
+			&row.GroupID,
+			&row.RowNum,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, row)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
+// -- name: RankDistinctGroups :many
+func (q *Queries) RankDistinctGroups(ctx context.Context, arg uint64) ([]RankDistinctGroupsRow, error) {
+	rows, err := q.db.QueryContext(ctx, ""+
+		"DECLARE $owner_id AS Uint64;\n"+
+		"SELECT group_id, ROW_NUMBER() OVER w AS row_num\n"+
+		"FROM records\n"+
+		"WHERE owner_hash = Digest::CityHash(CAST($owner_id AS String))\n"+
+		"GROUP BY group_id\n"+
+		"WINDOW w AS (ORDER BY group_id)\n"+
+		"ORDER BY group_id;",
+		sql.Named("owner_id", arg),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []RankDistinctGroupsRow(nil)
+	for rows.Next() {
+		var row RankDistinctGroupsRow
+		if err := rows.Scan(
+			&row.GroupID,
+			&row.RowNum,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, row)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
 // -- name: ListRecordDays :many
 func (q *Queries) ListRecordDays(ctx context.Context, arg uint64) ([]ListRecordDaysRow, error) {
 	rows, err := q.db.QueryContext(ctx, ""+
