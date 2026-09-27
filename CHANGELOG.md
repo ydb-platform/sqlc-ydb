@@ -31,6 +31,7 @@
 ### Added
 
 - Add Go `:multi` queries for two or more read-only SELECT result sets in one YDB request, with typed slices, optional result names and exact result-set validation.
+- Add Java JDBC `:multi` queries with named typed lists, empty-result schema validation and complete result traversal.
 
 ## v0.8.0
 

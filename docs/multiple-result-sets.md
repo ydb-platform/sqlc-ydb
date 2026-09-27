@@ -1,6 +1,6 @@
-# Multiple result sets in Go
+# Multiple result sets
 
-Use `:multi` when two or more read-only top-level SELECT statements should execute in one YDB request and return different row shapes. It is supported by `gen.go.sql_package: ydb` and `database/sql`; every other target rejects it during generation. A UNION inside one SELECT remains one result set. DML, including RETURNING, is not supported by `:multi`.
+Use `:multi` when two or more read-only top-level SELECT statements should execute in one YDB request and return different row shapes. It is supported by `gen.go.sql_package: ydb` and `database/sql`, and Java `runtime: jdbc`; every other target rejects it during generation. A UNION inside one SELECT remains one result set. DML, including RETURNING, is not supported by `:multi`.
 
 ```sql
 -- name: FetchSummary :multi
@@ -27,3 +27,5 @@ type FetchSummaryResult struct {
 Both Go adapters submit the complete SQL once, consume all three result sets, check each set's column names, order and YQL types against the analyzed schema, and check for missing or extra sets and late stream errors. They close the result before returning. An error returns a zero result, without partial slices. `emit_empty_slices` makes successful empty fields non-nil; by default they are nil. `gen.go.rename` changes row field names, not SQL result names or `-- result:` names.
 
 The supplied executor owns transaction boundaries and retry policy. The method does not start a transaction, replay a partly consumed stream or split the script into separate calls. Native client, session and transaction executors, plus `database/sql` clients and transactions, are exercised in the [live example](../examples/multi_results/README.md).
+
+Java JDBC generates one record per result set and a result record with `List<Row>` fields named from the annotations (`item`, `flags`, `result3` in the example). Successful empty fields are non-null empty lists. The method executes the complete SQL once through a borrowed `Connection`, checks each result set's column count, names, order, YQL types and nullability before reading rows, then checks for missing or extra sets and late errors. It closes its statement and result sets, leaves the connection and transaction with the caller, and throws `SQLException` without returning partial results on error. Java result names must also be representable as Java identifiers. The [Java example](../examples/multi_results/README.md) exercises both buffered and streaming JDBC modes.

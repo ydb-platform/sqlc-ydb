@@ -4,3 +4,4 @@ set -eu
 cd "$(dirname "$0")"
 mvn -B test-compile dependency:build-classpath -Dmdep.outputFile=target/classpath
 java -cp "target/test-classes:target/classes:$(cat target/classpath)" BatchSmoke
+java -cp "target/test-classes:target/classes:$(cat target/classpath)" MultiSmoke
