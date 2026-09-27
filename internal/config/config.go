@@ -39,13 +39,14 @@ func (p *Paths) UnmarshalYAML(n *yaml.Node) error {
 }
 
 type Go struct {
-	Package         string            `yaml:"package"`
-	Out             string            `yaml:"out"`
-	SQLPackage      string            `yaml:"sql_package"`
-	Rename          map[string]string `yaml:"rename"`
-	EmitJSONTags    bool              `yaml:"emit_json_tags"`
-	EmitInterface   bool              `yaml:"emit_interface"`
-	EmitEmptySlices bool              `yaml:"emit_empty_slices"`
+	Package             string            `yaml:"package"`
+	Out                 string            `yaml:"out"`
+	SQLPackage          string            `yaml:"sql_package"`
+	Rename              map[string]string `yaml:"rename"`
+	EmitJSONTags        bool              `yaml:"emit_json_tags"`
+	EmitInterface       bool              `yaml:"emit_interface"`
+	EmitEmptySlices     bool              `yaml:"emit_empty_slices"`
+	QueryParameterLimit *int32            `yaml:"query_parameter_limit"`
 }
 
 type Python struct {
@@ -229,6 +230,12 @@ func Parse(data []byte) (*Config, error) {
 			return nil, err
 		}
 		if g := s.Gen.Go; g != nil {
+			if g.QueryParameterLimit == nil {
+				limit := int32(1)
+				g.QueryParameterLimit = &limit
+			} else if *g.QueryParameterLimit < 0 {
+				return nil, fmt.Errorf("sql[%d].gen.go.query_parameter_limit must not be negative", i)
+			}
 			if len(g.Rename) == 0 {
 				g.Rename = nil
 			}

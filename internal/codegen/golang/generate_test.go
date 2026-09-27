@@ -30,6 +30,107 @@ func sample() *model.AnalysisResult {
 	}}
 }
 
+func TestQueryParameterLimit(t *testing.T) {
+	require.False(t, useParamsStruct(sample().Queries[0], Options{}))
+	require.True(t, useParamsStruct(sample().Queries[2], Options{}))
+	for _, runtime := range []string{"database/sql", "ydb"} {
+		for _, tc := range []struct {
+			name  string
+			limit *int32
+			want  []string
+			dont  []string
+		}{
+			{"default", nil, []string{"GetUser(ctx context.Context, arg uint64", "UpdateUser(ctx context.Context, arg UpdateUserParams"}, []string{"type GetUserParams struct"}},
+			{"zero", intPtr(0), []string{"type GetUserParams struct", "GetUser(ctx context.Context, arg GetUserParams", "UpdateUser(ctx context.Context, arg UpdateUserParams"}, nil},
+			{"two", intPtr(2), []string{"GetUser(ctx context.Context, arg uint64", "UpdateUser(ctx context.Context, argName string, argBio *string"}, []string{"type GetUserParams struct", "type UpdateUserParams struct"}},
+		} {
+			t.Run(runtime+"/"+tc.name, func(t *testing.T) {
+				options := Options{Package: "db", Runtime: runtime, EmitInterface: true, QueryParameterLimit: tc.limit}
+				files, err := Generate(sample(), options)
+				require.NoError(t, err)
+				var source string
+				for _, file := range files {
+					source += string(file.Content)
+				}
+				for _, want := range tc.want {
+					require.Contains(t, source, want)
+				}
+				for _, unwanted := range tc.dont {
+					require.NotContains(t, source, unwanted)
+				}
+				if tc.name == "two" {
+					if runtime == "database/sql" {
+						require.Contains(t, source, `sql.Named("name", argName)`)
+						require.Contains(t, source, `sql.Named("bio", argBio)`)
+					} else {
+						require.Contains(t, source, `parameters.Param("$name").Text(argName)`)
+						require.Contains(t, source, `parameters.Param("$bio").BeginOptional().Text(argBio).EndOptional()`)
+					}
+				}
+				compileInput(t, sample(), options)
+			})
+		}
+	}
+	_, err := Generate(sample(), Options{QueryParameterLimit: intPtr(-1)})
+	require.ErrorContains(t, err, "query_parameter_limit must not be negative")
+
+	in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name: "BindTyped", Command: model.Exec, SQL: "SELECT $day, $id;",
+		Parameters: []model.Parameter{{Name: "day", Type: model.Type{Kind: "Date"}}, {Name: "id", Type: model.Type{Kind: "Uuid"}}},
+	}}}
+	for _, runtime := range []string{"database/sql", "ydb"} {
+		compileInput(t, in, Options{Package: "db", Runtime: runtime, QueryParameterLimit: intPtr(2)})
+	}
+}
+
+func intPtr(v int32) *int32 { return &v }
+
+func TestQueryParameterLimitComplexTypes(t *testing.T) {
+	u64 := model.Type{Kind: "Uint64"}
+	utf8 := model.Type{Kind: "Utf8"}
+	decimal := model.Type{Kind: "Decimal", Precision: 22, Scale: 9}
+	book := model.Type{Kind: "Struct", Fields: []model.StructField{{Name: "book_id", Type: u64}, {Name: "amount", Type: decimal}}}
+	in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{
+		{Name: "PutBooks", Command: model.Exec, SQL: "INSERT INTO books SELECT * FROM AS_TABLE($rows);", Parameters: []model.Parameter{{Name: "rows", Type: model.Type{Kind: "List", Elem: &book}}, {Name: "tenant_id", Type: u64}}},
+		{Name: "PutBook", Command: model.Exec, SQL: "UPSERT INTO books SELECT $book;", Parameters: []model.Parameter{{Name: "book", Type: book}, {Name: "tenant_id", Type: u64}}},
+		{Name: "PutTags", Command: model.Exec, SQL: "SELECT $tags, $tenant_id;", Parameters: []model.Parameter{{Name: "tags", Type: model.Type{Kind: "List", Elem: &utf8}}, {Name: "tenant_id", Type: u64}}},
+		{Name: "PutAmount", Command: model.Exec, SQL: "SELECT $amount, $tenant_id;", Parameters: []model.Parameter{{Name: "amount", Type: decimal}, {Name: "tenant_id", Type: u64}}},
+		{Name: "Renamed", Command: model.Exec, SQL: "SELECT $book_id, $title;", Parameters: []model.Parameter{{Name: "book_id", Type: u64}, {Name: "title", Type: utf8}}},
+		{Name: "Visit", Command: model.Each, SQL: "SELECT id FROM books WHERE id BETWEEN $from AND $to;", Parameters: []model.Parameter{{Name: "from", Type: u64}, {Name: "to", Type: u64}}, ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: u64}}}}},
+	}}
+	for _, runtime := range []string{"database/sql", "ydb"} {
+		t.Run(runtime, func(t *testing.T) {
+			opts := Options{Package: "db", Runtime: runtime, EmitInterface: true, QueryParameterLimit: intPtr(2), Rename: map[string]string{"book_id": "RecordID", "title": "Title"}}
+			files, err := Generate(in, opts)
+			require.NoError(t, err)
+			var source string
+			for _, file := range files {
+				source += string(file.Content)
+			}
+			for _, want := range []string{
+				"PutBooks(ctx context.Context, argRows []PutBooksRowsItem, argTenantID uint64",
+				"PutBook(ctx context.Context, argBook PutBookBook, argTenantID uint64",
+				"PutTags(ctx context.Context, argTags []string, argTenantID uint64",
+				"PutAmount(ctx context.Context, argAmount types.Decimal, argTenantID uint64",
+				"Renamed(ctx context.Context, argRecordID uint64, argTitle string",
+				"Visit(ctx context.Context, argFrom uint64, argTo uint64, consume func(VisitRow) error",
+				"validateDecimalParameter(\"$amount\", argAmount",
+				"for _, item := range argRows",
+			} {
+				require.Contains(t, source, want)
+			}
+			if runtime == "database/sql" {
+				require.Contains(t, source, `sql.Named("book_id", argRecordID)`)
+				require.Contains(t, source, `sql.Named("title", argTitle)`)
+			} else {
+				require.Contains(t, source, `parameters.Param("$book_id").Uint64(argRecordID)`)
+				require.Contains(t, source, `parameters.Param("$title").Text(argTitle)`)
+			}
+			compileInput(t, in, opts)
+		})
+	}
+}
+
 func embeddedAnalysis() *model.AnalysisResult {
 	u64 := model.Type{Kind: "Uint64"}
 	utf8 := model.Type{Kind: "Utf8"}

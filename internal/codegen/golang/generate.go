@@ -17,12 +17,13 @@ import (
 )
 
 type Options struct {
-	Package         string
-	Runtime         string // ydb or database/sql
-	Rename          map[string]string
-	EmitJSONTags    bool
-	EmitInterface   bool
-	EmitEmptySlices bool
+	Package             string
+	Runtime             string // ydb or database/sql
+	Rename              map[string]string
+	EmitJSONTags        bool
+	EmitInterface       bool
+	EmitEmptySlices     bool
+	QueryParameterLimit *int32
 }
 
 func Generate(in *model.AnalysisResult, o Options) ([]model.File, error) {
@@ -43,6 +44,12 @@ func Generate(in *model.AnalysisResult, o Options) ([]model.File, error) {
 	}
 	if o.Runtime != "ydb" && o.Runtime != "database/sql" {
 		return nil, fmt.Errorf("unsupported Go runtime %q", o.Runtime)
+	}
+	if o.QueryParameterLimit == nil {
+		limit := int32(1)
+		o.QueryParameterLimit = &limit
+	} else if *o.QueryParameterLimit < 0 {
+		return nil, fmt.Errorf("query_parameter_limit must not be negative")
 	}
 	if err := validate(in, o); err != nil {
 		return nil, err
@@ -361,7 +368,7 @@ func models(in *model.AnalysisResult, o Options) []byte {
 			}
 			b.WriteString("}\n\n")
 		}
-		if len(q.Parameters) > 1 {
+		if useParamsStruct(q, o) {
 			b.WriteString("type " + q.Name + "Params struct {\n")
 			for _, p := range q.Parameters {
 				typ, _ := parameterGoType(q, p)
@@ -489,7 +496,7 @@ func queryFile(source string, qs []model.AnalyzedQuery, o Options) []byte {
 		needsEach = needsEach || q.Command == model.Each
 		needsYDBRows = needsYDBRows || (o.Runtime == "ydb" && (q.Command == model.Many || q.Command == model.Each))
 		for _, p := range q.Parameters {
-			usesParameterType := !isStructParameter(p.Type) && (len(q.Parameters) == 1 || (o.Runtime == "database/sql" && strings.EqualFold(p.Type.Kind, "List")))
+			usesParameterType := !isStructParameter(p.Type) && (!useParamsStruct(q, o) || (o.Runtime == "database/sql" && strings.EqualFold(p.Type.Kind, "List")))
 			if usesParameterType {
 				parameterImports.add(p.Type)
 			}
@@ -501,7 +508,7 @@ func queryFile(source string, qs []model.AnalyzedQuery, o Options) []byte {
 			needsUUID = needsUUID || (usesParameterType && hasKind(p.Type, "uuid"))
 			needsTypes = needsTypes || isStructParameter(p.Type) || hasKind(p.Type, "list") ||
 				(o.Runtime == "database/sql" && (kind == "uuid" || kind == "decimal")) ||
-				(o.Runtime == "ydb" && (hasKind(p.Type, "list") || (len(q.Parameters) == 1 && hasKind(p.Type, "decimal"))))
+				(o.Runtime == "ydb" && (hasKind(p.Type, "list") || (!useParamsStruct(q, o) && hasKind(p.Type, "decimal"))))
 			needsYDB = needsYDB || o.Runtime == "ydb"
 		}
 	}
@@ -622,11 +629,16 @@ func queryComment(q model.AnalyzedQuery) string {
 
 func methodArgs(q model.AnalyzedQuery, o Options) string {
 	args := ""
-	if len(q.Parameters) > 1 {
+	if useParamsStruct(q, o) {
 		args = ", arg " + q.Name + "Params"
 	} else if len(q.Parameters) == 1 {
 		t, _ := parameterGoType(q, q.Parameters[0])
 		args = ", arg " + t
+	} else {
+		for _, p := range q.Parameters {
+			t, _ := parameterGoType(q, p)
+			args += ", arg" + o.fieldName(p.Name) + " " + t
+		}
 	}
 	if q.Command == model.Each {
 		args += ", consume func(" + q.Name + "Row) error"
@@ -637,10 +649,21 @@ func methodArgs(q model.AnalyzedQuery, o Options) string {
 	return args
 }
 func varRef(q model.AnalyzedQuery, p model.Parameter, o Options) string {
-	if len(q.Parameters) > 1 {
+	if useParamsStruct(q, o) {
 		return "arg." + o.fieldName(p.Name)
 	}
-	return "arg"
+	if len(q.Parameters) == 1 {
+		return "arg"
+	}
+	return "arg" + o.fieldName(p.Name)
+}
+
+func useParamsStruct(q model.AnalyzedQuery, o Options) bool {
+	limit := int32(1)
+	if o.QueryParameterLimit != nil {
+		limit = *o.QueryParameterLimit
+	}
+	return len(q.Parameters) > 0 && len(q.Parameters) > int(limit)
 }
 func sqlArgumentList(q model.AnalyzedQuery, o Options) []string {
 	x := make([]string, len(q.Parameters))
