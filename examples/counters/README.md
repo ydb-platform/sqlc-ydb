@@ -12,7 +12,8 @@ A small counter table demonstrates constants and computed DML from [PR #24](http
 | `ClearOptional` | `SET optional_value = NULL, label = NULL` clears optional columns. |
 | `UpsertCounter` | `UPSERT ... VALUES` computes a value from the declared `$seed` parameter. |
 | `ReadCounter`, `ListCounters` | `SELECT c.*` and `SELECT *` become explicit projections in the generated SQL. |
-| `ReadThenIncrement`, `IncrementReturningThenIncrement` | `:exec` submits the whole script in one request, discards its SELECT or RETURNING rows, and reports execution errors. |
+| `ReadThenIncrement` | `:exec` submits SELECT and UPDATE in one request and discards the SELECT rows. |
+| `IncrementReturningThenIncrement` | `:exec` submits two UPDATE statements in one request and discards the RETURNING rows. |
 
 For example, creating a counter, incrementing by 5 and then transforming it yields values 0, 5 and 17. The transformed `enabled` value is false because `value > 10l` reads the original value 5. The [executable Go tests](../../tests/examples/go/counters/smoke_test.go) demonstrate both adapters, transaction rollback and SELECT/RETURNING after an unrelated column is added. A native SDK call is:
 
