@@ -4,7 +4,7 @@
 
 ### Added
 
-- Support upstream-compatible `gen.go.emit_exported_queries` for exported Go YQL constants in both YDB SDK profiles.
+- Support `gen.go.emit_exported_queries` with upstream-compatible option and constant names; the exported Go YQL omits `-- name:` annotations in both YDB SDK profiles.
 
 ## v0.7.1
 
