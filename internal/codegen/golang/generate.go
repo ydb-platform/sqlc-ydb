@@ -136,7 +136,7 @@ func validate(in *model.AnalysisResult, o Options) error {
 			return fmt.Errorf("multiple query sources map to generated file %q", out)
 		}
 		outputs[out] = source
-		if q.Command != model.One && q.Command != model.Many && q.Command != model.Each && q.Command != model.Exec && q.Command != model.ExecRows {
+		if q.Command != model.One && q.Command != model.Many && q.Command != model.Multi && q.Command != model.Each && q.Command != model.Exec && q.Command != model.ExecRows {
 			return fmt.Errorf("%s: unsupported command %q", q.Name, q.Command)
 		}
 		if q.Command == model.ExecRows {
@@ -144,6 +144,19 @@ func validate(in *model.AnalysisResult, o Options) error {
 		}
 		if (q.Command == model.One || q.Command == model.Many || q.Command == model.Each) && (len(q.ResultSets) != 1 || len(q.ResultSets[0].Columns) == 0) {
 			return fmt.Errorf("%s: %s requires one non-empty result set", q.Name, q.Command)
+		}
+		if q.Command == model.Multi {
+			if len(q.ResultSets) < 2 {
+				return fmt.Errorf("%s: :multi requires at least two result sets", q.Name)
+			}
+			for _, rs := range q.ResultSets {
+				if len(rs.Columns) == 0 {
+					return fmt.Errorf("%s: :multi result %q requires at least one column", q.Name, rs.Name)
+				}
+				if !ident(rs.Name) || !ast.IsExported(rs.Name) {
+					return fmt.Errorf("%s: invalid :multi result name %q", q.Name, rs.Name)
+				}
+			}
 		}
 		field := map[string]bool{}
 		for _, p := range q.Parameters {
@@ -365,33 +378,45 @@ func models(in *model.AnalysisResult, o Options) []byte {
 				writeStructModel(&b, q, p, o, &imports)
 			}
 		}
-		if q.Command == model.One || q.Command == model.Many || q.Command == model.Each {
-			r := q.ResultSets[0]
-			b.WriteString("type " + q.Name + "Row struct {\n")
-			for i, c := range r.Columns {
-				if embed := embeddingAt(r, i); embed != nil {
-					if embed.Start == i {
-						b.WriteString(o.fieldName(embed.Field) + " " + o.embeddedGoType(embed.Table))
-						if o.EmitJSONTags {
-							b.WriteString(" `json:" + strconv.Quote(embed.Field) + "`")
+		if q.Command == model.One || q.Command == model.Many || q.Command == model.Each || q.Command == model.Multi {
+			for _, r := range q.ResultSets {
+				rowName := q.Name + "Row"
+				if q.Command == model.Multi {
+					rowName = q.Name + r.Name + "Row"
+				}
+				b.WriteString("type " + rowName + " struct {\n")
+				for i, c := range r.Columns {
+					if embed := embeddingAt(r, i); embed != nil {
+						if embed.Start == i {
+							b.WriteString(o.fieldName(embed.Field) + " " + o.embeddedGoType(embed.Table))
+							if o.EmitJSONTags {
+								b.WriteString(" `json:" + strconv.Quote(embed.Field) + "`")
+							}
+							b.WriteString("\n")
 						}
-						b.WriteString("\n")
+						continue
 					}
-					continue
+					typ, _ := o.columnGoType(c)
+					if index := o.columnOverride(c); index >= 0 {
+						overrideImports[index] = true
+					} else {
+						imports.add(c.Type)
+					}
+					b.WriteString(o.fieldName(c.Name) + " " + typ)
+					if o.EmitJSONTags {
+						b.WriteString(" `json:" + strconv.Quote(c.Name) + "`")
+					}
+					b.WriteString("\n")
 				}
-				typ, _ := o.columnGoType(c)
-				if index := o.columnOverride(c); index >= 0 {
-					overrideImports[index] = true
-				} else {
-					imports.add(c.Type)
-				}
-				b.WriteString(o.fieldName(c.Name) + " " + typ)
-				if o.EmitJSONTags {
-					b.WriteString(" `json:" + strconv.Quote(c.Name) + "`")
-				}
-				b.WriteString("\n")
+				b.WriteString("}\n\n")
 			}
-			b.WriteString("}\n\n")
+			if q.Command == model.Multi {
+				b.WriteString("type " + q.Name + "Result struct {\n")
+				for _, r := range q.ResultSets {
+					b.WriteString(r.Name + " []" + q.Name + r.Name + "Row\n")
+				}
+				b.WriteString("}\n\n")
+			}
 		}
 		if useParamsStruct(q, o) {
 			b.WriteString("type " + q.Name + "Params struct {\n")
@@ -432,6 +457,9 @@ func models(in *model.AnalysisResult, o Options) []byte {
 			}
 			if q.Command == model.Many {
 				ret = "([]" + q.Name + "Row, error)"
+			}
+			if q.Command == model.Multi {
+				ret = "(" + q.Name + "Result, error)"
 			}
 			b.WriteString(q.Name + "(ctx context.Context" + sig + ") " + ret + "\n")
 		}
@@ -529,7 +557,7 @@ func queryFile(source string, qs []model.AnalyzedQuery, o Options) []byte {
 	overrideImports := map[int]bool{}
 	for _, q := range qs {
 		needsEach = needsEach || q.Command == model.Each
-		needsYDBRows = needsYDBRows || (o.Runtime == "ydb" && (q.Command == model.Many || q.Command == model.Each))
+		needsYDBRows = needsYDBRows || (o.Runtime == "ydb" && (q.Command == model.Many || q.Command == model.Multi || q.Command == model.Each))
 		for _, p := range q.Parameters {
 			usesParameterType := !isStructParameter(p.Type) && (!useParamsStruct(q, o) || (o.Runtime == "database/sql" && strings.EqualFold(p.Type.Kind, "List")))
 			if usesParameterType {
@@ -553,8 +581,11 @@ func queryFile(source string, qs []model.AnalyzedQuery, o Options) []byte {
 	}
 	stdlibImports := []string{"\"context\""}
 
-	if needsEach || needsYDBRows {
+	if needsEach || needsYDBRows || hasMulti(qs) {
 		stdlibImports = append(stdlibImports, "\"errors\"")
+	}
+	if hasMulti(qs) {
+		stdlibImports = append(stdlibImports, "\"fmt\"")
 	}
 	externalImports := []string{}
 	if parameterImports.time {
@@ -618,6 +649,9 @@ func writeQuery(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 	}
 	if q.Command == model.Many {
 		ret = "([]" + q.Name + "Row, error)"
+	}
+	if q.Command == model.Multi {
+		ret = "(out " + q.Name + "Result, err error)"
 	}
 	if q.Command == model.Each {
 		ret = "(err error)"
@@ -804,6 +838,8 @@ func writeSQL(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 		b.WriteString("return row, err\n")
 	case model.Each:
 		writeSQLEach(b, q, parameters, o)
+	case model.Multi:
+		writeSQLMulti(b, q, parameters, o)
 	case model.Many:
 		init := "[]" + q.Name + "Row(nil)"
 		if o.EmitEmptySlices {
@@ -846,6 +882,10 @@ func writeYDB(b *bytes.Buffer, q model.AnalyzedQuery, o Options) {
 	}
 	if q.Command == model.Each {
 		writeYDBEach(b, q, opt, o)
+		return
+	}
+	if q.Command == model.Multi {
+		writeYDBMulti(b, q, opt, o)
 		return
 	}
 	if q.Command == model.Exec {
@@ -922,6 +962,8 @@ func decimalValidationFailure(q model.AnalyzedQuery, o Options) string {
 		return "return " + q.Name + "Row{}, " + err
 	case model.Many:
 		return "return nil, " + err
+	case model.Multi:
+		return "return " + q.Name + "Result{}, " + err
 	default:
 		return "return " + err
 	}

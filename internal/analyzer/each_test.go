@@ -29,5 +29,5 @@ func TestEachSelect(t *testing.T) {
 
 func TestMalformedAnnotationListsEach(t *testing.T) {
 	_, err := Analyze(nil, []model.Source{{Name: "queries.sql", Text: "-- name: Visit :each extra\nSELECT 1;"}})
-	require.ErrorContains(t, err, "expected -- name: QueryName :one|:many|:each|:exec|:execrows")
+	require.ErrorContains(t, err, "expected -- name: QueryName :one|:many|:multi|:each|:exec|:execrows")
 }

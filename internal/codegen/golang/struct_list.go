@@ -202,6 +202,21 @@ func validateStructDeclarations(in *model.AnalysisResult, o Options) error {
 			names[q.Name+"Row"] = true
 		}
 	}
+	for _, q := range in.Queries {
+		if q.Command != model.Multi {
+			continue
+		}
+		declarations := []string{q.Name + "Result"}
+		for _, rs := range q.ResultSets {
+			declarations = append(declarations, q.Name+rs.Name+"Row")
+		}
+		for _, name := range declarations {
+			if names[name] {
+				return fmt.Errorf("%s: generated declaration %s collides with another declaration", q.Name, name)
+			}
+			names[name] = true
+		}
+	}
 	for _, table := range in.Catalog.Tables {
 		if !embeddedTableUsed(in, table.Name) {
 			continue

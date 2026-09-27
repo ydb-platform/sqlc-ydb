@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Add Go `:multi` queries for two or more read-only SELECT result sets in one YDB request, with typed slices, optional result names and exact result-set validation.
+
 ## v0.8.0
 
 ### Added

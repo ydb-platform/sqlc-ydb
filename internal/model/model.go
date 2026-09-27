@@ -164,6 +164,7 @@ type Parameter struct {
 	Type Type
 }
 type ResultSet struct {
+	Name    string
 	Columns []Column
 	Embeds  []Embedding
 }
@@ -181,6 +182,7 @@ type Command string
 const (
 	One      Command = ":one"
 	Many     Command = ":many"
+	Multi    Command = ":multi"
 	Each     Command = ":each"
 	Exec     Command = ":exec"
 	ExecRows Command = ":execrows"
