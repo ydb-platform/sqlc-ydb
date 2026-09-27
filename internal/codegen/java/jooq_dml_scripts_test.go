@@ -88,6 +88,10 @@ SELECT id, label FROM records WHERE id = $id;
 -- name: ReadThenDelete :one
 DECLARE $id AS Uint64;
 SELECT id, label FROM records WHERE id = $id;
+DELETE FROM children WHERE owner = $id;
+-- name: DiscardThenDelete :exec
+DECLARE $id AS Uint64;
+SELECT id FROM records WHERE id = $id;
 DELETE FROM children WHERE owner = $id;`
 	analysis, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: jooqDMLScriptSchema}}, []model.Source{{Name: "queries.sql", Text: queries}})
 	require.NoError(t, err)
@@ -101,7 +105,8 @@ DELETE FROM children WHERE owner = $id;`
 		for _, want := range []string{"DECLARE $label AS Utf8;", "UPDATE", "SELECT id, label FROM", "DELETE FROM", "dsl.render(RECORDS)", "dsl.render(CHILDREN)", "_prepared.getMoreResults()", "Expected one result set"} {
 			require.Contains(t, code, want, "missing %q in generated script:\n%s", want, code)
 		}
-		require.False(t, strings.Count(code, ".prepareStatement(") != 2 || strings.Count(code, "_prepared.execute();") != 2 || strings.Contains(code, ".executeQuery("), "expected one JDBC execution per mixed script:\n%s", code)
+		require.False(t, strings.Count(code, ".prepareStatement(") != 3 || strings.Count(code, "_prepared.execute();") != 3 || strings.Contains(code, ".executeQuery("), "expected one JDBC execution per mixed script:\n%s", code)
+		require.Contains(t, code, "while (_rows.next()) {}")
 	}
 }
 

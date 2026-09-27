@@ -11,7 +11,7 @@ import (
 func TestDatabaseSQLMixedScriptReportsCompletionErrors(t *testing.T) {
 	analysis, err := analyzer.Analyze(
 		[]model.Source{{Name: "schema.sql", Text: "CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));"}},
-		[]model.Source{{Name: "queries.sql", Text: "-- name: ReadAndDelete :many\nSELECT id FROM records;\nDELETE FROM records WHERE id = 9ul;"}},
+		[]model.Source{{Name: "queries.sql", Text: "-- name: ReadAndDelete :many\nSELECT id FROM records;\nDELETE FROM records WHERE id = 9ul;\n-- name: DiscardAndDelete :exec\nSELECT id FROM records;\nDELETE FROM records WHERE id = 9ul;"}},
 	)
 	require.NoError(t, err)
 	runGeneratedRuntimeTest(t, analysis, Options{Package: "db", Runtime: "database/sql"}, mixedScriptDatabaseSQLRuntime)
@@ -73,13 +73,23 @@ func TestCompletion(t *testing.T) {
   {"rows-late-error",1,completionError},{"empty-late-error",0,completionError},
  } {
   t.Run(test.name,func(t *testing.T){
-   currentRows=&scriptRows{remaining:test.count,completion:test.completion}
-   queryCalls=0
-   rows,err:=q.ReadAndDelete(context.Background())
-   if test.completion!=nil {
-    if !errors.Is(err,test.completion) || rows!=nil {t.Fatalf("partial result escaped before completion: rows=%v error=%v",rows,err)}
-   } else if err!=nil || len(rows)!=test.count || (len(rows)>0 && rows[0].ID!=7) {t.Fatalf("rows=%v error=%v",rows,err)}
-   if queryCalls!=1 || currentRows.closes!=1 {t.Fatalf("calls=%d closes=%d",queryCalls,currentRows.closes)}
+   for _,command:=range []string{"many","exec"} {
+    currentRows=&scriptRows{remaining:test.count,completion:test.completion}
+    queryCalls=0
+    var err error
+    if command=="many" {
+     rows,readErr:=q.ReadAndDelete(context.Background())
+     err=readErr
+     if test.completion!=nil {
+      if rows!=nil {t.Fatalf("partial result escaped before completion: rows=%v",rows)}
+     } else if len(rows)!=test.count || (len(rows)>0 && rows[0].ID!=7) {t.Fatalf("rows=%v",rows)}
+    } else {
+     err=q.DiscardAndDelete(context.Background())
+    }
+    if test.completion!=nil && !errors.Is(err,test.completion) {t.Fatalf("%s did not report terminal error: %v",command,err)}
+    if test.completion==nil && err!=nil {t.Fatalf("%s failed: %v",command,err)}
+    if queryCalls!=1 || currentRows.closes!=1 || currentRows.remaining!=0 {t.Fatalf("%s: calls=%d closes=%d remaining=%d",command,queryCalls,currentRows.closes,currentRows.remaining)}
+   }
   })
  }
 }

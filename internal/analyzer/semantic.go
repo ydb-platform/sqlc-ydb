@@ -259,7 +259,7 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 		if (block.command == model.One || block.command == model.Many || block.command == model.Each) && !returnsRows {
 			diagnostics = append(diagnostics, model.Diagnostic{Position: query.Source, Message: fmt.Sprintf("command %s requires a result set", block.command)})
 		}
-		if (block.command == model.Exec || block.command == model.ExecRows) && returnsRows {
+		if ((block.command == model.Exec && !query.MultipleStatements) || block.command == model.ExecRows) && returnsRows {
 			diagnostics = append(diagnostics, model.Diagnostic{Position: query.Source, Message: fmt.Sprintf("command %s cannot be used with a row-returning statement", block.command)})
 		}
 	}
@@ -573,8 +573,6 @@ func validateQueryStatements(block queryBlock, tree queryTree) []model.Diagnosti
 		message = "multi-statement :each is unsupported; use :one or :many to consume the result before returning"
 	case block.command == model.ExecRows:
 		message = "multi-statement :execrows is unsupported; use :exec, :one, or :many"
-	case block.command == model.Exec && results != 0:
-		message = "command :exec cannot be used with a row-returning script; use :one or :many"
 	case (block.command == model.One || block.command == model.Many) && results == 0:
 		message = fmt.Sprintf("command %s requires exactly one result-producing statement in a script", block.command)
 	}

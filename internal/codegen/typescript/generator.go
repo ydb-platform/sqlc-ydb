@@ -292,7 +292,7 @@ func renderTypeScript(a *model.AnalysisResult) (string, error) {
 			}
 			b.WriteString("};\n\n")
 		}
-		if len(q.ResultSets) > 0 {
+		if q.Command == model.One || q.Command == model.Many {
 			renderRowType(&b, "export type "+exportedName(q.Name)+"Row", q)
 		}
 	}

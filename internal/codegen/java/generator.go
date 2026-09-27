@@ -460,13 +460,27 @@ func emitJDBCOn(b *strings.Builder, q model.AnalyzedQuery, names []string, bindi
 		}
 	}
 	if q.Command == model.Exec {
-		b.WriteString(indent + "_prepared.execute();\n")
+		if q.MultipleStatements && len(q.ResultSets) != 0 {
+			emitJDBCExecDiscard(b, indent)
+		} else {
+			b.WriteString(indent + "_prepared.execute();\n")
+		}
 	} else {
 		emitJDBCResultStart(b, q, indent)
 		emitRows(b, q, row, indent+"    ", false)
 		b.WriteString(indent + "}\n")
 	}
 	indent = strings.TrimSuffix(indent, "    ")
+	b.WriteString(indent + "}\n")
+}
+
+func emitJDBCExecDiscard(b *strings.Builder, indent string) {
+	b.WriteString(indent + "_prepared.execute();\n")
+	b.WriteString(indent + "while (true) {\n")
+	b.WriteString(indent + "    try (var _rows = _prepared.getResultSet()) {\n")
+	b.WriteString(indent + "        if (_rows != null) while (_rows.next()) {}\n")
+	b.WriteString(indent + "    }\n")
+	b.WriteString(indent + "    if (!_prepared.getMoreResults() && _prepared.getUpdateCount() == -1) break;\n")
 	b.WriteString(indent + "}\n")
 }
 

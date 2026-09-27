@@ -243,3 +243,41 @@ func (q *Queries) ListCounters(ctx context.Context, opts ...query.ExecuteOption)
 
 	return items, nil
 }
+
+// -- name: ReadThenIncrement :exec
+func (q *Queries) ReadThenIncrement(ctx context.Context, arg ReadThenIncrementParams, opts ...query.ExecuteOption) error {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$id").Text(arg.ID)
+	parameters = parameters.Param("$delta").Int64(arg.Delta)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	err := q.db.Exec(ctx, ""+
+		"DECLARE $id AS Utf8;\n"+
+		"DECLARE $delta AS Int64;\n"+
+		"SELECT value FROM counters WHERE id = $id;\n"+
+		"UPDATE counters SET value = value + $delta WHERE id = $id;",
+		callOptions...,
+	)
+
+	return xerrors.WithStackTrace(err)
+}
+
+// -- name: IncrementReturningThenIncrement :exec
+func (q *Queries) IncrementReturningThenIncrement(ctx context.Context, arg string, opts ...query.ExecuteOption) error {
+	parameters := ydb.ParamsBuilder()
+	parameters = parameters.Param("$id").Text(arg)
+
+	callOptions := append([]query.ExecuteOption(nil), opts...)
+	callOptions = append(callOptions, query.WithParameters(parameters.Build()))
+
+	err := q.db.Exec(ctx, ""+
+		"DECLARE $id AS Utf8;\n"+
+		"UPDATE counters SET value = value + 1 WHERE id = $id RETURNING value;\n"+
+		"UPDATE counters SET value = value + 1 WHERE id = $id;",
+		callOptions...,
+	)
+
+	return xerrors.WithStackTrace(err)
+}

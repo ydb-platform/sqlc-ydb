@@ -165,7 +165,11 @@ func emitJooqDeclared(b *strings.Builder, q model.AnalyzedQuery, names []string,
 		}
 	}
 	if q.Command == model.Exec {
-		b.WriteString("                _prepared.execute();\n")
+		if q.MultipleStatements && len(q.ResultSets) != 0 {
+			emitJDBCExecDiscard(b, "                ")
+		} else {
+			b.WriteString("                _prepared.execute();\n")
+		}
 	} else {
 		emitJDBCResultStart(b, q, "                ")
 		var types, values []string
