@@ -15,6 +15,7 @@ A record store with a hashed owner key, batch writes and filtered reads/deletes.
 | `ReverseGroupLabel` | The built-in `Unicode::Reverse` signature accepts a nullable label through AutoMap and returns the reversed Unicode text. |
 | `RankRecordsWithinGroup` | `ROW_NUMBER() OVER w` numbers records within each group in record ID order; the result is `Uint64`. |
 | `RankDistinctGroups` | `GROUP BY` first reduces rows to distinct groups, then `ROW_NUMBER() OVER w` numbers those groups in group ID order. |
+| `ListRecordDays` | `DateTime::MakeTzDate` converts each stored `Timestamp` to a `TzDate` intermediate; `DateTime::ToSeconds` returns its UTC day start as `Uint32`. |
 
 The built-in [`Unicode::Reverse`](https://ydb.tech/docs/en/yql/reference/udf/list/unicode) contract is `Utf8{Flags:AutoMap} -> Utf8`. AutoMap makes a null input return null, represented as `*string` in Go. See [function signatures](../../docs/functions.md).
 

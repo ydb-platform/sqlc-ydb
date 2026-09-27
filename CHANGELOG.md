@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Resolve `DateTime::MakeTzDate` for basic-range DateTime values, including nullable inputs.
+
 ## v0.12.0
 
 ### Added

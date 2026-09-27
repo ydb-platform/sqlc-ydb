@@ -110,3 +110,8 @@ type RankDistinctGroupsRow struct {
 	GroupID string
 	RowNum  uint64
 }
+
+type ListRecordDaysRow struct {
+	RecordID        string
+	CreatedDayStart uint32
+}

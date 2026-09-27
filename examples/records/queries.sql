@@ -103,3 +103,10 @@ WHERE owner_hash = Digest::CityHash(CAST($owner_id AS String))
 GROUP BY group_id
 WINDOW w AS (ORDER BY group_id)
 ORDER BY group_id;
+
+-- name: ListRecordDays :many
+DECLARE $owner_id AS Uint64;
+SELECT record_id, DateTime::ToSeconds(DateTime::MakeTzDate(created_at)) AS created_day_start
+FROM records
+WHERE owner_hash = Digest::CityHash(CAST($owner_id AS String))
+ORDER BY record_id;
