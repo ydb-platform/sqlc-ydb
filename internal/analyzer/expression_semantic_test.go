@@ -368,6 +368,15 @@ SELECT COUNT(DISTINCT value) AS unique_values FROM records WHERE false;`}}
 	}
 }
 
+func TestAnalyzeCountAll(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY (id));`}}
+	sql := "-- name: CountAll :one\nSELECT COUNT(ALL id) AS direct, COUNT(ALL id + 1ul) AS computed FROM records;"
+	got, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: sql}})
+	require.NoError(t, err)
+	assert.Equal(t, sql, got.Queries[0].SQL)
+	assert.Equal(t, []model.Column{{Name: "direct", Type: model.Type{Kind: "Uint64"}}, {Name: "computed", Type: model.Type{Kind: "Uint64"}}}, got.Queries[0].ResultSets[0].Columns)
+}
+
 func TestAnalyzeRejectsUnsupportedDistinctArguments(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (
     id Uint64 NOT NULL,

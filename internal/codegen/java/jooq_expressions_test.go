@@ -13,7 +13,7 @@ import (
 func TestJooqConditionalAggregateExpressions(t *testing.T) {
 	analysis, err := analyzer.Analyze(
 		[]model.Source{{Name: "schema.sql", Text: "CREATE TABLE items (id Uint64 NOT NULL, note Utf8, PRIMARY KEY(id));"}},
-		[]model.Source{{Name: "query.sql", Text: "-- name: Statistics :one\nSELECT COUNT_IF(note IS NOT NULL) AS present, COUNT_IF(note != \"\"u) AS nonempty, CAST(COUNT(*) AS Bool), COUNT(DISTINCT note) AS distinct_notes FROM items;"}},
+		[]model.Source{{Name: "query.sql", Text: "-- name: Statistics :one\nSELECT COUNT_IF(note IS NOT NULL) AS present, COUNT_IF(note != \"\"u) AS nonempty, CAST(COUNT(*) AS Bool), COUNT(DISTINCT note) AS distinct_notes, COUNT(ALL note) AS all_notes FROM items;"}},
 	)
 	require.NoError(t, err)
 	files, err := Generate(analysis, Options{Package: "db", Runtime: "jooq"})
@@ -27,7 +27,7 @@ func TestJooqConditionalAggregateExpressions(t *testing.T) {
 	for _, expression := range []string{
 		`systemName("COUNT_IF")`, `YdbTypes.UINT64`, `ITEMS.NOTE.isNotNull()`,
 		`ITEMS.NOTE.ne(inline("", YdbTypes.UTF8))`, `count().coerce(YdbTypes.UINT64).cast(YdbTypes.BOOL)`,
-		`countDistinct(ITEMS.NOTE).coerce(YdbTypes.UINT64)`,
+		`countDistinct(ITEMS.NOTE).coerce(YdbTypes.UINT64)`, `count(ITEMS.NOTE).coerce(YdbTypes.UINT64)`,
 	} {
 		assert.Contains(t, queries, expression, "missing %s in generated query:\n%s", expression, queries)
 	}
