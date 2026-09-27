@@ -486,12 +486,12 @@ func TestAnalyzeRejectsMixedUnsupportedQueryStatement(t *testing.T) {
 	require.ErrorContains(t, err, "unsupported PRAGMA")
 }
 
-func TestAnalyzeRejectsFlattenSourceInsteadOfIgnoringItsTypeEffect(t *testing.T) {
+func TestAnalyzeRejectsUnsupportedFlattenInsteadOfIgnoringItsTypeEffect(t *testing.T) {
 	_, err := Analyze(
 		[]model.Source{{Name: "schema.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, tags List<Utf8>, PRIMARY KEY (id));`}},
-		[]model.Source{{Name: "query.sql", Text: "-- name: Tags :many\nSELECT tags FROM authors FLATTEN LIST BY tags;"}},
+		[]model.Source{{Name: "query.sql", Text: "-- name: Tags :many\nSELECT tags FROM authors FLATTEN DICT BY tags;"}},
 	)
-	require.ErrorContains(t, err, "FLATTEN sources are not yet supported")
+	require.ErrorContains(t, err, "only FLATTEN LIST BY is supported")
 }
 
 func TestAnalyzeChecksLocalBindingTypeAtUse(t *testing.T) {

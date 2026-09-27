@@ -630,4 +630,48 @@ std::optional<EchoAuthorIDTextRow> Queries::EchoAuthorIDText(const std::string& 
     return sqlc_row;
 }
 
+// -- name: ListAuthorNameWords :many
+std::vector<ListAuthorNameWordsRow> Queries::ListAuthorNameWords() const {
+    std::optional<NYdb::TResultSet> sqlc_result_set;
+    const auto sqlc_execute = [&](NYdb::NQuery::TSession sqlc_session, const NYdb::NQuery::TTxControl& sqlc_tx) -> NYdb::TStatus {
+        auto sqlc_result = sqlc_session.ExecuteQuery(
+            "SELECT id, word\n"
+            "FROM (SELECT id, Unicode::SplitToList(name, \" \"u) AS words FROM authors)\n"
+            "FLATTEN LIST BY words AS word\n"
+            "ORDER BY id, word;",
+            sqlc_tx,
+            this->execute_settings_
+        ).GetValueSync();
+        if (sqlc_result.IsSuccess()) {
+            if (sqlc_result.GetResultSets().size() != 1) {
+                throw std::runtime_error("expected exactly one result set");
+            }
+            sqlc_result_set = sqlc_result.GetResultSet(0);
+        }
+        return sqlc_result;
+    };
+    const auto sqlc_status = this->transaction_ != nullptr
+        ? sqlc_execute(this->transaction_->GetSession(), NYdb::NQuery::TTxControl::Tx(*this->transaction_))
+        : this->client_->RetryQuerySync([&](NYdb::NQuery::TSession sqlc_session) -> NYdb::TStatus {
+            return sqlc_execute(
+                std::move(sqlc_session),
+                NYdb::NQuery::TTxControl::BeginTx(this->tx_settings_).CommitTx()
+            );
+        }, this->retry_settings_);
+    NYdb::NStatusHelpers::ThrowOnError(sqlc_status);
+    if (!sqlc_result_set) {
+        throw std::runtime_error("ListAuthorNameWords: successful query returned no result set");
+    }
+    NYdb::TResultSetParser sqlc_parser(*sqlc_result_set);
+    std::vector<ListAuthorNameWordsRow> sqlc_rows;
+    sqlc_rows.reserve(sqlc_result_set->RowsCount());
+    while (sqlc_parser.TryNextRow()) {
+        sqlc_rows.push_back(ListAuthorNameWordsRow{
+            sqlc_parser.ColumnParser("id").GetUint64(),
+            sqlc_parser.ColumnParser("word").GetUtf8(),
+        });
+    }
+    return sqlc_rows;
+}
+
 }  // namespace authors::native

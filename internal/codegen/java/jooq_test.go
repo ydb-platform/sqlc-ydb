@@ -29,7 +29,11 @@ func TestJooqAllExampleQueries(t *testing.T) {
 			}
 			schemas, e := source.Read(root, []string{schema}, true)
 			require.Nil(t, e)
-			sources, e := source.Read(root, []string{queries}, false)
+			queryPaths := []string{queries}
+			if family == "authors" {
+				queryPaths = append(queryPaths, "flatten.sql")
+			}
+			sources, e := source.Read(root, queryPaths, false)
 			require.Nil(t, e)
 			options := analyzer.Options{}
 			if family == "authors" {
@@ -75,6 +79,15 @@ func TestJooqRejectsUnsupportedSyntax(t *testing.T) {
 			require.Contains(t, e.Error(), "Unsupported: unsupported jOOQ syntax", "missing actionable diagnostic: %v", e)
 		})
 	}
+}
+
+func TestJooqUsesFullSQLForDerivedFlattenListBy(t *testing.T) {
+	queries := []model.Source{{Name: "query.sql", Text: "-- name: Words :many\nSELECT word FROM (SELECT AsList(\"a\") AS words) FLATTEN LIST BY words AS word;"}}
+	a, err := analyzer.Analyze(nil, queries)
+	require.NoError(t, err)
+	files, err := Generate(a, Options{Runtime: "jooq"})
+	require.NoError(t, err)
+	require.Contains(t, string(files[len(files)-1].Content), "FLATTEN LIST BY words AS word")
 }
 
 func TestJooqRejectsSelectBackedDML(t *testing.T) {
@@ -354,10 +367,9 @@ public class Main {
 	})
 }
 
-// These helpers also reject unsupported input at their own boundary. The full
-// pipeline currently rejects these sources and table names before calling them.
+// These helpers also reject unsupported input at their own boundary.
 func TestJooqTableSourceRejectsUnsupportedSources(t *testing.T) {
-	for _, source := range []string{"(SELECT id FROM books) AS b", "AS_TABLE($rows) AS r"} {
+	for _, source := range []string{"(SELECT id FROM books) AS b", "AS_TABLE($rows) AS r", "books FLATTEN LIST BY tags"} {
 		t.Run(source, func(t *testing.T) {
 			lexer := parser.NewYQLLexer(antlr.NewInputStream(source))
 			p := parser.NewYQLParser(antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel))

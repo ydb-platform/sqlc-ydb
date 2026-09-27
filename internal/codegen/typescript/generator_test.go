@@ -27,7 +27,11 @@ func TestApprovedExamples(t *testing.T) {
 			}
 			schema, err := source.Read(base, []string{schemaPath}, true)
 			require.NoError(t, err)
-			queries, err := source.Read(base, []string{queryPath}, false)
+			queryPaths := []string{queryPath}
+			if family == "authors" {
+				queryPaths = append(queryPaths, "flatten.sql")
+			}
+			queries, err := source.Read(base, queryPaths, false)
 			require.NoError(t, err)
 			options := analyzer.Options{}
 			if family == "authors" {

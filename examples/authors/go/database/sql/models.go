@@ -94,3 +94,8 @@ type GetAuthorExportMetadataRow struct {
 type EchoAuthorIDTextRow struct {
 	AuthorIDText string
 }
+
+type ListAuthorNameWordsRow struct {
+	ID   uint64
+	Word string
+}

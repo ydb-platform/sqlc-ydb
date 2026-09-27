@@ -16,4 +16,6 @@ Compared with [upstream](../README.md), IDs are explicit `Uint64` inputs rather 
 
 `EchoAuthorIDText` returns a text value supplied by the caller. Its `$author_id` parameter has no inferable SQL type, so `analyzer.parameters` assigns `Utf8` to this query alone; the other author queries still infer `$author_id` as `Uint64` from the table column.
 
+`ListAuthorNameWords` computes a list of words in a derived SELECT and uses `FLATTEN LIST BY` to return one typed `Utf8` row per word. The jOOQ profile executes its authored YQL through the full-SQL path.
+
 This example covers every built-in language/runtime. Each language's build files and executable smoke tests live in its own directory. See [development](../../.agents/development.md) for generation and sequential live acceptance commands.
