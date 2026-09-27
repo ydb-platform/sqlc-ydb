@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.7.0
+
 ### Added
 
 - Support upstream-compatible `gen.go.overrides` for supported scalar Go types by YQL type or physical column, including parameter binding and result decoding in both Go runtimes.
