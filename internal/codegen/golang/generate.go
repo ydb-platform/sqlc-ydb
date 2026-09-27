@@ -148,12 +148,13 @@ func validate(in *model.AnalysisResult, o Options) error {
 			if len(q.ResultSets) < 2 {
 				return fmt.Errorf("%s: :multi requires at least two result sets", q.Name)
 			}
-			fields := map[string]bool{}
 			for _, rs := range q.ResultSets {
-				if len(rs.Columns) == 0 || !ident(rs.Name) || fields[rs.Name] {
-					return fmt.Errorf("%s: invalid or duplicate :multi result name %q", q.Name, rs.Name)
+				if len(rs.Columns) == 0 {
+					return fmt.Errorf("%s: :multi result %q requires at least one column", q.Name, rs.Name)
 				}
-				fields[rs.Name] = true
+				if !ident(rs.Name) || !ast.IsExported(rs.Name) {
+					return fmt.Errorf("%s: invalid :multi result name %q", q.Name, rs.Name)
+				}
 			}
 		}
 		field := map[string]bool{}

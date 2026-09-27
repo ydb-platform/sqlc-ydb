@@ -52,6 +52,27 @@ func TestMultiGeneratedTypeCollision(t *testing.T) {
 	require.ErrorContains(t, err, "generated declaration ReadSummaryCountRow collides with another declaration")
 }
 
+func TestMultiRejectsMalformedResultSets(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		change func(*model.AnalyzedQuery)
+		want   string
+	}{
+		{"one result set", func(q *model.AnalyzedQuery) { q.ResultSets = q.ResultSets[:1] }, ":multi requires at least two result sets"},
+		{"empty columns", func(q *model.AnalyzedQuery) { q.ResultSets[1].Columns = nil }, ":multi result \"Status\" requires at least one column"},
+		{"invalid name", func(q *model.AnalyzedQuery) { q.ResultSets[1].Name = "bad-name" }, "invalid :multi result name \"bad-name\""},
+		{"unexported name", func(q *model.AnalyzedQuery) { q.ResultSets[1].Name = "status" }, "invalid :multi result name \"status\""},
+		{"duplicate name", func(q *model.AnalyzedQuery) { q.ResultSets[1].Name = q.ResultSets[0].Name }, "generated declaration ReadSummaryCountRow collides"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := multiInput(t)
+			tc.change(&in.Queries[0])
+			_, err := Generate(in, Options{Runtime: "ydb"})
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
 func TestMultiUnicodeResultNameCompiles(t *testing.T) {
 	const sql = "-- name: Read :multi\n-- result: Имя\nSELECT 1 AS value;\nSELECT false AS enabled;"
 	in, err := analyzer.Analyze(nil, []model.Source{{Name: "query.sql", Text: sql}})
