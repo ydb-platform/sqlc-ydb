@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.11.0
+
 ### Added
 
 - Support upstream-compatible `gen.go.emit_db_tags` for generated Go structs in both YDB SDK profiles, alongside optional JSON tags.
