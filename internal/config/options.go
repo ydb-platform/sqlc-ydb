@@ -51,7 +51,8 @@ func Generators() []Generator {
 			Option{Name: "rename", Type: "map", Default: "{}", Description: "Map SQL column and table names to exported Go struct field and model names; single scalar arguments are unchanged."},
 			Option{Name: "emit_json_tags", Type: "boolean", Default: "false", Description: "Add JSON tags to generated struct fields."},
 			Option{Name: "emit_interface", Type: "boolean", Default: "false", Description: "Generate the Querier interface implemented by Queries."},
-			Option{Name: "emit_empty_slices", Type: "boolean", Default: "false", Description: "Return empty slices instead of nil for successful :many queries with no rows."}),
+			Option{Name: "emit_empty_slices", Type: "boolean", Default: "false", Description: "Return empty slices instead of nil for successful :many queries with no rows."},
+			Option{Name: "query_parameter_limit", Type: "integer", Default: "1", Description: "Maximum number of positional query arguments; 0 always uses a Params struct for queries with parameters."}),
 		generator("python", "runtime", "ydb", []string{"ydb", "dbapi", "sqlalchemy"}, false,
 			out,
 			Option{Name: "emit_sync_querier", Type: "boolean", Default: strconv.FormatBool(defaultSyncQuerier), Description: "Generate synchronous query helpers; must remain true while asynchronous generation is unsupported."},
@@ -172,6 +173,8 @@ func InitYAML(profiles []InitProfile) ([]byte, error) {
 			node := scalar(value)
 			if option.Type == "boolean" {
 				node.Tag = "!!bool"
+			} else if option.Type == "integer" {
+				node.Tag = "!!int"
 			} else if option.Type == "map" {
 				node = &yaml.Node{Kind: yaml.MappingNode}
 			}

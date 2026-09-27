@@ -1,0 +1,20 @@
+version: "2"
+sql:
+  - engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      go:
+        out: db/native
+        sql_package: ydb
+        query_parameter_limit: 0
+        emit_interface: true
+  - engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
+      go:
+        out: db/stdlib
+        sql_package: database/sql
+        query_parameter_limit: 2
+        emit_interface: true

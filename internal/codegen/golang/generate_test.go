@@ -30,6 +30,59 @@ func sample() *model.AnalysisResult {
 	}}
 }
 
+func TestQueryParameterLimit(t *testing.T) {
+	for _, runtime := range []string{"database/sql", "ydb"} {
+		for _, tc := range []struct {
+			name  string
+			limit *int32
+			want  []string
+			dont  []string
+		}{
+			{"default", nil, []string{"GetUser(ctx context.Context, arg uint64", "UpdateUser(ctx context.Context, arg UpdateUserParams"}, []string{"type GetUserParams struct"}},
+			{"zero", intPtr(0), []string{"type GetUserParams struct", "GetUser(ctx context.Context, arg GetUserParams", "UpdateUser(ctx context.Context, arg UpdateUserParams"}, nil},
+			{"two", intPtr(2), []string{"GetUser(ctx context.Context, arg uint64", "UpdateUser(ctx context.Context, argName string, argBio *string"}, []string{"type GetUserParams struct", "type UpdateUserParams struct"}},
+		} {
+			t.Run(runtime+"/"+tc.name, func(t *testing.T) {
+				options := Options{Package: "db", Runtime: runtime, EmitInterface: true, QueryParameterLimit: tc.limit}
+				files, err := Generate(sample(), options)
+				require.NoError(t, err)
+				var source string
+				for _, file := range files {
+					source += string(file.Content)
+				}
+				for _, want := range tc.want {
+					require.Contains(t, source, want)
+				}
+				for _, unwanted := range tc.dont {
+					require.NotContains(t, source, unwanted)
+				}
+				if tc.name == "two" {
+					if runtime == "database/sql" {
+						require.Contains(t, source, `sql.Named("name", argName)`)
+						require.Contains(t, source, `sql.Named("bio", argBio)`)
+					} else {
+						require.Contains(t, source, `parameters.Param("$name").Text(argName)`)
+						require.Contains(t, source, `parameters.Param("$bio").BeginOptional().Text(argBio).EndOptional()`)
+					}
+				}
+				compileInput(t, sample(), options)
+			})
+		}
+	}
+	_, err := Generate(sample(), Options{QueryParameterLimit: intPtr(-1)})
+	require.ErrorContains(t, err, "query_parameter_limit must not be negative")
+
+	in := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+		Name: "BindTyped", Command: model.Exec, SQL: "SELECT $day, $id;",
+		Parameters: []model.Parameter{{Name: "day", Type: model.Type{Kind: "Date"}}, {Name: "id", Type: model.Type{Kind: "Uuid"}}},
+	}}}
+	for _, runtime := range []string{"database/sql", "ydb"} {
+		compileInput(t, in, Options{Package: "db", Runtime: runtime, QueryParameterLimit: intPtr(2)})
+	}
+}
+
+func intPtr(v int32) *int32 { return &v }
+
 func embeddedAnalysis() *model.AnalysisResult {
 	u64 := model.Type{Kind: "Uint64"}
 	utf8 := model.Type{Kind: "Utf8"}
