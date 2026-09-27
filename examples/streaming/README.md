@@ -1,6 +1,6 @@
 # Callback exports
 
-This example exports an ordered range of devices as newline-delimited JSON using `:each`. The same [queries](queries.sql) generate typed callbacks for both supported Go profiles: [native YDB](go/native) and [database/sql](go/database/sql). Nullable names remain pointers, callbacks run sequentially, and writer errors stop the export. `VisitAllDevices` demonstrates the no-parameter API.
+This example exports an ordered range of devices as newline-delimited JSON using `:each`. The same [queries](queries.sql) generate typed callbacks for [native Go YDB](go/native), [Go database/sql](go/database/sql), and [Java JDBC](java/jdbc/src/main/java/streaming/jdbc). Go nullable names remain pointers, callbacks run sequentially, and writer errors stop the export. `VisitAllDevices` demonstrates the no-parameter API.
 
 ```sql
 -- name: VisitDevices :each
@@ -26,7 +26,19 @@ err := q.VisitDevices(ctx, devices.VisitDevicesParams{MinID: 1, MaxID: 1000},
 
 The `database/sql` profile has the same callback shape and accepts `*sql.DB`, `*sql.Conn` or `*sql.Tx`. Native `New(client)` is also supported and retains the SDK's materialized-result behavior; the generated method uses the selected executor directly. The [runnable acceptance test](../../tests/examples/go/streaming/streaming_test.go) compiles and executes native client, session and transaction calls plus SQL client and transaction calls. Its SDK-owned operations explicitly use a zero retry budget because replaying an export could duplicate output; generation adds no retry policy.
 
-Only the two Go profiles support `:each`. Other language/runtime profiles reject it; no additional SQL expressions were enabled by this feature. The shared CLI tests verify this rejection for every other configured runtime. See [streaming callbacks](../../docs/streaming.md) for cancellation, error and resource ownership contracts.
+Java JDBC requires `useStreamResultSets=true` and `useQueryService=true` (the driver default) on the caller-owned connection. Its generated method rejects buffered connections before executing SQL. A caller can stream rows into a writer while propagating an unchecked writer failure:
+
+```java
+var properties = new java.util.Properties();
+properties.setProperty("useStreamResultSets", "true");
+properties.setProperty("useQueryService", "true");
+try (var connection = java.sql.DriverManager.getConnection("jdbc:ydb:" + endpoint, properties)) {
+    var queries = new streaming.jdbc.Queries(connection);
+    queries.visitDevices(1L, 1000L, row -> writeJsonLine(row));
+}
+```
+
+Other language/runtime profiles reject `:each`; no additional SQL expressions were enabled by this feature. The shared CLI tests verify this rejection. See [streaming callbacks](../../docs/streaming.md) for cancellation, error and resource ownership contracts.
 
 From the repository root:
 
@@ -40,4 +52,6 @@ The live example needs a disposable YDB with no pre-existing `streaming_devices`
 ```sh
 cd tests/examples/go
 YDB_CONNECTION_STRING=grpc://localhost:2136/local go test -p 1 -count=1 ./streaming -v
+cd ../../../
+YDB_CONNECTION_STRING=grpc://localhost:2136/local sh tests/examples/java/streaming/run-smoke.sh
 ```

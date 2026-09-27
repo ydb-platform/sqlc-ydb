@@ -17,7 +17,7 @@ func TestEachUnsupportedTargets(t *testing.T) {
 	for _, profile := range []struct{ target, runtime string }{
 		{"python", "ydb"}, {"python", "dbapi"}, {"python", "sqlalchemy"},
 		{"cpp", "ydb"}, {"cpp", "userver"}, {"csharp", "adonet"}, {"csharp", "dapper"},
-		{"java", "ydb"}, {"java", "jdbc"}, {"java", "jooq"},
+		{"java", "ydb"}, {"java", "jooq"},
 		{"kotlin", "ydb"}, {"kotlin", "jdbc"}, {"kotlin", "exposed"},
 		{"typescript", "ydb"}, {"rust", "ydb"}, {"php", "ydb"},
 	} {
