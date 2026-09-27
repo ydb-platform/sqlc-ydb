@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.12.0
+
 ### Added
 
 - Accept `sqlc.slice` in IN and NOT IN predicates, lowering it to one typed YQL list parameter before generation.
