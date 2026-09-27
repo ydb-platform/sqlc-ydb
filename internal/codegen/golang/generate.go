@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/config"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
@@ -54,7 +53,7 @@ func Generate(in *model.AnalysisResult, o Options) ([]model.File, error) {
 	switch o.JSONTagsCaseStyle {
 	case "", "none", "camel", "pascal", "snake":
 	default:
-		return nil, fmt.Errorf("json_tags_case_style must be none, camel, pascal, or snake")
+		return nil, fmt.Errorf("json_tags_case_style %q must be none, camel, pascal, or snake", o.JSONTagsCaseStyle)
 	}
 	if o.QueryParameterLimit == nil {
 		limit := int32(1)
@@ -150,7 +149,8 @@ func validate(in *model.AnalysisResult, o Options) error {
 		if q.Command == model.ExecRows {
 			return fmt.Errorf("%s: :execrows is unavailable for %s", q.Name, o.Runtime)
 		}
-		if (q.Command == model.One || q.Command == model.Many || q.Command == model.Each) && (len(q.ResultSets) != 1 || len(q.ResultSets[0].Columns) == 0) {
+		singleResult := q.Command == model.One || q.Command == model.Many || q.Command == model.Each
+		if singleResult && (len(q.ResultSets) != 1 || len(q.ResultSets[0].Columns) == 0) {
 			return fmt.Errorf("%s: %s requires one non-empty result set", q.Name, q.Command)
 		}
 		if q.Command == model.Multi {
@@ -166,13 +166,20 @@ func validate(in *model.AnalysisResult, o Options) error {
 				}
 			}
 		}
+		paramsStruct := useParamsStruct(q, o)
 		field := map[string]bool{}
+		tags := map[string]bool{}
 		for _, p := range q.Parameters {
 			name := o.fieldName(p.Name)
 			if !ident(name) || field[name] {
 				return fmt.Errorf("%s: colliding parameter %q", q.Name, p.Name)
 			}
 			field[name] = true
+			if paramsStruct {
+				if err := o.addJSONTag(tags, p.Name); err != nil {
+					return fmt.Errorf("%s parameters: %w", q.Name, err)
+				}
+			}
 			if _, err := o.parameterGoType(q, p); err != nil {
 				return fmt.Errorf("%s parameter %s: %w", q.Name, p.Name, err)
 			}
@@ -196,6 +203,7 @@ func validate(in *model.AnalysisResult, o Options) error {
 		}
 		for _, rs := range q.ResultSets {
 			field := map[string]bool{}
+			tags := map[string]bool{}
 			for i, c := range rs.Columns {
 				if embed := embeddingAt(rs, i); embed == nil || embed.Start == i {
 					name := c.Name
@@ -207,6 +215,11 @@ func validate(in *model.AnalysisResult, o Options) error {
 						return fmt.Errorf("%s: colliding result field %q", q.Name, name)
 					}
 					field[n] = true
+					if singleResult || q.Command == model.Multi {
+						if err := o.addJSONTag(tags, name); err != nil {
+							return fmt.Errorf("%s: %w", q.Name, err)
+						}
+					}
 				}
 				if _, err := o.columnGoType(c); err != nil {
 					return fmt.Errorf("%s column %s: %w", q.Name, c.Name, err)
@@ -1207,14 +1220,22 @@ func (o Options) jsonTagName(name string) string {
 				}
 				continue
 			}
-			if part != "" {
-				r, size := utf8.DecodeRuneInString(part)
-				b.WriteRune(unicode.ToUpper(r))
-				b.WriteString(part[size:])
-			}
+			b.WriteString(strings.Title(part)) //nolint:staticcheck // Match upstream sqlc's case conversion for quoted identifiers.
 		}
 		return b.String()
 	}
+}
+
+func (o Options) addJSONTag(seen map[string]bool, name string) error {
+	if !o.EmitJSONTags {
+		return nil
+	}
+	tag := o.jsonTagName(name)
+	if seen[tag] {
+		return fmt.Errorf("colliding JSON tag %q", tag)
+	}
+	seen[tag] = true
+	return nil
 }
 func ident(s string) bool {
 	if s == "" {

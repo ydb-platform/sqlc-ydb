@@ -51,7 +51,7 @@ func Generators() []Generator {
 			Option{Name: "rename", Type: "map", Default: "{}", Description: "Map SQL column and table names to exported Go struct field and model names; single scalar arguments are unchanged."},
 			Option{Name: "overrides", Type: "list", Default: "[]", Description: "Override supported scalar Go types by YQL db_type or physical table.column; see compatibility for binding and decoding limits."},
 			Option{Name: "emit_json_tags", Type: "boolean", Default: "false", Description: "Add JSON tags to generated struct fields."},
-			Option{Name: "json_tags_case_style", Type: "enum", Default: "none", Description: "Case style for JSON tags when emit_json_tags is true; none preserves SQL names.", Values: []string{"none", "camel", "pascal", "snake"}},
+			Option{Name: "json_tags_case_style", Type: "enum", Default: "none", Description: "Case style for JSON tags from SQL names (not rename) when emit_json_tags is true; none preserves names, camel keeps the first segment and uses Id for later id segments, pascal uses ID for id segments, and snake inserts underscores at case boundaries only when the SQL name has no underscores already.", Values: []string{"none", "camel", "pascal", "snake"}},
 			Option{Name: "emit_interface", Type: "boolean", Default: "false", Description: "Generate the Querier interface implemented by Queries."},
 			Option{Name: "emit_empty_slices", Type: "boolean", Default: "false", Description: "Return empty slices instead of nil for successful :many queries with no rows."},
 			Option{Name: "emit_exported_queries", Type: "boolean", Default: "false", Description: "Export each query's executable YQL as a Go constant named after the query."},

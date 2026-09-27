@@ -62,7 +62,7 @@ func TestGoJSONTagCaseStyleConfiguration(t *testing.T) {
 		})
 	}
 	_, err = Parse([]byte(base + "      json_tags_case_style: kebab\n"))
-	require.ErrorContains(t, err, "json_tags_case_style")
+	require.ErrorContains(t, err, `json_tags_case_style "kebab" must be none, camel, pascal, or snake`)
 }
 
 func TestGoQueryParameterLimit(t *testing.T) {

@@ -302,7 +302,7 @@ func Parse(data []byte) (*Config, error) {
 			switch g.JSONTagsCaseStyle {
 			case "none", "camel", "pascal", "snake":
 			default:
-				return nil, fmt.Errorf("sql[%d].gen.go.json_tags_case_style must be none, camel, pascal, or snake", i)
+				return nil, fmt.Errorf("sql[%d].gen.go.json_tags_case_style %q must be none, camel, pascal, or snake", i, g.JSONTagsCaseStyle)
 			}
 			if g.QueryParameterLimit == nil {
 				limit := int32(1)
