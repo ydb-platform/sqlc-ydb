@@ -380,26 +380,28 @@ func emitJDBC(b *strings.Builder, q model.AnalyzedQuery, names []string, binding
 	}
 	if jdbc.HasDeclarations(q) {
 		fmt.Fprintf(b, "        %s.unwrap(tech.ydb.jdbc.YdbConnection::class.java).prepareStatement(%s, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY).use { _prepared ->\n", connection, sql)
-		for i, p := range q.Parameters {
-			kind := p.Type.UnwrapOptional().Kind
-			if !isStructList(p.Type) && kind != "Uint64" {
-				scalar, _, _ := typeInfo(p.Type)
-				value := names[i]
-				if kind == "Timestamp" {
-					value = "java.sql.Timestamp.from(" + value + ")"
-					if p.Type.IsOptional() {
-						value = names[i] + "?.let { java.sql.Timestamp.from(it) }"
+		if !q.DeclarationOnly {
+			for i, p := range q.Parameters {
+				kind := p.Type.UnwrapOptional().Kind
+				if !isStructList(p.Type) && kind != "Uint64" {
+					scalar, _, _ := typeInfo(p.Type)
+					value := names[i]
+					if kind == "Timestamp" {
+						value = "java.sql.Timestamp.from(" + value + ")"
+						if p.Type.IsOptional() {
+							value = names[i] + "?.let { java.sql.Timestamp.from(it) }"
+						}
 					}
+					if p.Type.IsOptional() && scalar.typ != "String" && scalar.typ != "ByteArray" && kind != "Timestamp" {
+						fmt.Fprintf(b, "            if (%s == null) _prepared.setNull(%s, java.sql.Types.NULL) else ", names[i], quoted(p.Name))
+					} else {
+						b.WriteString("            ")
+					}
+					fmt.Fprintf(b, "_prepared.set%s(%s, %s)\n", scalar.jdbc, quoted(p.Name), value)
+					continue
 				}
-				if p.Type.IsOptional() && scalar.typ != "String" && scalar.typ != "ByteArray" && kind != "Timestamp" {
-					fmt.Fprintf(b, "            if (%s == null) _prepared.setNull(%s, java.sql.Types.NULL) else ", names[i], quoted(p.Name))
-				} else {
-					b.WriteString("            ")
-				}
-				fmt.Fprintf(b, "_prepared.set%s(%s, %s)\n", scalar.jdbc, quoted(p.Name), value)
-				continue
+				fmt.Fprintf(b, "            _prepared.setObject(%s, %s)\n", quoted(p.Name), indentExpression(parameterValue(p, names[i]), "            "))
 			}
-			fmt.Fprintf(b, "            _prepared.setObject(%s, %s)\n", quoted(p.Name), indentExpression(parameterValue(p, names[i]), "            "))
 		}
 	} else {
 		fmt.Fprintf(b, "        %s.prepareStatement(%s).use { _prepared ->\n", connection, sql)

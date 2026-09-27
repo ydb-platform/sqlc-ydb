@@ -120,7 +120,6 @@ public final class Queries {
         try (var _prepared = client.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
             DECLARE $value AS Uint64;\
             """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
-            _prepared.setObject("value", PrimitiveValue.newUint64(value));
             _prepared.execute();
         }
     }

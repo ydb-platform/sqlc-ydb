@@ -16,7 +16,7 @@ The tuple example explicitly declares the year parameter. For jOOQ this uses its
 
 `DeleteAuthorWithBooks` deletes an author's books and then the author in one `:exec` script with a shared `Uint64` parameter. Each generated method submits the complete script once; the caller retains connection and transaction ownership. The explicit `DECLARE` selects jOOQ's typed JDBC path, which also preserves both operations in one execution.
 
-`NoOpWithParameter` demonstrates a declaration-only `:exec` query. Its generated method accepts and binds the declared value and executes the authored SQL once, although the query does not read or write data.
+`NoOpWithParameter` demonstrates a declaration-only `:exec` query. Its generated method requires the declared value and executes the authored SQL once, although the query does not read or write data. Java/Kotlin JDBC and jOOQ do not send this unused value because the JDBC driver's prepared parameter metadata omits it; other runtimes bind it.
 
 `UpdateAuthorAndListBooks` updates an author and returns their books through `:many`. `SelectAuthorAndDeleteBooks` returns the author through `:one` and then deletes their books. Both methods execute the complete script, including operations after the SELECT, before returning. An empty `:one` result does not roll back successful writes; use a caller-owned transaction when that policy is needed. Their explicit declarations keep jOOQ on the same whole-script JDBC path.
 

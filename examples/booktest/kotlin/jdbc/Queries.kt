@@ -109,7 +109,6 @@ class Queries(private val client: java.sql.Connection) {
     fun noOpWithParameter(value_: Long): Unit {
         client.unwrap(tech.ydb.jdbc.YdbConnection::class.java).prepareStatement(
             "DECLARE \$value AS Uint64;", tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY).use { _prepared ->
-            _prepared.setObject("value", PrimitiveValue.newUint64(value_))
             _prepared.execute()
         }
     }

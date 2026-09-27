@@ -89,6 +89,7 @@ func analyzeQuery(catalog model.Catalog, block queryBlock) (model.AnalyzedQuery,
 	if diagnostics = validateQueryStatements(block, tree); len(diagnostics) != 0 {
 		return query, diagnostics
 	}
+	query.DeclarationOnly = isDeclarationOnlyExec(block, tree)
 	if contextDiagnostics := validateINSubqueryContexts(block, parsed.tree); len(contextDiagnostics) != 0 {
 		return query, append(diagnostics, contextDiagnostics...)
 	}
@@ -499,7 +500,7 @@ func validateQueryStatements(block queryBlock, tree queryTree) []model.Diagnosti
 	}
 	if len(dataStatements) == 0 {
 		if block.command == model.Exec && len(tree.declares) != 0 {
-			if len(tree.statements) == len(tree.declares) {
+			if isDeclarationOnlyExec(block, tree) {
 				return nil
 			}
 			for _, statement := range tree.statements {
@@ -550,6 +551,10 @@ func validateQueryStatements(block queryBlock, tree queryTree) []model.Diagnosti
 		return []model.Diagnostic{diagnosticAt(block.file, block.line-1, dataStatements[0], message)}
 	}
 	return nil
+}
+
+func isDeclarationOnlyExec(block queryBlock, tree queryTree) bool {
+	return block.command == model.Exec && len(tree.declares) != 0 && len(tree.statements) == len(tree.declares)
 }
 
 func declarations(block queryBlock, tree queryTree) (map[string]model.Type, map[int]bool, []model.Diagnostic) {

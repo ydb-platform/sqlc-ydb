@@ -118,6 +118,7 @@ func TestDeclareOnlyExecRetainsUnusedParameters(t *testing.T) {
 	require.Equal(t, sql, q.SQL)
 	require.Equal(t, []model.Parameter{{Name: "id", Type: model.Type{Kind: "Uint64"}}, {Name: "name", Type: model.Optional(model.Type{Kind: "Utf8"})}}, q.Parameters)
 	require.Equal(t, []string{"id", "name"}, q.DeclaredParameters)
+	require.True(t, q.DeclarationOnly)
 	require.Empty(t, q.ResultSets)
 	require.False(t, q.MultipleStatements)
 }

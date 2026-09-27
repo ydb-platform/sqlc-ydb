@@ -65,6 +65,23 @@ func TestJDBCUsesStandardPositionalParameters(t *testing.T) {
 	require.Contains(t, generated, wantPrepared, "generated Kotlin JDBC API did not use positional SQL:\n%s", generated)
 }
 
+func TestJDBCDeclarationOnlySkipsUnusedBinding(t *testing.T) {
+	const sql = "-- name: NoOpWithParameter :exec\nDECLARE $value AS Uint64;\nDECLARE $name AS Utf8;"
+	analysis, err := analyzer.Analyze(nil, []model.Source{{Name: "queries.sql", Text: sql}})
+	require.NoError(t, err)
+	for _, runtime := range []string{"jdbc", "exposed"} {
+		t.Run(runtime, func(t *testing.T) {
+			files, err := Generate(analysis, Options{Runtime: runtime})
+			require.NoError(t, err)
+			generated := string(files[len(files)-1].Content)
+			require.Contains(t, generated, "fun noOpWithParameter(value_: Long, name: String)")
+			require.Contains(t, generated, `DECLARE \$value AS Uint64;`)
+			require.Contains(t, generated, `DECLARE \$name AS Utf8;`)
+			require.NotRegexp(t, `_prepared\.set\w+\(`, generated)
+		})
+	}
+}
+
 func TestNullableScalarModelsAndRuntimeOwnership(t *testing.T) {
 	a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{Name: "GetAuthor", Command: model.One, SQL: "SELECT $id;", Parameters: []model.Parameter{{Name: "id", Type: model.Type{Kind: "Uint64"}}}, ResultSets: []model.ResultSet{{Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Uint64"}}, {Name: "bio", Type: model.Optional(model.Type{Kind: "Utf8"})}}}}}}}
 	for _, runtime := range []string{"", "native", "ydb", "jdbc", "exposed"} {
