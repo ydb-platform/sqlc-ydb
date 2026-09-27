@@ -36,6 +36,7 @@ func TestRecordsNative(t *testing.T) {
 	require.Len(t, days, 2)
 	require.Equal(t, "a", days[0].RecordID)
 	require.Equal(t, uint32(createdAt.Truncate(24*time.Hour).Unix()), days[0].CreatedDayStart)
+	require.Equal(t, "b", days[1].RecordID)
 	key := native.GetRecordKey{OwnerHash: rows[0].OwnerHash, RecordID: "a"}
 	row, err := q.GetRecord(ctx, key)
 	require.NoError(t, err)
@@ -127,6 +128,7 @@ func TestRecordsDatabaseSQL(t *testing.T) {
 	require.Len(t, days, 2)
 	require.Equal(t, "a", days[0].RecordID)
 	require.Equal(t, uint32(createdAt.Truncate(24*time.Hour).Unix()), days[0].CreatedDayStart)
+	require.Equal(t, "b", days[1].RecordID)
 	key := sq.GetRecordKey{OwnerHash: rows[0].OwnerHash, RecordID: "a"}
 	row, err := q.GetRecord(ctx, key)
 	require.NoError(t, err)

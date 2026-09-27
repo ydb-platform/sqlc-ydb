@@ -30,6 +30,7 @@ func TestDateTimeDocumentedResourceOverloads(t *testing.T) {
 		name, result, resource string
 	}{
 		{"MakeDate", "Date", dateTimeTM}, {"MakeDate32", "Date32", dateTimeTM64},
+		{"MakeTzDate", "TzDate", dateTimeTM},
 		{"MakeTzDate32", "TzDate32", dateTimeTM64}, {"MakeDatetime", "Datetime", dateTimeTM},
 		{"MakeTzDatetime", "TzDatetime", dateTimeTM}, {"MakeDatetime64", "Datetime64", dateTimeTM64},
 		{"MakeTzDatetime64", "TzDatetime64", dateTimeTM64}, {"MakeTimestamp", "Timestamp", dateTimeTM},
@@ -101,7 +102,6 @@ func TestDateTimeDocumentedResourceOverloads(t *testing.T) {
 
 func TestDateTimeMakeTzDate(t *testing.T) {
 	resource := udfKind(dateTimeTM)
-	checkDocumentedUDF(t, "DateTime::MakeTzDate", []model.Type{resource}, udfKind("TzDate"))
 	checkDocumentedUDF(t, "DateTime::MakeTzDate", []model.Type{model.Optional(resource)}, model.Optional(udfKind("TzDate")))
 	_, err := Resolve("DateTime::MakeTzDate", []model.Type{udfKind(dateTimeTM64)})
 	require.Error(t, err)
