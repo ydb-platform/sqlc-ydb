@@ -259,6 +259,109 @@ func TestGeneratedSQLPreservesExplicitDeclarations(t *testing.T) {
 	}
 }
 
+func TestExportedQueryConstants(t *testing.T) {
+	const body = "DECLARE $id AS Uint64;\r\nSELECT `id`, `bio` FROM `users` WHERE id = $id; -- ☀\r\n"
+	in := sample()
+	in.Queries[0].Name = "getUser"
+	in.Queries[0].SQL = "-- name: getUser :one\r\n" + body
+	for _, runtime := range []string{"database/sql", "ydb"} {
+		t.Run(runtime, func(t *testing.T) {
+			opts := Options{Package: "db", Runtime: runtime, EmitExportedQueries: true}
+			files, err := Generate(in, opts)
+			require.NoError(t, err)
+			var source []byte
+			for _, f := range files {
+				if f.Name == "query.sql.go" {
+					source = f.Content
+				}
+			}
+			require.Contains(t, string(source), "const GetUser =")
+			require.Contains(t, string(source), "const ListUsers =")
+			require.Contains(t, string(source), "const UpdateUser =")
+			fset := token.NewFileSet()
+			parsed, err := parser.ParseFile(fset, "query.sql.go", source, 0)
+			require.NoError(t, err)
+			var expr ast.Expr
+			for _, decl := range parsed.Decls {
+				constant, ok := decl.(*ast.GenDecl)
+				if !ok || constant.Tok != token.CONST {
+					continue
+				}
+				for _, spec := range constant.Specs {
+					value := spec.(*ast.ValueSpec)
+					if value.Names[0].Name == "GetUser" {
+						expr = value.Values[0]
+					}
+				}
+			}
+			require.NotNil(t, expr)
+			start, end := fset.Position(expr.Pos()).Offset, fset.Position(expr.End()).Offset
+			got, err := types.Eval(fset, nil, token.NoPos, string(source[start:end]))
+			require.NoError(t, err)
+			require.Equal(t, body, constant.StringVal(got.Value))
+			if runtime == "database/sql" {
+				require.Contains(t, string(source), "q.db.QueryRowContext(ctx, GetUser,")
+				require.Contains(t, string(source), "q.db.QueryContext(ctx, ListUsers)")
+				require.Contains(t, string(source), "q.db.ExecContext(ctx, UpdateUser,")
+			} else {
+				require.Contains(t, string(source), "q.db.QueryRow(ctx, GetUser,")
+				require.Contains(t, string(source), "q.db.Query(ctx, ListUsers,")
+				require.Contains(t, string(source), "q.db.Exec(ctx, UpdateUser,")
+			}
+			compileInput(t, in, opts)
+
+			defaultSource := generatedSQLSourceForAnalysis(t, runtime, in)
+			require.NotContains(t, string(defaultSource), "const GetUser =")
+			require.Equal(t, body, generatedSQLValue(t, defaultSource))
+		})
+	}
+}
+
+func TestExportedQueryConstantForEach(t *testing.T) {
+	in := sample()
+	in.Queries = in.Queries[1:2]
+	in.Queries[0].Name = "StreamUsers"
+	in.Queries[0].Command = model.Each
+	for _, runtime := range []string{"database/sql", "ydb"} {
+		t.Run(runtime, func(t *testing.T) {
+			opts := Options{Package: "db", Runtime: runtime, EmitExportedQueries: true}
+			files, err := Generate(in, opts)
+			require.NoError(t, err)
+			for _, f := range files {
+				if f.Name == "query.sql.go" {
+					require.Contains(t, string(f.Content), "const StreamUsers =")
+					require.Contains(t, string(f.Content), "ctx, StreamUsers")
+				}
+			}
+			compileInput(t, in, opts)
+		})
+	}
+}
+
+func TestExportedQueryConstantCollisions(t *testing.T) {
+	for _, tc := range []struct {
+		name, query, want string
+	}{
+		{"constructor", "New", "constant New conflicts with generated declaration"},
+		{"result row", "GetUserRow", "constant GetUserRow conflicts with generated declaration"},
+		{"same exported name", "getUser", "constant GetUser conflicts with generated declaration"},
+		{"unexported", "_getUser", "cannot form an exported Go constant"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := sample()
+			if tc.name == "result row" || tc.name == "same exported name" {
+				in.Queries[1].Name = tc.query
+			} else {
+				in.Queries[0].Name = tc.query
+			}
+			for _, runtime := range []string{"database/sql", "ydb"} {
+				_, err := Generate(in, Options{Package: "db", Runtime: runtime, EmitExportedQueries: true})
+				require.ErrorContains(t, err, tc.want)
+			}
+		})
+	}
+}
+
 func TestGeneratedDatabaseSQLFormatsMultiParameterQueryRowCall(t *testing.T) {
 	utf8 := model.Type{Kind: "Utf8"}
 	u64 := model.Type{Kind: "Uint64"}
