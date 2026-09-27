@@ -57,12 +57,16 @@ func validateStructParameter(t model.Type, o Options) error {
 		return fmt.Errorf("%s requires at least one field", kind)
 	}
 	names := map[string]bool{}
+	tags := map[string]bool{}
 	for _, f := range fields {
 		name := o.fieldName(f.Name)
 		if f.Name == "" || !ident(name) || names[name] {
 			return fmt.Errorf("%s has invalid or colliding field %q", kind, f.Name)
 		}
 		names[name] = true
+		if err := o.addJSONTag(tags, f.Name); err != nil {
+			return fmt.Errorf("%s: %w", kind, err)
+		}
 		scalar := f.Type
 		if scalar.IsOptional() && scalar.Elem != nil {
 			scalar = *scalar.Elem
@@ -90,7 +94,7 @@ func writeStructModel(b *bytes.Buffer, q model.AnalyzedQuery, p model.Parameter,
 		imports.add(f.Type)
 		b.WriteString(o.fieldName(f.Name) + " " + typ)
 		if o.EmitJSONTags {
-			b.WriteString(" `json:" + strconv.Quote(f.Name) + "`")
+			b.WriteString(" `json:" + strconv.Quote(o.jsonTagName(f.Name)) + "`")
 		}
 		b.WriteByte('\n')
 	}
@@ -227,12 +231,16 @@ func validateStructDeclarations(in *model.AnalysisResult, o Options) error {
 		}
 		names[name] = true
 		fields := map[string]bool{}
+		tags := map[string]bool{}
 		for _, column := range table.Columns {
 			field := o.fieldName(column.Name)
 			if fields[field] {
 				return fmt.Errorf("embedded table %q: colliding model field %q", table.Name, column.Name)
 			}
 			fields[field] = true
+			if err := o.addJSONTag(tags, column.Name); err != nil {
+				return fmt.Errorf("embedded table %q: %w", table.Name, err)
+			}
 		}
 	}
 	for _, q := range in.Queries {

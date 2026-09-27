@@ -8,6 +8,7 @@ import (
 	"go/format"
 	"go/token"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,6 +24,7 @@ type Options struct {
 	Rename              map[string]string
 	Overrides           []config.GoOverride
 	EmitJSONTags        bool
+	JSONTagsCaseStyle   string
 	EmitInterface       bool
 	EmitEmptySlices     bool
 	EmitExportedQueries bool
@@ -47,6 +49,11 @@ func Generate(in *model.AnalysisResult, o Options) ([]model.File, error) {
 	}
 	if o.Runtime != "ydb" && o.Runtime != "database/sql" {
 		return nil, fmt.Errorf("unsupported Go runtime %q", o.Runtime)
+	}
+	switch o.JSONTagsCaseStyle {
+	case "", "none", "camel", "pascal", "snake":
+	default:
+		return nil, fmt.Errorf("json_tags_case_style %q must be none, camel, pascal, or snake", o.JSONTagsCaseStyle)
 	}
 	if o.QueryParameterLimit == nil {
 		limit := int32(1)
@@ -142,7 +149,8 @@ func validate(in *model.AnalysisResult, o Options) error {
 		if q.Command == model.ExecRows {
 			return fmt.Errorf("%s: :execrows is unavailable for %s", q.Name, o.Runtime)
 		}
-		if (q.Command == model.One || q.Command == model.Many || q.Command == model.Each) && (len(q.ResultSets) != 1 || len(q.ResultSets[0].Columns) == 0) {
+		singleResult := q.Command == model.One || q.Command == model.Many || q.Command == model.Each
+		if singleResult && (len(q.ResultSets) != 1 || len(q.ResultSets[0].Columns) == 0) {
 			return fmt.Errorf("%s: %s requires one non-empty result set", q.Name, q.Command)
 		}
 		if q.Command == model.Multi {
@@ -158,13 +166,20 @@ func validate(in *model.AnalysisResult, o Options) error {
 				}
 			}
 		}
+		paramsStruct := useParamsStruct(q, o)
 		field := map[string]bool{}
+		tags := map[string]bool{}
 		for _, p := range q.Parameters {
 			name := o.fieldName(p.Name)
 			if !ident(name) || field[name] {
 				return fmt.Errorf("%s: colliding parameter %q", q.Name, p.Name)
 			}
 			field[name] = true
+			if paramsStruct {
+				if err := o.addJSONTag(tags, p.Name); err != nil {
+					return fmt.Errorf("%s parameters: %w", q.Name, err)
+				}
+			}
 			if _, err := o.parameterGoType(q, p); err != nil {
 				return fmt.Errorf("%s parameter %s: %w", q.Name, p.Name, err)
 			}
@@ -188,6 +203,7 @@ func validate(in *model.AnalysisResult, o Options) error {
 		}
 		for _, rs := range q.ResultSets {
 			field := map[string]bool{}
+			tags := map[string]bool{}
 			for i, c := range rs.Columns {
 				if embed := embeddingAt(rs, i); embed == nil || embed.Start == i {
 					name := c.Name
@@ -199,6 +215,11 @@ func validate(in *model.AnalysisResult, o Options) error {
 						return fmt.Errorf("%s: colliding result field %q", q.Name, name)
 					}
 					field[n] = true
+					if singleResult || q.Command == model.Multi {
+						if err := o.addJSONTag(tags, name); err != nil {
+							return fmt.Errorf("%s: %w", q.Name, err)
+						}
+					}
 				}
 				if _, err := o.columnGoType(c); err != nil {
 					return fmt.Errorf("%s column %s: %w", q.Name, c.Name, err)
@@ -366,7 +387,7 @@ func models(in *model.AnalysisResult, o Options) []byte {
 			}
 			b.WriteString(o.fieldName(c.Name) + " " + typ)
 			if o.EmitJSONTags {
-				b.WriteString(" `json:" + strconv.Quote(c.Name) + "`")
+				b.WriteString(" `json:" + strconv.Quote(o.jsonTagName(c.Name)) + "`")
 			}
 			b.WriteString("\n")
 		}
@@ -390,7 +411,7 @@ func models(in *model.AnalysisResult, o Options) []byte {
 						if embed.Start == i {
 							b.WriteString(o.fieldName(embed.Field) + " " + o.embeddedGoType(embed.Table))
 							if o.EmitJSONTags {
-								b.WriteString(" `json:" + strconv.Quote(embed.Field) + "`")
+								b.WriteString(" `json:" + strconv.Quote(o.jsonTagName(embed.Field)) + "`")
 							}
 							b.WriteString("\n")
 						}
@@ -404,7 +425,7 @@ func models(in *model.AnalysisResult, o Options) []byte {
 					}
 					b.WriteString(o.fieldName(c.Name) + " " + typ)
 					if o.EmitJSONTags {
-						b.WriteString(" `json:" + strconv.Quote(c.Name) + "`")
+						b.WriteString(" `json:" + strconv.Quote(o.jsonTagName(c.Name)) + "`")
 					}
 					b.WriteString("\n")
 				}
@@ -431,7 +452,7 @@ func models(in *model.AnalysisResult, o Options) []byte {
 				}
 				b.WriteString(o.fieldName(p.Name) + " " + typ)
 				if o.EmitJSONTags {
-					b.WriteString(" `json:" + strconv.Quote(p.Name) + "`")
+					b.WriteString(" `json:" + strconv.Quote(o.jsonTagName(p.Name)) + "`")
 				}
 				b.WriteString("\n")
 			}
@@ -1171,6 +1192,50 @@ func (o Options) fieldName(source string) string {
 		return renamed
 	}
 	return goName(source)
+}
+
+var jsonSnakePattern = regexp.MustCompile("([^A-Z])([A-Z]+)")
+
+func (o Options) jsonTagName(name string) string {
+	switch o.JSONTagsCaseStyle {
+	case "", "none":
+		return name
+	case "snake":
+		if !strings.ContainsRune(name, '_') {
+			name = jsonSnakePattern.ReplaceAllString(name, "${1}_${2}")
+		}
+		return strings.ToLower(name)
+	default:
+		var b strings.Builder
+		for i, part := range strings.Split(name, "_") {
+			if i == 0 && o.JSONTagsCaseStyle == "camel" {
+				b.WriteString(part)
+				continue
+			}
+			if part == "id" {
+				if o.JSONTagsCaseStyle == "pascal" {
+					b.WriteString("ID")
+				} else {
+					b.WriteString("Id")
+				}
+				continue
+			}
+			b.WriteString(strings.Title(part)) //nolint:staticcheck // Match upstream sqlc's case conversion for quoted identifiers.
+		}
+		return b.String()
+	}
+}
+
+func (o Options) addJSONTag(seen map[string]bool, name string) error {
+	if !o.EmitJSONTags {
+		return nil
+	}
+	tag := o.jsonTagName(name)
+	if seen[tag] {
+		return fmt.Errorf("colliding JSON tag %q", tag)
+	}
+	seen[tag] = true
+	return nil
 }
 func ident(s string) bool {
 	if s == "" {

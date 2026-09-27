@@ -1,0 +1,1 @@
+<fixture>/sqlc.yaml: sql[0].gen.go.json_tags_case_style "kebab" must be none, camel, pascal, or snake

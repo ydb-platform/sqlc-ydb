@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Support `gen.go.json_tags_case_style` with `none`, `camel`, `pascal`, and `snake` JSON tag styles.
+
 ## v0.8.1
 
 ### Added

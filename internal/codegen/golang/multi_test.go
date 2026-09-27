@@ -42,6 +42,17 @@ func TestMultiGoGeneration(t *testing.T) {
 	}
 }
 
+func TestMultiJSONTagCaseStyle(t *testing.T) {
+	const sql = "-- name: Read :multi\nSELECT 1 AS account_id;\nSELECT 2 AS value;"
+	in, err := analyzer.Analyze(nil, []model.Source{{Name: "query.sql", Text: sql}})
+	require.NoError(t, err)
+	for _, runtime := range []string{"ydb", "database/sql"} {
+		files, err := Generate(in, Options{Runtime: runtime, EmitJSONTags: true, JSONTagsCaseStyle: "camel"})
+		require.NoError(t, err)
+		require.Contains(t, string(files[0].Content), "AccountID int32 `json:\"accountId\"`")
+	}
+}
+
 func TestMultiGeneratedTypeCollision(t *testing.T) {
 	in := multiInput(t)
 	in.Queries = append(in.Queries, model.AnalyzedQuery{

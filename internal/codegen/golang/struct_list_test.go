@@ -58,6 +58,17 @@ func TestNames(t *testing.T){ fields,err:=types.StructFields(bindUpdateBookBook(
 	}
 }
 
+func TestStructuredParameterJSONTagCaseStyle(t *testing.T) {
+	fields := []model.StructField{{Name: "book_id", Type: model.Type{Kind: "Uint64"}}}
+	for _, input := range []*model.AnalysisResult{structInput(fields...), batchInput(fields...)} {
+		for _, runtime := range []string{"ydb", "database/sql"} {
+			files, err := Generate(input, Options{Package: "db", Runtime: runtime, EmitJSONTags: true, JSONTagsCaseStyle: "camel"})
+			require.NoError(t, err)
+			require.Contains(t, string(files[0].Content), "BookID uint64 `json:\"bookId\"`")
+		}
+	}
+}
+
 func TestRenamedStructParameterMembersBindByWireName(t *testing.T) {
 	in := structInput(model.StructField{Name: "title", Type: model.Type{Kind: "Utf8"}}, model.StructField{Name: "payload", Type: model.Type{Kind: "String"}})
 	for _, runtime := range []string{"ydb", "database/sql"} {

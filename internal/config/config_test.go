@@ -49,6 +49,22 @@ sql:
 	require.Equal(t, map[string]string{"spotify_url": "SpotifyURL", "id": "Identifier"}, c.SQL[0].Gen.Go.Rename)
 }
 
+func TestGoJSONTagCaseStyleConfiguration(t *testing.T) {
+	base := "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n  gen:\n    go:\n      out: db\n"
+	c, err := Parse([]byte(base))
+	require.NoError(t, err)
+	require.Equal(t, "none", c.SQL[0].Gen.Go.JSONTagsCaseStyle)
+	for _, style := range []string{"none", "camel", "pascal", "snake"} {
+		t.Run(style, func(t *testing.T) {
+			c, err := Parse([]byte(base + "      json_tags_case_style: " + style + "\n"))
+			require.NoError(t, err)
+			require.Equal(t, style, c.SQL[0].Gen.Go.JSONTagsCaseStyle)
+		})
+	}
+	_, err = Parse([]byte(base + "      json_tags_case_style: kebab\n"))
+	require.ErrorContains(t, err, `json_tags_case_style "kebab" must be none, camel, pascal, or snake`)
+}
+
 func TestGoQueryParameterLimit(t *testing.T) {
 	base := "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n  gen:\n    go:\n      out: db\n"
 	for _, tc := range []struct {
