@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.6.0
+
 ### Added
 
 - Resolve `COUNT(DISTINCT direct_column)` as a required `Uint64` across generated runtimes.
