@@ -46,6 +46,7 @@ type Go struct {
 	Rename              map[string]string `yaml:"rename"`
 	Overrides           []GoOverride      `yaml:"overrides"`
 	BuildTags           string            `yaml:"build_tags"`
+	EmitDBTags          bool              `yaml:"emit_db_tags"`
 	EmitJSONTags        bool              `yaml:"emit_json_tags"`
 	JSONTagsCaseStyle   string            `yaml:"json_tags_case_style"`
 	EmitInterface       bool              `yaml:"emit_interface"`

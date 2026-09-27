@@ -15,6 +15,7 @@ sql:
           display_name: Label
         emit_json_tags: true
         json_tags_case_style: camel
+        emit_db_tags: true
   - name: database-sql
     engine: ydb
     schema: schema.sql
@@ -30,3 +31,4 @@ sql:
           display_name: Label
         emit_json_tags: true
         json_tags_case_style: camel
+        emit_db_tags: true
