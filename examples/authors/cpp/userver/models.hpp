@@ -86,4 +86,9 @@ struct EchoAuthorIDTextRow final {
     ::userver::ydb::Utf8 author_id_text;
 };
 
+struct ListAuthorNameWordsRow final {
+    std::uint64_t id;
+    ::userver::ydb::Utf8 word;
+};
+
 }  // namespace authors::userver

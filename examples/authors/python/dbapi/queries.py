@@ -323,3 +323,24 @@ class Querier:
             )
         finally:
             cursor.close()
+
+    # -- name: ListAuthorNameWords :many
+    def list_author_name_words(self) -> list[_models.ListAuthorNameWordsRow]:
+        parameters = {
+        }
+        cursor = self._connection.cursor()
+        try:
+            cursor.execute(
+                ("SELECT id, word\n"
+                 "FROM (SELECT id, Unicode::SplitToList(name, \" \"u) AS words FROM authors)\n"
+                 "FLATTEN LIST BY words AS word\n"
+                 "ORDER BY id, word;"),
+                parameters,
+            )
+            rows = cursor.fetchall()
+            return [_models.ListAuthorNameWordsRow(
+                id=row[0],
+                word=row[1],
+            ) for row in rows]
+        finally:
+            cursor.close()
