@@ -47,6 +47,7 @@ func TestGoOverridesGeneratedRuntime(t *testing.T) {
 			input.Catalog = embedded.Catalog
 			input.Queries = append(input.Queries, embedded.Queries...)
 			options := overrideOptions(runtime)
+			options.EmitInterface = true
 			options.Overrides = append(options.Overrides, config.GoOverride{Column: "authors.name", GoType: config.GoType{Import: "generated/domain", Type: "AuthorName"}})
 			files, err := Generate(input, options)
 			require.NoError(t, err)
@@ -55,6 +56,7 @@ func TestGoOverridesGeneratedRuntime(t *testing.T) {
 				if file.Name == "models.go" {
 					require.Regexp(t, `(?s)type Authors struct \{[^}]*Name\s+sqlcOverride0\.AuthorName`, string(file.Content))
 					require.Regexp(t, `(?s)type GetAuthorRow struct \{[^}]*Authors\s+Authors`, string(file.Content))
+					require.Contains(t, string(file.Content), "GetCustomer(ctx context.Context, arg CustomerID")
 				}
 				require.NoError(t, os.WriteFile(filepath.Join(dir, file.Name), file.Content, 0600))
 			}
@@ -161,6 +163,28 @@ func TestGoOverrideConflictAndUnsupportedTypes(t *testing.T) {
 		}
 	}
 	require.True(t, strings.Contains(models, `"generated/domain"`))
+}
+
+func TestGoOverrideInvalidRuleDiagnostics(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		change func(*Options)
+		want   string
+	}{
+		{"package without import", func(o *Options) { o.Overrides[0].GoType.Import = "" }, "go_type.package requires go_type.import"},
+		{"invalid import", func(o *Options) { o.Overrides[0].GoType.Import = "generated//domain" }, "invalid go_type.import"},
+		{"invalid package", func(o *Options) { o.Overrides[0].GoType.Package = "bad-name" }, "invalid go_type.package"},
+		{"malformed column", func(o *Options) { o.Overrides[2].Column = "customers" }, "column must be table.column"},
+		{"duplicate type", func(o *Options) { o.Overrides = append(o.Overrides, o.Overrides[0]) }, "duplicate override"},
+		{"duplicate column", func(o *Options) { o.Overrides = append(o.Overrides, o.Overrides[2]) }, "duplicate override"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			options := overrideOptions("ydb")
+			tc.change(&options)
+			_, err := Generate(overrideInput(), options)
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
 }
 
 func TestColumnOverrideRejectsUnsupportedMatchedTypes(t *testing.T) {

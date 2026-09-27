@@ -102,7 +102,11 @@ func TestGoOverrideConfigurationErrors(t *testing.T) {
 	base := "version: '2'\nsql:\n- engine: ydb\n  schema: s.sql\n  queries: q.sql\n  gen:\n    go:\n      out: db\n      overrides:\n      - "
 	for _, tc := range []struct{ entry, want string }{
 		{"db_type: Utf8\n        column: users.name\n        go_type: Name", "exactly one"},
+		{"go_type: Name", "exactly one"},
 		{"db_type: Utf8", "go_type is required"},
+		{"db_type: Utf8\n        go_type: 42", "go_type must be a string or mapping"},
+		{"db_type: Utf8\n        go_type: [Name]", "go_type must be a string or mapping"},
+		{"Name", "override must be a mapping"},
 		{"db_type: Utf8\n        go_type: {type: Name, pointer: true}", "pointer"},
 		{"db_type: Utf8\n        go_type: {type: Name, pointer: false}", "pointer"},
 		{"db_type: Utf8\n        go_type: {type: Name, slice: false}", "slice"},
@@ -111,6 +115,7 @@ func TestGoOverrideConfigurationErrors(t *testing.T) {
 		{"column: users.name\n        nullable: true\n        go_type: Name", "nullable applies only"},
 		{"column: users.name\n        nullable: false\n        go_type: Name", "nullable applies only"},
 		{"db_type: Utf8\n        go_type: {type: Name, unknown: true}", "unsupported go_type option"},
+		{"db_type: Utf8\n        go_type: Name\n        unknown: true", "unknown override option"},
 	} {
 		_, err := Parse([]byte(base + tc.entry + "\n"))
 		require.ErrorContains(t, err, tc.want)
