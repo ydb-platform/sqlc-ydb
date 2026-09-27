@@ -376,6 +376,11 @@ func jooqRequiresFullSQL(q model.AnalyzedQuery) bool {
 	if q.Syntax == nil {
 		return false
 	}
+	for _, source := range jooqNodes[*parser.Flatten_sourceContext](q.Syntax.Root) {
+		if source.FLATTEN() != nil {
+			return true
+		}
+	}
 	for _, group := range jooqNodes[*parser.Group_by_clauseContext](q.Syntax.Root) {
 		for _, named := range jooqNodes[*parser.Named_exprContext](group) {
 			if named.AS() != nil {

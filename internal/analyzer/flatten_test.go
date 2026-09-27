@@ -79,3 +79,22 @@ func TestAnalyzeFlattenListByRejectsUnknownAndCollidingColumns(t *testing.T) {
 		})
 	}
 }
+
+func TestAnalyzeFlattenListByRejectsEmbedOfTransformedTable(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, tags List<Utf8>, PRIMARY KEY(id));`}}
+	query := []model.Source{{Name: "query.sql", Text: `-- name: Read :many
+SELECT sqlc.embed(a) FROM authors AS a FLATTEN LIST BY tags;`}}
+	_, err := Analyze(schema, query)
+	require.ErrorContains(t, err, "sqlc.embed requires a physical catalog table")
+	require.ErrorContains(t, err, "flattened")
+}
+
+func TestAnalyzeFlattenListByRejectsIgnoredSourceColumnList(t *testing.T) {
+	for _, sql := range []string{
+		`SELECT x.n FROM (SELECT AsList("a") AS tags, 1 AS n) AS x(n);`,
+		`SELECT x.n FROM (SELECT AsList("a") AS tags, 1 AS n) AS x(n) FLATTEN LIST BY tags;`,
+	} {
+		_, err := Analyze(nil, []model.Source{{Name: "query.sql", Text: "-- name: Read :many\n" + sql}})
+		require.ErrorContains(t, err, "source column lists are unsupported")
+	}
+}

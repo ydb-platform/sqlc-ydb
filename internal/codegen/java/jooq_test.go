@@ -90,6 +90,19 @@ func TestJooqUsesFullSQLForDerivedFlattenListBy(t *testing.T) {
 	require.Contains(t, string(files[len(files)-1].Content), "FLATTEN LIST BY words AS word")
 }
 
+func TestJooqUsesFullSQLForPhysicalFlattenListBy(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE authors (id Uint64 NOT NULL, tags List<Utf8>, PRIMARY KEY(id));`}}
+	queries := []model.Source{{Name: "query.sql", Text: "-- name: Words :many\nSELECT tag FROM authors AS a FLATTEN LIST BY tags AS tag;"}}
+	a, err := analyzer.Analyze(schema, queries)
+	require.NoError(t, err)
+	q := a.Queries[0]
+	require.True(t, jooqRequiresFullSQL(q))
+	sql, err := jooqDeclaredSQL(q, jdbc.NamedSQL(q))
+	require.NoError(t, err)
+	require.Contains(t, sql, "FLATTEN LIST BY tags AS tag")
+	require.Contains(t, sql, "dsl.render(AUTHORS)")
+}
+
 func TestJooqRejectsSelectBackedDML(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: "CREATE TABLE items (id Uint64 NOT NULL, name Utf8, PRIMARY KEY(id));"}}
 	for _, sql := range []string{

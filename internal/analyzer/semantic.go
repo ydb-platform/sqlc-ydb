@@ -827,6 +827,10 @@ func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser
 				continue
 			}
 			single := named.Hinted_single_source().Single_source()
+			if named.Pure_column_list() != nil {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, named.Pure_column_list(), "source column lists are unsupported; use named SELECT columns"))
+				continue
+			}
 			if named.Hinted_single_source().Table_hints() != nil || named.Sample_clause() != nil || named.Tablesample_clause() != nil {
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, "table hints and sampling are not yet supported"))
 				continue
@@ -920,6 +924,7 @@ func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser
 				if len(ds) != 0 {
 					continue
 				}
+				rel.physical = false
 			}
 			relations = append(relations, rel)
 			if i > 0 {
