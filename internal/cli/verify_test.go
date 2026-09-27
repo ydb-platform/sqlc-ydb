@@ -33,6 +33,8 @@ func TestVerifyReleasedQueriesAgainstProposedSchema(t *testing.T) {
 		"-- name: Current :one\nSELECT id FROM records;")
 	code, _, stderr := invoke("verify", "--against", released, "-f", proposed)
 	require.Zero(t, code, stderr)
+	code, _, stderr = invoke("verify", "--against="+released, "-f", proposed)
+	require.Zero(t, code, stderr)
 	_, err := os.Stat(filepath.Join(dir, "db"))
 	require.ErrorIs(t, err, os.ErrNotExist, "verify wrote generated files")
 
@@ -102,9 +104,40 @@ func TestVerifyRequiresBaseline(t *testing.T) {
 	code, _, stderr := invoke("verify")
 	require.NotZero(t, code)
 	require.Contains(t, stderr, "--against")
+	for _, args := range [][]string{{"verify", "--against"}, {"verify", "--against="}} {
+		code, _, stderr = invoke(args...)
+		require.NotZero(t, code)
+		require.Contains(t, stderr, "--against requires a non-empty path")
+	}
 	code, _, stderr = invoke("compile", "--against", "sqlc.yaml")
 	require.NotZero(t, code)
 	require.Contains(t, stderr, "--against")
+	released, proposed, _ := verifyFixture(t,
+		"CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));",
+		"CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));",
+		"-- name: ReadRecord :one\nSELECT id FROM records;",
+		"-- name: Current :one\nSELECT id FROM records;")
+	code, _, stderr = invoke("verify", "--against", released+".missing", "-f", proposed)
+	require.NotZero(t, code)
+	require.Contains(t, stderr, "released configuration")
+}
+
+func TestVerifyRejectsAmbiguousQuerySetNames(t *testing.T) {
+	released, proposed, _ := verifyFixture(t,
+		"CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));",
+		"CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));",
+		"-- name: ReadRecord :one\nSELECT id FROM records;",
+		"-- name: Current :one\nSELECT id FROM records;")
+	set := "- name: app\n  engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n"
+	put(t, released, "version: '2'\nsql:\n"+set+set)
+	code, _, stderr := invoke("verify", "--against", released, "-f", proposed)
+	require.NotZero(t, code)
+	require.Contains(t, stderr, "released query set name \"app\" is repeated")
+	put(t, released, "version: '2'\nsql:\n"+set)
+	put(t, proposed, "version: '2'\nsql:\n"+set+set)
+	code, _, stderr = invoke("verify", "--against", released, "-f", proposed)
+	require.NotZero(t, code)
+	require.Contains(t, stderr, "multiple proposed query sets named \"app\"")
 }
 
 func TestVerifyRejectsMissingQuerySetBeforeDatabaseAccess(t *testing.T) {
@@ -132,6 +165,10 @@ func TestVerifyUnnamedSetsAndLocalSchemaRequirement(t *testing.T) {
 	}
 	code, _, stderr := invoke("verify", "--against", released, "-f", proposed)
 	require.Zero(t, code, stderr)
+	put(t, proposed, "version: '2'\nsql:\n- name: app\n  engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n")
+	code, _, stderr = invoke("verify", "--against", released, "-f", proposed)
+	require.NotZero(t, code)
+	require.Contains(t, stderr, "unnamed query set has no unnamed proposed sql[0]")
 	put(t, proposed, "version: '2'\nsql:\n- engine: ydb\n  queries: queries.sql\n  database:\n    uri: grpc://127.0.0.1:1/local\n")
 	code, _, stderr = invoke("verify", "--against", released, "-f", proposed)
 	require.NotZero(t, code)
