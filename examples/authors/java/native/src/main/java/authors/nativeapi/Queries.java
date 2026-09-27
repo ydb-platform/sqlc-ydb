@@ -289,4 +289,25 @@ public final class Queries {
         String _value0 = _rows.getColumn(0).getText();
         return java.util.Optional.of(new EchoAuthorIDTextRow(_value0));
     }
+
+    // -- name: ListAuthorNameWords :many
+    public java.util.List<ListAuthorNameWordsRow> listAuthorNameWords() {
+        var _params = Params.create();
+        var _query = QueryReader.readFrom(
+                client.createQuery("""
+                    SELECT id, word
+                    FROM (SELECT id, Unicode::SplitToList(name, \" \"u) AS words FROM authors)
+                    FLATTEN LIST BY words AS word
+                    ORDER BY id, word;\
+                    """, _params)).join().getValue();
+        if (_query.getResultSetCount() != 1) throw new IllegalStateException("Expected one result set");
+        var _rows = _query.getResultSet(0);
+        var _items = new java.util.ArrayList<ListAuthorNameWordsRow>();
+        while (_rows.next()) {
+            long _value0 = _rows.getColumn(0).getUint64();
+            String _value1 = _rows.getColumn(1).getText();
+            _items.add(new ListAuthorNameWordsRow(_value0, _value1));
+        }
+        return _items;
+    }
 }

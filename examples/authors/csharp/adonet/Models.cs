@@ -100,3 +100,8 @@ public sealed record GetAuthorExportMetadataRow(
 public sealed record EchoAuthorIDTextRow(
     string AuthorIDText
 );
+
+public sealed record ListAuthorNameWordsRow(
+    ulong ID,
+    string Word
+);

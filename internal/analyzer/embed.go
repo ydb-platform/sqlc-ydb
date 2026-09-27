@@ -58,7 +58,7 @@ func embedProjection(block queryBlock, core *parser.Select_coreContext, result p
 		return nil, model.Embedding{}, nil, fmt.Errorf("sqlc.embed refers to unknown table or alias %q", refs[0].name)
 	}
 	if !matched.physical {
-		return nil, model.Embedding{}, nil, fmt.Errorf("sqlc.embed requires a physical catalog table; %q is a derived or tabular source", refs[0].name)
+		return nil, model.Embedding{}, nil, fmt.Errorf("sqlc.embed requires a physical catalog table; %q is a derived, tabular or flattened source", refs[0].name)
 	}
 	if matched.optional {
 		return nil, model.Embedding{}, nil, fmt.Errorf("sqlc.embed of nullable OUTER JOIN side %q is unsupported; select explicit columns or use an INNER JOIN", refs[0].name)

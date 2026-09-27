@@ -74,7 +74,7 @@ func lookupDateTimeUDF(name string) functionResolver {
 		"DateTime::GetMinute", "DateTime::GetSecond", "DateTime::GetMillisecondOfSecond",
 		"DateTime::GetMicrosecondOfSecond", "DateTime::GetTimezoneId", "DateTime::GetTimezoneName":
 		return func(args []model.Type) (model.Type, error) { return resolveDateTimeGet(name, args) }
-	case "DateTime::MakeDate", "DateTime::MakeDate32", "DateTime::MakeTzDate32",
+	case "DateTime::MakeDate", "DateTime::MakeTzDate", "DateTime::MakeDate32", "DateTime::MakeTzDate32",
 		"DateTime::MakeDatetime", "DateTime::MakeTzDatetime", "DateTime::MakeDatetime64",
 		"DateTime::MakeTzDatetime64", "DateTime::MakeTimestamp", "DateTime::MakeTzTimestamp",
 		"DateTime::MakeTimestamp64", "DateTime::MakeTzTimestamp64":

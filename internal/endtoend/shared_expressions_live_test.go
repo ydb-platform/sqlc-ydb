@@ -91,6 +91,16 @@ SELECT COUNT_IF(flag) AS flagged FROM records WHERE false;
 SELECT enabled, COUNT_IF(flag) AS flagged, COUNT_IF(flag IS NOT NULL) AS present
 FROM records GROUP BY enabled ORDER BY enabled;
 
+-- name: Conditional :one
+SELECT SUM_IF(counter, flag) AS total, AVG_IF(counter, flag) AS average FROM records;
+
+-- name: ConditionalEmpty :one
+SELECT SUM_IF(counter, flag) AS total, AVG_IF(counter, flag) AS average FROM records WHERE false;
+
+-- name: ConditionalGrouped :many
+SELECT enabled, SUM_IF(id, flag) AS total, AVG_IF(id, flag) AS average
+FROM records GROUP BY enabled ORDER BY enabled;
+
 -- name: Casts :many
 SELECT id, CAST(id AS Bool) AS active, CAST(enabled AS Uint64) AS numeric,
        CAST(id AS Uint32) AS narrow, CAST(text AS Json) AS document, COALESCE(CAST(id AS Uint32), 0)
@@ -187,6 +197,18 @@ func TestSharedExpressions(t *testing.T) {
 	groups, err := q.Grouped(ctx)
 	if err != nil || len(groups) != 2 || groups[0].Enabled || groups[0].Flagged != 0 || groups[0].Present != 0 || !groups[1].Enabled || groups[1].Flagged != 1 || groups[1].Present != 2 {
 		t.Fatalf("grouped aggregate: %+v %v", groups, err)
+	}
+	conditional, err := q.Conditional(ctx)
+	if err != nil || conditional.Total == nil || *conditional.Total != 7 || conditional.Average == nil || *conditional.Average != 7 {
+		t.Fatalf("conditional aggregate: %+v %v", conditional, err)
+	}
+	conditionalEmpty, err := q.ConditionalEmpty(ctx)
+	if err != nil || conditionalEmpty.Total != nil || conditionalEmpty.Average != nil {
+		t.Fatalf("empty conditional aggregate: %+v %v", conditionalEmpty, err)
+	}
+	conditionalGroups, err := q.ConditionalGrouped(ctx)
+	if err != nil || len(conditionalGroups) != 2 || conditionalGroups[0].Enabled || conditionalGroups[0].Total != nil || conditionalGroups[0].Average != nil || !conditionalGroups[1].Enabled || conditionalGroups[1].Total == nil || *conditionalGroups[1].Total != 2 || conditionalGroups[1].Average == nil || *conditionalGroups[1].Average != 2 {
+		t.Fatalf("grouped conditional aggregate: %+v %v", conditionalGroups, err)
 	}
 	casts, err := q.Casts(ctx)
 	if err != nil || len(casts) != 3 {

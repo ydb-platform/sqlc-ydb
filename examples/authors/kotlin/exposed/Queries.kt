@@ -271,4 +271,24 @@ class Queries(private val client: org.jetbrains.exposed.v1.jdbc.JdbcTransaction)
             }
         }
     }
+
+    // -- name: ListAuthorNameWords :many
+    fun listAuthorNameWords(): List<ListAuthorNameWordsRow> {
+        val _connection = client.connection.connection as java.sql.Connection
+        _connection.prepareStatement(
+            "SELECT id, word\n" +
+            "FROM (SELECT id, Unicode::SplitToList(name, \" \"u) AS words FROM authors)\n" +
+            "FLATTEN LIST BY words AS word\n" +
+            "ORDER BY id, word;").use { _prepared ->
+            _prepared.executeQuery().use { _rows ->
+                val _items = ArrayList<ListAuthorNameWordsRow>()
+                while (_rows.next()) {
+                    val _value0: Long = _rows.getLong(1)
+                    val _value1: String = _rows.getString(2)
+                    _items.add(ListAuthorNameWordsRow(_value0, _value1))
+                }
+                return _items
+            }
+        }
+    }
 }

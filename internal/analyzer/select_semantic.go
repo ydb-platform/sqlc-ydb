@@ -397,7 +397,7 @@ func isAggregateFunction(name string) bool {
 		return true
 	}
 	switch strings.ToLower(name) {
-	case "count", "count_if", "sum", "avg", "min", "max", "some", "every", "aggregate_list", "agg_list", "aggregate_list_distinct", "agg_list_distinct":
+	case "count", "count_if", "sum", "sum_if", "avg", "avg_if", "min", "max", "some", "every", "aggregate_list", "agg_list", "aggregate_list_distinct", "agg_list_distinct":
 		return true
 	default:
 		return false

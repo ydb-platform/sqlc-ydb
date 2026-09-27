@@ -257,4 +257,23 @@ class Queries(private val client: java.sql.Connection) {
             }
         }
     }
+
+    // -- name: ListAuthorNameWords :many
+    fun listAuthorNameWords(): List<ListAuthorNameWordsRow> {
+        client.prepareStatement(
+            "SELECT id, word\n" +
+            "FROM (SELECT id, Unicode::SplitToList(name, \" \"u) AS words FROM authors)\n" +
+            "FLATTEN LIST BY words AS word\n" +
+            "ORDER BY id, word;").use { _prepared ->
+            _prepared.executeQuery().use { _rows ->
+                val _items = ArrayList<ListAuthorNameWordsRow>()
+                while (_rows.next()) {
+                    val _value0: Long = _rows.getLong(1)
+                    val _value1: String = _rows.getString(2)
+                    _items.add(ListAuthorNameWordsRow(_value0, _value1))
+                }
+                return _items
+            }
+        }
+    }
 }

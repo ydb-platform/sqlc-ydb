@@ -307,3 +307,22 @@ class Querier:
         return _models.EchoAuthorIDTextRow(
             author_id_text=row["author_id_text"],
         )
+
+    # -- name: ListAuthorNameWords :many
+    def list_author_name_words(self) -> list[_models.ListAuthorNameWordsRow]:
+        parameters = {
+        }
+        result_sets = self._execute(
+            ("SELECT id, word\n"
+             "FROM (SELECT id, Unicode::SplitToList(name, \" \"u) AS words FROM authors)\n"
+             "FLATTEN LIST BY words AS word\n"
+             "ORDER BY id, word;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.ListAuthorNameWordsRow(
+            id=row["id"],
+            word=row["word"],
+        ) for row in rows]

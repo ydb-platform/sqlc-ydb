@@ -33,6 +33,21 @@ func TestJooqConditionalAggregateExpressions(t *testing.T) {
 	}
 }
 
+func TestJooqRejectsConditionalAggregatesOutsideDSLSubset(t *testing.T) {
+	for _, function := range []string{"SUM_IF", "AVG_IF"} {
+		t.Run(function, func(t *testing.T) {
+			analysis, err := analyzer.Analyze(
+				[]model.Source{{Name: "schema.sql", Text: "CREATE TABLE items (id Uint64 NOT NULL, enabled Bool NOT NULL, PRIMARY KEY(id));"}},
+				[]model.Source{{Name: "query.sql", Text: "-- name: Statistics :one\nSELECT " + function + "(id, enabled) AS result FROM items;"}},
+			)
+			require.NoError(t, err)
+			files, err := Generate(analysis, Options{Package: "db", Runtime: "jooq"})
+			require.Empty(t, files)
+			require.ErrorContains(t, err, `unsupported jOOQ syntax "`+function)
+		})
+	}
+}
+
 func TestJooqNullChecks(t *testing.T) {
 	for _, tc := range []struct{ sql, method string }{
 		{"IS NULL", "isNull"}, {"IS NOT NULL", "isNotNull"},

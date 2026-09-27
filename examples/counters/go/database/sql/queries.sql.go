@@ -153,6 +153,21 @@ func (q *Queries) ListCounters(ctx context.Context) ([]ListCountersRow, error) {
 	return items, nil
 }
 
+// -- name: CounterSummary :one
+func (q *Queries) CounterSummary(ctx context.Context) (CounterSummaryRow, error) {
+	var row CounterSummaryRow
+	err := q.db.QueryRowContext(ctx, ""+
+		"SELECT COUNT(*) AS total, SUM_IF(value, enabled) AS enabled_total, AVG_IF(value, enabled) AS enabled_average\n"+
+		"FROM counters;",
+	).Scan(
+		&row.Total,
+		&row.EnabledTotal,
+		&row.EnabledAverage,
+	)
+
+	return row, err
+}
+
 // -- name: ReadThenIncrement :exec
 func (q *Queries) ReadThenIncrement(ctx context.Context, arg ReadThenIncrementParams) error {
 	rows, err := q.db.QueryContext(ctx, ""+
