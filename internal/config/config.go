@@ -45,6 +45,7 @@ type Go struct {
 	Rename              map[string]string `yaml:"rename"`
 	Overrides           []GoOverride      `yaml:"overrides"`
 	EmitJSONTags        bool              `yaml:"emit_json_tags"`
+	JSONTagsCaseStyle   string            `yaml:"json_tags_case_style"`
 	EmitInterface       bool              `yaml:"emit_interface"`
 	EmitEmptySlices     bool              `yaml:"emit_empty_slices"`
 	EmitExportedQueries bool              `yaml:"emit_exported_queries"`
@@ -295,6 +296,14 @@ func Parse(data []byte) (*Config, error) {
 			return nil, err
 		}
 		if g := s.Gen.Go; g != nil {
+			if g.JSONTagsCaseStyle == "" {
+				g.JSONTagsCaseStyle = "none"
+			}
+			switch g.JSONTagsCaseStyle {
+			case "none", "camel", "pascal", "snake":
+			default:
+				return nil, fmt.Errorf("sql[%d].gen.go.json_tags_case_style must be none, camel, pascal, or snake", i)
+			}
 			if g.QueryParameterLimit == nil {
 				limit := int32(1)
 				g.QueryParameterLimit = &limit

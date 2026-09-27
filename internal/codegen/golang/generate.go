@@ -8,10 +8,12 @@ import (
 	"go/format"
 	"go/token"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/ydb-platform/sqlc-ydb/internal/config"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
@@ -23,6 +25,7 @@ type Options struct {
 	Rename              map[string]string
 	Overrides           []config.GoOverride
 	EmitJSONTags        bool
+	JSONTagsCaseStyle   string
 	EmitInterface       bool
 	EmitEmptySlices     bool
 	EmitExportedQueries bool
@@ -47,6 +50,11 @@ func Generate(in *model.AnalysisResult, o Options) ([]model.File, error) {
 	}
 	if o.Runtime != "ydb" && o.Runtime != "database/sql" {
 		return nil, fmt.Errorf("unsupported Go runtime %q", o.Runtime)
+	}
+	switch o.JSONTagsCaseStyle {
+	case "", "none", "camel", "pascal", "snake":
+	default:
+		return nil, fmt.Errorf("json_tags_case_style must be none, camel, pascal, or snake")
 	}
 	if o.QueryParameterLimit == nil {
 		limit := int32(1)
@@ -366,7 +374,7 @@ func models(in *model.AnalysisResult, o Options) []byte {
 			}
 			b.WriteString(o.fieldName(c.Name) + " " + typ)
 			if o.EmitJSONTags {
-				b.WriteString(" `json:" + strconv.Quote(c.Name) + "`")
+				b.WriteString(" `json:" + strconv.Quote(o.jsonTagName(c.Name)) + "`")
 			}
 			b.WriteString("\n")
 		}
@@ -390,7 +398,7 @@ func models(in *model.AnalysisResult, o Options) []byte {
 						if embed.Start == i {
 							b.WriteString(o.fieldName(embed.Field) + " " + o.embeddedGoType(embed.Table))
 							if o.EmitJSONTags {
-								b.WriteString(" `json:" + strconv.Quote(embed.Field) + "`")
+								b.WriteString(" `json:" + strconv.Quote(o.jsonTagName(embed.Field)) + "`")
 							}
 							b.WriteString("\n")
 						}
@@ -404,7 +412,7 @@ func models(in *model.AnalysisResult, o Options) []byte {
 					}
 					b.WriteString(o.fieldName(c.Name) + " " + typ)
 					if o.EmitJSONTags {
-						b.WriteString(" `json:" + strconv.Quote(c.Name) + "`")
+						b.WriteString(" `json:" + strconv.Quote(o.jsonTagName(c.Name)) + "`")
 					}
 					b.WriteString("\n")
 				}
@@ -431,7 +439,7 @@ func models(in *model.AnalysisResult, o Options) []byte {
 				}
 				b.WriteString(o.fieldName(p.Name) + " " + typ)
 				if o.EmitJSONTags {
-					b.WriteString(" `json:" + strconv.Quote(p.Name) + "`")
+					b.WriteString(" `json:" + strconv.Quote(o.jsonTagName(p.Name)) + "`")
 				}
 				b.WriteString("\n")
 			}
@@ -1171,6 +1179,42 @@ func (o Options) fieldName(source string) string {
 		return renamed
 	}
 	return goName(source)
+}
+
+var jsonSnakePattern = regexp.MustCompile("([^A-Z])([A-Z]+)")
+
+func (o Options) jsonTagName(name string) string {
+	switch o.JSONTagsCaseStyle {
+	case "", "none":
+		return name
+	case "snake":
+		if !strings.ContainsRune(name, '_') {
+			name = jsonSnakePattern.ReplaceAllString(name, "${1}_${2}")
+		}
+		return strings.ToLower(name)
+	default:
+		var b strings.Builder
+		for i, part := range strings.Split(name, "_") {
+			if i == 0 && o.JSONTagsCaseStyle == "camel" {
+				b.WriteString(part)
+				continue
+			}
+			if part == "id" {
+				if o.JSONTagsCaseStyle == "pascal" {
+					b.WriteString("ID")
+				} else {
+					b.WriteString("Id")
+				}
+				continue
+			}
+			if part != "" {
+				r, size := utf8.DecodeRuneInString(part)
+				b.WriteRune(unicode.ToUpper(r))
+				b.WriteString(part[size:])
+			}
+		}
+		return b.String()
+	}
 }
 func ident(s string) bool {
 	if s == "" {

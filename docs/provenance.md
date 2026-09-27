@@ -10,6 +10,7 @@ Behavior and API references:
 
 - [sqlc configuration and command documentation](https://docs.sqlc.dev/);
 - sqlc's Go generator for familiar query method shapes and defaults;
+- JSON tag case-style behavior checked against [`sqlc-dev/sqlc@bdbe55db3ee08745827090d4aad1781bea2ee4ee`](https://github.com/sqlc-dev/sqlc/blob/bdbe55db3ee08745827090d4aad1781bea2ee4ee/internal/codegen/golang/field.go); the YDB generator retains its own source and configuration parser;
 - sqlc-gen-python checkout `53fa0b2e3d10c4201f7a5a344d00a560330da3bb` for dataclass and Querier conventions;
 - this repository's previous Apache-licensed engine/plugin code, preserved at `da046efe95d7ec65c13cd1f88a9f55804c322f73`, for YDB SDK integration examples.
 

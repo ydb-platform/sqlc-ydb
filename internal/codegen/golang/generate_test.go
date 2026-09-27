@@ -629,6 +629,40 @@ func TestRenameGoFieldsPreservesSQLNames(t *testing.T) {
 	}
 }
 
+func TestJSONTagCaseStyle(t *testing.T) {
+	for _, tc := range []struct{ style, name, want string }{
+		{"", "account_id", "account_id"},
+		{"none", "account_id", "account_id"},
+		{"camel", "account_id", "accountId"},
+		{"camel", "author_id", "authorId"},
+		{"pascal", "account_id", "AccountID"},
+		{"snake", "AccountID", "account_id"},
+		{"snake", "HTTP_Response", "http_response"},
+	} {
+		t.Run(tc.style+"/"+tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, (Options{JSONTagsCaseStyle: tc.style}).jsonTagName(tc.name))
+		})
+	}
+	_, err := Generate(sample(), Options{Package: "db", JSONTagsCaseStyle: "kebab"})
+	require.ErrorContains(t, err, "json_tags_case_style")
+}
+
+func TestJSONTagCaseStyleGeneratedSerialization(t *testing.T) {
+	in := sample()
+	in.Queries[0].ResultSets[0].Columns[1].Name = "author_id"
+	in.Queries[2].Parameters[0].Name = "display_name"
+	in.Queries[2].Parameters[1].Name = "author_id"
+	for _, runtime := range []string{"ydb", "database/sql"} {
+		runGeneratedRuntimeTest(t, in, Options{Package: "db", Runtime: runtime, EmitJSONTags: true, JSONTagsCaseStyle: "camel", Rename: map[string]string{"display_name": "Label"}}, `package db
+import("encoding/json";"testing")
+func TestSerialization(t *testing.T) {
+  params,err:=json.Marshal(UpdateUserParams{Label:"Ada"});if err!=nil||string(params)!="{\"displayName\":\"Ada\",\"authorId\":null}" {t.Fatalf("params=%s err=%v",params,err)}
+  row,err:=json.Marshal(GetUserRow{ID:7});if err!=nil||string(row)!="{\"id\":7,\"authorId\":null}" {t.Fatalf("row=%s err=%v",row,err)}
+}
+`)
+	}
+}
+
 func TestRenameGoFieldsRejectsInvalidAndCollidingNames(t *testing.T) {
 	for _, tc := range []struct {
 		name, key, value, want string

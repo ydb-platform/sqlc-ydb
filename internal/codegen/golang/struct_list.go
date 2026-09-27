@@ -90,7 +90,7 @@ func writeStructModel(b *bytes.Buffer, q model.AnalyzedQuery, p model.Parameter,
 		imports.add(f.Type)
 		b.WriteString(o.fieldName(f.Name) + " " + typ)
 		if o.EmitJSONTags {
-			b.WriteString(" `json:" + strconv.Quote(f.Name) + "`")
+			b.WriteString(" `json:" + strconv.Quote(o.jsonTagName(f.Name)) + "`")
 		}
 		b.WriteByte('\n')
 	}

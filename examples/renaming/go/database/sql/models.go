@@ -2,18 +2,18 @@
 package renaming
 
 type Account struct {
-	AccountID uint64 `json:"account_id"`
-	Label     string `json:"display_name"`
+	AccountID uint64 `json:"accountId"`
+	Label     string `json:"displayName"`
 }
 
 type UpsertAccountParams struct {
-	AccountID uint64 `json:"account_id"`
-	Label     string `json:"display_name"`
+	AccountID uint64 `json:"accountId"`
+	Label     string `json:"displayName"`
 }
 
 type GetAccountRow struct {
-	AccountID uint64 `json:"account_id"`
-	Label     string `json:"display_name"`
+	AccountID uint64 `json:"accountId"`
+	Label     string `json:"displayName"`
 }
 
 type ListAccountModelsRow struct {
