@@ -43,11 +43,75 @@ type Go struct {
 	Out                 string            `yaml:"out"`
 	SQLPackage          string            `yaml:"sql_package"`
 	Rename              map[string]string `yaml:"rename"`
+	Overrides           []GoOverride      `yaml:"overrides"`
 	EmitJSONTags        bool              `yaml:"emit_json_tags"`
 	EmitInterface       bool              `yaml:"emit_interface"`
 	EmitEmptySlices     bool              `yaml:"emit_empty_slices"`
 	QueryParameterLimit *int32            `yaml:"query_parameter_limit"`
 }
+
+type GoType struct {
+	Import  string `yaml:"import"`
+	Package string `yaml:"package"`
+	Type    string `yaml:"type"`
+}
+
+func (t *GoType) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind == yaml.ScalarNode {
+		if node.Tag != "!!str" {
+			return fmt.Errorf("go_type must be a string or mapping")
+		}
+		t.Type = node.Value
+		return nil
+	}
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("go_type must be a string or mapping")
+	}
+	for i := 0; i < len(node.Content); i += 2 {
+		switch node.Content[i].Value {
+		case "import", "package", "type":
+		default:
+			return fmt.Errorf("unsupported go_type option %q", node.Content[i].Value)
+		}
+	}
+	return node.Decode((*goTypeFields)(t))
+}
+
+type goTypeFields GoType
+
+type GoOverride struct {
+	DBType   string `yaml:"db_type"`
+	Column   string `yaml:"column"`
+	GoType   GoType `yaml:"go_type"`
+	Nullable bool   `yaml:"nullable"`
+}
+
+func (o *GoOverride) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("override must be a mapping")
+	}
+	hasNullable := false
+	for i := 0; i < len(node.Content); i += 2 {
+		switch node.Content[i].Value {
+		case "db_type", "column", "go_type":
+		case "nullable":
+			hasNullable = true
+		case "unsigned", "go_struct_tag":
+			return fmt.Errorf("unsupported override option %q", node.Content[i].Value)
+		default:
+			return fmt.Errorf("unknown override option %q", node.Content[i].Value)
+		}
+	}
+	if err := node.Decode((*goOverrideFields)(o)); err != nil {
+		return err
+	}
+	if o.Column != "" && hasNullable {
+		return fmt.Errorf("nullable applies only to db_type overrides")
+	}
+	return nil
+}
+
+type goOverrideFields GoOverride
 
 type Python struct {
 	Package          yaml.Node `yaml:"package"` // Retained only to diagnose the formerly ignored option.
@@ -238,6 +302,21 @@ func Parse(data []byte) (*Config, error) {
 			}
 			if len(g.Rename) == 0 {
 				g.Rename = nil
+			}
+			if len(g.Overrides) == 0 {
+				g.Overrides = nil
+			}
+			for j, override := range g.Overrides {
+				where := fmt.Sprintf("sql[%d].gen.go.overrides[%d]", i, j)
+				if (override.DBType == "") == (override.Column == "") {
+					return nil, fmt.Errorf("%s: specify exactly one of db_type or column", where)
+				}
+				if override.GoType.Type == "" {
+					return nil, fmt.Errorf("%s.go_type is required", where)
+				}
+				if override.Column != "" && override.Nullable {
+					return nil, fmt.Errorf("%s: nullable applies only to db_type overrides", where)
+				}
 			}
 			if g.Out == "" {
 				return nil, fmt.Errorf("sql[%d].gen.go.out is required", i)

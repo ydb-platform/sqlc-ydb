@@ -15,6 +15,7 @@ Use `sqlc-ydb init --help` to list languages and their runtimes. For the options
 | `out` | string | Required | Output directory, relative to sqlc.yaml. |
 | `package` | string | `basename(out)` | Generated Go package name; defaults to the output directory's base name. |
 | `rename` | map | `{}` | Map SQL column and table names to exported Go struct field and model names; single scalar arguments are unchanged. |
+| `overrides` | list | `[]` | Override supported scalar Go types by YQL db_type or physical table.column; see compatibility for binding and decoding limits. |
 | `emit_json_tags` | boolean | `false` | Add JSON tags to generated struct fields. |
 | `emit_interface` | boolean | `false` | Generate the Querier interface implemented by Queries. |
 | `emit_empty_slices` | boolean | `false` | Return empty slices instead of nil for successful :many queries with no rows. |
@@ -91,6 +92,8 @@ Use `sqlc-ydb init --help` to list languages and their runtimes. For the options
 `gen.go.rename` maps a SQL column name to the exact exported Go field name in result rows, parameter structs, YQL `Struct` inputs and embedded table models. It also maps an embedded table's basename to its Go model type and `sqlc.embed` row field. Keys apply throughout one `sql[].gen.go` entry, so the same source name cannot have different Go names in separate tables or queries. Positional argument identifiers for a single parameter remain `arg`; with multiple positional parameters, they follow the mapped field names. SQL text, YDB parameter/result/Struct member names, and JSON tags retain their original names. Empty source names, invalid Go identifiers and colliding generated names are errors; unused keys are accepted, as in upstream sqlc. For example, `rename: {accounts: Account, account_id: AccountID, display_name: Label}` produces the [renaming example](../examples/renaming). Query methods and row/parameter struct type names are unchanged.
 
 `gen.go.query_parameter_limit` defaults to `1`: queries with one parameter take a single `arg` value, while queries with more parameters take a `<QueryName>Params` struct. Set it to `0` to use a Params struct for every parameterized query, or to a larger number to allow that many positional arguments (`argID`, `argLabel`, and so on). Queries without parameters never get a Params struct. Negative values are errors. The setting applies to both `sql_package: ydb` and `database/sql`, including generated `Querier` interfaces; it changes the Go method signature and argument source without changing SQL parameter names or binding order. See the [parameter-limit fixture](../internal/endtoend/testdata/go_query_parameter_limit/sqlc.yaml) for both profiles.
+
+`gen.go.overrides` changes supported scalar field and parameter types; its selector, nullability, conversion and diagnostic rules are in [Go type overrides](compatibility.md#go-type-overrides).
 
 | Target | Configuration | Generated API |
 |---|---|---|

@@ -69,6 +69,59 @@ func TestGoQueryParameterLimit(t *testing.T) {
 	require.ErrorContains(t, err, "sql[0].gen.go.query_parameter_limit must not be negative")
 }
 
+func TestGoOverrideConfiguration(t *testing.T) {
+	c, err := Parse([]byte(`version: "2"
+sql:
+- engine: ydb
+  schema: schema.sql
+  queries: queries.sql
+  gen:
+    go:
+      out: generated
+      overrides:
+      - db_type: Utf8
+        go_type: CustomerName
+      - db_type: Utf8
+        nullable: true
+        go_type:
+          import: example.com/domain
+          package: domain
+          type: Note
+      - column: customers.id
+        go_type: CustomerID
+`))
+	require.NoError(t, err)
+	require.Equal(t, []GoOverride{
+		{DBType: "Utf8", GoType: GoType{Type: "CustomerName"}},
+		{DBType: "Utf8", Nullable: true, GoType: GoType{Import: "example.com/domain", Package: "domain", Type: "Note"}},
+		{Column: "customers.id", GoType: GoType{Type: "CustomerID"}},
+	}, c.SQL[0].Gen.Go.Overrides)
+}
+
+func TestGoOverrideConfigurationErrors(t *testing.T) {
+	base := "version: '2'\nsql:\n- engine: ydb\n  schema: s.sql\n  queries: q.sql\n  gen:\n    go:\n      out: db\n      overrides:\n      - "
+	for _, tc := range []struct{ entry, want string }{
+		{"db_type: Utf8\n        column: users.name\n        go_type: Name", "exactly one"},
+		{"go_type: Name", "exactly one"},
+		{"db_type: Utf8", "go_type is required"},
+		{"db_type: Utf8\n        go_type: 42", "go_type must be a string or mapping"},
+		{"db_type: Utf8\n        go_type: [Name]", "go_type must be a string or mapping"},
+		{"Name", "override must be a mapping"},
+		{"db_type: Utf8\n        go_type: {type: Name, pointer: true}", "pointer"},
+		{"db_type: Utf8\n        go_type: {type: Name, pointer: false}", "pointer"},
+		{"db_type: Utf8\n        go_type: {type: Name, slice: false}", "slice"},
+		{"db_type: Utf8\n        go_type: Name\n        unsigned: false", "unsigned"},
+		{"db_type: Utf8\n        go_type: Name\n        go_struct_tag: ''", "go_struct_tag"},
+		{"column: users.name\n        nullable: true\n        go_type: Name", "nullable applies only"},
+		{"column: users.name\n        nullable: false\n        go_type: Name", "nullable applies only"},
+		{"db_type: Utf8\n        go_type: {type: Name, unknown: true}", "unsupported go_type option"},
+		{"db_type: Utf8\n        go_type: Name\n        unknown: true", "unknown override option"},
+	} {
+		_, err := Parse([]byte(base + tc.entry + "\n"))
+		require.ErrorContains(t, err, tc.want)
+	}
+}
+
 func TestRejectUnsupportedConfiguration(t *testing.T) {
 	base := "version: '2'\nsql:\n- engine: ydb\n  schema: s.sql\n  queries: q.sql\n"
 	for _, tc := range []struct{ name, input, want string }{
