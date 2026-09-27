@@ -67,6 +67,7 @@ pub struct GetAuthorStatisticsRow {
     pub with_bio: u64,
     pub with_nonempty_bio: u64,
     pub column3: bool,
+    pub distinct_biographies: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

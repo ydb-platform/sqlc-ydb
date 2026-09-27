@@ -340,6 +340,53 @@ FROM records;`}}
 	}
 }
 
+func TestAnalyzeCountDistinct(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (
+    id Uint64 NOT NULL,
+    category Utf8 NOT NULL,
+    value Utf8,
+    PRIMARY KEY (id)
+);`}}
+	queries := []model.Source{{Name: "query.sql", Text: `-- name: Global :one
+SELECT COUNT(DISTINCT value) AS unique_values FROM records;
+-- name: Grouped :many
+SELECT category, COUNT(DISTINCT records.value) AS unique_values
+FROM records GROUP BY category HAVING COUNT(DISTINCT value) > 0ul;
+-- name: Empty :one
+SELECT COUNT(DISTINCT value) AS unique_values FROM records WHERE false;`}}
+	got, err := Analyze(schema, queries)
+	require.NoError(t, err)
+	wantSQL := []string{
+		"-- name: Global :one\nSELECT COUNT(DISTINCT value) AS unique_values FROM records;",
+		"-- name: Grouped :many\nSELECT category, COUNT(DISTINCT records.value) AS unique_values\nFROM records GROUP BY category HAVING COUNT(DISTINCT value) > 0ul;",
+		"-- name: Empty :one\nSELECT COUNT(DISTINCT value) AS unique_values FROM records WHERE false;",
+	}
+	for i, query := range got.Queries {
+		column := query.ResultSets[0].Columns[len(query.ResultSets[0].Columns)-1]
+		assert.Equal(t, model.Column{Name: "unique_values", Type: model.Type{Kind: "Uint64"}}, column)
+		assert.Equal(t, wantSQL[i], query.SQL)
+	}
+}
+
+func TestAnalyzeRejectsUnsupportedDistinctArguments(t *testing.T) {
+	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE records (
+    id Uint64 NOT NULL,
+    value Utf8,
+    PRIMARY KEY (id)
+);`}}
+	for _, tc := range []struct{ sql, want string }{
+		{`SELECT COUNT(DISTINCT value || "x"u) AS n FROM records;`, "COUNT(DISTINCT ...) requires one direct column"},
+		{`SELECT COUNT(DISTINCT id + 1ul) AS n FROM records;`, "COUNT(DISTINCT ...) requires one direct column"},
+		{`SELECT COUNT(DISTINCT id, value) AS n FROM records;`, "COUNT(DISTINCT ...) requires one direct column"},
+		{`SELECT SUM(DISTINCT id) AS n FROM records;`, `set quantifiers in function "SUM" are unsupported`},
+	} {
+		t.Run(tc.sql, func(t *testing.T) {
+			_, err := Analyze(schema, []model.Source{{Name: "query.sql", Text: "-- name: Read :one\n" + tc.sql}})
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
 func TestAnalyzeGroupingDistinguishesSameNamedJoinColumns(t *testing.T) {
 	schema := []model.Source{{Name: "schema.sql", Text: `CREATE TABLE left_records (id Uint64 NOT NULL, PRIMARY KEY (id));
 CREATE TABLE right_records (id Uint64 NOT NULL, PRIMARY KEY (id));`}}

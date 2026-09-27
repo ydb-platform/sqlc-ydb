@@ -486,7 +486,8 @@ std::optional<GetAuthorStatisticsRow> Queries::GetAuthorStatistics() const {
             "    COUNT(*) AS total,\n"
             "    COUNT_IF(bio IS NOT NULL) AS with_bio,\n"
             "    COUNT_IF(bio != \"\"u) AS with_nonempty_bio,\n"
-            "    CAST(COUNT(*) AS Bool)\n"
+            "    CAST(COUNT(*) AS Bool),\n"
+            "    COUNT(DISTINCT bio) AS distinct_biographies\n"
             "FROM authors;",
             sqlc_tx,
             this->execute_settings_
@@ -520,6 +521,7 @@ std::optional<GetAuthorStatisticsRow> Queries::GetAuthorStatistics() const {
         sqlc_parser.ColumnParser("with_bio").GetUint64(),
         sqlc_parser.ColumnParser("with_nonempty_bio").GetUint64(),
         sqlc_parser.ColumnParser("column3").GetBool(),
+        sqlc_parser.ColumnParser("distinct_biographies").GetUint64(),
     };
     return sqlc_row;
 }

@@ -36,6 +36,7 @@ class GetAuthorStatisticsRow:
     with_bio: int
     with_nonempty_bio: int
     column3: bool
+    distinct_biographies: int
 
 @dataclass
 class GetAuthorExportMetadataRow:

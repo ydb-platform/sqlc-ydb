@@ -47,7 +47,8 @@ SELECT
     COUNT(*) AS total,
     COUNT_IF(bio IS NOT NULL) AS with_bio,
     COUNT_IF(bio != ""u) AS with_nonempty_bio,
-    CAST(COUNT(*) AS Bool)
+    CAST(COUNT(*) AS Bool),
+    COUNT(DISTINCT bio) AS distinct_biographies
 FROM authors;
 
 -- name: GetAuthorExportMetadata :one

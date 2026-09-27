@@ -16,8 +16,8 @@ func TestAuthorExpressions(t *testing.T) {
 	ctx := db.Context
 	n, s := native.New(db.Native), sq.New(db.SQL)
 	type statistics struct {
-		total, withBio, withNonemptyBio uint64
-		exists                          bool
+		total, withBio, withNonemptyBio, distinctBiographies uint64
+		exists                                               bool
 	}
 	readers := []struct {
 		name   string
@@ -26,7 +26,7 @@ func TestAuthorExpressions(t *testing.T) {
 	}{
 		{"native", func() (statistics, error) {
 			r, err := n.GetAuthorStatistics(ctx)
-			return statistics{r.Total, r.WithBio, r.WithNonemptyBio, r.Column3}, err
+			return statistics{r.Total, r.WithBio, r.WithNonemptyBio, r.DistinctBiographies, r.Column3}, err
 		}, func(prefix string) ([]bool, error) {
 			rows, err := n.FindAuthorsByNamePrefix(ctx, prefix)
 			flags := make([]bool, len(rows))
@@ -37,7 +37,7 @@ func TestAuthorExpressions(t *testing.T) {
 		}},
 		{"database/sql", func() (statistics, error) {
 			r, err := s.GetAuthorStatistics(ctx)
-			return statistics{r.Total, r.WithBio, r.WithNonemptyBio, r.Column3}, err
+			return statistics{r.Total, r.WithBio, r.WithNonemptyBio, r.DistinctBiographies, r.Column3}, err
 		}, func(prefix string) ([]bool, error) {
 			rows, err := s.FindAuthorsByNamePrefix(ctx, prefix)
 			flags := make([]bool, len(rows))
@@ -57,6 +57,7 @@ func TestAuthorExpressions(t *testing.T) {
 		{AuthorID: 1, AuthorName: "Alice"},
 		{AuthorID: 2, AuthorName: "Alfred", Biography: &empty},
 		{AuthorID: ^uint64(0), AuthorName: "Bob", Biography: &bio},
+		{AuthorID: 3, AuthorName: "Carla", Biography: &bio},
 	} {
 		require.NoError(t, n.UpsertAuthor(ctx, row))
 	}
@@ -64,7 +65,7 @@ func TestAuthorExpressions(t *testing.T) {
 		t.Run(reader.name, func(t *testing.T) {
 			got, err := reader.stats()
 			require.NoError(t, err)
-			require.Equal(t, statistics{3, 2, 1, true}, got)
+			require.Equal(t, statistics{4, 3, 2, 2, true}, got)
 			prefix, err := reader.prefix("Al")
 			require.NoError(t, err)
 			require.Equal(t, []bool{false, true}, prefix)

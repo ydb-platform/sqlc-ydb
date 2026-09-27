@@ -566,7 +566,8 @@ final class Queries
                     COUNT(*) AS total,
                     COUNT_IF(bio IS NOT NULL) AS with_bio,
                     COUNT_IF(bio != ""u) AS with_nonempty_bio,
-                    CAST(COUNT(*) AS Bool)
+                    CAST(COUNT(*) AS Bool),
+                    COUNT(DISTINCT bio) AS distinct_biographies
                 FROM authors;
                 SQLC_YDB_YQL)
                 ->parameters($parameters)
@@ -595,12 +596,14 @@ final class Queries
                 ['with_bio', PrimitiveTypeId::UINT64, false],
                 ['with_nonempty_bio', PrimitiveTypeId::UINT64, false],
                 ['column3', PrimitiveTypeId::BOOL, false],
+                ['distinct_biographies', PrimitiveTypeId::UINT64, false],
             ],
             static fn($items): GetAuthorStatisticsRow => new GetAuthorStatisticsRow(
                 YdbValueCodec::uint64($items->offsetGet(0), 'GetAuthorStatistics.total'),
                 YdbValueCodec::uint64($items->offsetGet(1), 'GetAuthorStatistics.with_bio'),
                 YdbValueCodec::uint64($items->offsetGet(2), 'GetAuthorStatistics.with_nonempty_bio'),
                 YdbValueCodec::bool($items->offsetGet(3), 'GetAuthorStatistics.column3'),
+                YdbValueCodec::uint64($items->offsetGet(4), 'GetAuthorStatistics.distinct_biographies'),
             ),
         );
 

@@ -5,5 +5,6 @@ data class GetAuthorStatisticsRow(
     val total: Long,
     val withBio: Long,
     val withNonemptyBio: Long,
-    val column3: Boolean
+    val column3: Boolean,
+    val distinctBiographies: Long
 )

@@ -242,7 +242,8 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
                 "    COUNT(*) AS total,\n",
                 "    COUNT_IF(bio IS NOT NULL) AS with_bio,\n",
                 "    COUNT_IF(bio != \"\"u) AS with_nonempty_bio,\n",
-                "    CAST(COUNT(*) AS Bool)\n",
+                "    CAST(COUNT(*) AS Bool),\n",
+                "    COUNT(DISTINCT bio) AS distinct_biographies\n",
                 "FROM authors;",
             ))
             .await?;
@@ -251,6 +252,7 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
             with_bio: row.remove_field(1)?.try_into()?,
             with_nonempty_bio: row.remove_field(2)?.try_into()?,
             column3: row.remove_field(3)?.try_into()?,
+            distinct_biographies: row.remove_field(4)?.try_into()?,
         })
     }
 

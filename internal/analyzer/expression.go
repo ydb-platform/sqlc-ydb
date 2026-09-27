@@ -581,11 +581,17 @@ func dateTimeFormatInput(value model.Type) bool {
 }
 
 func resolveFunction(name string, invoke *parser.Invoke_exprContext, scope expressionScope) (model.Type, error) {
+	if invoke.Opt_set_quantifier() != nil && invoke.Opt_set_quantifier().GetText() != "" {
+		if !strings.EqualFold(name, "count") || !strings.EqualFold(invoke.Opt_set_quantifier().GetText(), "DISTINCT") {
+			return model.Type{}, fmt.Errorf("set quantifiers in function %q are unsupported", name)
+		}
+		list := invoke.Named_expr_list()
+		if list == nil || len(list.AllNamed_expr()) != 1 || list.Named_expr(0).AS() != nil || list.Named_expr(0).Expr() == nil || !isPureColumnExpression(list.Named_expr(0).Expr()) {
+			return model.Type{}, fmt.Errorf("COUNT(DISTINCT ...) requires one direct column")
+		}
+	}
 	if strings.EqualFold(name, "count") && invoke.ASTERISK() != nil {
 		return model.Type{Kind: "Uint64"}, nil
-	}
-	if invoke.Opt_set_quantifier() != nil && invoke.Opt_set_quantifier().GetText() != "" {
-		return model.Type{}, fmt.Errorf("set quantifiers in function %q are unsupported", name)
 	}
 	if strings.EqualFold(name, "ListCreate") {
 		return resolveListCreateType(invoke)

@@ -304,7 +304,8 @@ class Queries {
                 "    COUNT(*) AS total,\n" +
                 "    COUNT_IF(bio IS NOT NULL) AS with_bio,\n" +
                 "    COUNT_IF(bio != \"\"u) AS with_nonempty_bio,\n" +
-                "    CAST(COUNT(*) AS Bool)\n" +
+                "    CAST(COUNT(*) AS Bool),\n" +
+                "    COUNT(DISTINCT bio) AS distinct_biographies\n" +
                 "FROM authors;", _params)).join().getValue()
         } else {
             client!!.supplyResult { _session ->
@@ -313,7 +314,8 @@ class Queries {
                     "    COUNT(*) AS total,\n" +
                     "    COUNT_IF(bio IS NOT NULL) AS with_bio,\n" +
                     "    COUNT_IF(bio != \"\"u) AS with_nonempty_bio,\n" +
-                    "    CAST(COUNT(*) AS Bool)\n" +
+                    "    CAST(COUNT(*) AS Bool),\n" +
+                    "    COUNT(DISTINCT bio) AS distinct_biographies\n" +
                     "FROM authors;", TxMode.SERIALIZABLE_RW, _params))
             }.join().getValue()
         }
@@ -324,7 +326,8 @@ class Queries {
         val _value1: Long = _rows.getColumn(1).getUint64()
         val _value2: Long = _rows.getColumn(2).getUint64()
         val _value3: Boolean = _rows.getColumn(3).getBool()
-        return GetAuthorStatisticsRow(_value0, _value1, _value2, _value3)
+        val _value4: Long = _rows.getColumn(4).getUint64()
+        return GetAuthorStatisticsRow(_value0, _value1, _value2, _value3, _value4)
     }
 
     // -- name: GetAuthorExportMetadata :one

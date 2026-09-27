@@ -10,6 +10,7 @@ final class GetAuthorStatisticsRow
         public readonly string $total,
         public readonly string $withBio,
         public readonly string $withNonemptyBio,
-        public readonly bool $column3
+        public readonly bool $column3,
+        public readonly string $distinctBiographies
     ) {}
 }

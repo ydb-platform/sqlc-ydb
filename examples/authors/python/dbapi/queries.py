@@ -248,7 +248,8 @@ class Querier:
                  "    COUNT(*) AS total,\n"
                  "    COUNT_IF(bio IS NOT NULL) AS with_bio,\n"
                  "    COUNT_IF(bio != \"\"u) AS with_nonempty_bio,\n"
-                 "    CAST(COUNT(*) AS Bool)\n"
+                 "    CAST(COUNT(*) AS Bool),\n"
+                 "    COUNT(DISTINCT bio) AS distinct_biographies\n"
                  "FROM authors;"),
                 parameters,
             )
@@ -260,6 +261,7 @@ class Querier:
                 with_bio=row[1],
                 with_nonempty_bio=row[2],
                 column3=row[3],
+                distinct_biographies=row[4],
             )
         finally:
             cursor.close()
