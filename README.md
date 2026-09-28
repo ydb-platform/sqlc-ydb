@@ -41,9 +41,10 @@ See the [first-release summary](CHANGELOG.md) for the comparison and known limit
 | --- | --- | --- | --- |
 | Go | YDB Query SDK | [Test](tests/examples/go/authors/smoke_test.go#L18) | [Test](tests/examples/go/authors/smoke_test.go#L94) |
 | Go | database/sql | [Test](tests/examples/go/authors/smoke_test.go#L45) | [Test](tests/examples/go/authors/smoke_test.go#L120) |
-| Python | YDB Query SDK | [Test](examples/authors/python/smoke.py#L23) | [Test](examples/authors/python/smoke.py#L36) |
-| Python | DB-API | [Test](examples/authors/python/smoke.py#L68) | [Test](examples/authors/python/smoke.py#L69) |
-| Python | SQLAlchemy | [Test](examples/authors/python/smoke.py#L82) | [Test](examples/authors/python/smoke.py#L83) |
+| Python | YDB Query SDK (sync) | [Test](examples/authors/python/smoke.py#L125) | [Test](examples/authors/python/smoke.py#L46) |
+| Python | YDB Query SDK (async) | [Test](examples/authors/python/smoke.py#L62) | [Test](examples/authors/python/smoke.py#L71) |
+| Python | DB-API | [Test](examples/authors/python/smoke.py#L134) | [Test](examples/authors/python/smoke.py#L138) |
+| Python | SQLAlchemy | [Test](examples/authors/python/smoke.py#L148) | [Test](examples/authors/python/smoke.py#L152) |
 | C++ | YDB Query SDK | [Test](examples/authors/cpp/native/main.cpp#L100) | [Test](examples/authors/cpp/native/main.cpp#L116) |
 | C++ | userver | [Test](examples/authors/cpp/userver/smoke_handler.cpp#L60) | [Test](examples/authors/cpp/userver/smoke_handler.cpp#L80) |
 | C# | ADO.NET | [Test](examples/authors/csharp/adonet/Smoke.cs#L14) | [Test](examples/authors/csharp/adonet/Smoke.cs#L34) |
