@@ -57,8 +57,43 @@ func TestJDBCMultiNamesAndShapes(t *testing.T) {
 	require.ErrorContains(t, err, "result field name collision")
 }
 
+func TestJDBCMultiDiagnostics(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		runtime string
+		change  func(*model.AnalysisResult)
+		want    string
+	}{
+		{"native runtime", "ydb", nil, "Java ydb does not support :multi"},
+		{"result type collision", "jdbc", func(a *model.AnalysisResult) {
+			a.Catalog.Tables = []model.Table{{Name: "ReadResult", Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Int32"}}}}}
+		}, "Java type name collision: ReadResult"},
+		{"invalid result name", "jdbc", func(a *model.AnalysisResult) {
+			a.Queries[0].ResultSets[0].Name = "1st"
+		}, "invalid :multi result name \"1st\""},
+		{"duplicate row field", "jdbc", func(a *model.AnalysisResult) {
+			a.Queries[0].ResultSets[0].Columns = append(a.Queries[0].ResultSets[0].Columns, model.Column{Name: "Id", Type: model.Type{Kind: "Int32"}})
+		}, "Java field name collision in ReadFirstRow: id"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &model.AnalysisResult{Queries: []model.AnalyzedQuery{{
+				Name: "Read", Command: model.Multi, SQL: "SELECT 1 AS id; SELECT 2 AS id;",
+				ResultSets: []model.ResultSet{
+					{Name: "First", Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Int32"}}}},
+					{Name: "Second", Columns: []model.Column{{Name: "id", Type: model.Type{Kind: "Int32"}}}},
+				},
+			}}}
+			if tc.change != nil {
+				tc.change(a)
+			}
+			_, err := Generate(a, Options{Runtime: tc.runtime})
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
 func TestJDBCMultiRuntime(t *testing.T) {
-	const sql = "-- name: Read :multi\n-- result: Empty\nSELECT 1 AS id FROM (SELECT 1 AS x) AS source WHERE false;\n-- result: Flag\nSELECT true AS enabled LIMIT 1;\nSELECT CAST(NULL AS Optional<Utf8>) AS status;"
+	const sql = "-- name: Read :multi\n-- result: Empty\nSELECT 1 AS id FROM (SELECT 1 AS x) AS source WHERE false;\n-- result: Flag\nSELECT true AS enabled LIMIT 1;\nSELECT CAST(NULL AS Optional<Utf8>) AS status;\nSELECT CurrentUtcTimestamp() AS at;"
 	analysis, err := analyzer.Analyze(nil, []model.Source{{Name: "queries.sql", Text: sql}})
 	require.NoError(t, err)
 	files, err := Generate(analysis, Options{Package: "multires", Runtime: "jdbc"})
@@ -90,6 +125,7 @@ public final class Main {
     private static Set empty() { return new Set("id", "Int32", 0); }
     private static Set flag() { return new Set("enabled", "Bool", 0, true); }
     private static Set optional() { return new Set("status", "Text", 1, (Object) null); }
+    private static Set timestamp() { return new Set("at", "Timestamp", 0, java.sql.Timestamp.from(java.time.Instant.ofEpochSecond(1))); }
 
     private static ResultSet rows(Set set) {
         var metadata = (ResultSetMetaData) Proxy.newProxyInstance(Main.class.getClassLoader(), new Class<?>[]{ResultSetMetaData.class}, (proxy, method, args) -> switch (method.getName()) {
@@ -103,7 +139,7 @@ public final class Main {
         return (ResultSet) Proxy.newProxyInstance(Main.class.getClassLoader(), new Class<?>[]{ResultSet.class}, (proxy, method, args) -> switch (method.getName()) {
             case "getMetaData" -> metadata;
             case "next" -> ++cursor[0] < set.values().length;
-            case "getInt", "getBoolean", "getString" -> set.values()[cursor[0]];
+            case "getInt", "getBoolean", "getString", "getTimestamp" -> set.values()[cursor[0]];
             case "close" -> null;
             default -> throw new AssertionError(method);
         });
@@ -142,15 +178,18 @@ public final class Main {
     }
 
     public static void main(String[] args) throws Exception {
-        var result = new Queries(connection(new Set[]{empty(), flag(), optional()}, -1)).read();
+        var result = new Queries(connection(new Set[]{empty(), flag(), optional(), timestamp()}, -1)).read();
         if (!result.empty().isEmpty() || result.flag().size() != 1 || !result.flag().get(0).enabled() || result.result3().size() != 1 || result.result3().get(0).status() != null)
             throw new AssertionError("wrong rows, empty list, or result order");
+        if (result.result4().size() != 1 || !result.result4().get(0).at().equals(java.time.Instant.ofEpochSecond(1)))
+            throw new AssertionError("wrong typed Timestamp result");
         fails(new Set[]{new Set("wrong", "Int32", 0), flag(), optional()}, -1, "schema mismatch");
         fails(new Set[]{empty(), new Set("enabled", "Int32", 0, true), optional()}, -1, "schema mismatch");
         fails(new Set[]{empty(), flag(), new Set("status", "Text", 0, (Object) null)}, -1, "schema mismatch");
         fails(new Set[]{empty(), flag()}, -1, "missing result set 3");
-        fails(new Set[]{empty(), flag(), optional(), empty()}, -1, "unexpected extra result set");
-        fails(new Set[]{empty(), flag(), optional()}, 2, "late result failure");
+        fails(new Set[]{empty(), flag(), optional()}, -1, "missing result set 4");
+        fails(new Set[]{empty(), flag(), optional(), timestamp(), empty()}, -1, "unexpected extra result set");
+        fails(new Set[]{empty(), flag(), optional(), timestamp()}, 3, "late result failure");
     }
 }
 `
