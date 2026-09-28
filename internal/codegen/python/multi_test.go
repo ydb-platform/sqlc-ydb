@@ -175,7 +175,7 @@ func TestLiveYDBNativeMultiResultSets(t *testing.T) {
 	if os.Getenv("YDB_CONNECTION_STRING") == "" {
 		t.Skip("set YDB_CONNECTION_STRING to run live YDB adapter validation")
 	}
-	files, err := Generate(multiAnalysis(t), Options{Runtime: "ydb"})
+	files, err := Generate(multiAnalysis(t), Options{Runtime: "ydb", EmitAsyncQuerier: true})
 	require.NoError(t, err)
 	dir := t.TempDir()
 	pkg := filepath.Join(dir, "generated")
@@ -183,9 +183,9 @@ func TestLiveYDBNativeMultiResultSets(t *testing.T) {
 	for _, file := range files {
 		require.NoError(t, os.WriteFile(filepath.Join(pkg, file.Name), file.Content, 0600))
 	}
-	script := `import os, urllib.parse
+	script := `import asyncio, os, urllib.parse
 import ydb
-from generated.queries import Querier
+from generated.queries import AsyncQuerier, Querier
 
 u = urllib.parse.urlsplit(os.environ["YDB_CONNECTION_STRING"])
 driver = ydb.Driver(ydb.DriverConfig(u.scheme + "://" + u.netloc, u.path, credentials=ydb.AnonymousCredentials(), disable_discovery=True))
@@ -205,6 +205,26 @@ try:
     assert [row.column0 for row in bare.result3] == [False]
 finally:
     driver.stop()
+
+async def check_async():
+    async with ydb.aio.Driver(ydb.DriverConfig(u.scheme + "://" + u.netloc, u.path, credentials=ydb.AnonymousCredentials(), disable_discovery=True)) as driver:
+        await driver.wait(timeout=20, fail_fast=True)
+        async with ydb.aio.QuerySessionPool(driver) as pool:
+            async def check(q):
+                value = await q.fetch_summary()
+                assert value.item == []
+                assert [r.enabled for r in value.flags] == [True]
+                assert [r.status for r in value.result3] == ["ready"]
+            await check(AsyncQuerier(pool))
+            async def transaction(tx):
+                await check(AsyncQuerier(tx))
+            await pool.retry_tx_async(transaction)
+            bare = await AsyncQuerier(pool).bare_literals()
+            assert [row.column0 for row in bare.result1] == [1]
+            assert [row.column0 for row in bare.result2] == ["2"]
+            assert [row.column0 for row in bare.result3] == [False]
+
+asyncio.run(check_async())
 `
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
