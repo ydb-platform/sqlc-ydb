@@ -31,7 +31,7 @@ import (
 )
 
 // Version and Commit are set through linker flags in release builds.
-var Version = "0.12.1"
+var Version = "0.13.0"
 var Commit = "unknown"
 
 const help = `sqlc-ydb generates typed code from YQL.
@@ -42,6 +42,7 @@ Usage:
 Commands:
   generate     Analyze queries and generate source code
   compile      Analyze schema and queries without generating files
+  verify       Check released queries against a proposed schema
   diff         Compare generated code with existing files (exit 1 on differences)
   init         Create a sqlc.yaml configuration (version 2)
   version      Print the version and check for updates (--verbose includes the commit)
@@ -49,6 +50,7 @@ Commands:
 Options:
   --upgrade         Install the latest stable release in place (version only)
   -f, --file <path>  Use an alternate configuration file; use --file=-name or ./-name for leading dashes
+  --against <path>  Released sqlc configuration (verify only)
   --no-remote       Skip the version update check
   --no-database     Disable database-assisted analysis
   -h, --help        Print help
@@ -64,6 +66,7 @@ type arguments struct {
 	language      string
 	runtime       string
 	allOptions    bool
+	against       string
 	initProfiles  []config.InitProfile
 }
 
@@ -85,6 +88,17 @@ func parseArgs(args []string) (arguments, error) {
 			a.file = strings.TrimPrefix(arg, "--file=")
 			if a.file == "" {
 				return a, errors.New("--file requires a non-empty path")
+			}
+		case arg == "--against":
+			i++
+			if i == len(args) || args[i] == "" || strings.HasPrefix(args[i], "-") {
+				return a, errors.New("--against requires a non-empty path")
+			}
+			a.against = args[i]
+		case strings.HasPrefix(arg, "--against="):
+			a.against = strings.TrimPrefix(arg, "--against=")
+			if a.against == "" {
+				return a, errors.New("--against requires a non-empty path")
 			}
 		case arg == "--no-database":
 			a.noDatabase = true
@@ -139,6 +153,12 @@ func parseArgs(args []string) (arguments, error) {
 	if (a.language != "" || a.runtime != "" || a.allOptions) && a.command != "init" {
 		return a, errors.New("--language, --runtime and --all-options are only valid for init")
 	}
+	if a.against != "" && a.command != "verify" {
+		return a, errors.New("--against is only valid for verify")
+	}
+	if a.command == "verify" && a.against == "" && !a.help {
+		return a, errors.New("verify requires --against with a released sqlc configuration")
+	}
 	if a.command == "init" {
 		var err error
 		a.initProfiles, err = config.InitProfiles(a.language, a.runtime)
@@ -146,8 +166,8 @@ func parseArgs(args []string) (arguments, error) {
 			return a, err
 		}
 	}
-	if a.noDatabase && a.command != "generate" && a.command != "compile" && a.command != "diff" && !a.help {
-		return a, errors.New("--no-database is only valid for generate, compile, or diff")
+	if a.noDatabase && a.command != "generate" && a.command != "compile" && a.command != "diff" && a.command != "verify" && !a.help {
+		return a, errors.New("--no-database is only valid for generate, compile, diff, or verify")
 	}
 	if a.verbose && a.command != "version" {
 		return a, errors.New("--verbose is only valid for version")
@@ -236,13 +256,19 @@ func run(args []string, stdout, stderr io.Writer, updater *update.Client) int {
 		return 0
 	}
 	switch a.command {
-	case "generate", "compile", "diff":
+	case "generate", "compile", "diff", "verify":
 	default:
 		return fail(fmt.Errorf("unknown command %q", a.command))
 	}
 	c, err := config.Load(a.file)
 	if err != nil {
 		return fail(err)
+	}
+	if a.command == "verify" {
+		if err := verify(c, a.against, a.noDatabase); err != nil {
+			return fail(err)
+		}
+		return 0
 	}
 	files, err := prepare(c, a.command != "compile", a.noDatabase)
 	if err != nil {

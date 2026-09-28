@@ -10,7 +10,14 @@ if err != nil {
 fmt.Println(len(summary.Item), summary.Flags[0].Enabled, summary.Result3[0].Status)
 ```
 
-Both generated Go profiles are in [go/native](go/native) and [go/database/sql](go/database/sql). The caller supplies a native Query Service executor or a `database/sql` connection and retains its transaction and retry policy. The generated method reads every result set, checks its names and YQL types, closes the result, and returns no partial rows on an error. Java JDBC output is in [java/jdbc](java/jdbc); its borrowed connection retains transaction and retry ownership, and its result record has non-null typed lists for every set. Other target runtimes reject `:multi` during generation.
+The generated Go profiles are in [go/native](go/native) and [go/database/sql](go/database/sql); native Python is in [python/native](python/native), and Java JDBC is in [java/jdbc](java/jdbc). The caller supplies a Query Service executor or a `database/sql` connection and retains its transaction and retry policy. The generated method checks every result set's names and YQL types and returns no partial rows on an error. Java JDBC uses a borrowed connection and returns non-null typed lists for every set. Other target runtimes reject `:multi` during generation.
+
+```python
+summary = Querier(pool).fetch_summary(42)
+assert summary.item == []
+assert summary.flags[0].enabled is True
+assert summary.result3[0].status == "ready"
+```
 
 `BareLiterals` uses the three unaliased literal SELECTs from the original request. It generates `Result1`, `Result2` and `Result3`, each with its own row type.
 

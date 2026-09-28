@@ -6,6 +6,13 @@
 
 - Add Java JDBC `:multi` queries with named typed lists, empty-result schema validation and complete result traversal.
 
+## v0.13.0
+
+### Added
+
+- Support `:multi` queries in the native Python runtime with typed lists for each result set.
+- Add local `verify --against` for checking released queries and resolved parameter/result types against a proposed YDB schema, with optional non-executing server validation.
+
 ## v0.12.1
 
 ### Added
