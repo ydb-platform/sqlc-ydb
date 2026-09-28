@@ -9,7 +9,7 @@ import (
 )
 
 func TestNoDatabaseFlag(t *testing.T) {
-	for _, command := range []string{"generate", "compile", "diff"} {
+	for _, command := range []string{"generate", "compile", "diff", "vet"} {
 		for _, args := range [][]string{{command, "--no-database"}, {"--no-database", command}} {
 			got, err := parseArgs(args)
 			require.NoError(t, err, "%v", args)
@@ -31,7 +31,7 @@ func TestDatabaseAnalysisCanBeDisabledWithoutCredentials(t *testing.T) {
 	t.Setenv("SQLC_YDB_UNSET_TEST_URI", "")
 	t.Setenv("SQLC_YDB_UNSET_TEST_TOKEN", "")
 	put(t, cfg, base)
-	for _, command := range []string{"compile", "generate", "diff"} {
+	for _, command := range []string{"compile", "generate", "diff", "vet"} {
 		code, _, stderr := invoke(command, "--no-database", "-f", cfg)
 		require.Zero(t, code, "%s --no-database: %s", command, stderr)
 	}

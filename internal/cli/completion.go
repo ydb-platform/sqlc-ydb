@@ -17,7 +17,7 @@ Usage:
 See docs/installation.md for installation instructions.
 `
 
-const completionCommands = "generate compile verify diff init version completion help"
+const completionCommands = "generate compile verify vet diff init version completion help"
 
 func printCompletion(shell string, w io.Writer) error {
 	languages := map[string]bool{}
@@ -87,7 +87,7 @@ const bashCompletion = `_sqlc_ydb_complete() {
   cmd=""
   for word in "${COMP_WORDS[@]:1:COMP_CWORD-1}"; do
     case "$word" in
-      generate|compile|verify|diff|init|version|completion|help) cmd="$word"; break ;;
+      generate|compile|verify|vet|diff|init|version|completion|help) cmd="$word"; break ;;
     esac
   done
   if [[ -z "$cmd" && "$cur" != -* ]]; then
@@ -100,7 +100,7 @@ const bashCompletion = `_sqlc_ydb_complete() {
   fi
   opts='-h --help -f --file'
   case "$cmd" in
-    generate|compile|diff) opts="$opts --no-database" ;;
+    generate|compile|diff|vet) opts="$opts --no-database" ;;
     verify) opts="$opts --against --no-database" ;;
     init) opts="$opts --language --runtime --all-options --v2" ;;
     version) opts='-h --help --verbose --no-remote --upgrade' ;;
@@ -119,7 +119,7 @@ _sqlc_ydb() {
   cmd=''
   for word in "${words[@]}"; do
     case "$word" in
-      generate|compile|verify|diff|init|version|completion|help) cmd="$word"; break ;;
+      generate|compile|verify|vet|diff|init|version|completion|help) cmd="$word"; break ;;
     esac
   done
   case "${words[CURRENT-1]}" in
@@ -142,7 +142,7 @@ _sqlc_ydb() {
   fi
   options=(-h --help -f --file)
   case "$cmd" in
-    generate|compile|diff) options+=(--no-database) ;;
+    generate|compile|diff|vet) options+=(--no-database) ;;
     verify) options+=(--against --no-database) ;;
     init) options+=(--language --runtime --all-options --v2) ;;
     version) options=(-h --help --verbose --no-remote --upgrade) ;;
@@ -156,7 +156,7 @@ compdef _sqlc_ydb sqlc-ydb
 const fishCompletion = `function __fish_sqlc_ydb_needs_command
     for word in (commandline -opc)
         switch $word
-            case generate compile verify diff init version completion help
+            case generate compile verify vet diff init version completion help
                 return 1
         end
     end
@@ -167,9 +167,9 @@ function __fish_sqlc_ydb_using_command --argument-names wanted
 end
 complete -c sqlc-ydb -n '__fish_sqlc_ydb_needs_command' -f -a '%s'
 complete -c sqlc-ydb -l help -s h
-complete -c sqlc-ydb -n '__fish_sqlc_ydb_needs_command; or __fish_sqlc_ydb_using_command generate; or __fish_sqlc_ydb_using_command compile; or __fish_sqlc_ydb_using_command diff; or __fish_sqlc_ydb_using_command verify; or __fish_sqlc_ydb_using_command init' -l file -s f -r -F
+complete -c sqlc-ydb -n '__fish_sqlc_ydb_needs_command; or __fish_sqlc_ydb_using_command generate; or __fish_sqlc_ydb_using_command compile; or __fish_sqlc_ydb_using_command diff; or __fish_sqlc_ydb_using_command verify; or __fish_sqlc_ydb_using_command vet; or __fish_sqlc_ydb_using_command init' -l file -s f -r -F
 complete -c sqlc-ydb -n '__fish_sqlc_ydb_using_command verify' -l against -r -F
-complete -c sqlc-ydb -n '__fish_sqlc_ydb_using_command generate; or __fish_sqlc_ydb_using_command compile; or __fish_sqlc_ydb_using_command diff; or __fish_sqlc_ydb_using_command verify' -l no-database
+complete -c sqlc-ydb -n '__fish_sqlc_ydb_using_command generate; or __fish_sqlc_ydb_using_command compile; or __fish_sqlc_ydb_using_command diff; or __fish_sqlc_ydb_using_command verify; or __fish_sqlc_ydb_using_command vet' -l no-database
 complete -c sqlc-ydb -n '__fish_sqlc_ydb_using_command init' -l language -r -a '%s'
 complete -c sqlc-ydb -n '__fish_sqlc_ydb_using_command init' -l runtime -r -a '%s'
 complete -c sqlc-ydb -n '__fish_sqlc_ydb_using_command init' -l all-options
@@ -222,7 +222,7 @@ const powershellCompletion = `Register-ArgumentCompleter -Native -CommandName sq
         else {
             $options = @('-h', '--help', '-f', '--file')
             switch ($command) {
-                { $_ -in @('generate', 'compile', 'diff') } { $options += '--no-database' }
+                { $_ -in @('generate', 'compile', 'diff', 'vet') } { $options += '--no-database' }
                 'verify' { $options += @('--against', '--no-database') }
                 'init' { $options += @('--language', '--runtime', '--all-options', '--v2') }
                 'version' { $options = @('-h', '--help', '--verbose', '--no-remote', '--upgrade') }

@@ -215,15 +215,23 @@ type SQL struct {
 	Engine   string    `yaml:"engine"`
 	Schema   Paths     `yaml:"schema"`
 	Queries  Paths     `yaml:"queries"`
+	Rules    []string  `yaml:"rules"`
 	Database *Database `yaml:"database"`
 	Analyzer Analyzer  `yaml:"analyzer"`
 	Gen      Gen       `yaml:"gen"`
 	Codegen  yaml.Node `yaml:"codegen"`
 }
 
+type Rule struct {
+	Name    string `yaml:"name"`
+	Rule    string `yaml:"rule"`
+	Message string `yaml:"message"`
+}
+
 type Config struct {
 	Version string    `yaml:"version"`
 	SQL     []SQL     `yaml:"sql"`
+	Rules   []Rule    `yaml:"rules"`
 	Plugins yaml.Node `yaml:"plugins"`
 	Engines yaml.Node `yaml:"engines"`
 	Path    string    `yaml:"-"`
@@ -286,8 +294,31 @@ func Parse(data []byte) (*Config, error) {
 	if len(c.SQL) == 0 {
 		return nil, errors.New("configuration contains no SQL query sets")
 	}
+	ruleNames := map[string]bool{"sqlc/db-prepare": true}
+	for i, rule := range c.Rules {
+		if rule.Name == "" || strings.TrimSpace(rule.Name) != rule.Name {
+			return nil, fmt.Errorf("rules[%d].name must be non-empty and have no surrounding whitespace", i)
+		}
+		if ruleNames[rule.Name] {
+			return nil, fmt.Errorf("rules[%d].name %q is repeated or reserved", i, rule.Name)
+		}
+		if strings.TrimSpace(rule.Rule) == "" {
+			return nil, fmt.Errorf("rules[%d].rule requires a CEL expression", i)
+		}
+		ruleNames[rule.Name] = true
+	}
 	for i := range c.SQL {
 		s := &c.SQL[i]
+		selected := map[string]bool{}
+		for _, name := range s.Rules {
+			if !ruleNames[name] {
+				return nil, fmt.Errorf("sql[%d].rules references unknown rule %q", i, name)
+			}
+			if selected[name] {
+				return nil, fmt.Errorf("sql[%d].rules repeats %q", i, name)
+			}
+			selected[name] = true
+		}
 		if s.Codegen.Kind != 0 {
 			return nil, pluginError()
 		}

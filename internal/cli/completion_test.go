@@ -20,6 +20,7 @@ func TestCompletionCommand(t *testing.T) {
 			require.Empty(t, stderr)
 			assert.Contains(t, out, "sqlc-ydb")
 			assert.Contains(t, out, "generate")
+			assert.Contains(t, out, "vet")
 			if shell == "fish" {
 				assert.Contains(t, out, "-l against")
 			} else {
@@ -62,6 +63,7 @@ func TestBashCompletion(t *testing.T) {
 		want        []string
 	}{
 		{"commands", "sqlc-ydb co", 1, []string{"compile", "completion"}},
+		{"vet options", "sqlc-ydb vet --no", 2, []string{"--no-database"}},
 		{"options", "sqlc-ydb generate --no", 2, []string{"--no-database"}},
 		{"shells", "sqlc-ydb completion p", 2, []string{"powershell"}},
 		{"completion options", "sqlc-ydb completion --", 2, []string{"--help"}},
@@ -105,6 +107,7 @@ func TestZshCompletionSyntax(t *testing.T) {
 	}{
 		{"sqlc-ydb co", "completion"},
 		{"sqlc-ydb verify --no", "--no-database"},
+		{"sqlc-ydb vet --no", "--no-database"},
 		{"sqlc-ydb completion p", "powershell"},
 		{"sqlc-ydb completion --", "--help"},
 		{"sqlc-ydb init --language py", "python"},
