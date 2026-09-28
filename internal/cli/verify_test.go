@@ -111,6 +111,40 @@ func TestVerifyRejectsInvalidBaseline(t *testing.T) {
 	require.Contains(t, stderr, "missing")
 }
 
+func TestVerifyRejectsInvalidProposedQueries(t *testing.T) {
+	released, proposed, _ := verifyFixture(t,
+		"CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));",
+		"CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));",
+		"-- name: ReadRecord :one\nSELECT id FROM records;",
+		"-- name: Current :one\nSELECT missing FROM records;")
+	code, _, stderr := invoke("verify", "--against", released, "-f", proposed)
+	require.NotZero(t, code)
+	require.Contains(t, stderr, "proposed configuration")
+	require.Contains(t, stderr, "missing")
+}
+
+func TestVerifyRejectsMissingReleasedSources(t *testing.T) {
+	for _, tc := range []struct {
+		name, file, diagnostic string
+	}{
+		{"schema", "schema.sql", "released sql[0] schema"},
+		{"queries", "queries.sql", "released sql[0] queries"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			released, proposed, _ := verifyFixture(t,
+				"CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));",
+				"CREATE TABLE records (id Uint64 NOT NULL, PRIMARY KEY(id));",
+				"-- name: ReadRecord :one\nSELECT id FROM records;",
+				"-- name: Current :one\nSELECT id FROM records;")
+			require.NoError(t, os.Remove(filepath.Join(filepath.Dir(released), tc.file)))
+			code, _, stderr := invoke("verify", "--against", released, "-f", proposed)
+			require.NotZero(t, code)
+			require.Contains(t, stderr, tc.diagnostic)
+			require.Contains(t, stderr, tc.file)
+		})
+	}
+}
+
 func TestVerifyRequiresBaseline(t *testing.T) {
 	code, _, stderr := invoke("verify")
 	require.NotZero(t, code)
