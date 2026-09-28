@@ -32,6 +32,27 @@ sql:
 	}
 }
 
+func TestPythonQuerierModes(t *testing.T) {
+	base := "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n  gen:\n    python:\n      out: py\n"
+	for _, tc := range []struct {
+		name, options       string
+		wantSync, wantAsync bool
+	}{
+		{"default", "", true, false},
+		{"async only", "      emit_sync_querier: false\n      emit_async_querier: true\n", false, true},
+		{"both", "      emit_sync_querier: true\n      emit_async_querier: true\n", true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := Parse([]byte(base + tc.options))
+			require.NoError(t, err)
+			require.Equal(t, tc.wantSync, *c.SQL[0].Gen.Python.EmitSyncQuerier)
+			require.Equal(t, tc.wantAsync, c.SQL[0].Gen.Python.EmitAsyncQuerier)
+		})
+	}
+	_, err := Parse([]byte(base + "      emit_sync_querier: false\n      emit_async_querier: false\n"))
+	require.ErrorContains(t, err, "Python requires emit_sync_querier or emit_async_querier")
+}
+
 func TestVetRuleConfiguration(t *testing.T) {
 	base := "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n  rules: [no-scan]\nrules:\n- name: no-scan\n  rule: query.cmd == 'many'\n"
 	c, err := Parse([]byte(base))

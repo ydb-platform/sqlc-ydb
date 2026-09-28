@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional, Union
 from . import models as _models
 import ydb as _ydb
+import ydb.aio as _ydb_aio
 
 
 class Querier:
@@ -115,6 +116,136 @@ class Querier:
         parameters = {
         }
         result_sets = self._execute(
+            ("PRAGMA TablePathPrefix(\"/local/sqlc_namespaces/a\");\n"
+             "SELECT a.id AS id, a.name AS primary_name, b.name AS secondary_name\n"
+             "FROM users AS a\n"
+             "LEFT JOIN `/local/sqlc_namespaces/b/users` AS b ON a.id = b.id\n"
+             "ORDER BY a.id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.CompareUserNamesRow(
+            id=row["id"],
+            primary_name=row["primary_name"],
+            secondary_name=row["secondary_name"],
+        ) for row in rows]
+
+
+class AsyncQuerier:
+    def __init__(self, executor: Union[_ydb_aio.QuerySessionPool, _ydb_aio.QueryTxContext], *, retry_settings: Optional[_ydb.RetrySettings] = None):
+        if not isinstance(executor, (_ydb_aio.QuerySessionPool, _ydb_aio.QueryTxContext)):
+            raise TypeError("AsyncQuerier requires ydb.aio.QuerySessionPool or ydb.aio.QueryTxContext")
+        if retry_settings is not None and not isinstance(executor, _ydb_aio.QuerySessionPool):
+            raise ValueError("retry_settings belongs to the pool; configure retries around the whole transaction")
+        self._executor = executor
+        self._retry_settings = retry_settings
+        if isinstance(executor, _ydb_aio.QuerySessionPool) and retry_settings is None:
+            self._retry_settings = _ydb.RetrySettings(max_retries=0)
+
+    async def _execute(self, query: str, parameters: dict):
+        if isinstance(self._executor, _ydb_aio.QuerySessionPool):
+            return await self._executor.execute_with_retries(query, parameters, retry_settings=self._retry_settings)
+        async with await self._executor.execute(query, parameters) as stream:
+            return [result_set async for result_set in stream]
+
+    # -- name: UpsertPrimaryUser :exec
+    async def upsert_primary_user(self, id: int, name: str) -> None:
+        parameters = {
+            "$id": _ydb.TypedValue(id, _ydb.PrimitiveType.Uint64),
+            "$name": _ydb.TypedValue(name, _ydb.PrimitiveType.Utf8),
+        }
+        result_sets = await self._execute(
+            ("PRAGMA TablePathPrefix(\"/local/sqlc_namespaces/a\");\n"
+             "DECLARE $id AS Uint64;\n"
+             "DECLARE $name AS Utf8;\n"
+             "UPSERT INTO users (id, name) VALUES ($id, $name);"),
+            parameters,
+        )
+        return None
+
+    # -- name: UpsertSecondaryUser :exec
+    async def upsert_secondary_user(self, id: int, name: str) -> None:
+        parameters = {
+            "$id": _ydb.TypedValue(id, _ydb.PrimitiveType.Uint64),
+            "$name": _ydb.TypedValue(name, _ydb.PrimitiveType.Utf8),
+        }
+        result_sets = await self._execute(
+            ("PRAGMA TablePathPrefix(\"/local/sqlc_namespaces/b\");\n"
+             "DECLARE $id AS Uint64;\n"
+             "DECLARE $name AS Utf8;\n"
+             "UPSERT INTO users (id, name) VALUES ($id, $name);"),
+            parameters,
+        )
+        return None
+
+    # -- name: GetPrimaryUser :one
+    async def get_primary_user(self, id: int) -> Optional[_models.LocalSqlcNamespacesAUsers]:
+        parameters = {
+            "$id": _ydb.TypedValue(id, _ydb.PrimitiveType.Uint64),
+        }
+        result_sets = await self._execute(
+            ("PRAGMA TablePathPrefix(\"/local/sqlc_namespaces/a\");\n"
+             "SELECT users.`id` AS `id`, `users`.`name` AS `name` FROM users WHERE id = $id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        row = rows[0] if rows else None
+        if row is None:
+            return None
+        return _models.LocalSqlcNamespacesAUsers(
+            id=row["id"],
+            name=row["name"],
+        )
+
+    # -- name: GetSecondaryUser :one
+    async def get_secondary_user(self, id: int) -> Optional[_models.LocalSqlcNamespacesBUsers]:
+        parameters = {
+            "$id": _ydb.TypedValue(id, _ydb.PrimitiveType.Uint64),
+        }
+        result_sets = await self._execute(
+            ("PRAGMA TablePathPrefix(\"/local/sqlc_namespaces/b\");\n"
+             "DECLARE $id AS Uint64;\n"
+             "SELECT users.`id` AS `id`, `users`.`name` AS `name` FROM users WHERE id = $id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        row = rows[0] if rows else None
+        if row is None:
+            return None
+        return _models.LocalSqlcNamespacesBUsers(
+            id=row["id"],
+            name=row["name"],
+        )
+
+    # -- name: FindPrimaryUsersByName :many
+    async def find_primary_users_by_name(self, name: str) -> list[_models.LocalSqlcNamespacesAUsers]:
+        parameters = {
+            "$name": _ydb.TypedValue(name, _ydb.PrimitiveType.Utf8),
+        }
+        result_sets = await self._execute(
+            ("PRAGMA TablePathPrefix(\"/local/sqlc_namespaces/a\");\n"
+             "SELECT u.`id` AS `id`, `u`.`name` AS `name` FROM users VIEW by_name AS u WHERE u.name = $name ORDER BY u.id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.LocalSqlcNamespacesAUsers(
+            id=row["id"],
+            name=row["name"],
+        ) for row in rows]
+
+    # -- name: CompareUserNames :many
+    async def compare_user_names(self) -> list[_models.CompareUserNamesRow]:
+        parameters = {
+        }
+        result_sets = await self._execute(
             ("PRAGMA TablePathPrefix(\"/local/sqlc_namespaces/a\");\n"
              "SELECT a.id AS id, a.name AS primary_name, b.name AS secondary_name\n"
              "FROM users AS a\n"

@@ -82,6 +82,21 @@ func TestGenerateCompileDiff(t *testing.T) {
 	require.Equal(t, original, data, "regeneration not deterministic")
 }
 
+func TestPythonAsyncOptionsReachGenerator(t *testing.T) {
+	dir := t.TempDir()
+	put(t, filepath.Join(dir, "schema.sql"), "CREATE TABLE authors (id Uint64 NOT NULL, PRIMARY KEY(id));")
+	put(t, filepath.Join(dir, "queries.sql"), "-- name: GetAuthor :one\nDECLARE $id AS Uint64;\nSELECT id FROM authors WHERE id = $id;")
+	cfg := filepath.Join(dir, "sqlc.yaml")
+	put(t, cfg, "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n  gen:\n    python:\n      out: py\n      runtime: ydb\n      emit_sync_querier: false\n      emit_async_querier: true\n")
+	code, _, stderr := invoke("generate", "-f", cfg)
+	require.Zero(t, code, stderr)
+	queries, err := os.ReadFile(filepath.Join(dir, "py", "queries.py"))
+	require.NoError(t, err)
+	require.Contains(t, string(queries), "class AsyncQuerier:")
+	require.NotContains(t, string(queries), "class Querier:")
+	require.Contains(t, string(queries), "import ydb.aio as _ydb_aio")
+}
+
 func TestSQLCArgumentDiagnosticsAcrossCommands(t *testing.T) {
 	dir := t.TempDir()
 	put(t, filepath.Join(dir, "schema.sql"), "CREATE TABLE foo (id Uint64 NOT NULL, PRIMARY KEY(id));")

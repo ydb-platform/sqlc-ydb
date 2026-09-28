@@ -403,7 +403,7 @@ func prepare(c *config.Config, generate, noDatabase bool) ([]output, error) {
 			}
 		}
 		if p := s.Gen.Python; p != nil {
-			files, err := python.Generate(result, python.Options{Runtime: p.Runtime, EmitAsyncQuerier: p.EmitAsyncQuerier})
+			files, err := python.Generate(result, python.Options{Runtime: p.Runtime, EmitSyncQuerier: p.EmitSyncQuerier, EmitAsyncQuerier: p.EmitAsyncQuerier})
 			if err != nil {
 				return nil, fmt.Errorf("Python generation: %w", err)
 			}

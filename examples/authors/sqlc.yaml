@@ -33,6 +33,7 @@ sql:
       python:
         out: python/native
         runtime: ydb
+        emit_async_querier: true
       csharp:
         namespace: Authors.AdoNet
         out: csharp/adonet

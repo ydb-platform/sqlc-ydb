@@ -15,6 +15,7 @@ import (
 
 type Options struct {
 	Runtime          string
+	EmitSyncQuerier  *bool
 	EmitAsyncQuerier bool
 }
 
@@ -31,8 +32,11 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 	if o.Runtime != "ydb" && o.Runtime != "dbapi" && o.Runtime != "sqlalchemy" {
 		return nil, fmt.Errorf("python generator: unsupported runtime %q", o.Runtime)
 	}
-	if o.EmitAsyncQuerier {
-		return nil, fmt.Errorf("python generator: async querier is unsupported by the installed YDB Python runtimes; use a synchronous querier")
+	if o.EmitAsyncQuerier && o.Runtime != "ydb" {
+		return nil, fmt.Errorf("python generator: async querier is unsupported by runtime %s; use runtime ydb", o.Runtime)
+	}
+	if o.EmitSyncQuerier != nil && !*o.EmitSyncQuerier && !o.EmitAsyncQuerier {
+		return nil, fmt.Errorf("python generator: requires emit_sync_querier or emit_async_querier")
 	}
 	for _, q := range a.Queries {
 		if err := validateQuery(q, o); err != nil {
@@ -325,12 +329,22 @@ func renderQueries(a *model.AnalysisResult, o Options) (string, error) {
 		b.WriteString(", Union")
 	}
 	b.WriteString("\n" + parameterTypeImports(a) + "from . import models as _models\nimport ydb as _ydb\n")
+	if o.EmitAsyncQuerier {
+		b.WriteString("import ydb.aio as _ydb_aio\n")
+	}
 	if o.Runtime == "sqlalchemy" {
 		b.WriteString("from sqlalchemy import text as _text\nfrom sqlalchemy.engine import Connection\n")
 	}
 	b.WriteString("\n")
-	if err := renderClass(&b, a, o); err != nil {
-		return "", err
+	if o.EmitSyncQuerier == nil || *o.EmitSyncQuerier {
+		if err := renderClass(&b, a, o, false); err != nil {
+			return "", err
+		}
+	}
+	if o.EmitAsyncQuerier {
+		if err := renderClass(&b, a, o, true); err != nil {
+			return "", err
+		}
 	}
 	return b.String(), nil
 }
@@ -422,11 +436,25 @@ func sqlalchemySQL(q model.AnalyzedQuery) (string, error) {
 	return out.String(), nil
 }
 
-func renderClass(b *strings.Builder, a *model.AnalysisResult, o Options) error {
-	b.WriteString("\nclass Querier:\n")
+func renderClass(b *strings.Builder, a *model.AnalysisResult, o Options, async bool) error {
+	name := "Querier"
+	if async {
+		name = "AsyncQuerier"
+	}
+	b.WriteString("\nclass " + name + ":\n")
 	if o.Runtime == "ydb" {
-		b.WriteString("    def __init__(self, executor: Union[_ydb.QuerySessionPool, _ydb.QueryTxContext], *, retry_settings: Optional[_ydb.RetrySettings] = None):\n        if retry_settings is not None and not isinstance(executor, _ydb.QuerySessionPool):\n            raise ValueError(\"retry_settings belongs to the pool; configure retries around the whole transaction\")\n        self._executor = executor\n        self._retry_settings = retry_settings\n        if isinstance(executor, _ydb.QuerySessionPool) and retry_settings is None:\n            self._retry_settings = _ydb.RetrySettings(max_retries=0)\n\n")
-		b.WriteString("    def _execute(self, query: str, parameters: dict):\n        if isinstance(self._executor, _ydb.QuerySessionPool):\n            return self._executor.execute_with_retries(query, parameters, retry_settings=self._retry_settings)\n        return list(self._executor.execute(query, parameters))\n\n")
+		pool, tx := "_ydb.QuerySessionPool", "_ydb.QueryTxContext"
+		typeCheck := ""
+		if async {
+			pool, tx = "_ydb_aio.QuerySessionPool", "_ydb_aio.QueryTxContext"
+			typeCheck = "        if not isinstance(executor, (" + pool + ", " + tx + ")):\n            raise TypeError(\"AsyncQuerier requires ydb.aio.QuerySessionPool or ydb.aio.QueryTxContext\")\n"
+		}
+		b.WriteString("    def __init__(self, executor: Union[" + pool + ", " + tx + "], *, retry_settings: Optional[_ydb.RetrySettings] = None):\n" + typeCheck + "        if retry_settings is not None and not isinstance(executor, " + pool + "):\n            raise ValueError(\"retry_settings belongs to the pool; configure retries around the whole transaction\")\n        self._executor = executor\n        self._retry_settings = retry_settings\n        if isinstance(executor, " + pool + ") and retry_settings is None:\n            self._retry_settings = _ydb.RetrySettings(max_retries=0)\n\n")
+		if async {
+			b.WriteString("    async def _execute(self, query: str, parameters: dict):\n        if isinstance(self._executor, _ydb_aio.QuerySessionPool):\n            return await self._executor.execute_with_retries(query, parameters, retry_settings=self._retry_settings)\n        async with await self._executor.execute(query, parameters) as stream:\n            return [result_set async for result_set in stream]\n\n")
+		} else {
+			b.WriteString("    def _execute(self, query: str, parameters: dict):\n        if isinstance(self._executor, _ydb.QuerySessionPool):\n            return self._executor.execute_with_retries(query, parameters, retry_settings=self._retry_settings)\n        return list(self._executor.execute(query, parameters))\n\n")
+		}
 	}
 	if o.Runtime == "dbapi" {
 		b.WriteString("    def __init__(self, connection):\n        self._connection = connection\n\n")
@@ -435,14 +463,14 @@ func renderClass(b *strings.Builder, a *model.AnalysisResult, o Options) error {
 		b.WriteString("    def __init__(self, connection: Connection):\n        self._connection = connection\n\n")
 	}
 	for _, q := range a.Queries {
-		if err := renderMethod(b, a, q, o); err != nil {
+		if err := renderMethod(b, a, q, o, async); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQuery, o Options) error {
+func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQuery, o Options, async bool) error {
 	sql := model.WithoutQueryAnnotation(q.SQL)
 	q.SQL = sql
 	if o.Runtime == "sqlalchemy" {
@@ -482,14 +510,22 @@ func renderMethod(b *strings.Builder, a *model.AnalysisResult, q model.AnalyzedQ
 		indent = "            "
 	}
 	b.WriteString("    # " + model.QueryAnnotation(q) + "\n")
-	b.WriteString("    def " + methodName(q.Name) + "(self" + p + ") -> " + ret + ":\n")
+	definition := "    def "
+	if async {
+		definition = "    async def "
+	}
+	b.WriteString(definition + methodName(q.Name) + "(self" + p + ") -> " + ret + ":\n")
 
 	if o.Runtime == "ydb" {
 		b.WriteString("        parameters = {\n")
 		for i, x := range q.Parameters {
 			renderParameter(b, x, typeExprs[i], o.Runtime)
 		}
-		b.WriteString("        }\n        result_sets = self._execute(\n            " + literal + ",\n            parameters,\n        )\n")
+		call := "self._execute"
+		if async {
+			call = "await self._execute"
+		}
+		b.WriteString("        }\n        result_sets = " + call + "(\n            " + literal + ",\n            parameters,\n        )\n")
 	}
 	if o.Runtime == "dbapi" {
 		b.WriteString("        parameters = {\n")
