@@ -545,3 +545,545 @@ class Querier:
             yson_string=row["yson_string"],
             pattern_found=row["pattern_found"],
         )
+
+
+class AsyncQuerier:
+    def __init__(self, executor: Union[_ydb.aio.QuerySessionPool, _ydb.aio.QueryTxContext], *, retry_settings: Optional[_ydb.RetrySettings] = None):
+        if retry_settings is not None and not isinstance(executor, _ydb.aio.QuerySessionPool):
+            raise ValueError("retry_settings belongs to the pool; configure retries around the whole transaction")
+        self._executor = executor
+        self._retry_settings = retry_settings
+        if isinstance(executor, _ydb.aio.QuerySessionPool) and retry_settings is None:
+            self._retry_settings = _ydb.RetrySettings(max_retries=0)
+
+    async def _execute(self, query: str, parameters: dict):
+        if isinstance(self._executor, _ydb.aio.QuerySessionPool):
+            return await self._executor.execute_with_retries(query, parameters, retry_settings=self._retry_settings)
+        async with await self._executor.execute(query, parameters) as stream:
+            return [result_set async for result_set in stream]
+
+    # -- name: GetAuthor :one
+    async def get_author(self, author_id: int) -> Optional[_models.Authors]:
+        parameters = {
+            "$author_id": _ydb.TypedValue(author_id, _ydb.PrimitiveType.Uint64),
+        }
+        result_sets = await self._execute(
+            ("SELECT author_id, name\n"
+             "FROM authors\n"
+             "WHERE author_id = $author_id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        row = rows[0] if rows else None
+        if row is None:
+            return None
+        return _models.Authors(
+            author_id=row["author_id"],
+            name=row["name"],
+        )
+
+    # -- name: FindAuthors :many
+    async def find_authors(self, min_author_id: int, filter_name: Optional[str]) -> list[_models.Authors]:
+        parameters = {
+            "$min_author_id": _ydb.TypedValue(min_author_id, _ydb.PrimitiveType.Uint64),
+            "$filter_name": _ydb.TypedValue(filter_name, _ydb.OptionalType(_ydb.PrimitiveType.Utf8)),
+        }
+        result_sets = await self._execute(
+            ("SELECT author_id, name\n"
+             "FROM authors\n"
+             "WHERE author_id >= $min_author_id\n"
+             "  AND ($`filter_name` IS NULL OR name = $`filter_name`)\n"
+             "ORDER BY author_id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.Authors(
+            author_id=row["author_id"],
+            name=row["name"],
+        ) for row in rows]
+
+    # -- name: GetBook :one
+    async def get_book(self, book_id: int) -> Optional[_models.Books]:
+        parameters = {
+            "$book_id": _ydb.TypedValue(book_id, _ydb.PrimitiveType.Uint64),
+        }
+        result_sets = await self._execute(
+            ("SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags\n"
+             "FROM books\n"
+             "WHERE book_id = $book_id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        row = rows[0] if rows else None
+        if row is None:
+            return None
+        return _models.Books(
+            book_id=row["book_id"],
+            author_id=row["author_id"],
+            isbn=row["isbn"],
+            book_type=row["book_type"],
+            title=row["title"],
+            publication_year=row["publication_year"],
+            available=row["available"],
+            tags=row["tags"],
+        )
+
+    # -- name: GetBookAndAuthor :one
+    async def get_book_and_author(self, book_id: int) -> Optional[_models.GetBookAndAuthorRow]:
+        parameters = {
+            "$book_id": _ydb.TypedValue(book_id, _ydb.PrimitiveType.Uint64),
+        }
+        result_sets = await self._execute(
+            ("PRAGMA OrderedColumns;\n"
+             "SELECT `b`.`book_id` AS `__sqlc_embed_0_0`, `b`.`author_id` AS `__sqlc_embed_0_1`, `b`.`isbn` AS `__sqlc_embed_0_2`, `b`.`book_type` AS `__sqlc_embed_0_3`, `b`.`title` AS `__sqlc_embed_0_4`, `b`.`publication_year` AS `__sqlc_embed_0_5`, `b`.`available` AS `__sqlc_embed_0_6`, `b`.`tags` AS `__sqlc_embed_0_7`, `a`.`author_id` AS `__sqlc_embed_1_0`, `a`.`name` AS `__sqlc_embed_1_1`\n"
+             "FROM books AS b\n"
+             "JOIN authors AS a ON b.author_id = a.author_id\n"
+             "WHERE b.book_id = $book_id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        row = rows[0] if rows else None
+        if row is None:
+            return None
+        return _models.GetBookAndAuthorRow(
+            books=_models.Books(
+                book_id=row["__sqlc_embed_0_0"],
+                author_id=row["__sqlc_embed_0_1"],
+                isbn=row["__sqlc_embed_0_2"],
+                book_type=row["__sqlc_embed_0_3"],
+                title=row["__sqlc_embed_0_4"],
+                publication_year=row["__sqlc_embed_0_5"],
+                available=row["__sqlc_embed_0_6"],
+                tags=row["__sqlc_embed_0_7"],
+            ),
+            authors=_models.Authors(
+                author_id=row["__sqlc_embed_1_0"],
+                name=row["__sqlc_embed_1_1"],
+            ),
+        )
+
+    # -- name: DeleteBook :exec
+    async def delete_book(self, book_id: int) -> None:
+        parameters = {
+            "$book_id": _ydb.TypedValue(book_id, _ydb.PrimitiveType.Uint64),
+        }
+        result_sets = await self._execute(
+            ("DELETE FROM books\n"
+             "WHERE book_id = $book_id;"),
+            parameters,
+        )
+        return None
+
+    # -- name: NoOpWithParameter :exec
+    async def no_op_with_parameter(self, value: int) -> None:
+        parameters = {
+            "$value": _ydb.TypedValue(value, _ydb.PrimitiveType.Uint64),
+        }
+        result_sets = await self._execute(
+            ("DECLARE $value AS Uint64;"),
+            parameters,
+        )
+        return None
+
+    # -- name: BooksByTitleYear :many
+    async def books_by_title_year(self, title: str, publication_year: int) -> list[_models.Books]:
+        parameters = {
+            "$title": _ydb.TypedValue(title, _ydb.PrimitiveType.Utf8),
+            "$publication_year": _ydb.TypedValue(publication_year, _ydb.PrimitiveType.Int32),
+        }
+        result_sets = await self._execute(
+            ("SELECT book_id, author_id, isbn, book_type, title, publication_year, available, tags\n"
+             "FROM books\n"
+             "WHERE title = $title AND publication_year = $publication_year;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.Books(
+            book_id=row["book_id"],
+            author_id=row["author_id"],
+            isbn=row["isbn"],
+            book_type=row["book_type"],
+            title=row["title"],
+            publication_year=row["publication_year"],
+            available=row["available"],
+            tags=row["tags"],
+        ) for row in rows]
+
+    # -- name: BooksByTags :many
+    async def books_by_tags(self, tags: str) -> list[_models.BooksByTagsRow]:
+        parameters = {
+            "$tags": _ydb.TypedValue(tags, _ydb.PrimitiveType.Json),
+        }
+        result_sets = await self._execute(
+            ("DECLARE $tags AS Json;\n"
+             "SELECT\n"
+             "    b.book_id,\n"
+             "    b.title,\n"
+             "    a.name,\n"
+             "    b.isbn,\n"
+             "    b.tags\n"
+             "FROM books AS b\n"
+             "LEFT JOIN authors AS a ON b.author_id = a.author_id\n"
+             "WHERE NOT SetIsDisjoint(\n"
+             "    ToSet(Yson::ConvertToStringList(b.tags)),\n"
+             "    Yson::ConvertToStringList($tags)\n"
+             ");"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.BooksByTagsRow(
+            book_id=row["b.book_id"],
+            title=row["b.title"],
+            name=row["a.name"],
+            isbn=row["b.isbn"],
+            tags=row["b.tags"],
+        ) for row in rows]
+
+    # -- name: CreateAuthor :one
+    async def create_author(self, author_id: int, name: str) -> Optional[_models.Authors]:
+        parameters = {
+            "$author_id": _ydb.TypedValue(author_id, _ydb.PrimitiveType.Uint64),
+            "$name": _ydb.TypedValue(name, _ydb.PrimitiveType.Utf8),
+        }
+        result_sets = await self._execute(
+            ("INSERT INTO authors (author_id, name)\n"
+             "VALUES ($author_id, $name)\n"
+             "RETURNING author_id, name;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        row = rows[0] if rows else None
+        if row is None:
+            return None
+        return _models.Authors(
+            author_id=row["author_id"],
+            name=row["name"],
+        )
+
+    # -- name: CreateBook :one
+    async def create_book(self, book_id: int, author_id: int, isbn: str, book_type: str, title: str, publication_year: int, available: datetime, tags: str) -> Optional[_models.Books]:
+        parameters = {
+            "$book_id": _ydb.TypedValue(book_id, _ydb.PrimitiveType.Uint64),
+            "$author_id": _ydb.TypedValue(author_id, _ydb.PrimitiveType.Uint64),
+            "$isbn": _ydb.TypedValue(isbn, _ydb.PrimitiveType.Utf8),
+            "$book_type": _ydb.TypedValue(book_type, _ydb.PrimitiveType.Utf8),
+            "$title": _ydb.TypedValue(title, _ydb.PrimitiveType.Utf8),
+            "$publication_year": _ydb.TypedValue(publication_year, _ydb.PrimitiveType.Int32),
+            "$available": _ydb.TypedValue(available, _ydb.PrimitiveType.Timestamp),
+            "$tags": _ydb.TypedValue(tags, _ydb.PrimitiveType.Json),
+        }
+        result_sets = await self._execute(
+            ("INSERT INTO books (\n"
+             "    book_id,\n"
+             "    author_id,\n"
+             "    isbn,\n"
+             "    book_type,\n"
+             "    title,\n"
+             "    publication_year,\n"
+             "    available,\n"
+             "    tags\n"
+             ") VALUES (\n"
+             "    $book_id,\n"
+             "    $author_id,\n"
+             "    $isbn,\n"
+             "    $book_type,\n"
+             "    $title,\n"
+             "    $publication_year,\n"
+             "    $available,\n"
+             "    $tags\n"
+             ")\n"
+             "RETURNING book_id, author_id, isbn, book_type, title, publication_year, available, tags;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        row = rows[0] if rows else None
+        if row is None:
+            return None
+        return _models.Books(
+            book_id=row["book_id"],
+            author_id=row["author_id"],
+            isbn=row["isbn"],
+            book_type=row["book_type"],
+            title=row["title"],
+            publication_year=row["publication_year"],
+            available=row["available"],
+            tags=row["tags"],
+        )
+
+    # -- name: UpdateBook :exec
+    async def update_book(self, title: str, tags: str, book_id: int) -> None:
+        parameters = {
+            "$title": _ydb.TypedValue(title, _ydb.PrimitiveType.Utf8),
+            "$tags": _ydb.TypedValue(tags, _ydb.PrimitiveType.Json),
+            "$book_id": _ydb.TypedValue(book_id, _ydb.PrimitiveType.Uint64),
+        }
+        result_sets = await self._execute(
+            ("UPDATE books\n"
+             "SET title = $title, tags = $tags\n"
+             "WHERE book_id = $book_id;"),
+            parameters,
+        )
+        return None
+
+    # -- name: RemoveBookTag :exec
+    async def remove_book_tag(self, book_id: int, tag: bytes) -> None:
+        parameters = {
+            "$book_id": _ydb.TypedValue(book_id, _ydb.PrimitiveType.Uint64),
+            "$tag": _ydb.TypedValue(tag, _ydb.PrimitiveType.String),
+        }
+        result_sets = await self._execute(
+            ("DECLARE $book_id AS Uint64;\n"
+             "DECLARE $tag AS String;\n"
+             "UPDATE books\n"
+             "SET tags = UNWRAP(Yson::SerializeJson(Json::From(ListFilter(\n"
+             "    Yson::ConvertToStringList(tags),\n"
+             "    ($item) -> ($item NOT IN AsList($tag))\n"
+             "))))\n"
+             "WHERE book_id = $book_id;"),
+            parameters,
+        )
+        return None
+
+    # -- name: UpdateBookISBN :exec
+    async def update_book_i_s_b_n(self, title: str, tags: str, isbn: str, book_id: int) -> None:
+        parameters = {
+            "$title": _ydb.TypedValue(title, _ydb.PrimitiveType.Utf8),
+            "$tags": _ydb.TypedValue(tags, _ydb.PrimitiveType.Json),
+            "$isbn": _ydb.TypedValue(isbn, _ydb.PrimitiveType.Utf8),
+            "$book_id": _ydb.TypedValue(book_id, _ydb.PrimitiveType.Uint64),
+        }
+        result_sets = await self._execute(
+            ("UPDATE books\n"
+             "SET title = $title, tags = $tags, isbn = $isbn\n"
+             "WHERE book_id = $book_id;"),
+            parameters,
+        )
+        return None
+
+    # -- name: DeleteAuthorBeforeYear :exec
+    async def delete_author_before_year(self, publication_year: int, author_id: int) -> None:
+        parameters = {
+            "$publication_year": _ydb.TypedValue(publication_year, _ydb.PrimitiveType.Int32),
+            "$author_id": _ydb.TypedValue(author_id, _ydb.PrimitiveType.Uint64),
+        }
+        result_sets = await self._execute(
+            ("DELETE FROM books\n"
+             "WHERE publication_year < $publication_year AND author_id = $author_id;"),
+            parameters,
+        )
+        return None
+
+    # -- name: SayHello :one
+    async def say_hello(self, name: str) -> Optional[_models.SayHelloRow]:
+        parameters = {
+            "$name": _ydb.TypedValue(name, _ydb.PrimitiveType.Utf8),
+        }
+        result_sets = await self._execute(
+            ("SELECT \"hello \"u || $name AS greeting;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        row = rows[0] if rows else None
+        if row is None:
+            return None
+        return _models.SayHelloRow(
+            greeting=row["greeting"],
+        )
+
+    # -- name: ListAuthorsWithRecentBooks :many
+    async def list_authors_with_recent_books(self, since_year: int) -> list[_models.Authors]:
+        parameters = {
+            "$since_year": _ydb.TypedValue(since_year, _ydb.PrimitiveType.Int32),
+        }
+        result_sets = await self._execute(
+            ("SELECT a.author_id, a.name\n"
+             "FROM authors AS a\n"
+             "WHERE a.author_id IN (\n"
+             "    SELECT b.author_id FROM books AS b WHERE b.publication_year >= $since_year\n"
+             ")\n"
+             "ORDER BY a.author_id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.Authors(
+            author_id=row["author_id"],
+            name=row["name"],
+        ) for row in rows]
+
+    # -- name: ListBooksWithRecentEditions :many
+    async def list_books_with_recent_editions(self, since_year: int) -> list[_models.Books]:
+        parameters = {
+            "$since_year": _ydb.TypedValue(since_year, _ydb.PrimitiveType.Int32),
+        }
+        result_sets = await self._execute(
+            ("DECLARE $since_year AS Int32;\n"
+             "SELECT b.book_id, b.author_id, b.isbn, b.book_type, b.title, b.publication_year, b.available, b.tags\n"
+             "FROM books AS b\n"
+             "WHERE (b.author_id, b.book_type) IN (\n"
+             "    SELECT (recent.author_id, recent.book_type)\n"
+             "    FROM books AS recent\n"
+             "    WHERE recent.publication_year >= $since_year\n"
+             ")\n"
+             "ORDER BY b.book_id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.Books(
+            book_id=row["book_id"],
+            author_id=row["author_id"],
+            isbn=row["isbn"],
+            book_type=row["book_type"],
+            title=row["title"],
+            publication_year=row["publication_year"],
+            available=row["available"],
+            tags=row["tags"],
+        ) for row in rows]
+
+    # -- name: DeleteBooksByAuthorName :exec
+    async def delete_books_by_author_name(self, author_name: str) -> None:
+        parameters = {
+            "$author_name": _ydb.TypedValue(author_name, _ydb.PrimitiveType.Utf8),
+        }
+        result_sets = await self._execute(
+            ("DELETE FROM books\n"
+             "WHERE author_id IN (SELECT author_id FROM authors WHERE name = $author_name);"),
+            parameters,
+        )
+        return None
+
+    # -- name: DeleteAuthorWithBooks :exec
+    async def delete_author_with_books(self, author_id: int) -> None:
+        parameters = {
+            "$author_id": _ydb.TypedValue(author_id, _ydb.PrimitiveType.Uint64),
+        }
+        result_sets = await self._execute(
+            ("DECLARE $author_id AS Uint64;\n"
+             "DELETE FROM books WHERE author_id = $author_id;\n"
+             "DELETE FROM authors WHERE author_id = $author_id;"),
+            parameters,
+        )
+        return None
+
+    # -- name: UpdateAuthorAndListBooks :many
+    async def update_author_and_list_books(self, author_id: int, name: str) -> list[_models.UpdateAuthorAndListBooksRow]:
+        parameters = {
+            "$author_id": _ydb.TypedValue(author_id, _ydb.PrimitiveType.Uint64),
+            "$name": _ydb.TypedValue(name, _ydb.PrimitiveType.Utf8),
+        }
+        result_sets = await self._execute(
+            ("DECLARE $author_id AS Uint64;\n"
+             "DECLARE $name AS Utf8;\n"
+             "UPDATE authors SET name = $name WHERE author_id = $author_id;\n"
+             "SELECT book_id, title FROM books WHERE author_id = $author_id ORDER BY book_id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.UpdateAuthorAndListBooksRow(
+            book_id=row["book_id"],
+            title=row["title"],
+        ) for row in rows]
+
+    # -- name: SelectAuthorAndDeleteBooks :one
+    async def select_author_and_delete_books(self, author_id: int) -> Optional[_models.Authors]:
+        parameters = {
+            "$author_id": _ydb.TypedValue(author_id, _ydb.PrimitiveType.Uint64),
+        }
+        result_sets = await self._execute(
+            ("DECLARE $author_id AS Uint64;\n"
+             "SELECT author_id, name FROM authors WHERE author_id = $author_id;\n"
+             "DELETE FROM books WHERE author_id = $author_id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        row = rows[0] if rows else None
+        if row is None:
+            return None
+        return _models.Authors(
+            author_id=row["author_id"],
+            name=row["name"],
+        )
+
+    # -- name: ListAuthorBookTitles :many
+    async def list_author_book_titles(self, since_year: int) -> list[_models.ListAuthorBookTitlesRow]:
+        parameters = {
+            "$since_year": _ydb.TypedValue(since_year, _ydb.PrimitiveType.Int32),
+        }
+        result_sets = await self._execute(
+            ("DECLARE $since_year AS Int32;\n"
+             "$recent = (SELECT author_id, title FROM books WHERE publication_year >= $since_year);\n"
+             "$grouped = (\n"
+             "    SELECT author_id, AGGREGATE_LIST(title, 100u) AS titles\n"
+             "    FROM $recent\n"
+             "    GROUP BY author_id\n"
+             ");\n"
+             "SELECT a.author_id, a.name, Yson::SerializeJson(Json::From(g.titles)) AS titles_json\n"
+             "FROM (SELECT author_id, name FROM authors) AS a\n"
+             "JOIN $grouped AS g ON a.author_id = g.author_id\n"
+             "ORDER BY a.author_id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.ListAuthorBookTitlesRow(
+            author_id=row["a.author_id"],
+            name=row["a.name"],
+            titles_json=row["titles_json"],
+        ) for row in rows]
+
+    # -- name: InspectBookText :one
+    async def inspect_book_text(self, text: bytes) -> Optional[_models.InspectBookTextRow]:
+        parameters = {
+            "$text": _ydb.TypedValue(text, _ydb.PrimitiveType.String),
+        }
+        result_sets = await self._execute(
+            ("DECLARE $text AS String;\n"
+             "SELECT\n"
+             "    String::Base32Encode($text) AS base32,\n"
+             "    Unicode::IsAlpha(\"Book\"u) AS alphabetic,\n"
+             "    Url::GetHost(\"https://example.org/books\") AS host,\n"
+             "    Math::Sqrt(9.0) AS square_root,\n"
+             "    Yson::IsString(Yson::From($text)) AS yson_string,\n"
+             "    Pire::Grep(\"book\")($text) AS pattern_found;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        row = rows[0] if rows else None
+        if row is None:
+            return None
+        return _models.InspectBookTextRow(
+            base32=row["base32"],
+            alphabetic=row["alphabetic"],
+            host=row["host"],
+            square_root=row["square_root"],
+            yson_string=row["yson_string"],
+            pattern_found=row["pattern_found"],
+        )

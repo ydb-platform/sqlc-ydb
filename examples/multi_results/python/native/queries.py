@@ -106,3 +106,107 @@ class Querier:
                 column0=row["column0"],
             ) for row in result_sets[2].rows],
         )
+
+
+class AsyncQuerier:
+    def __init__(self, executor: Union[_ydb.aio.QuerySessionPool, _ydb.aio.QueryTxContext], *, retry_settings: Optional[_ydb.RetrySettings] = None):
+        if retry_settings is not None and not isinstance(executor, _ydb.aio.QuerySessionPool):
+            raise ValueError("retry_settings belongs to the pool; configure retries around the whole transaction")
+        self._executor = executor
+        self._retry_settings = retry_settings
+        if isinstance(executor, _ydb.aio.QuerySessionPool) and retry_settings is None:
+            self._retry_settings = _ydb.RetrySettings(max_retries=0)
+
+    async def _execute(self, query: str, parameters: dict):
+        if isinstance(self._executor, _ydb.aio.QuerySessionPool):
+            return await self._executor.execute_with_retries(query, parameters, retry_settings=self._retry_settings)
+        async with await self._executor.execute(query, parameters) as stream:
+            return [result_set async for result_set in stream]
+
+    # -- name: FetchSummary :multi
+    async def fetch_summary(self, id: int) -> _models.FetchSummaryResult:
+        parameters = {
+            "$id": _ydb.TypedValue(id, _ydb.PrimitiveType.Uint64),
+        }
+        result_sets = await self._execute(
+            ("DECLARE $id AS Uint64;\n"
+             "-- result: Item\n"
+             "SELECT $id AS id FROM (SELECT 1 AS x) AS source WHERE false;\n"
+             "-- result: Flags\n"
+             "SELECT true AS enabled LIMIT 1;\n"
+             "SELECT \"ready\"u AS status;"),
+            parameters,
+        )
+        if len(result_sets) != 3:
+            raise ValueError("expected 3 YDB result sets")
+        if result_sets[0].truncated:
+            raise ValueError("YDB result set 1 was truncated by the server")
+        if [(column.name, column.type) for column in result_sets[0].columns] != [
+            ("id", _ydb.PrimitiveType.Uint64.proto),
+        ]:
+            raise ValueError("YDB result set 1 schema mismatch")
+        if result_sets[1].truncated:
+            raise ValueError("YDB result set 2 was truncated by the server")
+        if [(column.name, column.type) for column in result_sets[1].columns] != [
+            ("enabled", _ydb.PrimitiveType.Bool.proto),
+        ]:
+            raise ValueError("YDB result set 2 schema mismatch")
+        if result_sets[2].truncated:
+            raise ValueError("YDB result set 3 was truncated by the server")
+        if [(column.name, column.type) for column in result_sets[2].columns] != [
+            ("status", _ydb.PrimitiveType.Utf8.proto),
+        ]:
+            raise ValueError("YDB result set 3 schema mismatch")
+        return _models.FetchSummaryResult(
+            item=[_models.FetchSummaryItemRow(
+                id=row["id"],
+            ) for row in result_sets[0].rows],
+            flags=[_models.FetchSummaryFlagsRow(
+                enabled=row["enabled"],
+            ) for row in result_sets[1].rows],
+            result3=[_models.FetchSummaryResult3Row(
+                status=row["status"],
+            ) for row in result_sets[2].rows],
+        )
+
+    # -- name: BareLiterals :multi
+    async def bare_literals(self) -> _models.BareLiteralsResult:
+        parameters = {
+        }
+        result_sets = await self._execute(
+            ("SELECT 1;\n"
+             "SELECT \"2\"u;\n"
+             "SELECT false;"),
+            parameters,
+        )
+        if len(result_sets) != 3:
+            raise ValueError("expected 3 YDB result sets")
+        if result_sets[0].truncated:
+            raise ValueError("YDB result set 1 was truncated by the server")
+        if [(column.name, column.type) for column in result_sets[0].columns] != [
+            ("column0", _ydb.PrimitiveType.Int32.proto),
+        ]:
+            raise ValueError("YDB result set 1 schema mismatch")
+        if result_sets[1].truncated:
+            raise ValueError("YDB result set 2 was truncated by the server")
+        if [(column.name, column.type) for column in result_sets[1].columns] != [
+            ("column0", _ydb.PrimitiveType.Utf8.proto),
+        ]:
+            raise ValueError("YDB result set 2 schema mismatch")
+        if result_sets[2].truncated:
+            raise ValueError("YDB result set 3 was truncated by the server")
+        if [(column.name, column.type) for column in result_sets[2].columns] != [
+            ("column0", _ydb.PrimitiveType.Bool.proto),
+        ]:
+            raise ValueError("YDB result set 3 schema mismatch")
+        return _models.BareLiteralsResult(
+            result1=[_models.BareLiteralsResult1Row(
+                column0=row["column0"],
+            ) for row in result_sets[0].rows],
+            result2=[_models.BareLiteralsResult2Row(
+                column0=row["column0"],
+            ) for row in result_sets[1].rows],
+            result3=[_models.BareLiteralsResult3Row(
+                column0=row["column0"],
+            ) for row in result_sets[2].rows],
+        )

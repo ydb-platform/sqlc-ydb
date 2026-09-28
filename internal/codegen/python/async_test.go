@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
 func TestNativeAsyncQuerier(t *testing.T) {
@@ -70,9 +71,16 @@ async def check():
     row = await q.get_author(7)
     assert row.id == 7 and row.display_name is None
     assert pool.calls[0][1]["$id"].value == 7
+    retry_settings = ydb.RetrySettings(max_retries=2)
+    await AsyncQuerier(pool, retry_settings=retry_settings).get_author(7)
+    assert pool.calls[-1][2] is retry_settings
     pool.result_sets = [ResultSet([])]
     assert await q.get_author(7) is None
     assert await q.list_authors() == []
+    pool.result_sets = [ResultSet([]), ResultSet([])]
+    try: await q.get_author(7)
+    except ValueError as exc: assert "expected exactly one YDB result set" in str(exc)
+    else: raise AssertionError("extra result set accepted")
     pool.result_sets = []
     assert await q.delete_author(7) is None
     tx = ydb.aio.QueryTxContext([ResultSet([{"id": 9, "display_name": "nine"}])])
@@ -105,12 +113,29 @@ func TestNativeAsyncOnlyAndUnsupportedAdapters(t *testing.T) {
 	queries := string(files[1].Content)
 	require.NotContains(t, queries, "class Querier:")
 	require.Contains(t, queries, "class AsyncQuerier:")
+	sync = true
+	files, err = Generate(a, Options{Runtime: "ydb", EmitSyncQuerier: &sync, EmitAsyncQuerier: true})
+	require.NoError(t, err)
+	queries = string(files[1].Content)
+	require.Contains(t, queries, "class Querier:")
+	require.Contains(t, queries, "class AsyncQuerier:")
+	sync = false
 	for _, runtime := range []string{"dbapi", "sqlalchemy"} {
 		_, err := Generate(a, Options{Runtime: runtime, EmitAsyncQuerier: true})
 		require.ErrorContains(t, err, "async querier is unsupported")
 	}
 	_, err = Generate(a, Options{Runtime: "ydb", EmitSyncQuerier: &sync})
 	require.ErrorContains(t, err, "requires emit_sync_querier or emit_async_querier")
+}
+
+func TestNativeAsyncRejectsUnsupportedParameterType(t *testing.T) {
+	a := sampleAnalysis()
+	a.Queries = a.Queries[2:3]
+	a.Queries[0].Parameters[0].Type = model.Type{Kind: "Any"}
+	for _, sync := range []bool{true, false} {
+		_, err := renderQueries(a, Options{Runtime: "ydb", EmitSyncQuerier: &sync, EmitAsyncQuerier: true})
+		require.ErrorContains(t, err, `query "delete_author" parameter "id": unsupported YQL type "Any"`)
+	}
 }
 
 func TestNativeAsyncMultiResultSets(t *testing.T) {
@@ -170,6 +195,10 @@ async def check():
     try: await q.fetch_summary()
     except ValueError as exc: assert "schema mismatch" in str(exc)
     else: raise AssertionError("wrong result schema accepted")
+    pool.sets = [ResultSet("id", "Int32", [], truncated=True), ResultSet("enabled", "Bool", []), ResultSet("status", "Utf8", [])]
+    try: await q.fetch_summary()
+    except ValueError as exc: assert "truncated by the server" in str(exc)
+    else: raise AssertionError("truncated result set accepted")
 
 asyncio.run(check())
 `

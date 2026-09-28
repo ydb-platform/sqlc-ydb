@@ -8,6 +8,7 @@ sql:
       python:
         out: python/native
         runtime: ydb
+        emit_async_querier: true
       csharp:
         namespace: Booktest.AdoNet
         out: csharp/adonet
