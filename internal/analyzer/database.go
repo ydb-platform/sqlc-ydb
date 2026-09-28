@@ -3,7 +3,6 @@ package analyzer
 import (
 	"context"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 
@@ -42,14 +41,28 @@ func queryValidationSQL(block queryBlock) (string, []model.Diagnostic) {
 	if len(diagnostics) != 0 {
 		return "", diagnostics
 	}
+	query := model.AnalyzedQuery{SQL: block.text}
+	for name, typ := range block.parameters {
+		query.Parameters = append(query.Parameters, model.Parameter{Name: name, Type: typ})
+	}
+	for name := range declared {
+		query.DeclaredParameters = append(query.DeclaredParameters, name)
+	}
+	return ValidationSQL(query), nil
+}
+
+// ValidationSQL prefixes inferred parameters for non-executing YDB checks.
+func ValidationSQL(query model.AnalyzedQuery) string {
+	parameters := slices.Clone(query.Parameters)
+	slices.SortFunc(parameters, func(a, b model.Parameter) int { return strings.Compare(a.Name, b.Name) })
 	var prefix strings.Builder
-	for _, name := range slices.Sorted(maps.Keys(block.parameters)) {
-		if _, sourceDeclared := declared[name]; sourceDeclared {
+	for _, param := range parameters {
+		if query.IsDeclaredParameter(param.Name) {
 			continue
 		}
-		fmt.Fprintf(&prefix, "DECLARE $%s AS %s; ", quotedYQLIdentifier(name), block.parameters[name].String())
+		fmt.Fprintf(&prefix, "DECLARE $%s AS %s; ", quotedYQLIdentifier(param.Name), param.Type.String())
 	}
-	return prefix.String() + block.text, nil
+	return prefix.String() + query.SQL
 }
 
 type databaseTableReference struct {

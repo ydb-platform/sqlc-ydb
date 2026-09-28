@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/cel-go/cel"
 	"github.com/stretchr/testify/require"
 	queryservice "github.com/ydb-platform/ydb-go-genproto/Ydb_Query_V1"
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
@@ -55,4 +56,27 @@ func TestVetRejectsMissingOrMalformedYDBPlan(t *testing.T) {
 			require.ErrorContains(t, err, tc.want)
 		})
 	}
+}
+
+func TestVetEvaluatesPlanActivationOffline(t *testing.T) {
+	const plan = `{"Plan":{"Node Type":"TableFullScan"}}`
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	server := grpc.NewServer()
+	queryservice.RegisterQueryServiceServer(server, vetPlanServer{parts: []*Ydb_Query.ExecuteQueryResponsePart{{Status: Ydb.StatusIds_SUCCESS, ExecStats: &Ydb_TableStats.QueryStats{QueryPlan: plan}}}})
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(server.Stop)
+	client, err := database.New(config.ResolvedDatabase{Endpoint: listener.Addr().String(), Database: "/local", Timeout: time.Second})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+	env, err := cel.NewEnv(cel.Variable("ydb", cel.DynType))
+	require.NoError(t, err)
+	ast, issues := env.Compile(`ydb.plan.operations.exists(op, op == 'TableFullScan') && ydb.plan.json.contains('TableFullScan') && ydb.explain.Plan['Node Type'] == 'TableFullScan'`)
+	require.NoError(t, issues.Err())
+	program, err := env.Program(ast)
+	require.NoError(t, err)
+	failures, err := vetQueries(&config.Config{Version: "2"}, config.SQL{Engine: "ydb", Rules: []string{"plan-check"}}, []model.AnalyzedQuery{{Name: "List", SQL: "SELECT 1;"}}, map[string]vetRule{"plan-check": {program: program, needsPlan: true}}, client)
+	require.NoError(t, err)
+	require.Len(t, failures, 1)
+	require.ErrorContains(t, failures[0], "query List: vet rule plan-check: rule matched")
 }

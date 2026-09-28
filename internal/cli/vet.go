@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/cel-go/cel"
 	celast "github.com/google/cel-go/common/ast"
+	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/config"
 	"github.com/ydb-platform/sqlc-ydb/internal/database"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
@@ -52,53 +53,54 @@ func vet(c *config.Config, noDatabase bool) error {
 		rules[rule.Name] = vetRule{Rule: rule, program: program, needsPlan: needsPlan}
 	}
 	var failures []error
+	withFailures := func(err error) error { return errors.Join(append(failures, err)...) }
 	for i, set := range c.SQL {
 		connected := !noDatabase && set.DatabaseEnabled()
 		for _, name := range set.Rules {
 			if name == "sqlc/db-prepare" && !connected {
-				return fmt.Errorf("sql[%d].rules: sqlc/db-prepare requires database.uri and connected analysis", i)
+				return withFailures(fmt.Errorf("sql[%d].rules: sqlc/db-prepare requires database.uri and connected analysis", i))
 			}
 			if rules[name].needsPlan && !connected {
-				return fmt.Errorf("sql[%d].rules: rule %q requires database.uri and connected analysis for YDB plan checks", i, name)
+				return withFailures(fmt.Errorf("sql[%d].rules: rule %q requires database.uri and connected analysis for YDB plan checks", i, name))
 			}
 		}
 		if len(set.Schema) == 0 && !connected {
-			return fmt.Errorf("sql[%d]: schema is required when database-assisted analysis is disabled", i)
+			return withFailures(fmt.Errorf("sql[%d]: schema is required when database-assisted analysis is disabled", i))
 		}
 		var schemas []model.Source
 		if len(set.Schema) != 0 {
 			schemas, err = source.Read(c.Dir, set.Schema, true)
 			if err != nil {
-				return fmt.Errorf("sql[%d] schema: %w", i, err)
+				return withFailures(fmt.Errorf("sql[%d] schema: %w", i, err))
 			}
 		}
 		queries, err := source.Read(c.Dir, set.Queries, false)
 		if err != nil {
-			return fmt.Errorf("sql[%d] queries: %w", i, err)
+			return withFailures(fmt.Errorf("sql[%d] queries: %w", i, err))
 		}
 		result, err := analyzeSources(c.Dir, set, schemas, queries, noDatabase)
 		if err != nil {
-			return fmt.Errorf("sql[%d]: %w", i, err)
+			return withFailures(fmt.Errorf("sql[%d]: %w", i, err))
 		}
 		var client *database.Client
 		if connected && hasPlanVetRules(set.Rules, rules) {
 			settings, err := set.Database.Resolve(c.Dir)
 			if err != nil {
-				return fmt.Errorf("sql[%d]: %w", i, err)
+				return withFailures(fmt.Errorf("sql[%d]: %w", i, err))
 			}
 			client, err = database.New(settings)
 			if err != nil {
-				return fmt.Errorf("sql[%d]: connect for vet: %w", i, err)
+				return withFailures(fmt.Errorf("sql[%d]: connect for vet: %w", i, err))
 			}
 		}
 		failuresForSet, checkErr := vetQueries(c, set, result.Queries, rules, client)
 		if client != nil {
 			checkErr = errors.Join(checkErr, client.Close())
 		}
-		if checkErr != nil {
-			return fmt.Errorf("sql[%d]: %w", i, checkErr)
-		}
 		failures = append(failures, failuresForSet...)
+		if checkErr != nil {
+			return withFailures(fmt.Errorf("sql[%d]: %w", i, checkErr))
+		}
 	}
 	return errors.Join(failures...)
 }
@@ -121,13 +123,13 @@ func vetQueries(c *config.Config, set config.SQL, queries []model.AnalyzedQuery,
 			"ydb":    map[string]any{},
 		}
 		if client != nil {
-			plan, err := client.ExplainQuery(context.Background(), vetValidationSQL(query))
+			plan, err := client.ExplainQuery(context.Background(), analyzer.ValidationSQL(query))
 			if err != nil {
-				return nil, fmt.Errorf("query %s: %w", query.Name, err)
+				return failures, fmt.Errorf("query %s: %w", query.Name, err)
 			}
 			operations, document, err := vetPlan(plan)
 			if err != nil {
-				return nil, fmt.Errorf("query %s: %w", query.Name, err)
+				return failures, fmt.Errorf("query %s: %w", query.Name, err)
 			}
 			activation["ydb"] = map[string]any{"plan": map[string]any{"operations": operations, "json": plan}, "explain": document}
 		}
@@ -138,11 +140,11 @@ func vetQueries(c *config.Config, set config.SQL, queries []model.AnalyzedQuery,
 			rule := rules[name]
 			value, _, err := rule.program.Eval(activation)
 			if err != nil {
-				return nil, fmt.Errorf("rule %q on query %s: %w", name, query.Name, err)
+				return failures, fmt.Errorf("rule %q on query %s: %w", name, query.Name, err)
 			}
 			matched, ok := value.Value().(bool)
 			if !ok {
-				return nil, fmt.Errorf("rule %q on query %s returned %T instead of bool", name, query.Name, value.Value())
+				return failures, fmt.Errorf("rule %q on query %s returned %T instead of bool", name, query.Name, value.Value())
 			}
 			if matched {
 				message := rule.Message
@@ -162,16 +164,6 @@ func vetQuery(query model.AnalyzedQuery) map[string]any {
 		params[i] = map[string]any{"number": int64(i + 1), "name": param.Name, "type": param.Type.String()}
 	}
 	return map[string]any{"sql": query.SQL, "name": query.Name, "cmd": strings.TrimPrefix(string(query.Command), ":"), "params": params}
-}
-
-func vetValidationSQL(query model.AnalyzedQuery) string {
-	var declarations strings.Builder
-	for _, param := range query.Parameters {
-		if !query.IsDeclaredParameter(param.Name) {
-			fmt.Fprintf(&declarations, "DECLARE $`%s` AS %s; ", strings.ReplaceAll(param.Name, "`", "``"), param.Type)
-		}
-	}
-	return declarations.String() + query.SQL
 }
 
 func vetPlan(raw string) ([]string, map[string]any, error) {

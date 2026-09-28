@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/ydb-platform/sqlc-ydb/internal/analyzer"
 	"github.com/ydb-platform/sqlc-ydb/internal/model"
 )
 
@@ -85,6 +86,35 @@ rules:
 	require.Contains(t, stderr, "index out of bounds")
 }
 
+func TestVetPreservesFailuresWhenLaterEvaluationFails(t *testing.T) {
+	dir := t.TempDir()
+	put(t, filepath.Join(dir, "schema.sql"), "CREATE TABLE items (id Uint64 NOT NULL, PRIMARY KEY(id));")
+	put(t, filepath.Join(dir, "first.sql"), "-- name: First :one\nSELECT id FROM items WHERE id = $id;")
+	put(t, filepath.Join(dir, "second.sql"), "-- name: BeforeSecond :one\nSELECT id FROM items WHERE id = $id;\n\n-- name: Second :one\nSELECT id FROM items WHERE id = $id;")
+	configPath := filepath.Join(dir, "sqlc.yaml")
+	put(t, configPath, `version: '2'
+sql:
+- engine: ydb
+  schema: schema.sql
+  queries: first.sql
+  rules: [always]
+- engine: ydb
+  schema: schema.sql
+  queries: second.sql
+  rules: [always, bad-index]
+rules:
+- name: always
+  rule: 'true'
+- name: bad-index
+  rule: query.name == 'Second' && query.params[5].name == 'id'
+`)
+	code, _, stderr := invoke("vet", "-f", configPath)
+	require.Equal(t, 1, code)
+	require.Contains(t, stderr, "query First: vet rule always: rule matched")
+	require.Contains(t, stderr, "query BeforeSecond: vet rule always: rule matched")
+	require.Contains(t, stderr, `rule "bad-index" on query Second`)
+}
+
 func TestVetRequiresConnectionForPlanRules(t *testing.T) {
 	dir := t.TempDir()
 	put(t, filepath.Join(dir, "schema.sql"), "CREATE TABLE items (id Uint64 NOT NULL, PRIMARY KEY(id));")
@@ -99,6 +129,11 @@ func TestVetRequiresConnectionForPlanRules(t *testing.T) {
 	code, _, stderr = invoke("vet", "-f", configPath)
 	require.Equal(t, 1, code)
 	require.Contains(t, stderr, "sqlc/db-prepare requires database.uri")
+	withDatabase := strings.Replace(base, "  queries: queries.sql\n", "  queries: queries.sql\n  database:\n    uri: grpc://localhost:1/local\n", 1)
+	put(t, configPath, strings.Replace(withDatabase, "[no-scan]", "[sqlc/db-prepare]", 1))
+	code, _, stderr = invoke("vet", "--no-database", "-f", configPath)
+	require.Equal(t, 1, code)
+	require.Contains(t, stderr, "sqlc/db-prepare requires database.uri and connected analysis")
 }
 
 func TestVetNoDatabaseRequiresOfflineSchema(t *testing.T) {
@@ -194,9 +229,9 @@ func TestVetPlanOperationsIgnoreUnrelatedText(t *testing.T) {
 
 func TestVetPlanSQLPreservesSourceDeclarationsAndAddsConfiguredTypes(t *testing.T) {
 	query := model.AnalyzedQuery{
-		SQL:                "DECLARE $id AS Uint64; SELECT $id, $`имя`;",
+		SQL:                "DECLARE $id AS Uint64; SELECT $id, $`имя`, $`a``b`;",
 		DeclaredParameters: []string{"id"},
-		Parameters:         []model.Parameter{{Name: "id", Type: model.Type{Kind: "Uint64"}}, {Name: "имя", Type: model.Type{Kind: "Utf8"}}},
+		Parameters:         []model.Parameter{{Name: "id", Type: model.Type{Kind: "Uint64"}}, {Name: "имя", Type: model.Type{Kind: "Utf8"}}, {Name: "a`b", Type: model.Type{Kind: "Bool"}}},
 	}
-	require.Equal(t, "DECLARE $`имя` AS Utf8; "+query.SQL, vetValidationSQL(query))
+	require.Equal(t, "DECLARE $`a``b` AS Bool; DECLARE $`имя` AS Utf8; "+query.SQL, analyzer.ValidationSQL(query))
 }
