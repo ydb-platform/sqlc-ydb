@@ -117,6 +117,41 @@ sql:
 	require.Contains(t, stderr, "schema is required when database-assisted analysis is disabled")
 }
 
+func TestVetReportsInputErrorsBeforeEvaluatingRules(t *testing.T) {
+	for _, tc := range []struct {
+		name, schema, queries, want string
+	}{
+		{"missing schema", "", "-- name: Get :one\nSELECT id FROM items;", "sql[0] schema:"},
+		{"missing queries", "CREATE TABLE items (id Uint64 NOT NULL, PRIMARY KEY(id));", "", "sql[0] queries:"},
+		{"invalid query", "CREATE TABLE items (id Uint64 NOT NULL, PRIMARY KEY(id));", "-- name: Get :one\nSELECT missing FROM items;", `unknown column "missing"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if tc.schema != "" {
+				put(t, filepath.Join(dir, "schema.sql"), tc.schema)
+			}
+			if tc.queries != "" {
+				put(t, filepath.Join(dir, "queries.sql"), tc.queries)
+			}
+			configPath := filepath.Join(dir, "sqlc.yaml")
+			put(t, configPath, `version: '2'
+sql:
+- engine: ydb
+  schema: schema.sql
+  queries: queries.sql
+  rules: [always]
+rules:
+- name: always
+  rule: 'true'
+`)
+			code, _, stderr := invoke("vet", "-f", configPath)
+			require.Equal(t, 1, code)
+			require.Contains(t, stderr, tc.want)
+			require.NotContains(t, stderr, "vet rule always")
+		})
+	}
+}
+
 func TestVetRejectsInvalidRuleExpressions(t *testing.T) {
 	dir := t.TempDir()
 	put(t, filepath.Join(dir, "schema.sql"), "CREATE TABLE items (id Uint64 NOT NULL, PRIMARY KEY(id));")

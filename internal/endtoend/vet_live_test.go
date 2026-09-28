@@ -52,6 +52,8 @@ rules:
   rule: ydb.plan.operations.exists(op, op == 'TableFullScan')
 - name: missing-query-node
   rule: ydb.explain.Plan['Node Type'] != 'Query'
+- name: only-id
+  rule: query.name == 'ByID'
 `
 	require.NoError(t, os.WriteFile(configPath, []byte(configuration), 0600))
 	var stdout, stderr bytes.Buffer
@@ -65,4 +67,9 @@ rules:
 	stderr.Reset()
 	code = cli.Run([]string{"vet", "-f", configPath}, &stdout, &stderr)
 	require.Zero(t, code, stderr.String())
+	require.NoError(t, os.WriteFile(configPath, []byte(strings.Replace(configuration, "rules: [no-full-scan, missing-query-node, sqlc/db-prepare]", "rules: [only-id]", 1)), 0600))
+	stderr.Reset()
+	code = cli.Run([]string{"vet", "-f", configPath}, &stdout, &stderr)
+	require.Equal(t, 1, code, stderr.String())
+	require.Contains(t, stderr.String(), "query ByID: vet rule only-id: rule matched")
 }
