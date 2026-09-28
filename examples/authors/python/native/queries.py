@@ -326,3 +326,327 @@ class Querier:
             id=row["id"],
             word=row["word"],
         ) for row in rows]
+
+
+class AsyncQuerier:
+    def __init__(self, executor: Union[_ydb.aio.QuerySessionPool, _ydb.aio.QueryTxContext], *, retry_settings: Optional[_ydb.RetrySettings] = None):
+        if retry_settings is not None and not isinstance(executor, _ydb.aio.QuerySessionPool):
+            raise ValueError("retry_settings belongs to the pool; configure retries around the whole transaction")
+        self._executor = executor
+        self._retry_settings = retry_settings
+        if isinstance(executor, _ydb.aio.QuerySessionPool) and retry_settings is None:
+            self._retry_settings = _ydb.RetrySettings(max_retries=0)
+
+    async def _execute(self, query: str, parameters: dict):
+        if isinstance(self._executor, _ydb.aio.QuerySessionPool):
+            return await self._executor.execute_with_retries(query, parameters, retry_settings=self._retry_settings)
+        async with await self._executor.execute(query, parameters) as stream:
+            return [result_set async for result_set in stream]
+
+    # -- name: GetAuthor :one
+    async def get_author(self, author_id: int) -> Optional[_models.Authors]:
+        parameters = {
+            "$author_id": _ydb.TypedValue(author_id, _ydb.PrimitiveType.Uint64),
+        }
+        result_sets = await self._execute(
+            ("SELECT id, name, bio FROM authors WHERE id = $author_id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        row = rows[0] if rows else None
+        if row is None:
+            return None
+        return _models.Authors(
+            id=row["id"],
+            name=row["name"],
+            bio=row["bio"],
+        )
+
+    # -- name: ListAuthors :many
+    async def list_authors(self) -> list[_models.Authors]:
+        parameters = {
+        }
+        result_sets = await self._execute(
+            ("SELECT id, name, bio FROM authors ORDER BY name;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.Authors(
+            id=row["id"],
+            name=row["name"],
+            bio=row["bio"],
+        ) for row in rows]
+
+    # -- name: ListAuthorsWithoutBio :many
+    async def list_authors_without_bio(self) -> list[_models.ListAuthorsWithoutBioRow]:
+        parameters = {
+        }
+        result_sets = await self._execute(
+            ("SELECT `id`, `name` FROM authors ORDER BY id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.ListAuthorsWithoutBioRow(
+            id=row["id"],
+            name=row["name"],
+        ) for row in rows]
+
+    # -- name: ListAuthorsPage :many
+    async def list_authors_page(self, page_size: int, offset: int) -> list[_models.Authors]:
+        parameters = {
+            "$page_size": _ydb.TypedValue(page_size, _ydb.PrimitiveType.Int32),
+            "$offset": _ydb.TypedValue(offset, _ydb.PrimitiveType.Uint32),
+        }
+        result_sets = await self._execute(
+            ("DECLARE $page_size AS Int;\n"
+             "DECLARE $offset AS Uint32;\n"
+             "SELECT id, name, bio FROM authors ORDER BY id LIMIT $page_size OFFSET $offset;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.Authors(
+            id=row["id"],
+            name=row["name"],
+            bio=row["bio"],
+        ) for row in rows]
+
+    # -- name: GetAuthorName :one
+    async def get_author_name(self, author_id: int) -> Optional[_models.GetAuthorNameRow]:
+        parameters = {
+            "$author_id": _ydb.TypedValue(author_id, _ydb.PrimitiveType.Uint64),
+        }
+        result_sets = await self._execute(
+            ("SELECT name FROM authors WHERE id = $author_id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        row = rows[0] if rows else None
+        if row is None:
+            return None
+        return _models.GetAuthorNameRow(
+            name=row["name"],
+        )
+
+    # -- name: CreateAuthor :one
+    async def create_author(self, author_id: int, author_name: str, biography: Optional[str]) -> Optional[_models.Authors]:
+        parameters = {
+            "$author_id": _ydb.TypedValue(author_id, _ydb.PrimitiveType.Uint64),
+            "$author_name": _ydb.TypedValue(author_name, _ydb.PrimitiveType.Utf8),
+            "$biography": _ydb.TypedValue(biography, _ydb.OptionalType(_ydb.PrimitiveType.Utf8)),
+        }
+        result_sets = await self._execute(
+            ("INSERT INTO `authors` (`id`, `name`, `bio`)\n"
+             "VALUES ($author_id, $author_name, $biography)\n"
+             "RETURNING `id`, `name`, `bio`;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        row = rows[0] if rows else None
+        if row is None:
+            return None
+        return _models.Authors(
+            id=row["id"],
+            name=row["name"],
+            bio=row["bio"],
+        )
+
+    # -- name: UpsertAuthor :exec
+    async def upsert_author(self, author_id: int, author_name: str, biography: Optional[str]) -> None:
+        parameters = {
+            "$author_id": _ydb.TypedValue(author_id, _ydb.PrimitiveType.Uint64),
+            "$author_name": _ydb.TypedValue(author_name, _ydb.PrimitiveType.Utf8),
+            "$biography": _ydb.TypedValue(biography, _ydb.OptionalType(_ydb.PrimitiveType.Utf8)),
+        }
+        result_sets = await self._execute(
+            ("UPSERT INTO authors (id, name, bio)\n"
+             "VALUES ($author_id, $author_name, $biography);"),
+            parameters,
+        )
+        return None
+
+    # -- name: DeleteAuthor :exec
+    async def delete_author(self, author_id: int) -> None:
+        parameters = {
+            "$author_id": _ydb.TypedValue(author_id, _ydb.PrimitiveType.Uint64),
+        }
+        result_sets = await self._execute(
+            ("DELETE FROM authors WHERE id = $author_id;"),
+            parameters,
+        )
+        return None
+
+    # -- name: FindAuthorsByName :many
+    async def find_authors_by_name(self, name: str) -> list[_models.Authors]:
+        parameters = {
+            "$name": _ydb.TypedValue(name, _ydb.PrimitiveType.Utf8),
+        }
+        result_sets = await self._execute(
+            ("SELECT a.`id` AS `id`, `a`.`name` AS `name`, `a`.`bio` AS `bio` FROM authors VIEW by_name AS a\n"
+             "WHERE a.name = $name ORDER BY a.id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.Authors(
+            id=row["id"],
+            name=row["name"],
+            bio=row["bio"],
+        ) for row in rows]
+
+    # -- name: FindAuthorsByNameCovering :many
+    async def find_authors_by_name_covering(self, name: str) -> list[_models.Authors]:
+        parameters = {
+            "$name": _ydb.TypedValue(name, _ydb.PrimitiveType.Utf8),
+        }
+        result_sets = await self._execute(
+            ("DECLARE $name AS Utf8;\n"
+             "SELECT `id`, `name`, `bio` FROM authors VIEW by_name_covering WHERE name = $name ORDER BY id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.Authors(
+            id=row["id"],
+            name=row["name"],
+            bio=row["bio"],
+        ) for row in rows]
+
+    # -- name: FindAuthorsByNamePrefix :many
+    async def find_authors_by_name_prefix(self, prefix: str) -> list[_models.FindAuthorsByNamePrefixRow]:
+        parameters = {
+            "$prefix": _ydb.TypedValue(prefix, _ydb.PrimitiveType.Utf8),
+        }
+        result_sets = await self._execute(
+            ("DECLARE $prefix AS Utf8;\n"
+             "SELECT id, name, bio, bio IS NOT NULL AS has_bio\n"
+             "FROM authors\n"
+             "WHERE name LIKE $prefix || \"%\"u\n"
+             "ORDER BY id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.FindAuthorsByNamePrefixRow(
+            id=row["id"],
+            name=row["name"],
+            bio=row["bio"],
+            has_bio=row["has_bio"],
+        ) for row in rows]
+
+    # -- name: GetAuthorStatistics :one
+    async def get_author_statistics(self) -> Optional[_models.GetAuthorStatisticsRow]:
+        parameters = {
+        }
+        result_sets = await self._execute(
+            ("SELECT\n"
+             "    COUNT(*) AS total,\n"
+             "    COUNT_IF(bio IS NOT NULL) AS with_bio,\n"
+             "    COUNT_IF(bio != \"\"u) AS with_nonempty_bio,\n"
+             "    CAST(COUNT(*) AS Bool),\n"
+             "    COUNT(DISTINCT bio) AS distinct_biographies\n"
+             "FROM authors;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        row = rows[0] if rows else None
+        if row is None:
+            return None
+        return _models.GetAuthorStatisticsRow(
+            total=row["total"],
+            with_bio=row["with_bio"],
+            with_nonempty_bio=row["with_nonempty_bio"],
+            column3=row["column3"],
+            distinct_biographies=row["distinct_biographies"],
+        )
+
+    # -- name: GetAuthorExportMetadata :one
+    async def get_author_export_metadata(self, author_id: int) -> Optional[_models.GetAuthorExportMetadataRow]:
+        parameters = {
+            "$author_id": _ydb.TypedValue(author_id, _ydb.PrimitiveType.Uint64),
+        }
+        result_sets = await self._execute(
+            ("DECLARE $author_id AS Uint64;\n"
+             "SELECT\n"
+             "    id,\n"
+             "    CAST(CurrentUtcDate() AS String) AS export_date,\n"
+             "    CAST(CurrentUtcDatetime() AS String) AS export_datetime,\n"
+             "    CurrentUtcTimestamp() AS export_timestamp,\n"
+             "    CAST(CurrentUtcTimestamp() AS String) AS export_timestamp_text,\n"
+             "    CAST(CurrentUtcTimestamp() AS Uint64) AS export_timestamp_micros,\n"
+             "    COALESCE(CAST(id AS Uint32), 0),\n"
+             "    CAST('{\"source\":\"authors\"}' AS Json) AS export_metadata\n"
+             "FROM authors\n"
+             "WHERE id = $author_id;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        row = rows[0] if rows else None
+        if row is None:
+            return None
+        return _models.GetAuthorExportMetadataRow(
+            id=row["id"],
+            export_date=row["export_date"],
+            export_datetime=row["export_datetime"],
+            export_timestamp=row["export_timestamp"],
+            export_timestamp_text=row["export_timestamp_text"],
+            export_timestamp_micros=row["export_timestamp_micros"],
+            column6=row["column6"],
+            export_metadata=row["export_metadata"],
+        )
+
+    # -- name: EchoAuthorIDText :one
+    async def echo_author_i_d_text(self, author_id: str) -> Optional[_models.EchoAuthorIDTextRow]:
+        parameters = {
+            "$author_id": _ydb.TypedValue(author_id, _ydb.PrimitiveType.Utf8),
+        }
+        result_sets = await self._execute(
+            ("SELECT $author_id AS author_id_text;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        row = rows[0] if rows else None
+        if row is None:
+            return None
+        return _models.EchoAuthorIDTextRow(
+            author_id_text=row["author_id_text"],
+        )
+
+    # -- name: ListAuthorNameWords :many
+    async def list_author_name_words(self) -> list[_models.ListAuthorNameWordsRow]:
+        parameters = {
+        }
+        result_sets = await self._execute(
+            ("SELECT id, word\n"
+             "FROM (SELECT id, Unicode::SplitToList(name, \" \"u) AS words FROM authors)\n"
+             "FLATTEN LIST BY words AS word\n"
+             "ORDER BY id, word;"),
+            parameters,
+        )
+        if len(result_sets) != 1:
+            raise ValueError("expected exactly one YDB result set")
+        rows = result_sets[0].rows
+        return [_models.ListAuthorNameWordsRow(
+            id=row["id"],
+            word=row["word"],
+        ) for row in rows]
