@@ -6,6 +6,7 @@ Requires YDB_CONNECTION_STRING and no existing authors table. An existing table 
 never dropped if CREATE TABLE fails. Run profiles sequentially with Go smoke.
 """
 
+import asyncio
 import os
 from contextlib import contextmanager
 from threading import Event
@@ -17,7 +18,7 @@ import ydb
 import ydb.sqlalchemy  # registers the YDB dialect
 import ydb_dbapi
 
-from .native.queries import Querier as NativeQuerier
+from .native.queries import AsyncQuerier, Querier as NativeQuerier
 from .dbapi.queries import Querier as DBAPIQuerier
 from .sqlalchemy.queries import Querier as SQLAlchemyQuerier
 
@@ -50,6 +51,29 @@ def check_native_transaction(pool):
     pool.retry_tx_sync(rollback)
 
     assert NativeQuerier(pool).get_author(author_id) is None
+
+
+async def check_async_native(config):
+    author_id = 2**64 - 3
+    async with ydb.aio.Driver(config) as driver:
+        await driver.wait(timeout=10, fail_fast=True)
+        async with ydb.aio.QuerySessionPool(driver) as pool:
+            querier = AsyncQuerier(pool)
+            created = await querier.create_author(author_id, "async author", None)
+            assert created.id == author_id
+            assert (await querier.get_author(author_id)).name == "async author"
+            assert any(row.id == author_id for row in await querier.list_authors())
+            await querier.delete_author(author_id)
+            assert await querier.get_author(author_id) is None
+
+            async def transaction(tx):
+                transactional = AsyncQuerier(tx)
+                await transactional.upsert_author(author_id, "transaction", None)
+                assert (await transactional.get_author(author_id)).name == "transaction"
+
+            await pool.retry_tx_async(transaction)
+            assert (await querier.get_author(author_id)).name == "transaction"
+            await querier.delete_author(author_id)
 
 
 def check_retry_policy():
@@ -101,6 +125,8 @@ def main():
                 check(NativeQuerier(pool))
                 check_native_transaction(pool)
                 print("native YDB: passed", flush=True)
+                asyncio.run(check_async_native(config))
+                print("native YDB asyncio: passed", flush=True)
                 connection = ydb_dbapi.connect(
                     host=url.hostname, port=url.port, database=url.path, protocol=url.scheme,
                 )

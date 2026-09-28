@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Generate native Python `AsyncQuerier` methods using the YDB asyncio Query SDK, with pool and caller-owned transaction execution.
+
 ## v0.14.0
 
 ### Added

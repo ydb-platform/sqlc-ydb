@@ -31,8 +31,8 @@ Use `sqlc-ydb init --help` to list languages and their runtimes. For the options
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `out` | string | Required | Output directory, relative to sqlc.yaml. |
-| `emit_sync_querier` | boolean | `true` | Generate synchronous query helpers; must remain true while asynchronous generation is unsupported. |
-| `emit_async_querier` | boolean | `false` | Asynchronous generation is unsupported; true produces a generation error. |
+| `emit_sync_querier` | boolean | `true` | Generate synchronous query helpers as Querier; at least one querier mode must be enabled. |
+| `emit_async_querier` | boolean | `false` | Generate AsyncQuerier for the native ydb runtime; DB-API and SQLAlchemy runtimes reject this option. |
 | `runtime` | enum | `ydb` | SDK or framework used by the generated helpers. Values: `ydb`, `dbapi`, `sqlalchemy`. |
 
 ### gen.cpp
@@ -138,7 +138,7 @@ Python row decoding follows the selected runtime: native YDB rows are indexed by
 
 Python names support Unicode letters. Names that normalize to invalid Python identifiers (for example, a leading digit) are rejected, as are model names that conflict with Python keywords or the imported `Optional` type. Parameter names such as `ydb`, `models`, and `text` do not shadow the generated runtime imports.
 
-The verified `ydb-sqlalchemy` 0.1.22 has no asynchronous dialect. Requests for `emit_async_querier: true` are explicitly rejected. Async Python adapters, Pydantic, custom naming/type overrides and additional framework profiles remain subsequent work.
+Native Python with `emit_async_querier: true` generates `AsyncQuerier` alongside `Querier`; set `emit_sync_querier: false` to generate only the async class. `AsyncQuerier` takes a caller-owned `ydb.aio.QuerySessionPool` or `ydb.aio.QueryTxContext` and exposes `async def` methods with the same typed parameters and results as `Querier`. Pool calls await `execute_with_retries`; transaction calls fully consume the async result stream before returning, so late execution errors are raised. The same retry policy applies: pool calls default to zero retries, while transaction retries belong to the caller's surrounding `retry_tx_async`. The verified DB-API and `ydb-sqlalchemy` profiles have no generated async adapter; `emit_async_querier: true` with either runtime fails explicitly. Pydantic, custom naming/type overrides and additional framework profiles remain subsequent work.
 
 Verified runtime versions: Go SDK 3.151.1; Python SDK 3.29.7, ydb-dbapi 0.1.23, ydb-sqlalchemy 0.1.22, SQLAlchemy 2.0.52. Live tests cover both Go adapters and all three Python adapters on YDB 26.3.1.8, including high Uint64, binary/text, optional values and query cardinalities. Both Go adapters support scalar list parameters, including optional elements and empty lists with an explicit element type. Extended temporal list elements (`Date32`, `Datetime64`, `Timestamp64`, `Interval64`) are rejected because the pinned SDK lacks their list-builder methods. `Optional<List>`, nested lists, and list elements with more than one `Optional` wrapper remain errors. Both Go adapters also support root `Struct<...>` parameters and `List<Struct<...>>` parameters with named Go structs and typed YDB values; Struct members bind by their YQL field names rather than declaration order. Native Go supports scalar list results, while database/sql still rejects list results. Complex container and temporal boundary coverage remains incomplete.
 

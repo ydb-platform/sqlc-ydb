@@ -18,4 +18,6 @@ Compared with [upstream](../README.md), IDs are explicit `Uint64` inputs rather 
 
 `ListAuthorNameWords` computes a list of words in a derived SELECT and uses `FLATTEN LIST BY` to return one typed `Utf8` row per word. The jOOQ profile executes its authored YQL through the full-SQL path.
 
+The native Python output also includes `AsyncQuerier`, which runs the same typed queries through `ydb.aio.QuerySessionPool` or a caller-owned async transaction. The Python smoke checks both paths alongside the synchronous adapters.
+
 This example covers every built-in language/runtime. Each language's build files and executable smoke tests live in its own directory. See [development](../../.agents/development.md) for generation and sequential live acceptance commands.

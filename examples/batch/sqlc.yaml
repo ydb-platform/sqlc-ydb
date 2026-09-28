@@ -8,6 +8,7 @@ sql:
       python:
         out: python/native
         runtime: ydb
+        emit_async_querier: true
       csharp:
         namespace: Batch.AdoNet
         out: csharp/adonet
