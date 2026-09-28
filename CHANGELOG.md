@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.14.0
+
 ### Added
 
 - Add `completion bash|zsh|fish|powershell` for commands, command-specific options, generator language/runtime names and configuration paths.
