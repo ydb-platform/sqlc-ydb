@@ -22,26 +22,36 @@ func TestNativeAsyncQuerier(t *testing.T) {
 	require.Contains(t, queries, "async def list_authors(")
 	require.Contains(t, queries, "async def delete_author(")
 	require.Contains(t, queries, "async with await self._executor.execute(query, parameters) as stream:")
+	require.Contains(t, queries, "import ydb.aio as _ydb_aio")
 	dir := t.TempDir()
 	pkg := filepath.Join(dir, "generated")
 	require.NoError(t, os.Mkdir(pkg, 0700))
+	ydbPackage := filepath.Join(dir, "ydb")
+	require.NoError(t, os.Mkdir(ydbPackage, 0700))
 	for _, f := range files {
 		require.NoError(t, os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600))
 	}
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "ydb.py"), []byte(`class RetrySettings:
+	require.NoError(t, os.WriteFile(filepath.Join(ydbPackage, "__init__.py"), []byte(`class RetrySettings:
     def __init__(self, max_retries=None): self.max_retries = max_retries
+class QuerySessionPool: pass
 class Type:
     def __init__(self, name): self.proto = name
 class PrimitiveType:
     Uint64 = Type("Uint64")
 class TypedValue:
     def __init__(self, value, typ): self.value, self.type = value, typ
-class Pool:
-    def __init__(self, result_sets): self.result_sets, self.calls = result_sets, []
+`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(ydbPackage, "aio.py"), []byte(`class QuerySessionPool:
+    def __init__(self, result_sets): self.result_sets, self.calls, self.attempts, self.fail_next = result_sets, [], 0, False
     async def execute_with_retries(self, sql, parameters, retry_settings=None):
         self.calls.append((sql, parameters, retry_settings))
+        self.attempts += 1
+        if self.fail_next:
+            self.fail_next = False
+            if retry_settings.max_retries == 0: raise RuntimeError("uncertain write")
+            self.attempts += 1
         return self.result_sets
-class Tx:
+class QueryTxContext:
     def __init__(self, result_sets, fail=False): self.result_sets, self.fail, self.closed = result_sets, fail, False
     async def execute(self, sql, parameters): return Stream(self)
 class Stream:
@@ -52,10 +62,6 @@ class Stream:
     async def iterate(self):
         for result_set in self.tx.result_sets: yield result_set
         if self.tx.fail: raise RuntimeError("late YDB error")
-class AIO:
-    QuerySessionPool = Pool
-    QueryTxContext = Tx
-aio = AIO()
 `), 0600))
 	script := `import asyncio
 import ydb
@@ -67,13 +73,22 @@ class ResultSet:
 async def check():
     pool = ydb.aio.QuerySessionPool([ResultSet([{"id": 7, "display_name": None}])])
     q = AsyncQuerier(pool)
-    assert q._retry_settings.max_retries == 0
     row = await q.get_author(7)
     assert row.id == 7 and row.display_name is None
     assert pool.calls[0][1]["$id"].value == 7
     retry_settings = ydb.RetrySettings(max_retries=2)
     await AsyncQuerier(pool, retry_settings=retry_settings).get_author(7)
     assert pool.calls[-1][2] is retry_settings
+    pool.fail_next = True
+    attempts = pool.attempts
+    try: await q.delete_author(7)
+    except RuntimeError as exc: assert str(exc) == "uncertain write"
+    else: raise AssertionError("ambiguous write was replayed")
+    assert pool.attempts == attempts + 1
+    pool.fail_next = True
+    attempts = pool.attempts
+    await AsyncQuerier(pool, retry_settings=retry_settings).delete_author(7)
+    assert pool.attempts == attempts + 2
     pool.result_sets = [ResultSet([])]
     assert await q.get_author(7) is None
     assert await q.list_authors() == []
@@ -86,6 +101,11 @@ async def check():
     tx = ydb.aio.QueryTxContext([ResultSet([{"id": 9, "display_name": "nine"}])])
     assert (await AsyncQuerier(tx).get_author(9)).id == 9
     assert tx.closed
+    for executor in (ydb.QuerySessionPool(), object()):
+        for settings in (None, ydb.RetrySettings()):
+            try: AsyncQuerier(executor, retry_settings=settings)
+            except TypeError as exc: assert "ydb.aio.QuerySessionPool or ydb.aio.QueryTxContext" in str(exc)
+            else: raise AssertionError("wrong async executor accepted")
     try: AsyncQuerier(tx, retry_settings=ydb.RetrySettings())
     except ValueError: pass
     else: raise AssertionError("transaction retry policy accepted")
@@ -148,10 +168,12 @@ func TestNativeAsyncMultiResultSets(t *testing.T) {
 	dir := t.TempDir()
 	pkg := filepath.Join(dir, "generated")
 	require.NoError(t, os.Mkdir(pkg, 0700))
+	ydbPackage := filepath.Join(dir, "ydb")
+	require.NoError(t, os.Mkdir(ydbPackage, 0700))
 	for _, f := range files {
 		require.NoError(t, os.WriteFile(filepath.Join(pkg, f.Name), f.Content, 0600))
 	}
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "ydb.py"), []byte(`class RetrySettings:
+	require.NoError(t, os.WriteFile(filepath.Join(ydbPackage, "__init__.py"), []byte(`class RetrySettings:
     def __init__(self, max_retries=None): self.max_retries = max_retries
 class Type:
     def __init__(self, name): self.proto = name
@@ -159,13 +181,11 @@ class PrimitiveType:
     Int32 = Type("Int32")
     Bool = Type("Bool")
     Utf8 = Type("Utf8")
-class Pool:
+`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(ydbPackage, "aio.py"), []byte(`class QuerySessionPool:
     def __init__(self, sets): self.sets = sets
     async def execute_with_retries(self, sql, parameters, retry_settings=None): return self.sets
-class AIO:
-    QuerySessionPool = Pool
-    QueryTxContext = type("Tx", (), {})
-aio = AIO()
+class QueryTxContext: pass
 `), 0600))
 	script := `import asyncio
 import ydb

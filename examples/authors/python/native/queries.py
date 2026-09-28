@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional, Union
 from . import models as _models
 import ydb as _ydb
+import ydb.aio as _ydb_aio
 
 
 class Querier:
@@ -329,16 +330,18 @@ class Querier:
 
 
 class AsyncQuerier:
-    def __init__(self, executor: Union[_ydb.aio.QuerySessionPool, _ydb.aio.QueryTxContext], *, retry_settings: Optional[_ydb.RetrySettings] = None):
-        if retry_settings is not None and not isinstance(executor, _ydb.aio.QuerySessionPool):
+    def __init__(self, executor: Union[_ydb_aio.QuerySessionPool, _ydb_aio.QueryTxContext], *, retry_settings: Optional[_ydb.RetrySettings] = None):
+        if not isinstance(executor, (_ydb_aio.QuerySessionPool, _ydb_aio.QueryTxContext)):
+            raise TypeError("AsyncQuerier requires ydb.aio.QuerySessionPool or ydb.aio.QueryTxContext")
+        if retry_settings is not None and not isinstance(executor, _ydb_aio.QuerySessionPool):
             raise ValueError("retry_settings belongs to the pool; configure retries around the whole transaction")
         self._executor = executor
         self._retry_settings = retry_settings
-        if isinstance(executor, _ydb.aio.QuerySessionPool) and retry_settings is None:
+        if isinstance(executor, _ydb_aio.QuerySessionPool) and retry_settings is None:
             self._retry_settings = _ydb.RetrySettings(max_retries=0)
 
     async def _execute(self, query: str, parameters: dict):
-        if isinstance(self._executor, _ydb.aio.QuerySessionPool):
+        if isinstance(self._executor, _ydb_aio.QuerySessionPool):
             return await self._executor.execute_with_retries(query, parameters, retry_settings=self._retry_settings)
         async with await self._executor.execute(query, parameters) as stream:
             return [result_set async for result_set in stream]

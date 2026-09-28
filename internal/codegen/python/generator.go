@@ -329,6 +329,9 @@ func renderQueries(a *model.AnalysisResult, o Options) (string, error) {
 		b.WriteString(", Union")
 	}
 	b.WriteString("\n" + parameterTypeImports(a) + "from . import models as _models\nimport ydb as _ydb\n")
+	if o.EmitAsyncQuerier {
+		b.WriteString("import ydb.aio as _ydb_aio\n")
+	}
 	if o.Runtime == "sqlalchemy" {
 		b.WriteString("from sqlalchemy import text as _text\nfrom sqlalchemy.engine import Connection\n")
 	}
@@ -441,12 +444,14 @@ func renderClass(b *strings.Builder, a *model.AnalysisResult, o Options, async b
 	b.WriteString("\nclass " + name + ":\n")
 	if o.Runtime == "ydb" {
 		pool, tx := "_ydb.QuerySessionPool", "_ydb.QueryTxContext"
+		typeCheck := ""
 		if async {
-			pool, tx = "_ydb.aio.QuerySessionPool", "_ydb.aio.QueryTxContext"
+			pool, tx = "_ydb_aio.QuerySessionPool", "_ydb_aio.QueryTxContext"
+			typeCheck = "        if not isinstance(executor, (" + pool + ", " + tx + ")):\n            raise TypeError(\"AsyncQuerier requires ydb.aio.QuerySessionPool or ydb.aio.QueryTxContext\")\n"
 		}
-		b.WriteString("    def __init__(self, executor: Union[" + pool + ", " + tx + "], *, retry_settings: Optional[_ydb.RetrySettings] = None):\n        if retry_settings is not None and not isinstance(executor, " + pool + "):\n            raise ValueError(\"retry_settings belongs to the pool; configure retries around the whole transaction\")\n        self._executor = executor\n        self._retry_settings = retry_settings\n        if isinstance(executor, " + pool + ") and retry_settings is None:\n            self._retry_settings = _ydb.RetrySettings(max_retries=0)\n\n")
+		b.WriteString("    def __init__(self, executor: Union[" + pool + ", " + tx + "], *, retry_settings: Optional[_ydb.RetrySettings] = None):\n" + typeCheck + "        if retry_settings is not None and not isinstance(executor, " + pool + "):\n            raise ValueError(\"retry_settings belongs to the pool; configure retries around the whole transaction\")\n        self._executor = executor\n        self._retry_settings = retry_settings\n        if isinstance(executor, " + pool + ") and retry_settings is None:\n            self._retry_settings = _ydb.RetrySettings(max_retries=0)\n\n")
 		if async {
-			b.WriteString("    async def _execute(self, query: str, parameters: dict):\n        if isinstance(self._executor, _ydb.aio.QuerySessionPool):\n            return await self._executor.execute_with_retries(query, parameters, retry_settings=self._retry_settings)\n        async with await self._executor.execute(query, parameters) as stream:\n            return [result_set async for result_set in stream]\n\n")
+			b.WriteString("    async def _execute(self, query: str, parameters: dict):\n        if isinstance(self._executor, _ydb_aio.QuerySessionPool):\n            return await self._executor.execute_with_retries(query, parameters, retry_settings=self._retry_settings)\n        async with await self._executor.execute(query, parameters) as stream:\n            return [result_set async for result_set in stream]\n\n")
 		} else {
 			b.WriteString("    def _execute(self, query: str, parameters: dict):\n        if isinstance(self._executor, _ydb.QuerySessionPool):\n            return self._executor.execute_with_retries(query, parameters, retry_settings=self._retry_settings)\n        return list(self._executor.execute(query, parameters))\n\n")
 		}
