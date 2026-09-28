@@ -43,6 +43,8 @@ func TestVetRuleConfiguration(t *testing.T) {
 	}{
 		{strings.Replace(base, "[no-scan]", "[missing]", 1), `references unknown rule "missing"`},
 		{strings.Replace(base, "[no-scan]", "[no-scan, no-scan]", 1), `repeats "no-scan"`},
+		{strings.Replace(base, "- name: no-scan", "- name: ''", 1), "name must be non-empty"},
+		{strings.Replace(base, "- name: no-scan", "- name: ' no-scan '", 1), "no surrounding whitespace"},
 		{base + "- name: no-scan\n  rule: 'true'\n", `name "no-scan" is repeated`},
 		{strings.Replace(base, "query.cmd == 'many'", "'   '", 1), "requires a CEL expression"},
 		{strings.Replace(base, "- name: no-scan", "- name: sqlc/db-prepare", 1), `name "sqlc/db-prepare" is repeated or reserved`},
