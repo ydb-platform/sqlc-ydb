@@ -6,6 +6,12 @@
 
 - Add `vet` with selected CEL query rules and non-executing YDB plan checks, including the `sqlc/db-prepare` built-in rule.
 
+## v0.14.0
+
+### Added
+
+- Add `completion bash|zsh|fish|powershell` for commands, command-specific options, generator language/runtime names and configuration paths.
+
 ## v0.13.1
 
 ### Added

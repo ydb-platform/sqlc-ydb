@@ -41,6 +41,22 @@ go build -o bin/sqlc-ydb ./cmd/sqlc-ydb
 
 The executable includes the YQL parser, analyzer and generators. Generation does not require a running YDB or language SDKs. Applications using the generated code need the dependencies described in the [target reference](targets.md). See the [quick start](../README.md#quick-start) for the first generation.
 
+## Shell completion
+
+`sqlc-ydb completion` prints a script for Bash, Zsh, Fish or PowerShell. Load it in the current session after installing `sqlc-ydb` on `PATH`:
+
+```sh
+# Bash
+source <(sqlc-ydb completion bash)
+# Zsh (after initializing its completion system)
+autoload -Uz compinit && compinit
+source <(sqlc-ydb completion zsh)
+# Fish
+sqlc-ydb completion fish | source
+```
+
+In PowerShell, run `sqlc-ydb completion powershell | Out-String | Invoke-Expression`. Add the command for your shell to its startup profile to load completions in future sessions. Completion covers commands, their options, `init` language/runtime names, and paths for `--file` and `--against`; it does not read your configuration or contact YDB.
+
 ## Release archives
 
 Check [GitHub Releases](https://github.com/ydb-platform/sqlc-ydb/releases) for published versions and assets. Build from source if a release is not yet available.

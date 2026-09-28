@@ -31,7 +31,7 @@ import (
 )
 
 // Version and Commit are set through linker flags in release builds.
-var Version = "0.13.1"
+var Version = "0.14.0"
 var Commit = "unknown"
 
 const help = `sqlc-ydb generates typed code from YQL.
@@ -46,6 +46,7 @@ Commands:
   vet          Check queries against configured CEL rules and YDB plans
   diff         Compare generated code with existing files (exit 1 on differences)
   init         Create a sqlc.yaml configuration (version 2)
+  completion   Print a shell completion script
   version      Print the version and check for updates (--verbose includes the commit)
 
 Options:
@@ -68,6 +69,7 @@ type arguments struct {
 	runtime       string
 	allOptions    bool
 	against       string
+	shell         string
 	initProfiles  []config.InitProfile
 }
 
@@ -138,8 +140,12 @@ func parseArgs(args []string) (arguments, error) {
 		case strings.HasPrefix(arg, "-"):
 			return a, fmt.Errorf("unknown option %q", arg)
 		default:
-			if a.command == "help" && arg == "init" {
-				a.command, a.help = "init", true
+			if a.command == "help" && (arg == "init" || arg == "completion") {
+				a.command, a.help = arg, true
+				continue
+			}
+			if a.command == "completion" && a.shell == "" {
+				a.shell = arg
 				continue
 			}
 			if a.command != "" {
@@ -156,6 +162,9 @@ func parseArgs(args []string) (arguments, error) {
 	}
 	if a.against != "" && a.command != "verify" {
 		return a, errors.New("--against is only valid for verify")
+	}
+	if a.command == "completion" && (a.file != "" || a.noRemote) && !a.help {
+		return a, errors.New("--file and --no-remote are not valid for completion")
 	}
 	if a.command == "verify" && a.against == "" && !a.help {
 		return a, errors.New("verify requires --against with a released sqlc configuration")
@@ -203,6 +212,9 @@ func run(args []string, stdout, stderr io.Writer, updater *update.Client) int {
 		text := help
 		if a.command == "init" {
 			text = initHelp(a)
+		}
+		if a.command == "completion" {
+			text = completionHelp
 		}
 		if _, err := fmt.Fprint(stdout, text); err != nil {
 			return fail(err)
@@ -252,6 +264,12 @@ func run(args []string, stdout, stderr io.Writer, updater *update.Client) int {
 	}
 	if a.command == "init" {
 		if err := initialize(a, stdout); err != nil {
+			return fail(err)
+		}
+		return 0
+	}
+	if a.command == "completion" {
+		if err := printCompletion(a.shell, stdout); err != nil {
 			return fail(err)
 		}
 		return 0
