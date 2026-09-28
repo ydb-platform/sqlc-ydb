@@ -32,6 +32,29 @@ sql:
 	}
 }
 
+func TestVetRuleConfiguration(t *testing.T) {
+	base := "version: '2'\nsql:\n- engine: ydb\n  schema: schema.sql\n  queries: queries.sql\n  rules: [no-scan]\nrules:\n- name: no-scan\n  rule: query.cmd == 'many'\n"
+	c, err := Parse([]byte(base))
+	require.NoError(t, err)
+	require.Equal(t, []string{"no-scan"}, c.SQL[0].Rules)
+	require.Equal(t, "query.cmd == 'many'", c.Rules[0].Rule)
+	for _, tc := range []struct {
+		config, want string
+	}{
+		{strings.Replace(base, "[no-scan]", "[missing]", 1), `references unknown rule "missing"`},
+		{strings.Replace(base, "[no-scan]", "[no-scan, no-scan]", 1), `repeats "no-scan"`},
+		{base + "- name: no-scan\n  rule: 'true'\n", `name "no-scan" is repeated`},
+		{strings.Replace(base, "query.cmd == 'many'", "'   '", 1), "requires a CEL expression"},
+		{strings.Replace(base, "- name: no-scan", "- name: sqlc/db-prepare", 1), `name "sqlc/db-prepare" is repeated or reserved`},
+	} {
+		_, err := Parse([]byte(tc.config))
+		require.ErrorContains(t, err, tc.want)
+	}
+	c, err = Parse([]byte(strings.Replace(base, "[no-scan]", "[sqlc/db-prepare]", 1)))
+	require.NoError(t, err)
+	require.Equal(t, []string{"sqlc/db-prepare"}, c.SQL[0].Rules)
+}
+
 func TestGoRenameConfiguration(t *testing.T) {
 	c, err := Parse([]byte(`version: "2"
 sql:

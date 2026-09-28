@@ -27,6 +27,7 @@ import (
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb_Operations"
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb_Query"
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb_Table"
+	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb_TableStats"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -185,6 +186,48 @@ func TestValidateQueryOnlyExplainsOriginalSQL(t *testing.T) {
 		return stream.Send(&Ydb_Query.ExecuteQueryResponsePart{Status: Ydb.StatusIds_SUCCESS})
 	}})
 	require.NoError(t, client.ValidateQuery(context.Background(), sql))
+}
+
+func TestExplainQueryReturnsPlanAfterCompleteSuccess(t *testing.T) {
+	const sql = "SELECT id FROM items;"
+	client := testClient(t, tableServer{}, queryServer{explain: func(request *Ydb_Query.ExecuteQueryRequest, stream queryservice.QueryService_ExecuteQueryServer) error {
+		assert.Equal(t, Ydb_Query.ExecMode_EXEC_MODE_EXPLAIN, request.GetExecMode())
+		assert.Equal(t, Ydb_Query.StatsMode_STATS_MODE_FULL, request.GetStatsMode())
+		assert.Equal(t, sql, request.GetQueryContent().GetText())
+		assert.Nil(t, request.GetTxControl())
+		assert.Empty(t, request.GetParameters())
+		if err := stream.Send(&Ydb_Query.ExecuteQueryResponsePart{Status: Ydb.StatusIds_SUCCESS, ExecStats: &Ydb_TableStats.QueryStats{QueryPlan: `{"Plan":{"Plans":[]}}`}}); err != nil {
+			return err
+		}
+		return stream.Send(&Ydb_Query.ExecuteQueryResponsePart{Status: Ydb.StatusIds_SUCCESS})
+	}})
+	plan, err := client.ExplainQuery(context.Background(), sql)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"Plan":{"Plans":[]}}`, plan)
+}
+
+func TestExplainQueryRejectsMissingPlanAndLateError(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		parts []*Ydb_Query.ExecuteQueryResponsePart
+		want  string
+	}{
+		{"missing plan", []*Ydb_Query.ExecuteQueryResponsePart{{Status: Ydb.StatusIds_SUCCESS}}, "no query plan"},
+		{"late error", []*Ydb_Query.ExecuteQueryResponsePart{{Status: Ydb.StatusIds_SUCCESS, ExecStats: &Ydb_TableStats.QueryStats{QueryPlan: `{}`}}, {Status: Ydb.StatusIds_BAD_REQUEST, Issues: []*Ydb_Issue.IssueMessage{{Message: "bad final status"}}}}, "bad final status"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := testClient(t, tableServer{}, queryServer{explain: func(_ *Ydb_Query.ExecuteQueryRequest, stream queryservice.QueryService_ExecuteQueryServer) error {
+				for _, part := range tc.parts {
+					if err := stream.Send(part); err != nil {
+						return err
+					}
+				}
+				return nil
+			}})
+			_, err := client.ExplainQuery(context.Background(), "SELECT 1;")
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
 }
 
 func TestValidateQueryResponseErrors(t *testing.T) {

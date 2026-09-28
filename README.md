@@ -31,7 +31,7 @@ Run `sqlc-ydb version` to check for a newer release and `sqlc-ydb version --upgr
 
 ## Feature parity with sqlc
 
-The core `generate`, `compile`, `diff`, `verify`, `init` and `version` workflow is supported. Configuration is a subset of sqlc v2; queries use YQL parameters and `:one`, `:many`, or `:exec` annotations. [Database-assisted analysis](docs/database-analysis.md) optionally reads live table metadata and checks queries with YDB. [`verify`](docs/schema-verification.md) checks released queries against a proposed schema. Other database engines, external plugins and cloud workflows are not supported.
+The core `generate`, `compile`, `diff`, `verify`, `vet`, `init` and `version` workflow is supported. Configuration is a subset of sqlc v2; queries use YQL parameters and `:one`, `:many`, or `:exec` annotations. [Database-assisted analysis](docs/database-analysis.md) optionally reads live table metadata and checks queries with YDB. [`verify`](docs/schema-verification.md) checks released queries against a proposed schema, and [`vet`](docs/vet.md) checks selected CEL rules and YDB query plans. Other database engines, external plugins and cloud workflows are not supported.
 
 See the [first-release summary](CHANGELOG.md) for the comparison and known limitations, and the [compatibility contract](docs/compatibility.md) for the exact CLI, option and YQL coverage.
 

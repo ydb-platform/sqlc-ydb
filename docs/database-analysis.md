@@ -1,6 +1,6 @@
 # Database-assisted analysis
 
-`compile`, `generate`, `diff`, and [`verify`](schema-verification.md) can read table metadata from YDB and ask the server to compile each query. The commands never execute application queries or apply schema migrations. The default remains offline analysis when no database is configured.
+`compile`, `generate`, `diff`, [`verify`](schema-verification.md), and [`vet`](vet.md) can read table metadata from YDB and ask the server to compile each query. The commands never execute application queries or apply schema migrations. The default remains offline analysis when no database is configured.
 
 ## Generate from an existing database
 
@@ -111,6 +111,7 @@ sqlc-ydb compile --no-database
 sqlc-ydb generate --no-database
 sqlc-ydb diff --no-database
 sqlc-ydb verify --against path/to/released/sqlc.yaml --no-database
+sqlc-ydb vet --no-database
 ```
 
 `--no-database` overrides all configured database analysis for that command. It does not resolve database URI environment variables, read token variables or CA files, or open database connections. Offline analysis requires local `schema` inputs. `analyzer.database: false` makes the same choice for one query set.

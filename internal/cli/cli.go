@@ -43,6 +43,7 @@ Commands:
   generate     Analyze queries and generate source code
   compile      Analyze schema and queries without generating files
   verify       Check released queries against a proposed schema
+  vet          Check queries against configured CEL rules and YDB plans
   diff         Compare generated code with existing files (exit 1 on differences)
   init         Create a sqlc.yaml configuration (version 2)
   version      Print the version and check for updates (--verbose includes the commit)
@@ -166,8 +167,8 @@ func parseArgs(args []string) (arguments, error) {
 			return a, err
 		}
 	}
-	if a.noDatabase && a.command != "generate" && a.command != "compile" && a.command != "diff" && a.command != "verify" && !a.help {
-		return a, errors.New("--no-database is only valid for generate, compile, diff, or verify")
+	if a.noDatabase && a.command != "generate" && a.command != "compile" && a.command != "diff" && a.command != "verify" && a.command != "vet" && !a.help {
+		return a, errors.New("--no-database is only valid for generate, compile, diff, verify, or vet")
 	}
 	if a.verbose && a.command != "version" {
 		return a, errors.New("--verbose is only valid for version")
@@ -256,7 +257,7 @@ func run(args []string, stdout, stderr io.Writer, updater *update.Client) int {
 		return 0
 	}
 	switch a.command {
-	case "generate", "compile", "diff", "verify":
+	case "generate", "compile", "diff", "verify", "vet":
 	default:
 		return fail(fmt.Errorf("unknown command %q", a.command))
 	}
@@ -266,6 +267,12 @@ func run(args []string, stdout, stderr io.Writer, updater *update.Client) int {
 	}
 	if a.command == "verify" {
 		if err := verify(c, a.against, a.noDatabase); err != nil {
+			return fail(err)
+		}
+		return 0
+	}
+	if a.command == "vet" {
+		if err := vet(c, a.noDatabase); err != nil {
 			return fail(err)
 		}
 		return 0

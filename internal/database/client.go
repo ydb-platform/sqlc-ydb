@@ -127,38 +127,59 @@ func (c *Client) DescribeTable(ctx context.Context, name string) (model.Table, e
 
 // ValidateQuery compiles the full query with EXPLAIN without requiring parameter values.
 func (c *Client) ValidateQuery(ctx context.Context, sql string) error {
+	_, err := c.explainQuery(ctx, sql, false)
+	return err
+}
+
+// ExplainQuery compiles SQL without execution and returns the server's plan JSON.
+func (c *Client) ExplainQuery(ctx context.Context, sql string) (string, error) {
+	return c.explainQuery(ctx, sql, true)
+}
+
+func (c *Client) explainQuery(ctx context.Context, sql string, wantPlan bool) (string, error) {
 	ctx, cancel := c.requestContext(ctx)
 	defer cancel()
-	stream, err := c.queries.ExecuteQuery(ctx, &Ydb_Query.ExecuteQueryRequest{
+	request := &Ydb_Query.ExecuteQueryRequest{
 		ExecMode: Ydb_Query.ExecMode_EXEC_MODE_EXPLAIN,
 		Query: &Ydb_Query.ExecuteQueryRequest_QueryContent{QueryContent: &Ydb_Query.QueryContent{
 			Syntax: Ydb_Query.Syntax_SYNTAX_YQL_V1, Text: sql,
 		}},
-	})
+	}
+	if wantPlan {
+		request.StatsMode = Ydb_Query.StatsMode_STATS_MODE_FULL
+	}
+	stream, err := c.queries.ExecuteQuery(ctx, request)
 	if err != nil {
-		return fmt.Errorf("explain query: %w", err)
+		return "", fmt.Errorf("explain query: %w", err)
 	}
 	received := false
+	var plan string
 	for {
 		part, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
 			if !received {
-				return errors.New("explain query: server returned an empty response stream")
+				return "", errors.New("explain query: server returned an empty response stream")
 			}
-			return nil
+			if wantPlan && plan == "" {
+				return "", errors.New("explain query: server returned no query plan")
+			}
+			return plan, nil
 		}
 		if err != nil {
-			return fmt.Errorf("explain query: %w", err)
+			return "", fmt.Errorf("explain query: %w", err)
 		}
 		received = true
 		if err := statusError(part.GetStatus(), part.GetIssues()); err != nil {
 			if hasUndeclaredParameter(part.GetIssues()) {
 				err = fmt.Errorf("%w\nhint: declare query parameter types explicitly with DECLARE $var AS <YQL type>;", err)
 			}
-			return fmt.Errorf("explain query: %w", err)
+			return "", fmt.Errorf("explain query: %w", err)
 		}
 		if part.GetResultSet() != nil || part.GetTxMeta() != nil {
-			return errors.New("explain query: unexpected execution metadata in compile-only response")
+			return "", errors.New("explain query: unexpected execution metadata in compile-only response")
+		}
+		if stats := part.GetExecStats(); stats != nil && stats.GetQueryPlan() != "" {
+			plan = stats.GetQueryPlan()
 		}
 	}
 }
