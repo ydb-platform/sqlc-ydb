@@ -1,7 +1,11 @@
 package cli
 
 import (
+	"fmt"
 	"net"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,15 +25,43 @@ import (
 type vetPlanServer struct {
 	queryservice.UnimplementedQueryServiceServer
 	parts []*Ydb_Query.ExecuteQueryResponsePart
+	calls *atomic.Int32
 }
 
 func (s vetPlanServer) ExecuteQuery(_ *Ydb_Query.ExecuteQueryRequest, stream queryservice.QueryService_ExecuteQueryServer) error {
+	if s.calls != nil {
+		s.calls.Add(1)
+	}
 	for _, part := range s.parts {
 		if err := stream.Send(part); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func TestVetConnectedPlanAndPrepareRules(t *testing.T) {
+	const plan = `{"Plan":{"Node Type":"Query","Operators":[{"Name":"TableFullScan"}]}}`
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	server := grpc.NewServer()
+	var calls atomic.Int32
+	queryservice.RegisterQueryServiceServer(server, vetPlanServer{parts: []*Ydb_Query.ExecuteQueryResponsePart{{Status: Ydb.StatusIds_SUCCESS, ExecStats: &Ydb_TableStats.QueryStats{QueryPlan: plan}}}, calls: &calls})
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(server.Stop)
+	dir := t.TempDir()
+	put(t, filepath.Join(dir, "queries.sql"), "-- name: One :one\nSELECT 1 AS n;")
+	configPath := filepath.Join(dir, "sqlc.yaml")
+	configuration := fmt.Sprintf("version: '2'\nsql:\n- engine: ydb\n  queries: queries.sql\n  database:\n    uri: grpc://%s/local\n  rules: [sqlc/db-prepare, plan-check]\nrules:\n- name: plan-check\n  rule: ydb.plan.operations.exists(op, op == 'TableFullScan')\n", listener.Addr())
+	put(t, configPath, configuration)
+	code, _, stderr := invoke("vet", "-f", configPath)
+	require.Equal(t, 1, code)
+	require.Contains(t, stderr, "query One: vet rule plan-check: rule matched")
+	require.EqualValues(t, 2, calls.Load())
+	put(t, configPath, strings.Replace(configuration, "[sqlc/db-prepare, plan-check]", "[sqlc/db-prepare]", 1))
+	code, _, stderr = invoke("vet", "-f", configPath)
+	require.Zero(t, code, stderr)
+	require.EqualValues(t, 3, calls.Load())
 }
 
 func TestVetRejectsMissingOrMalformedYDBPlan(t *testing.T) {
