@@ -310,8 +310,8 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			return nil, fmt.Errorf("Java method name collision: %s", method)
 		}
 		methods[method] = true
-		row, _ := name(q.Name, true)
-		row += "Row"
+		queryType, _ := name(q.Name, true)
+		row := queryType + "Row"
 		sql := sqlLiteral(model.WithoutQueryAnnotation(q.SQL))
 		preparedSQL := sql
 		var bindings []int
@@ -337,13 +337,56 @@ func Generate(a *model.AnalysisResult, o Options) ([]model.File, error) {
 			} else if q.Command == model.Many {
 				ret = "java.util.List<" + row + ">"
 			}
+		case model.Multi:
+			if o.Runtime != "jdbc" {
+				return nil, fmt.Errorf("%s: Java %s does not support :multi", q.Name, o.Runtime)
+			}
+			if len(q.ResultSets) < 2 {
+				return nil, fmt.Errorf("%s: :multi requires at least two result sets", q.Name)
+			}
+			resultName := queryType + "Result"
+			if types[resultName] {
+				return nil, fmt.Errorf("Java type name collision: %s", resultName)
+			}
+			types[resultName] = true
+			fields := make([]string, len(q.ResultSets))
+			seen := map[string]bool{}
+			for i, rs := range q.ResultSets {
+				if len(rs.Columns) == 0 {
+					return nil, fmt.Errorf("%s: :multi result %q requires at least one column", q.Name, rs.Name)
+				}
+				field, err := name(rs.Name, false)
+				if err != nil {
+					return nil, fmt.Errorf("%s: invalid :multi result name %q: %w", q.Name, rs.Name, err)
+				}
+				if seen[field] {
+					return nil, fmt.Errorf("%s: Java result field name collision: %s", q.Name, field)
+				}
+				seen[field] = true
+				resultType, err := name(rs.Name, true)
+				if err != nil {
+					return nil, fmt.Errorf("%s: invalid :multi result name %q: %w", q.Name, rs.Name, err)
+				}
+				resultRow := queryType + resultType + "Row"
+				if err := addResultRecord(resultRow, rs); err != nil {
+					return nil, err
+				}
+				fields[i] = "java.util.List<" + resultRow + "> " + field
+			}
+			files = append(files, model.File{Name: resultName + ".java", Content: []byte(header + "public record " + resultName + "(" + strings.Join(fields, ", ") + ") {}\n")})
+			ret = resultName
 		case model.Exec:
 		default:
 			return nil, fmt.Errorf("%s: Java does not support %s", q.Name, q.Command)
 		}
 		params := []string{}
 		paramNames := []string{}
-		seen := map[string]bool{"client": true, "consume": q.Command == model.Each, "_params": true, "_query": true, "_connection": true, "_statement": true, "_prepared": true, "_rows": true, "_items": true, "_batchItem": true, "tech": true}
+		seen := map[string]bool{"client": true, "consume": q.Command == model.Each, "_params": true, "_query": true, "_connection": true, "_statement": true, "_prepared": true, "_rows": true, "_items": true, "_metadata": true, "_batchItem": true, "tech": true}
+		if q.Command == model.Multi {
+			for i := range q.ResultSets {
+				seen[fmt.Sprintf("_set%d", i+1)] = true
+			}
+		}
 		for _, p := range q.Parameters {
 			n, err := name(p.Name, false)
 			if err != nil {
@@ -478,6 +521,8 @@ func emitJDBCOn(b *strings.Builder, q model.AnalyzedQuery, names []string, bindi
 		} else {
 			b.WriteString(indent + "_prepared.execute();\n")
 		}
+	} else if q.Command == model.Multi {
+		emitJDBCMulti(b, q, indent)
 	} else {
 		emitJDBCResultStart(b, q, indent)
 		emitRows(b, q, row, indent+"    ", false)
@@ -509,6 +554,45 @@ func emitJDBCScriptFinish(b *strings.Builder, indent string) {
 	b.WriteString(indent + "while (_prepared.getMoreResults() || _prepared.getUpdateCount() != -1) {\n" + indent + "    if (_prepared.getResultSet() != null) throw new java.sql.SQLException(\"Expected one result set\");\n" + indent + "}\n")
 }
 
+func emitJDBCMulti(b *strings.Builder, q model.AnalyzedQuery, indent string) {
+	b.WriteString(indent + "_prepared.execute();\n")
+	queryType, _ := name(q.Name, true)
+	sets := make([]string, len(q.ResultSets))
+	for i, rs := range q.ResultSets {
+		set := fmt.Sprintf("_set%d", i+1)
+		sets[i] = set
+		resultType, _ := name(rs.Name, true)
+		row := queryType + resultType + "Row"
+		fmt.Fprintf(b, "%svar %s = new java.util.ArrayList<%s>();\n", indent, set, row)
+		if i > 0 {
+			b.WriteString(indent + "_prepared.getMoreResults();\n")
+		}
+		b.WriteString(indent + "try (var _rows = _prepared.getResultSet()) {\n")
+		fmt.Fprintf(b, "%s    if (_rows == null) throw new java.sql.SQLException(%s);\n", indent, quoted(fmt.Sprintf("%s: missing result set %d", q.Name, i+1)))
+		b.WriteString(indent + "    var _metadata = _rows.getMetaData();\n")
+		fmt.Fprintf(b, "%s    if (_metadata.getColumnCount() != %d) throw new java.sql.SQLException(%s + _metadata.getColumnCount());\n", indent, len(rs.Columns), quoted(fmt.Sprintf("%s: result set %d has column count ", q.Name, i+1)))
+		for j, c := range rs.Columns {
+			s, _, _ := typeInfo(c.Type)
+			nullable := "columnNoNulls"
+			if c.Type.IsOptional() {
+				nullable = "columnNullable"
+			}
+			column := j + 1
+			fmt.Fprintf(b, "%s    if (!%s.equals(_metadata.getColumnName(%d)) || !%s.equals(_metadata.getColumnTypeName(%d)) || _metadata.isNullable(%d) != java.sql.ResultSetMetaData.%s)\n", indent, quoted(c.ResultName()), column, quoted(s.sdk), column, column, nullable)
+			fmt.Fprintf(b, "%s        throw new java.sql.SQLException(%s + _metadata.getColumnName(%d) + \" \" + _metadata.getColumnTypeName(%d) + \" nullable=\" + _metadata.isNullable(%d));\n", indent, quoted(fmt.Sprintf("%s: result set %d column %d schema mismatch: ", q.Name, i+1, column)), column, column, column)
+		}
+		b.WriteString(indent + "    while (_rows.next()) {\n")
+		newRow := emitRowValues(b, rs, row, indent+"        ", false)
+		fmt.Fprintf(b, "%s        %s.add(%s);\n", indent, set, newRow)
+		b.WriteString(indent + "    }\n")
+		b.WriteString(indent + "}\n")
+	}
+	fmt.Fprintf(b, "%swhile (_prepared.getMoreResults() || _prepared.getUpdateCount() != -1) {\n", indent)
+	fmt.Fprintf(b, "%s    if (_prepared.getResultSet() != null) throw new java.sql.SQLException(%s);\n", indent, quoted(q.Name+": unexpected extra result set"))
+	b.WriteString(indent + "}\n")
+	fmt.Fprintf(b, "%sreturn new %sResult(%s);\n", indent, queryType, strings.Join(sets, ", "))
+}
+
 func emitRows(b *strings.Builder, q model.AnalyzedQuery, row, indent string, native bool) {
 	if q.Command == model.One {
 		if q.MultipleStatements && !native {
@@ -525,8 +609,32 @@ func emitRows(b *strings.Builder, q model.AnalyzedQuery, row, indent string, nat
 		fmt.Fprintf(b, "%svar _items = new java.util.ArrayList<%s>();\n%swhile (_rows.next()) {\n", indent, row, indent)
 		indent += "    "
 	}
+	newRow := emitRowValues(b, q.ResultSets[0], row, indent, native)
+	if q.Command == model.One {
+		if q.MultipleStatements && !native {
+			b.WriteString(indent + "while (_rows.next()) {}\n")
+			emitJDBCScriptFinish(b, indent)
+		}
+		fmt.Fprintf(b, "%sreturn java.util.Optional.of(%s);\n", indent, newRow)
+	} else if q.Command == model.Each {
+		fmt.Fprintf(b, "%sconsume.accept(%s);\n", indent, newRow)
+		indent = strings.TrimSuffix(indent, "    ")
+		b.WriteString(indent + "}\n")
+		emitJDBCScriptFinish(b, indent)
+	} else {
+		fmt.Fprintf(b, "%s_items.add(%s);\n", indent, newRow)
+		indent = strings.TrimSuffix(indent, "    ")
+		b.WriteString(indent + "}\n")
+		if q.MultipleStatements && !native {
+			emitJDBCScriptFinish(b, indent)
+		}
+		b.WriteString(indent + "return _items;\n")
+	}
+}
+
+func emitRowValues(b *strings.Builder, result model.ResultSet, row, indent string, native bool) string {
 	values := []string{}
-	for i, c := range q.ResultSets[0].Columns {
+	for i, c := range result.Columns {
 		s, typ, _ := typeInfo(c.Type)
 		n := fmt.Sprintf("_value%d", i)
 		if native {
@@ -548,27 +656,7 @@ func emitRows(b *strings.Builder, q model.AnalyzedQuery, row, indent string, nat
 		}
 		values = append(values, n)
 	}
-	newRow := "new " + row + "(" + strings.Join(javaRowValues(q.ResultSets[0], values), ", ") + ")"
-	if q.Command == model.One {
-		if q.MultipleStatements && !native {
-			b.WriteString(indent + "while (_rows.next()) {}\n")
-			emitJDBCScriptFinish(b, indent)
-		}
-		fmt.Fprintf(b, "%sreturn java.util.Optional.of(%s);\n", indent, newRow)
-	} else if q.Command == model.Each {
-		fmt.Fprintf(b, "%sconsume.accept(%s);\n", indent, newRow)
-		indent = strings.TrimSuffix(indent, "    ")
-		b.WriteString(indent + "}\n")
-		emitJDBCScriptFinish(b, indent)
-	} else {
-		fmt.Fprintf(b, "%s_items.add(%s);\n", indent, newRow)
-		indent = strings.TrimSuffix(indent, "    ")
-		b.WriteString(indent + "}\n")
-		if q.MultipleStatements && !native {
-			emitJDBCScriptFinish(b, indent)
-		}
-		b.WriteString(indent + "return _items;\n")
-	}
+	return "new " + row + "(" + strings.Join(javaRowValues(result, values), ", ") + ")"
 }
 
 func javaEmbeddingAt(result model.ResultSet, index int) *model.Embedding {

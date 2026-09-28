@@ -22,6 +22,14 @@ sql:
     schema: schema.sql
     queries: queries.sql
     gen:
+      java:
+        package: multires.jdbc
+        out: java/jdbc
+        runtime: jdbc
+  - engine: ydb
+    schema: schema.sql
+    queries: queries.sql
+    gen:
       python:
         out: python/native
         runtime: ydb

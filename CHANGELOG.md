@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Add Java JDBC `:multi` queries with named typed lists, empty-result schema validation and complete result traversal.
+
 ## v0.13.0
 
 ### Added

@@ -14,6 +14,8 @@ gen:
 
 `runtime` accepts `ydb` (also `native`), `jdbc`, or `jooq`. The [jOOQ prototype](#jooq-prototype) has its own DSL and runtime contract. Files are emitted directly into `out`; match it to your Java package directory. Each schema table and query projection gets a record, without ORM annotations.
 
+JDBC supports [`:multi`](multiple-result-sets.md) for two or more read-only SELECT result sets in one request. Its method returns a record of named typed lists, including non-null empty lists for empty results, and validates every result set's schema before decoding rows.
+
 Build with Java 17 or newer and Maven, then run the smoke programs:
 
 ```sh

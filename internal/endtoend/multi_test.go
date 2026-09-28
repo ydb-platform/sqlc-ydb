@@ -14,7 +14,7 @@ func TestMultiUnsupportedTargets(t *testing.T) {
 	for _, profile := range []struct{ target, runtime string }{
 		{"python", "dbapi"}, {"python", "sqlalchemy"},
 		{"cpp", "ydb"}, {"cpp", "userver"}, {"csharp", "adonet"}, {"csharp", "dapper"},
-		{"java", "ydb"}, {"java", "jdbc"}, {"java", "jooq"},
+		{"java", "ydb"}, {"java", "jooq"},
 		{"kotlin", "ydb"}, {"kotlin", "jdbc"}, {"kotlin", "exposed"},
 		{"typescript", "ydb"}, {"rust", "ydb"}, {"php", "ydb"},
 	} {
@@ -32,4 +32,22 @@ func TestMultiUnsupportedTargets(t *testing.T) {
 			require.ErrorIs(t, err, os.ErrNotExist, "partial Go output despite unsupported target")
 		})
 	}
+}
+
+func TestMultiJDBCGeneration(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "schema.sql"), nil, 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "queries.sql"), []byte("-- name: Summary :multi\n-- result: First\nSELECT 1 AS id;\nSELECT false AS flag;"), 0600))
+	cfg := "version: \"2\"\nsql:\n  - engine: ydb\n    schema: schema.sql\n    queries: queries.sql\n    gen:\n      java:\n        out: java\n        package: multires\n        runtime: jdbc\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "sqlc.yaml"), []byte(cfg), 0600))
+	var stdout, stderr bytes.Buffer
+	code := cli.Run([]string{"generate", "--no-remote", "-f", filepath.Join(dir, "sqlc.yaml")}, &stdout, &stderr)
+	require.Zero(t, code, stderr.String())
+	result, err := os.ReadFile(filepath.Join(dir, "java", "SummaryResult.java"))
+	require.NoError(t, err)
+	require.Contains(t, string(result), "List<SummaryFirstRow> first")
+	require.Contains(t, string(result), "List<SummaryResult2Row> result2")
+	query, err := os.ReadFile(filepath.Join(dir, "java", "Queries.java"))
+	require.NoError(t, err)
+	require.Contains(t, string(query), "public SummaryResult summary()")
 }

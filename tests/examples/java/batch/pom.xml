@@ -15,6 +15,7 @@
       <source>${project.basedir}/../../../../examples/namespaces/java/jdbc/src/main/java</source>
       <source>${project.basedir}/../../../../examples/booktest/java/native</source>
       <source>${project.basedir}/../../../../examples/booktest/java/jdbc</source>
+      <source>${project.basedir}/../../../../examples/multi_results/java/jdbc</source>
     </sources></configuration></execution></executions>
   </plugin></plugins></build>
 </project>
