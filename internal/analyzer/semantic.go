@@ -818,16 +818,16 @@ func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser
 	for _, join := range selectCore.AllJoin_source() {
 		base := len(relations)
 		for i, source := range join.AllFlatten_source() {
-			if source.FLATTEN() != nil {
-				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, "FLATTEN sources are not yet supported"))
-				continue
-			}
 			named := source.Named_single_source()
 			if named == nil || named.Hinted_single_source() == nil || named.Hinted_single_source().Single_source() == nil {
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, "unsupported FROM or JOIN source"))
 				continue
 			}
 			single := named.Hinted_single_source().Single_source()
+			if named.Pure_column_list() != nil {
+				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, named.Pure_column_list(), "source column lists are unsupported; use named SELECT columns"))
+				continue
+			}
 			if named.Hinted_single_source().Table_hints() != nil || named.Sample_clause() != nil || named.Tablesample_clause() != nil {
 				diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, "table hints and sampling are not yet supported"))
 				continue
@@ -913,7 +913,17 @@ func selectRelations(catalog model.Catalog, block queryBlock, selectCore *parser
 					diagnostics = append(diagnostics, diagnosticAt(block.file, block.line-1, source, fmt.Sprintf("duplicate source alias %q", alias)))
 				}
 			}
-			relations = append(relations, relation{table: table, alias: alias, physical: tableRef != nil && tableRef.Table_key() != nil})
+			rel := relation{table: table, alias: alias, physical: tableRef != nil && tableRef.Table_key() != nil}
+			if source.FLATTEN() != nil {
+				var ds []model.Diagnostic
+				rel, ds = flattenListRelation(block, source, rel)
+				diagnostics = append(diagnostics, ds...)
+				if len(ds) != 0 {
+					continue
+				}
+				rel.physical = false
+			}
+			relations = append(relations, rel)
 			if i > 0 {
 				op := strings.ToUpper(join.Join_op(i - 1).GetText())
 				switch {

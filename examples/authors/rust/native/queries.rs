@@ -307,4 +307,25 @@ impl<'a, E: ydb::QueryExecutor> Queries<'a, E> {
             author_id_text: row.remove_field(0)?.try_into()?,
         })
     }
+
+    // -- name: ListAuthorNameWords :many
+    #[builder(on(String, into))]
+    pub async fn list_author_name_words(&mut self) -> ydb::YdbResult<Vec<ListAuthorNameWordsRow>> {
+        self.client
+            .query_result_set(concat!(
+                "SELECT id, word\n",
+                "FROM (SELECT id, Unicode::SplitToList(name, \" \"u) AS words FROM authors)\n",
+                "FLATTEN LIST BY words AS word\n",
+                "ORDER BY id, word;",
+            ))
+            .await?
+            .rows()
+            .map(|mut row| {
+                Ok(ListAuthorNameWordsRow {
+                    id: row.remove_field(0)?.try_into()?,
+                    word: row.remove_field(1)?.try_into()?,
+                })
+            })
+            .collect()
+    }
 }

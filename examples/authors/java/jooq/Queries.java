@@ -218,4 +218,23 @@ public final class Queries {
                 .coerce(field(name("author_id_text"), YdbTypes.UTF8))
                 .fetchOptional(mapping(EchoAuthorIDTextRow::new));
     }
+
+    // -- name: ListAuthorNameWords :many
+    public List<ListAuthorNameWordsRow> listAuthorNameWords() {
+        return dsl.connectionResult(_connection -> {
+            try (var _prepared = _connection.unwrap(tech.ydb.jdbc.YdbConnection.class).prepareStatement("""
+                SELECT id, word
+                FROM (SELECT id, Unicode::SplitToList(name, \" \"u) AS words FROM\s\
+                """ + dsl.render(AUTHORS) + " AS `authors`" + """
+                )
+                FLATTEN LIST BY words AS word
+                ORDER BY id, word;\
+                """, tech.ydb.jdbc.YdbPrepareMode.DATA_QUERY)) {
+                try (var _rows = _prepared.executeQuery()) {
+                    var _result = dsl.fetch(_rows, YdbTypes.UINT64, YdbTypes.UTF8).map(_row -> new ListAuthorNameWordsRow(_row.get(0, org.jooq.types.ULong.class), _row.get(1, String.class)));
+                    return _result;
+                }
+            }
+        });
+    }
 }

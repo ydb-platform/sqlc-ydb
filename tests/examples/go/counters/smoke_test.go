@@ -20,6 +20,11 @@ func TestCountersNative(t *testing.T) {
 	db.Apply(t, "../../../../examples/counters/schema.sql", "DROP TABLE counters;")
 	ctx := db.Context
 	q := native.New(db.Native)
+	emptySummary, err := q.CounterSummary(ctx)
+	require.NoError(t, err)
+	require.Zero(t, emptySummary.Total)
+	require.Nil(t, emptySummary.EnabledTotal)
+	require.Nil(t, emptySummary.EnabledAverage)
 	const id = "requests"
 	created, err := q.CreateCounter(ctx, id)
 	require.NoError(t, err)
@@ -55,6 +60,13 @@ func TestCountersNative(t *testing.T) {
 	require.NotNil(t, row.Label)
 	require.Equal(t, "reset", *row.Label)
 	require.True(t, row.Enabled)
+	summary, err := q.CounterSummary(ctx)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), summary.Total)
+	require.NotNil(t, summary.EnabledTotal)
+	require.Equal(t, int64(12), *summary.EnabledTotal)
+	require.NotNil(t, summary.EnabledAverage)
+	require.Equal(t, float64(12), *summary.EnabledAverage)
 	aborted := errors.New("rollback counter increment")
 	err = db.Native.DoTx(ctx, func(ctx context.Context, tx query.TxActor) error {
 		txq := native.New(tx)
@@ -105,6 +117,11 @@ func TestCountersDatabaseSQL(t *testing.T) {
 	db.Apply(t, "../../../../examples/counters/schema.sql", "DROP TABLE counters;")
 	ctx := db.Context
 	q := sq.New(db.SQL)
+	emptySummary, err := q.CounterSummary(ctx)
+	require.NoError(t, err)
+	require.Zero(t, emptySummary.Total)
+	require.Nil(t, emptySummary.EnabledTotal)
+	require.Nil(t, emptySummary.EnabledAverage)
 	const id = "requests"
 	created, err := q.CreateCounter(ctx, id)
 	require.NoError(t, err)
@@ -140,6 +157,13 @@ func TestCountersDatabaseSQL(t *testing.T) {
 	require.NotNil(t, row.Label)
 	require.Equal(t, "reset", *row.Label)
 	require.True(t, row.Enabled)
+	summary, err := q.CounterSummary(ctx)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), summary.Total)
+	require.NotNil(t, summary.EnabledTotal)
+	require.Equal(t, int64(12), *summary.EnabledTotal)
+	require.NotNil(t, summary.EnabledAverage)
+	require.Equal(t, float64(12), *summary.EnabledAverage)
 	aborted := errors.New("rollback counter increment")
 	err = retry.DoTx(ctx, db.SQL, func(ctx context.Context, tx *sql.Tx) error {
 		txq := sq.New(tx)

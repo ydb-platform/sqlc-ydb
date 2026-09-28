@@ -99,6 +99,11 @@ type EchoAuthorIDTextRow struct {
 	AuthorIDText string `json:"author_id_text"`
 }
 
+type ListAuthorNameWordsRow struct {
+	ID   uint64 `json:"id"`
+	Word string `json:"word"`
+}
+
 type Querier interface {
 	GetAuthor(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorRow, error)
 	ListAuthors(ctx context.Context, opts ...query.ExecuteOption) ([]ListAuthorsRow, error)
@@ -114,4 +119,5 @@ type Querier interface {
 	GetAuthorStatistics(ctx context.Context, opts ...query.ExecuteOption) (GetAuthorStatisticsRow, error)
 	GetAuthorExportMetadata(ctx context.Context, arg uint64, opts ...query.ExecuteOption) (GetAuthorExportMetadataRow, error)
 	EchoAuthorIDText(ctx context.Context, arg string, opts ...query.ExecuteOption) (EchoAuthorIDTextRow, error)
+	ListAuthorNameWords(ctx context.Context, opts ...query.ExecuteOption) ([]ListAuthorNameWordsRow, error)
 }

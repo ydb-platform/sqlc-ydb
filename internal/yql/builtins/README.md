@@ -24,7 +24,7 @@ SQL built-in names are case-insensitive:
 - `LENGTH`/`LEN`, `SUBSTRING`, `FIND`, `RFIND`, `StartsWith`, `EndsWith`;
 - `ABS`;
 - `ToSet` and `SetIsDisjoint` for concrete List/Dict key types, and `ListCreate` with a literal YQL element type;
-- `COUNT`, `COUNT_IF`, `MIN`, `MAX`, `SUM`, `AVG`, `AGGREGATE_LIST` and its `AGG_LIST`, `AGGREGATE_LIST_DISTINCT`, and `AGG_LIST_DISTINCT` aliases.
+- `COUNT`, `COUNT_IF`, `MIN`, `MAX`, `SUM`, `SUM_IF`, `AVG`, `AVG_IF`, `AGGREGATE_LIST` and its `AGG_LIST`, `AGGREGATE_LIST_DISTINCT`, and `AGG_LIST_DISTINCT` aliases.
 
 C++ library names use the documented, case-sensitive `Module::Function` spelling:
 
@@ -35,7 +35,7 @@ C++ library names use the documented, case-sensitive `Module::Function` spelling
 - `Json::From` and `Yson::From` for `List<String>` and `List<Utf8>` (including optional lists), followed by `Yson::SerializeJson` for their resource result; serialization returns `Optional<Json>`.
 - the scalar `Digest` subset documented in [function signatures](../../../docs/functions.md), including `Digest::CityHash` with its named, omittable `Init` argument.
 
-The aggregate resolver models empty-input behavior: `COUNT` and `COUNT_IF` are non-optional `Uint64`; `AGGREGATE_LIST` is a non-optional `List<T>` and omits NULL elements; `MIN`, `MAX`, `SUM`, and `AVG` are optional when an empty input is possible. `AGGREGATE_LIST` accepts a non-optional limit of type Int8/Int16/Int32 or Uint8/Uint16/Uint32/Uint64; YDB rejects Int64 and optional limits. `COUNT_IF` requires Bool or Optional<Bool>, also accepts contextual NULL, and counts only true values; NULL and empty input do not make its result optional. A grouped aggregate over a non-optional argument is non-optional and the analyzer removes that wrapper using its group context. `SUM` widens signed and unsigned integers to `Int64` and `Uint64`, respectively, and widens Decimal precision to 35 while preserving its scale. `AVG` converts integer, `Float`, and interval input to `Double`, while preserving Decimal precision and scale. The strict `MIN`/`MAX` subset accepts primitive numeric values plus `String` and `Utf8`.
+The aggregate resolver models empty-input behavior: `COUNT` and `COUNT_IF` are non-optional `Uint64`; `AGGREGATE_LIST` is a non-optional `List<T>` and omits NULL elements; `MIN`, `MAX`, `SUM`, and `AVG` are optional when an empty input is possible. `AGGREGATE_LIST` accepts a non-optional limit of type Int8/Int16/Int32 or Uint8/Uint16/Uint32/Uint64; YDB rejects Int64 and optional limits. `COUNT_IF` requires Bool or Optional<Bool>, also accepts contextual NULL, and counts only true values; NULL and empty input do not make its result optional. A grouped `MIN`, `MAX`, `SUM`, or `AVG` over a non-optional argument is non-optional. `SUM_IF` and `AVG_IF` use the corresponding value type rules, require a Bool or Optional<Bool> predicate (or contextual NULL), and remain optional even for a group with only false or NULL predicates. `SUM` widens signed and unsigned integers to `Int64` and `Uint64`, respectively, and widens Decimal precision to 35 while preserving its scale. `AVG` converts integer, `Float`, and interval input to `Double`, while preserving Decimal precision and scale. The strict `MIN`/`MAX` subset accepts primitive numeric values plus `String` and `Utf8`.
 
 `CommonType` implements the documented primitive numeric result matrix and preserves optionality. Non-numeric types must match exactly. Different Decimal precision or scale is rejected rather than inventing Decimal arithmetic rules.
 

@@ -362,6 +362,24 @@ public sealed class Queries
         return await _connection.QueryFirstAsync<EchoAuthorIDTextRow>(command).ConfigureAwait(false);
     }
 
+    // -- name: ListAuthorNameWords :many
+    public async Task<IReadOnlyList<ListAuthorNameWordsRow>> ListAuthorNameWordsAsync(CancellationToken cancellationToken = default, int? commandTimeout = null)
+    {
+        var command = new CommandDefinition(
+            commandText: """
+            SELECT id, word
+            FROM (SELECT id, Unicode::SplitToList(name, " "u) AS words FROM authors)
+            FLATTEN LIST BY words AS word
+            ORDER BY id, word;
+            """,
+            parameters: null,
+            transaction: _transaction,
+            commandTimeout: commandTimeout,
+            cancellationToken: cancellationToken);
+
+        return (await _connection.QueryAsync<ListAuthorNameWordsRow>(command).ConfigureAwait(false)).AsList();
+    }
+
     private sealed class YdbParameters : SqlMapper.IDynamicParameters
     {
         private readonly YdbParameter[] _parameters;

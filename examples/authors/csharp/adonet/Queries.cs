@@ -325,4 +325,26 @@ public sealed class Queries
     private static EchoAuthorIDTextRow EchoAuthorIDTextRowFrom(DbDataReader reader) => new(
         reader.GetFieldValue<string>(0)
     );
+
+    // -- name: ListAuthorNameWords :many
+    public async Task<IReadOnlyList<ListAuthorNameWordsRow>> ListAuthorNameWordsAsync(CancellationToken cancellationToken = default)
+    {
+        await using var command = new YdbCommand(
+            "SELECT id, word\n" +
+            "FROM (SELECT id, Unicode::SplitToList(name, \" \"u) AS words FROM authors)\n" +
+            "FLATTEN LIST BY words AS word\n" +
+            "ORDER BY id, word;", _connection) { Transaction = _transaction };
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        var rows = new List<ListAuthorNameWordsRow>();
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            rows.Add(ListAuthorNameWordsRowFrom(reader));
+        }
+        return rows;
+    }
+
+    private static ListAuthorNameWordsRow ListAuthorNameWordsRowFrom(DbDataReader reader) => new(
+        reader.GetFieldValue<ulong>(0),
+        reader.GetFieldValue<string>(1)
+    );
 }

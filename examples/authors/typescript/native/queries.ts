@@ -98,6 +98,11 @@ export type EchoAuthorIDTextRow = {
   readonly author_id_text: string;
 };
 
+export type ListAuthorNameWordsRow = {
+  readonly id: bigint;
+  readonly word: string;
+};
+
 export class Queries {
   readonly #sql: SQL;
 
@@ -310,5 +315,19 @@ export class Queries {
     const [rows] = await stmt;
 
     return rows[0] ?? null;
+  }
+
+  // -- name: ListAuthorNameWords :many
+  async listAuthorNameWords(configure?: ConfigureQuery): Promise<ListAuthorNameWordsRow[]> {
+    const stmt = this.#sql<[ListAuthorNameWordsRow]>(
+      "SELECT id, word\n" +
+      "FROM (SELECT id, Unicode::SplitToList(name, \" \"u) AS words FROM authors)\n" +
+      "FLATTEN LIST BY words AS word\n" +
+      "ORDER BY id, word;"
+    );
+    configure?.(stmt);
+    const [rows] = await stmt;
+
+    return rows;
   }
 }

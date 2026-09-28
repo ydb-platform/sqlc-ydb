@@ -3,7 +3,7 @@ sql:
   - name: native
     engine: ydb
     schema: schema.sql
-    queries: queries.sql
+    queries: [queries.sql, flatten.sql]
     analyzer:
       parameters:
         EchoAuthorIDText:
@@ -47,7 +47,7 @@ sql:
   - name: portable
     engine: ydb
     schema: schema.sql
-    queries: queries.sql
+    queries: [queries.sql, flatten.sql]
     analyzer:
       parameters:
         EchoAuthorIDText:
@@ -71,7 +71,7 @@ sql:
   - name: exposed
     engine: ydb
     schema: schema.sql
-    queries: queries.sql
+    queries: [queries.sql, flatten.sql]
     analyzer:
       parameters:
         EchoAuthorIDText:
@@ -84,7 +84,7 @@ sql:
   - name: sqlalchemy
     engine: ydb
     schema: schema.sql
-    queries: queries.sql
+    queries: [queries.sql, flatten.sql]
     analyzer:
       parameters:
         EchoAuthorIDText:
@@ -97,7 +97,7 @@ sql:
   - name: userver
     engine: ydb
     schema: schema.sql
-    queries: queries.sql
+    queries: [queries.sql, flatten.sql]
     analyzer:
       parameters:
         EchoAuthorIDText:
@@ -110,7 +110,7 @@ sql:
   - name: dapper
     engine: ydb
     schema: schema.sql
-    queries: queries.sql
+    queries: [queries.sql, flatten.sql]
     analyzer:
       parameters:
         EchoAuthorIDText:
@@ -123,7 +123,7 @@ sql:
   - name: jooq
     engine: ydb
     schema: schema.sql
-    queries: queries.sql
+    queries: [queries.sql, flatten.sql]
     analyzer:
       parameters:
         EchoAuthorIDText:

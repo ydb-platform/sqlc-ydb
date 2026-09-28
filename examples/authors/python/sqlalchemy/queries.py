@@ -335,3 +335,25 @@ class Querier:
         return _models.EchoAuthorIDTextRow(
             author_id_text=row._mapping["author_id_text"],
         )
+
+    # -- name: ListAuthorNameWords :many
+    def list_author_name_words(self) -> list[_models.ListAuthorNameWordsRow]:
+        parameters = {
+        }
+        result = self._connection.execute(
+            _text(
+                ("SELECT id, word\n"
+                 "FROM (SELECT id, Unicode\\:\\:SplitToList(name, \" \"u) AS words FROM authors)\n"
+                 "FLATTEN LIST BY words AS word\n"
+                 "ORDER BY id, word;")
+            ),
+            parameters,
+        )
+        try:
+            rows = result.fetchall()
+        finally:
+            result.close()
+        return [_models.ListAuthorNameWordsRow(
+            id=row._mapping["id"],
+            word=row._mapping["word"],
+        ) for row in rows]

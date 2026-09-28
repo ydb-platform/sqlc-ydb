@@ -184,6 +184,31 @@ func TestCountIfAggregateSemantics(t *testing.T) {
 	}
 }
 
+func TestConditionalAggregateSemantics(t *testing.T) {
+	queries := []model.Source{{Name: "query.sql", Text: `-- name: Global :one
+SELECT SUM_IF(id, enabled) AS total, AVG_IF(counter, optional_flag) AS average FROM records;
+-- name: Grouped :many
+SELECT enabled, SUM_IF(id, optional_flag) AS total, AVG_IF(id, optional_flag) AS average
+FROM records GROUP BY enabled HAVING SUM_IF(id, optional_flag) > 0ul;`}}
+	result, err := Analyze([]model.Source{{Name: "schema.sql", Text: sharedExpressionSchema}}, queries)
+	require.NoError(t, err)
+	require.Equal(t, "Optional<Uint64>", result.Queries[0].ResultSets[0].Columns[0].Type.String())
+	require.Equal(t, "Optional<Double>", result.Queries[0].ResultSets[0].Columns[1].Type.String())
+	require.Equal(t, "Optional<Uint64>", result.Queries[1].ResultSets[0].Columns[1].Type.String())
+	require.Equal(t, "Optional<Double>", result.Queries[1].ResultSets[0].Columns[2].Type.String())
+
+	for _, tc := range []struct{ statement, message string }{
+		{"SELECT SUM_IF(id, id) AS total FROM records;", "Bool"},
+		{"SELECT SUM_IF(label, enabled) AS total FROM records;", "SUM_IF argument 1 must be numeric"},
+		{"SELECT AVG_IF(label, enabled) AS average FROM records;", "AVG_IF argument 1 must be numeric or Interval"},
+		{"SELECT SUM_IF(COUNT(*), enabled) AS total FROM records;", "cannot contain another aggregate"},
+		{"SELECT id FROM records WHERE SUM_IF(id, enabled) > 0ul;", "aggregate functions are not allowed in WHERE"},
+	} {
+		_, err := Analyze([]model.Source{{Name: "schema.sql", Text: sharedExpressionSchema}}, []model.Source{{Name: "query.sql", Text: "-- name: Invalid :many\n" + tc.statement}})
+		require.ErrorContains(t, err, tc.message)
+	}
+}
+
 func TestAggregateFunctionsRequireAggregationContext(t *testing.T) {
 	for _, statement := range []string{
 		"SELECT COUNT(*) AS value;",

@@ -4,8 +4,21 @@
 
 ### Added
 
-- Accept `sqlc.slice` in IN and NOT IN predicates, lowering it to one typed YQL list parameter before generation.
 - Add local `verify --against` for checking released queries and resolved parameter/result types against a proposed YDB schema, with optional non-executing server validation.
+
+## v0.12.1
+
+### Added
+
+- Resolve YQL `SUM_IF` and `AVG_IF` over supported numeric values and Boolean predicates, retaining nullable results when no rows match, including within a group.
+- Support `FLATTEN LIST BY` for list-valued YQL source columns, including optional lists and named element columns.
+- Resolve `DateTime::MakeTzDate` for basic-range DateTime values, including nullable inputs.
+
+## v0.12.0
+
+### Added
+
+- Accept `sqlc.slice` in IN and NOT IN predicates, lowering it to one typed YQL list parameter before generation.
 - Support `ROW_NUMBER() OVER` with inline or named windows, direct-column partitioning and ordering, and a `Uint64` result.
 - Generate typed `:each` streaming callbacks for Java JDBC with a required streaming result-set connection mode and caller-owned transactions.
 

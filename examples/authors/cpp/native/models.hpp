@@ -83,4 +83,9 @@ struct EchoAuthorIDTextRow final {
     std::string author_id_text;
 };
 
+struct ListAuthorNameWordsRow final {
+    std::uint64_t id;
+    std::string word;
+};
+
 }  // namespace authors::native

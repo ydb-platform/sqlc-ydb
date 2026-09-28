@@ -12,6 +12,7 @@ A small counter table demonstrates constants and computed DML from [PR #24](http
 | `ClearOptional` | `SET optional_value = NULL, label = NULL` clears optional columns. |
 | `UpsertCounter` | `UPSERT ... VALUES` computes a value from the declared `$seed` parameter. |
 | `ReadCounter`, `ListCounters` | `SELECT c.*` and `SELECT *` become explicit projections in the generated SQL. |
+| `CounterSummary` | `SUM_IF` and `AVG_IF` include only enabled counters and return NULL when no rows satisfy the condition. |
 | `ReadThenIncrement` | `:exec` submits SELECT and UPDATE in one request and discards the SELECT rows. |
 | `IncrementReturningThenIncrement` | `:exec` submits two UPDATE statements in one request and discards the RETURNING rows. |
 
