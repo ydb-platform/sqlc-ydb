@@ -12,7 +12,7 @@ YDB adaptations of all five families in [sqlc's examples](https://github.com/sql
 | [records](records) | Typed INSERT/UPSERT/UPDATE/DELETE SELECT, Struct/list parameters, Digest, JSON tag predicates and configured function signatures; Go native and `database/sql` |
 | [counters](counters) | Computed DML, constants, fixed wildcard projections and opt-in live schema checking/discovery; Go native and `database/sql` |
 | [streaming](streaming) | Typed callback exports; Go native SDK and database/sql |
-| [multi_results](multi_results) | Several typed SELECT result sets from one request; Go native SDK and database/sql |
+| [multi_results](multi_results) | Several typed SELECT result sets from one request; Go native SDK, database/sql and native Python |
 | [namespaces](namespaces) | Static TablePathPrefix, two catalogs with identically named tables, indexed reads and cross-catalog joins; all built-in languages |
 | [renaming](renaming) | Upstream-style `gen.go.rename` for Go struct fields; native SDK and `database/sql` |
 
