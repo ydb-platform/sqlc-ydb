@@ -53,6 +53,7 @@ func TestBashCompletion(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(script), 0600))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "test-config.yaml"), nil, 0600))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "test with space.yaml"), nil, 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "test=equals.yaml"), nil, 0600))
 	cmd := exec.Command("bash", "-n", path)
 	require.NoError(t, cmd.Run())
 	for _, tc := range []struct {
@@ -68,8 +69,10 @@ func TestBashCompletion(t *testing.T) {
 		{"language", "sqlc-ydb init --language py", 3, []string{"python"}},
 		{"language equals", "sqlc-ydb init --language=py", 2, []string{"--language=python"}},
 		{"file", "sqlc-ydb generate --file test-", 3, []string{"test-config.yaml"}},
-		{"file with spaces", "sqlc-ydb generate --file test", 3, []string{"test with space.yaml", "test-config.yaml"}},
+		{"file with spaces", "sqlc-ydb generate --file test", 3, []string{"test with space.yaml", "test-config.yaml", "test=equals.yaml"}},
 		{"file equals", "sqlc-ydb generate --file=test-", 2, []string{"--file=test-config.yaml"}},
+		{"file name contains equals", "sqlc-ydb generate --file=test=", 2, []string{"--file=test=equals.yaml"}},
+		{"against name contains equals", "sqlc-ydb verify --against=test=", 2, []string{"--against=test=equals.yaml"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			args := strings.Fields(tc.words)

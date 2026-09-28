@@ -72,13 +72,13 @@ const bashCompletion = `_sqlc_ydb_complete() {
   esac
   case "$cur" in
     --file=*|--against=*)
-      prefix="${cur%%=*}="
+      prefix="${cur%%%%=*}="
       value="${cur#*=}"
       compopt -o filenames
       while IFS= read -r path; do COMPREPLY+=("$prefix$path"); done < <(compgen -f -- "$value")
       return ;;
     --language=*|--runtime=*)
-      prefix="${cur%%=*}="
+      prefix="${cur%%%%=*}="
       value="${cur#*=}"
       if [[ "$prefix" == '--language=' ]]; then opts='%s'; else opts='%s'; fi
       for word in $(compgen -W "$opts" -- "$value"); do COMPREPLY+=("$prefix$word"); done
