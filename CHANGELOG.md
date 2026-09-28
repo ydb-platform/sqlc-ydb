@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.13.0
+
 ### Added
 
 - Support `:multi` queries in the native Python runtime with typed lists for each result set.
