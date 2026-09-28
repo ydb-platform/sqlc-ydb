@@ -115,6 +115,42 @@ func TestMultiRejectsPythonResultNameCollision(t *testing.T) {
 	require.ErrorContains(t, err, "model name collision")
 }
 
+func TestMultiRejectsPythonNameCollisions(t *testing.T) {
+	for _, tc := range []struct {
+		name, schema, queries, want string
+	}{
+		{
+			name:    "table",
+			schema:  "CREATE TABLE FetchSummaryResult (id Uint64 NOT NULL, PRIMARY KEY(id));",
+			queries: "-- name: FetchSummary :multi\n-- result: Item\nSELECT 1 AS id;\nSELECT false AS enabled;",
+			want:    `model name collision "FetchSummaryResult"`,
+		},
+		{
+			name:    "single result query",
+			queries: "-- name: FetchSummary :multi\n-- result: Item\nSELECT 1 AS id;\nSELECT false AS enabled;\n-- name: FetchSummaryItem :one\nSELECT 1 AS id;",
+			want:    `row model name collision "FetchSummaryItemRow"`,
+		},
+		{
+			name:    "parameters",
+			queries: "-- name: Read :multi\nDECLARE $fooBar AS Uint64;\nDECLARE $foo_bar AS Uint64;\nSELECT $fooBar AS id;\nSELECT $foo_bar AS id;",
+			want:    `parameter name collision at "foo_bar"`,
+		},
+		{
+			name:    "table columns",
+			schema:  "CREATE TABLE records (id Uint64 NOT NULL, FooBar Utf8, foo_bar Utf8, PRIMARY KEY(id));",
+			queries: "-- name: Read :multi\nSELECT id FROM records;\nSELECT false AS enabled;",
+			want:    `column name collision at "foo_bar"`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, err := analyzer.Analyze([]model.Source{{Name: "schema.sql", Text: tc.schema}}, []model.Source{{Name: "queries.sql", Text: tc.queries}})
+			require.NoError(t, err)
+			_, err = Generate(a, Options{Runtime: "ydb"})
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
 func TestMultiRejectsMalformedPythonResults(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
