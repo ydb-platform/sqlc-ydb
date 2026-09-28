@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.15.0
+
 ### Added
 
 - Add `vet` with selected CEL query rules and non-executing YDB plan checks, including the `sqlc/db-prepare` built-in rule.
